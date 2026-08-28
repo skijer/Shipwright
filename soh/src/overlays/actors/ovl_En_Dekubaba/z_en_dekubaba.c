@@ -32,6 +32,10 @@ void EnDekubaba_DeadStickDrop(EnDekubaba* this, PlayState* play);
 
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 
+static Player* EnDekubaba_GetClosestPlayer(PlayState* play, EnDekubaba* this) {
+    return Actor_GetClosestPlayerFromPos(play, (this != NULL) ? &this->actor.home.pos : NULL);
+}
+
 const ActorInit En_Dekubaba_InitVars = {
     ACTOR_EN_DEKUBABA,
     ACTORCAT_ENEMY,
@@ -488,7 +492,7 @@ void EnDekubaba_Wait(EnDekubaba* this, PlayState* play) {
 }
 
 void EnDekubaba_Grow(EnDekubaba* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnDekubaba_GetClosestPlayer(play, this);
     f32 headDistHorizontal;
     f32 headDistVertical;
     f32 headShiftX;
@@ -628,7 +632,7 @@ void EnDekubaba_UpdateHeadPosition(EnDekubaba* this) {
 }
 
 void EnDekubaba_DecideLunge(EnDekubaba* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnDekubaba_GetClosestPlayer(play, this);
 
     SkelAnime_Update(&this->skelAnime);
     if (Animation_OnFrame(&this->skelAnime, 0.0f) || Animation_OnFrame(&this->skelAnime, 12.0f)) {
@@ -668,7 +672,8 @@ void EnDekubaba_DecideLunge(EnDekubaba* this, PlayState* play) {
 
     if (240.0f * this->size < Math_Vec3f_DistXZ(&this->actor.home.pos, &player->actor.world.pos)) {
         EnDekubaba_SetupRetract(this);
-    } else if ((this->timer == 0) || (this->actor.xzDistToPlayer < 80.0f * this->size)) {
+    } else if ((this->timer == 0) ||
+               (Math_Vec3f_DistXZ(&this->actor.home.pos, &player->actor.world.pos) < 80.0f * this->size)) {
         EnDekubaba_SetupPrepareLunge(this);
     }
 }
@@ -733,7 +738,7 @@ void EnDekubaba_Lunge(EnDekubaba* this, PlayState* play) {
 }
 
 void EnDekubaba_PrepareLunge(EnDekubaba* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnDekubaba_GetClosestPlayer(play, this);
 
     if (this->timer != 0) {
         this->timer--;

@@ -333,6 +333,38 @@ void EnItem00_SetupAction(EnItem00* this, EnItem00ActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
 
+static Player* EnItem00_FindClosestPlayer(PlayState* play, Vec3f* pos, f32* distSqOut) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    Player* closest = NULL;
+    f32 minDistSq = 1.0e20f;
+
+    while (actor != NULL) {
+        if (actor->id == ACTOR_PLAYER) {
+            f32 dx = pos->x - actor->world.pos.x;
+            f32 dy = pos->y - actor->world.pos.y;
+            f32 dz = pos->z - actor->world.pos.z;
+            f32 distSq = dx * dx + dz * dz;
+
+            if ((dy >= -50.0f) && (dy <= 50.0f) && (distSq < minDistSq)) {
+                closest = (Player*)actor;
+                minDistSq = distSq;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    if (distSqOut != NULL) {
+        *distSqOut = minDistSq;
+    }
+
+    if (closest != NULL) {
+        return closest;
+    }
+
+    return GET_PLAYER(play);
+}
+
 void EnItem00_SetObjectDependency(EnItem00* this, PlayState* play, s16 objectIndex) {
     // Remove object dependency for Enemy Randomizer and Crowd Control to allow Like-likes to
     // drop equipment correctly in rooms where Like-likes normally don't spawn.
@@ -528,10 +560,10 @@ void EnItem00_Init(Actor* thisx, PlayState* play) {
             Item_Give(play, ITEM_RUPEE_GOLD);
             break;
         case ITEM00_HEART:
-            Item_Give(play, ITEM_HEART);
+            Health_ChangeBy(play, 0x10, EnItem00_FindClosestPlayer(play, &this->actor.world.pos, NULL));
             break;
         case ITEM00_FLEXIBLE:
-            Health_ChangeBy(play, 0x70);
+            Health_ChangeBy(play, 0x70, EnItem00_FindClosestPlayer(play, &this->actor.world.pos, NULL));
             break;
         case ITEM00_BOMBS_A:
         case ITEM00_BOMBS_B:
@@ -723,7 +755,14 @@ void func_8001E304(EnItem00* this, PlayState* play) {
 }
 
 void func_8001E5C8(EnItem00* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player;
+
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER)) {
+        player = (Player*)this->actor.parent;
+    } else {
+        player = GET_PLAYER(play);
+    }
+
     if (this->getItemId != GI_NONE) {
         if (!Actor_HasParent(&this->actor, play)) {
             Actor_OfferGetItem(&this->actor, play, this->getItemId, 50.0f, 80.0f);
@@ -760,6 +799,8 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
     static s16 D_80157D94[1];
     s16* params;
     Actor* dynaActor;
+    Player* closestPlayer;
+    f32 minDistSq;
     s32 getItemId = GI_NONE;
     s16 sp3A = 0;
     s16 i;
@@ -847,11 +888,18 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         return;
     }
 
-    if (!((this->actor.xzDistToPlayer <= 30.0f) && (this->actor.yDistToPlayer >= -50.0f) &&
-          (this->actor.yDistToPlayer <= 50.0f))) {
+    closestPlayer = EnItem00_FindClosestPlayer(play, &this->actor.world.pos, &minDistSq);
+    if (minDistSq > 900.0f) {
+        closestPlayer = NULL;
+    }
+
+    if (closestPlayer == NULL) {
         if (!Actor_HasParent(&this->actor, play)) {
             return;
         }
+    } else if (!Actor_HasParent(&this->actor, play) && (closestPlayer != GET_PLAYER(play))) {
+        this->actor.parent = &closestPlayer->actor;
+        closestPlayer->interactRangeActor = &this->actor;
     }
 
     if (play->gameOverCtx.state != GAMEOVER_INACTIVE) {
@@ -885,10 +933,10 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
             getItemId = GI_NUTS_5;
             break;
         case ITEM00_HEART:
-            Item_Give(play, ITEM_HEART);
+            Health_ChangeBy(play, 0x10, (closestPlayer != NULL) ? closestPlayer : GET_PLAYER(play));
             break;
         case ITEM00_FLEXIBLE:
-            Health_ChangeBy(play, 0x70);
+            Health_ChangeBy(play, 0x70, (closestPlayer != NULL) ? closestPlayer : GET_PLAYER(play));
             break;
         case ITEM00_BOMBS_A:
         case ITEM00_BOMBS_B:

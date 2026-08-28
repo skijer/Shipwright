@@ -1,12 +1,20 @@
 #include "global.h"
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+
 s32 D_8012CED0 = 0;
 
 s32 sShrinkWindowVal = 0;
 s32 sShrinkWindowCurrentVal = 0;
 
+static s32 ShrinkWindow_ShouldForceDisabled(void) {
+    return CVarGetInteger(CVAR_ENHANCEMENT("DisableBlackBars"), 0) ||
+           (!CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && (CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2) > 1));
+}
+
 void ShrinkWindow_SetVal(s32 value) {
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DisableBlackBars"), 0)) {
+    if (ShrinkWindow_ShouldForceDisabled()) {
         sShrinkWindowVal = 0;
         return;
     }
@@ -21,7 +29,7 @@ u32 ShrinkWindow_GetVal(void) {
 }
 
 void ShrinkWindow_SetCurrentVal(s32 currentVal) {
-    if (CVarGetInteger(CVAR_ENHANCEMENT("DisableBlackBars"), 0)) {
+    if (ShrinkWindow_ShouldForceDisabled()) {
         sShrinkWindowCurrentVal = 0;
         return;
     }

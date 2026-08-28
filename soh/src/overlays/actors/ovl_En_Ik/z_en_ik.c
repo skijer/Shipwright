@@ -785,7 +785,7 @@ void func_80A75FA0(Actor* thisx, PlayState* play) {
                     player->invincibilityTimer = 0;
                 } else {
                     player->invincibilityTimer = 0;
-                    play->damagePlayer(play, -64);
+                    play->damagePlayer(play, player, -64);
                     this->unk_2FE = 0;
                 }
             }

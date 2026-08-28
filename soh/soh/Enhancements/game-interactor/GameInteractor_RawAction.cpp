@@ -46,10 +46,10 @@ void GameInteractor::RawAction::AddOrRemoveMagic(int8_t amount) {
 
 void GameInteractor::RawAction::HealOrDamagePlayer(int16_t hearts) {
     if (hearts > 0) {
-        Health_ChangeBy(gPlayState, hearts * FULL_HEART_HEALTH);
+        Health_ChangeBy(gPlayState, hearts * FULL_HEART_HEALTH, GET_PLAYER(gPlayState));
     } else if (hearts < 0) {
         Player* player = GET_PLAYER(gPlayState);
-        Health_ChangeBy(gPlayState, hearts * FULL_HEART_HEALTH);
+        Health_ChangeBy(gPlayState, hearts * FULL_HEART_HEALTH, player);
         func_80837C0C(gPlayState, player, 0, 0, 0, 0, 0);
         player->invincibilityTimer = 28;
     }

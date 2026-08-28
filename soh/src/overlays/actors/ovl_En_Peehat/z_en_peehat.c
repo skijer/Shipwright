@@ -503,7 +503,7 @@ void EnPeehat_Ground_SetStateSeekPlayer(EnPeehat* this) {
 }
 
 void EnPeehat_Ground_StateSeekPlayer(EnPeehat* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
 
     Math_SmoothStepToF(&this->actor.speedXZ, 3.0f, 1.0f, 0.25f, 0.0f);
     Math_SmoothStepToF(&this->actor.world.pos.y, this->actor.floorHeight + 80.0f, 1.0f, 3.0f, 0.0f);
@@ -664,7 +664,7 @@ void EnPeehat_Ground_SetStateHover(EnPeehat* this) {
 
 void EnPeehat_Ground_StateHover(EnPeehat* this, PlayState* play) {
     f32 cos;
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
 
     // hover but don't gain altitude
     if (this->actor.world.pos.y - this->actor.floorHeight > 75.0f) {
@@ -713,7 +713,7 @@ void EnPeehat_Ground_StateReturnHome(EnPeehat* this, PlayState* play) {
     s16 yRot;
     Player* player;
 
-    player = GET_PLAYER(play);
+    player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     if (this->actor.world.pos.y - this->actor.floorHeight > 75.0f) {
         this->actor.world.pos.y -= 1.0f;
     } else {

@@ -152,7 +152,7 @@ void EnBx_Update(Actor* thisx, PlayState* play) {
                     player->invincibilityTimer = 0;
                 } else {
                     player->invincibilityTimer = 0;
-                    play->damagePlayer(play, -4);
+                    play->damagePlayer(play, GET_PLAYER(play), -4);
                 }
             }
             func_8002F71C(play, &this->actor, 6.0f, tmp32, 6.0f);

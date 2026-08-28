@@ -514,7 +514,7 @@ void BossRush_HandleBlueWarpHeal(PlayState* play) {
     // This function gets called multiple times per blue warp, so only heal when player isn't at max HP.
     if (gSaveContext.ship.quest.data.bossRush.options[BR_OPTIONS_HEAL] == BR_CHOICE_HEAL_EVERYBOSS &&
         gSaveContext.health != gSaveContext.healthCapacity) {
-        Health_ChangeBy(play, 320);
+        Health_ChangeBy(play, 320, GET_PLAYER(play));
     }
 }
 
@@ -552,7 +552,7 @@ void BossRush_HandleCompleteBoss(PlayState* play) {
     // Fully heal the player after Ganondorf
     if (gSaveContext.ship.quest.data.bossRush.options[BR_OPTIONS_HEAL] == BR_CHOICE_HEAL_EVERYBOSS &&
         play->sceneNum == SCENE_GANONDORF_BOSS) {
-        Health_ChangeBy(play, 320);
+        Health_ChangeBy(play, 320, GET_PLAYER(play));
     }
 
     if ((CheckDungeonCount() == 3 &&

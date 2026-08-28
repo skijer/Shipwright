@@ -43,9 +43,40 @@ void MagicWind_SetupAction(MagicWind* this, MagicWindFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
 
+static Player* MagicWind_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Actor* actor;
+
+    if (controllerPort == 1) {
+        return GET_PLAYER(play);
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* candidate = (Player*)actor;
+
+            if (candidate->isSecondPlayer && (candidate->controllerPort == controllerPort)) {
+                return candidate;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return GET_PLAYER(play);
+}
+
+static Player* MagicWind_GetCastingPlayer(MagicWind* this, PlayState* play) {
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        return (Player*)this->actor.parent;
+    }
+
+    return MagicWind_FindPlayerByPort(play, this->actor.home.rot.z);
+}
+
 void MagicWind_Init(Actor* thisx, PlayState* play) {
     MagicWind* this = (MagicWind*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicWind_GetCastingPlayer(this, play);
 
     if (SkelCurve_Init(play, &this->skelCurve, &sSkel, &sAnim) == 0) {
         // "Magic_Wind_Actor_ct (): Construct failed"
@@ -71,7 +102,7 @@ void MagicWind_Init(Actor* thisx, PlayState* play) {
 void MagicWind_Destroy(Actor* thisx, PlayState* play) {
     MagicWind* this = (MagicWind*)thisx;
     SkelCurve_Destroy(play, &this->skelCurve);
-    Magic_Reset(play);
+    Magic_ResetForPlayer(play, MagicWind_GetCastingPlayer(this, play));
     // "wipe out"
     LOG_STRING("消滅");
 }
@@ -87,7 +118,7 @@ void MagicWind_UpdateAlpha(f32 alpha) {
 }
 
 void MagicWind_WaitForTimer(MagicWind* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicWind_GetCastingPlayer(this, play);
 
     if (this->timer > 0) {
         this->timer--;

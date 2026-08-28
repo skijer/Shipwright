@@ -190,7 +190,7 @@ void func_80ACE5C8(EnPart* this, PlayState* play) {
                     player->invincibilityTimer = 0;
                 } else {
                     player->invincibilityTimer = 0;
-                    play->damagePlayer(play, -8);
+                    play->damagePlayer(play, GET_PLAYER(play), -8);
                 }
             }
             func_8002F71C(play, this->actor.parent, (650.0f - this->actor.parent->xzDistToPlayer) * 0.04f + 4.0f,

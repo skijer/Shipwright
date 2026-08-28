@@ -76,6 +76,37 @@ static u8 sVertexIndices[] = {
     14, 20, 21, 23, 28, 30, 33, 34, 40, 41, 43, 48, 50, 55, 57, 62, 64, 65, 73, 74,
 };
 
+static Player* MagicFire_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Actor* actor;
+
+    if (controllerPort == 1) {
+        return GET_PLAYER(play);
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* candidate = (Player*)actor;
+
+            if (candidate->isSecondPlayer && (candidate->controllerPort == controllerPort)) {
+                return candidate;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return GET_PLAYER(play);
+}
+
+static Player* MagicFire_GetCastingPlayer(MagicFire* this, PlayState* play) {
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        return (Player*)this->actor.parent;
+    }
+
+    return MagicFire_FindPlayerByPort(play, this->actor.home.rot.z);
+}
+
 void MagicFire_Init(Actor* thisx, PlayState* play) {
     MagicFire* this = (MagicFire*)thisx;
 
@@ -94,12 +125,13 @@ void MagicFire_Init(Actor* thisx, PlayState* play) {
 }
 
 void MagicFire_Destroy(Actor* thisx, PlayState* play) {
-    Magic_Reset(play);
+    MagicFire* this = (MagicFire*)thisx;
+    Magic_ResetForPlayer(play, MagicFire_GetCastingPlayer(this, play));
 }
 
 void MagicFire_UpdateBeforeCast(Actor* thisx, PlayState* play) {
     MagicFire* this = (MagicFire*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicFire_GetCastingPlayer(this, play);
 
     if ((play->msgCtx.msgMode == MSGMODE_OCARINA_CORRECT_PLAYBACK) || (play->msgCtx.msgMode == MSGMODE_SONG_PLAYED)) {
         Actor_Kill(&this->actor);
@@ -116,7 +148,7 @@ void MagicFire_UpdateBeforeCast(Actor* thisx, PlayState* play) {
 
 void MagicFire_Update(Actor* thisx, PlayState* play) {
     MagicFire* this = (MagicFire*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicFire_GetCastingPlayer(this, play);
     s32 pad;
 
     this->actor.world.pos = player->actor.world.pos;

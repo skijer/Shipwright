@@ -911,7 +911,7 @@ s32 func_80A44AB0(EnGo2* this, PlayState* play) {
 
                 arg2 = this->actionFunc == EnGo2_ContinueRolling ? 1.5f : this->actor.speedXZ * 1.5f;
 
-                play->damagePlayer(play, -4);
+                play->damagePlayer(play, player, -4);
                 func_8002F71C(play, &this->actor, arg2, this->actor.yawTowardsPlayer, 6.0f);
                 Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_HIT);
                 this->collider.base.ocFlags1 &= ~0x8;

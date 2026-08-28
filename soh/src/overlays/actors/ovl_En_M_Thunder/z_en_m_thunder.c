@@ -60,10 +60,40 @@ void func_80A9EFE0(EnMThunder* this, EnMThunderActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
 
+static Player* EnMThunder_FindClosestPlayer(EnMThunder* this, PlayState* play) {
+    Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    Player* closestPlayer = GET_PLAYER(play);
+    f32 currentMinDistSq = 9999999.9f;
+
+    while (playerActor != NULL) {
+        if (playerActor->id == ACTOR_PLAYER) {
+            f32 distSq = Math_Vec3f_DistXZ(&this->actor.world.pos, &playerActor->world.pos);
+
+            distSq *= distSq;
+            if (distSq < currentMinDistSq) {
+                currentMinDistSq = distSq;
+                closestPlayer = (Player*)playerActor;
+            }
+        }
+
+        playerActor = playerActor->next;
+    }
+
+    return closestPlayer;
+}
+
+static Player* EnMThunder_GetPlayer(EnMThunder* this, PlayState* play) {
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        return (Player*)this->actor.parent;
+    }
+
+    return GET_PLAYER(play);
+}
+
 void EnMThunder_Init(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     EnMThunder* this = (EnMThunder*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = EnMThunder_FindClosestPlayer(this, play);
 
     Collider_InitCylinder(play, &this->collider);
     Collider_SetCylinder(play, &this->collider, &this->actor, &D_80AA0420);
@@ -76,6 +106,7 @@ void EnMThunder_Init(Actor* thisx, PlayState* play2) {
     this->collider.dim.yShift = -20;
     this->unk_1C4 = 8;
     this->unk_1B4 = 0.0f;
+    this->actor.parent = &player->actor;
     this->actor.world.pos = player->bodyPartsPos[0];
     this->unk_1AC = 0.0f;
     this->unk_1BC = 0.0f;
@@ -85,9 +116,10 @@ void EnMThunder_Init(Actor* thisx, PlayState* play2) {
     this->unk_1CA = 0;
 
     if (player->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING) {
-        if (!gSaveContext.isMagicAcquired || (gSaveContext.magicState != MAGIC_STATE_IDLE) ||
+        if (!Magic_GetLevelForPort(player->isSecondPlayer ? player->controllerPort : 1) ||
+            (Magic_GetStateForPlayer(player) != MAGIC_STATE_IDLE) ||
             (((this->actor.params & 0xFF00) >> 8) &&
-             !(Magic_RequestChange(play, (this->actor.params & 0xFF00) >> 8, MAGIC_CONSUME_NOW)))) {
+             !(Magic_RequestChangeForPlayer(play, player, (this->actor.params & 0xFF00) >> 8, MAGIC_CONSUME_NOW)))) {
             Audio_PlaySoundGeneral(NA_SE_IT_ROLLING_CUT, &player->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             Audio_PlaySoundGeneral(NA_SE_IT_SWORD_SWING_HARD, &player->actor.projectedPos, 4,
@@ -116,7 +148,7 @@ void EnMThunder_Destroy(Actor* thisx, PlayState* play) {
     EnMThunder* this = (EnMThunder*)thisx;
 
     if (this->unk_1CA != 0) {
-        Magic_Reset(play);
+        Magic_ResetForPlayer(play, EnMThunder_GetPlayer(this, play));
     }
 
     Collider_DestroyCylinder(play, &this->collider);
@@ -129,7 +161,7 @@ void func_80A9F314(PlayState* play, f32 arg1) {
 }
 
 void func_80A9F350(EnMThunder* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnMThunder_GetPlayer(this, play);
 
     if (player->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING) {
         if (player->meleeWeaponAnimation >= 0x18) {
@@ -149,7 +181,7 @@ void func_80A9F350(EnMThunder* this, PlayState* play) {
 }
 
 void func_80A9F408(EnMThunder* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnMThunder_GetPlayer(this, play);
     Actor* child = this->actor.child;
 
     this->unk_1B8 = player->unk_858;
@@ -158,9 +190,10 @@ void func_80A9F408(EnMThunder* this, PlayState* play) {
 
     if (this->unk_1CA == 0) {
         if (player->unk_858 >= 0.1f) {
-            if ((gSaveContext.magicState != MAGIC_STATE_IDLE) ||
+            if ((Magic_GetStateForPlayer(player) != MAGIC_STATE_IDLE) ||
                 (((this->actor.params & 0xFF00) >> 8) &&
-                 !(Magic_RequestChange(play, (this->actor.params & 0xFF00) >> 8, MAGIC_CONSUME_WAIT_PREVIEW)))) {
+                 !(Magic_RequestChangeForPlayer(play, player, (this->actor.params & 0xFF00) >> 8,
+                                               MAGIC_CONSUME_WAIT_PREVIEW)))) {
                 func_80A9F350(this, play);
                 func_80A9EFE0(this, func_80A9F350);
                 this->unk_1C8 = 0;
@@ -194,7 +227,7 @@ void func_80A9F408(EnMThunder* this, PlayState* play) {
         } else {
             player->stateFlags2 &= ~PLAYER_STATE2_SPIN_ATTACKING;
             if ((this->actor.params & 0xFF00) >> 8) {
-                gSaveContext.magicState = MAGIC_STATE_CONSUME_SETUP;
+                Magic_SetStateForPlayer(player, MAGIC_STATE_CONSUME_SETUP);
             }
             if (player->unk_858 < 0.85f) {
                 this->collider.info.toucher.dmgFlags = D_80AA044C[this->unk_1C7];
@@ -271,7 +304,7 @@ void func_80A9F938(EnMThunder* this, PlayState* play) {
 }
 
 void func_80A9F9B4(EnMThunder* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = EnMThunder_GetPlayer(this, play);
 
     if (Math_StepToF(&this->unk_1AC, 0.0f, 1 / 16.0f)) {
         Actor_Kill(&this->actor);
@@ -320,7 +353,7 @@ void EnMThunder_Draw(Actor* thisx, PlayState* play2) {
     static f32 D_80AA046C[] = { 0.1f, 0.15f, 0.2f, 0.25f, 0.3f, 0.25f, 0.2f, 0.15f };
     PlayState* play = play2;
     EnMThunder* this = (EnMThunder*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = EnMThunder_GetPlayer(this, play);
     f32 phi_f14;
     s32 phi_t1;
 

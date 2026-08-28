@@ -1634,58 +1634,13 @@ void SohInputEditorWindow::DrawLinkTab() {
     }
 }
 
-void SohInputEditorWindow::DrawIvanTab() {
-    if (CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0)) {
-        DrawDebugPortTab(1, "Ivan (P2)");
-        return;
-    }
-
-    uint8_t portIndex = 1;
-    if (ImGui::BeginTabItem(StringHelper::Sprintf("Ivan (P2)###port%d", portIndex).c_str())) {
-        DrawClearAllButton(portIndex);
-        DrawSetDefaultsButton(portIndex);
-        DrawDeviceToggles(portIndex);
-
-        UpdateBitmaskToMappingIds(portIndex);
-        UpdateStickDirectionToMappingIds(portIndex);
-
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4(0.133f, 0.133f, 0.133f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.0f, 0.0f, 0.0f, 1.0f));
-
-        if (ImGui::CollapsingHeader("Buttons", NULL, ImGuiTreeNodeFlags_DefaultOpen)) {
-            DrawButtonLine("A", portIndex, BTN_A, CHIP_COLOR_N64_BLUE);
-            DrawButtonLine("B", portIndex, BTN_B, CHIP_COLOR_N64_GREEN);
-            DrawButtonLine("Z", portIndex, BTN_Z);
-            DrawButtonLine(StringHelper::Sprintf("C %s", ICON_FA_ARROW_UP).c_str(), portIndex, BTN_CUP,
-                           CHIP_COLOR_N64_YELLOW);
-            DrawButtonLine(StringHelper::Sprintf("C %s", ICON_FA_ARROW_DOWN).c_str(), portIndex, BTN_CDOWN,
-                           CHIP_COLOR_N64_YELLOW);
-            DrawButtonLine(StringHelper::Sprintf("C %s", ICON_FA_ARROW_LEFT).c_str(), portIndex, BTN_CLEFT,
-                           CHIP_COLOR_N64_YELLOW);
-            DrawButtonLine(StringHelper::Sprintf("C %s", ICON_FA_ARROW_RIGHT).c_str(), portIndex, BTN_CRIGHT,
-                           CHIP_COLOR_N64_YELLOW);
-        }
-
-        if (ImGui::CollapsingHeader("D-Pad", NULL, ImGuiTreeNodeFlags_DefaultOpen)) {
-            DrawButtonLine(StringHelper::Sprintf("%s", ICON_FA_ARROW_UP).c_str(), portIndex, BTN_DUP);
-            DrawButtonLine(StringHelper::Sprintf("%s", ICON_FA_ARROW_DOWN).c_str(), portIndex, BTN_DDOWN);
-            DrawButtonLine(StringHelper::Sprintf("%s", ICON_FA_ARROW_LEFT).c_str(), portIndex, BTN_DLEFT);
-            DrawButtonLine(StringHelper::Sprintf("%s", ICON_FA_ARROW_RIGHT).c_str(), portIndex, BTN_DRIGHT);
-        }
-
-        if (ImGui::CollapsingHeader("Analog Stick", NULL, ImGuiTreeNodeFlags_DefaultOpen)) {
-            DrawStickSection(portIndex, Ship::LEFT, 0);
-        }
-
-        ImGui::PopStyleColor();
-        ImGui::PopStyleColor();
-        ImGui::PopStyleColor();
-        ImGui::EndTabItem();
-    }
+void SohInputEditorWindow::DrawMultiplayerTabs() {
+    DrawPlayerPortTab(1, "Player 2 (P2)###port1");
+    DrawPlayerPortTab(2, "Player 3 (P3)###port2"); 
+    DrawPlayerPortTab(3, "Player 4 (P4)###port3");
 }
 
-void SohInputEditorWindow::DrawDebugPortTab(uint8_t portIndex, std::string customName) {
+void SohInputEditorWindow::DrawPlayerPortTab(uint8_t portIndex, std::string customName) {
     if (ImGui::BeginTabItem(customName == ""
                                 ? StringHelper::Sprintf("Port %d###port%d", portIndex + 1, portIndex).c_str()
                                 : customName.c_str())) {
@@ -1837,11 +1792,7 @@ void SohInputEditorWindow::DrawElement() {
     ImGui::PushStyleColor(ImGuiCol_TabActive, ImVec4(themeColor.x, themeColor.y, themeColor.z, 0.6f));
     ImGui::BeginTabBar("##ControllerConfigPortTabs");
     DrawLinkTab();
-    DrawIvanTab();
-    if (CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0)) {
-        DrawDebugPortTab(2);
-        DrawDebugPortTab(3);
-    }
+    DrawMultiplayerTabs();
     ImGui::EndTabBar();
     ImGui::PopStyleColor(3);
     ImGui::PopFont();

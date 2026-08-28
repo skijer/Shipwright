@@ -22,6 +22,7 @@ void BossRush_InitSave(void);
  */
 void Sram_InitNewSave(void) {
     Save_InitFile(false);
+    Interface_ResetExtraItemData();
 }
 
 /**
@@ -35,6 +36,7 @@ void Sram_InitNewSave(void) {
  */
 void Sram_InitDebugSave(void) {
     Save_InitFile(true);
+    Interface_ResetExtraItemData();
 }
 
 void Sram_InitBossRushSave(void) {
@@ -77,6 +79,7 @@ void Sram_OpenSave() {
     u8* ptr;
 
     Save_LoadFile();
+    Interface_ResetExtraItemData();
 
     switch (gSaveContext.savedSceneNum) {
         case SCENE_DEKU_TREE:
@@ -153,6 +156,32 @@ void Sram_OpenSave() {
     if (gSaveContext.health < STARTING_HEALTH) {
         gSaveContext.health =
             CVarGetInteger(CVAR_ENHANCEMENT("FullHealthSpawn"), 0) ? gSaveContext.healthCapacity : STARTING_HEALTH;
+    }
+
+    {
+        s16* secondaryHealth[] = { &gSaveContext.health2, &gSaveContext.health3, &gSaveContext.health4 };
+        s16* secondaryHealthCapacity[] = { &gSaveContext.healthCapacity2, &gSaveContext.healthCapacity3,
+                                           &gSaveContext.healthCapacity4 };
+
+        for (i = 0; i < ARRAY_COUNT(secondaryHealth); i++) {
+            if (*secondaryHealthCapacity[i] < STARTING_HEALTH) {
+                *secondaryHealthCapacity[i] = gSaveContext.healthCapacity;
+
+                if (*secondaryHealthCapacity[i] < STARTING_HEALTH) {
+                    *secondaryHealthCapacity[i] = STARTING_HEALTH;
+                }
+            }
+
+            if (*secondaryHealth[i] < STARTING_HEALTH) {
+                *secondaryHealth[i] = CVarGetInteger(CVAR_ENHANCEMENT("FullHealthSpawn"), 0)
+                                          ? *secondaryHealthCapacity[i]
+                                          : STARTING_HEALTH;
+            }
+
+            if (*secondaryHealth[i] > *secondaryHealthCapacity[i]) {
+                *secondaryHealth[i] = *secondaryHealthCapacity[i];
+            }
+        }
     }
 
     if (gSaveContext.scarecrowLongSongSet) {

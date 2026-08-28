@@ -200,19 +200,38 @@ void ObjKibako_Idle(ObjKibako* this, PlayState* play) {
         ObjKibako_SpawnCollectible(this, play);
         Actor_Kill(&this->actor);
     } else {
+        Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        f32 minDistSq = 1.0e20f;
+        s32 sanity = 0;
+
+        while ((playerActor != NULL) && (sanity < 2000)) {
+            if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+                f32 dx = this->actor.world.pos.x - playerActor->world.pos.x;
+                f32 dz = this->actor.world.pos.z - playerActor->world.pos.z;
+                f32 distSq = SQ(dx) + SQ(dz);
+
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                }
+            }
+
+            playerActor = playerActor->next;
+            sanity++;
+        }
+
         Actor_MoveXZGravity(&this->actor);
         Actor_UpdateBgCheckInfo(play, &this->actor, 19.0f, 20.0f, 0.0f, 5);
-        if (!(this->collider.base.ocFlags1 & OC1_TYPE_PLAYER) && (this->actor.xzDistToPlayer > 28.0f)) {
+        if (!(this->collider.base.ocFlags1 & OC1_TYPE_PLAYER) && (minDistSq > SQ(28.0f))) {
             this->collider.base.ocFlags1 |= OC1_TYPE_PLAYER;
         }
-        if (this->actor.xzDistToPlayer < 600.0f) {
+        if (minDistSq < SQ(600.0f)) {
             Collider_UpdateCylinder(&this->actor, &this->collider);
             CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
-            if (this->actor.xzDistToPlayer < 180.0f) {
+            if (minDistSq < SQ(180.0f)) {
                 CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
             }
         }
-        if (this->actor.xzDistToPlayer < 100.0f) {
+        if (minDistSq < SQ(100.0f)) {
             Actor_OfferCarry(&this->actor, play);
         }
     }

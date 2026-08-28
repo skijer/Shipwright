@@ -92,6 +92,38 @@ void EnBox_SetupAction(EnBox* this, EnBoxActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
 
+static Player* EnBox_FindInteractPlayer(PlayState* play, EnBox* this) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    Player* bestPlayer = NULL;
+    f32 bestDistSq = 1000000000.0f;
+    s32 sanity = 0;
+
+    while ((actor != NULL) && (sanity < 2000)) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+            Vec3f relPos;
+            s16 yawToChest;
+
+            Actor_WorldToActorCoords(&this->dyna.actor, &relPos, &player->actor.world.pos);
+            yawToChest = Math_Vec3f_Yaw(&player->actor.world.pos, &this->dyna.actor.world.pos);
+            if ((relPos.z > -50.0f) && (relPos.z < 0.0f) && (fabsf(relPos.y) < 10.0f) && (fabsf(relPos.x) < 20.0f) &&
+                (ABS(player->actor.shape.rot.y - yawToChest) < 0x3000)) {
+                f32 distSq = SQ(relPos.x) + SQ(relPos.z);
+
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestPlayer = player;
+                }
+            }
+        }
+
+        actor = actor->next;
+        sanity++;
+    }
+
+    return bestPlayer;
+}
+
 void EnBox_ClipToGround(EnBox* this, PlayState* play) {
     f32 newY;
     CollisionPoly* poly;
@@ -414,7 +446,6 @@ void EnBox_WaitOpen(EnBox* this, PlayState* play) {
     AnimationHeader* anim;
     s32 linkAge;
     s32 pad;
-    Vec3f sp4C;
     Player* player;
 
     this->alpha = 255;
@@ -443,11 +474,11 @@ void EnBox_WaitOpen(EnBox* this, PlayState* play) {
         osSyncPrintf("Actor_Environment_Tbox_On() %d\n", this->dyna.actor.params & 0x1F);
         Flags_SetTreasure(play, this->dyna.actor.params & 0x1F);
     } else {
-        player = GET_PLAYER(play);
-        Actor_WorldToActorCoords(&this->dyna.actor, &sp4C, &player->actor.world.pos);
-        if (sp4C.z > -50.0f && sp4C.z < 0.0f && fabsf(sp4C.y) < 10.0f && fabsf(sp4C.x) < 20.0f &&
-            Player_IsFacingActor(&this->dyna.actor, 0x3000, play)) {
-            Actor_OfferGetItemNearby(&this->dyna.actor, play, -(this->dyna.actor.params >> 5 & 0x7F));
+        player = EnBox_FindInteractPlayer(play, this);
+        if (player != NULL) {
+            player->getItemId = -(this->dyna.actor.params >> 5 & 0x7F);
+            player->interactRangeActor = &this->dyna.actor;
+            player->getItemDirection = ABS(this->dyna.actor.yawTowardsPlayer - player->actor.shape.rot.y);
         }
         if (Flags_GetTreasure(play, this->dyna.actor.params & 0x1F)) {
             EnBox_SetupAction(this, EnBox_Open);

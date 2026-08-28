@@ -972,7 +972,7 @@ void EnGirlA_ItemGive_Health(PlayState* play, EnGirlA* this) {
     GetItemEntry entry = ItemTable_Retrieve(this->getItemId);
     gSaveContext.ship.pendingSale = entry.itemId;
     gSaveContext.ship.pendingSaleMod = entry.modIndex;
-    Health_ChangeBy(play, this->itemCount);
+    Health_ChangeBy(play, this->itemCount, GET_PLAYER(play));
     Rupees_ChangeBy(-this->basePrice);
 }
 

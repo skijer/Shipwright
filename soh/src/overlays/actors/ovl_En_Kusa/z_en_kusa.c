@@ -331,17 +331,35 @@ void EnKusa_Main(EnKusa* this, PlayState* play) {
         EnKusa_SetupCut(this);
         this->actor.flags |= ACTOR_FLAG_GRASS_DESTROYED;
     } else {
-        if (!(this->collider.base.ocFlags1 & OC1_TYPE_PLAYER) && (this->actor.xzDistToPlayer > 12.0f)) {
+        Actor* plActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        f32 minDistSq = 1.0e20f;
+        s32 sanity = 0;
+
+        while ((plActor != NULL) && (sanity < 2000)) {
+            if ((plActor->id == ACTOR_PLAYER) && (plActor->update != NULL)) {
+                f32 dx = this->actor.world.pos.x - plActor->world.pos.x;
+                f32 dz = this->actor.world.pos.z - plActor->world.pos.z;
+                f32 distSq = (dx * dx) + (dz * dz);
+
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                }
+            }
+            plActor = plActor->next;
+            sanity++;
+        }
+ 
+        if (!(this->collider.base.ocFlags1 & OC1_TYPE_PLAYER) && (minDistSq > 144.0f)) {
             this->collider.base.ocFlags1 |= OC1_TYPE_PLAYER;
         }
-
-        if (this->actor.xzDistToPlayer < 600.0f) {
+ 
+        if (minDistSq < 360000.0f) {
             Collider_UpdateCylinder(&this->actor, &this->collider);
             CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
 
-            if (this->actor.xzDistToPlayer < 400.0f) {
+            if (minDistSq < 160000.0f) {
                 CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
-                if (this->actor.xzDistToPlayer < 100.0f) {
+                if (minDistSq < 10000.0f) {
                     Actor_OfferCarry(&this->actor, play);
                 }
             }

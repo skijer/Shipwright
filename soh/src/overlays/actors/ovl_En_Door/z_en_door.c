@@ -81,6 +81,46 @@ static Gfx* D_809FCEE4[5][2] = {
     { gFieldDoorLeftDL, gFieldDoorRightDL },
 };
 
+static Player* EnDoor_FindInteractPlayer(EnDoor* this, PlayState* play, s16* outDoorDirection) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    Player* bestPlayer = NULL;
+    f32 bestDistSq = 1000000000.0f;
+    s32 sanity = 0;
+
+    *outDoorDirection = 1;
+
+    while ((actor != NULL) && (sanity < 2000)) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+            Vec3f relPos;
+            s16 rotYDiff;
+
+            Actor_WorldToActorCoords(&this->actor, &relPos, &player->actor.world.pos);
+            if ((fabsf(relPos.y) < 20.0f) && (fabsf(relPos.x) < 20.0f) && (fabsf(relPos.z) < 50.0f)) {
+                rotYDiff = player->actor.shape.rot.y - this->actor.shape.rot.y;
+                if (relPos.z > 0.0f) {
+                    rotYDiff = 0x8000 - rotYDiff;
+                }
+
+                if (ABS(rotYDiff) < 0x3000) {
+                    f32 distSq = SQ(relPos.x) + SQ(relPos.z);
+
+                    if (distSq < bestDistSq) {
+                        bestDistSq = distSq;
+                        bestPlayer = player;
+                        *outDoorDirection = (relPos.z >= 0.0f) ? 1 : -1;
+                    }
+                }
+            }
+        }
+
+        actor = actor->next;
+        sanity++;
+    }
+
+    return bestPlayer;
+}
+
 void EnDoor_Init(Actor* thisx, PlayState* play2) {
     PlayState* play = play2;
     EnDoor* this = (EnDoor*)thisx;
@@ -193,12 +233,11 @@ void EnDoor_SetupType(EnDoor* this, PlayState* play) {
 
 void EnDoor_Idle(EnDoor* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
+    Player* interactPlayer;
     s32 doorType;
-    Vec3f playerPosRelToDoor;
-    s16 phi_v0;
+    s16 doorDirection;
 
     doorType = this->actor.params >> 7 & 7;
-    Actor_WorldToActorCoords(&this->actor, &playerPosRelToDoor, &player->actor.world.pos);
     if (this->playerIsOpening != 0) {
         this->actionFunc = EnDoor_Open;
         Animation_PlayOnceSetSpeed(&this->skelAnime, D_809FCECC[this->animStyle],
@@ -212,28 +251,21 @@ void EnDoor_Idle(EnDoor* this, PlayState* play) {
             GameInteractor_ExecuteOnDungeonKeyUsedHooks(gSaveContext.mapIndex);
         }
     } else if (!Player_InCsMode(play)) {
-        if (fabsf(playerPosRelToDoor.y) < 20.0f && fabsf(playerPosRelToDoor.x) < 20.0f &&
-            fabsf(playerPosRelToDoor.z) < 50.0f) {
-            phi_v0 = player->actor.shape.rot.y - this->actor.shape.rot.y;
-            if (playerPosRelToDoor.z > 0.0f) {
-                phi_v0 = 0x8000 - phi_v0;
-            }
-            if (ABS(phi_v0) < 0x3000) {
-                if (this->lockTimer != 0) {
-                    if (GameInteractor_Should(VB_NOT_HAVE_SMALL_KEY,
-                                              gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] <= 0, this)) {
-                        Player* player2 = GET_PLAYER(play);
+        interactPlayer = EnDoor_FindInteractPlayer(this, play, &doorDirection);
 
-                        player2->naviTextId = -0x203;
-                        return;
-                    } else {
-                        player->doorTimer = 10;
-                    }
+        if (interactPlayer != NULL) {
+            if (this->lockTimer != 0) {
+                if (GameInteractor_Should(VB_NOT_HAVE_SMALL_KEY,
+                                          gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] <= 0, this)) {
+                    interactPlayer->naviTextId = -0x203;
+                    return;
+                } else {
+                    interactPlayer->doorTimer = 10;
                 }
-                player->doorType = (doorType == DOOR_AJAR) ? PLAYER_DOORTYPE_AJAR : PLAYER_DOORTYPE_HANDLE;
-                player->doorDirection = (playerPosRelToDoor.z >= 0.0f) ? 1.0f : -1.0f;
-                player->doorActor = &this->actor;
             }
+            interactPlayer->doorType = (doorType == DOOR_AJAR) ? PLAYER_DOORTYPE_AJAR : PLAYER_DOORTYPE_HANDLE;
+            interactPlayer->doorDirection = doorDirection;
+            interactPlayer->doorActor = &this->actor;
         } else if (doorType == DOOR_AJAR && this->actor.xzDistToPlayer > DOOR_AJAR_OPEN_RANGE) {
             this->actionFunc = EnDoor_AjarOpen;
         }

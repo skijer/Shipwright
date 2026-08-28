@@ -2,6 +2,14 @@
 #include <assert.h>
 #include "soh/OTRGlobals.h"
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+
+static s32 Rcp_IsLocalMultiplayerEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) &&
+           (CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2) > 1);
+}
+
 Gfx sSetupDL[SETUPDL_MAX][6] = {
     {
         /* SETUPDL_0 */
@@ -1599,6 +1607,10 @@ void Gfx_SetupFrame(GraphicsContext* gfxCtx, u8 r, u8 g, u8 b) {
 
     if ((R_PAUSE_MENU_MODE < 2) && (gTrnsnUnkState < 2)) {
         s32 letterboxSize = ShrinkWindow_GetCurrentVal(); // Upstream TODO: Letterbox
+
+        if (Rcp_IsLocalMultiplayerEnabled()) {
+            letterboxSize = 0;
+        }
 
         if (HREG(80) == 16) {
             if (HREG(95) != 16) {

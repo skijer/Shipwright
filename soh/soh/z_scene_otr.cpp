@@ -11,8 +11,10 @@
 #include "soh/resource/type/Path.h"
 #include "soh/resource/type/Text.h"
 #include <ship/resource/type/Blob.h>
+#include <array>
 #include <memory>
 #include <cassert>
+#include <vector>
 #include "soh/resource/type/scenecommand/SetCameraSettings.h"
 #include "soh/resource/type/scenecommand/SetCutscenes.h"
 #include "soh/resource/type/scenecommand/SetStartPositionList.h"
@@ -39,6 +41,303 @@ extern Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName);
 extern "C" s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 extern "C" RomFile sNaviMsgFiles[];
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene);
+bool OTRfunc_800982FC(ObjectContext* objectCtx, s32 bankIndex, s16 objectId);
+
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_SECONDARY_AREA_LOAD_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SecondaryPlayersLoadAreas")
+#define LOCAL_MP_MAX_RETAINED_ROOMS 4
+
+namespace {
+typedef struct {
+    s32 roomNum;
+    Room roomData;
+    std::vector<s16> objectIds;
+} OTRRetainedRoomEntry;
+
+std::array<OTRRetainedRoomEntry, LOCAL_MP_MAX_RETAINED_ROOMS> sRetainedRooms;
+s32 sRetainedRoomCount = 0;
+s32 sPendingObjectListRoomNum = -1;
+std::vector<s16> sPendingObjectList;
+
+bool OTRRoom_AreaPersistenceEnabledInternal() {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && CVarGetInteger(LOCAL_MP_SECONDARY_AREA_LOAD_CVAR, 0);
+}
+
+s16 OTRRoom_NormalizeObjectId(s16 objectId) {
+    return (objectId < 0) ? -objectId : objectId;
+}
+
+bool OTRRoom_ObjectListContains(const std::vector<s16>& objectList, s16 objectId) {
+    for (s16 listObjectId : objectList) {
+        if (listObjectId == objectId) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+s32 OTRRoom_FindRetainedRoomIndexInternal(s32 roomNum) {
+    for (s32 i = 0; i < sRetainedRoomCount; i++) {
+        if (sRetainedRooms[i].roomNum == roomNum) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+bool OTRRoom_IsRoomOccupiedByAnyPlayerInternal(PlayState* play, s32 roomNum) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    s32 sanity = 0;
+
+    if (roomNum < 0) {
+        return false;
+    }
+
+    while ((actor != NULL) && (sanity < 2000)) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL) && (actor->room == roomNum)) {
+            return true;
+        }
+
+        actor = actor->next;
+        sanity++;
+    }
+
+    return false;
+}
+
+void OTRRoom_RefreshObjectContextNumInternal(ObjectContext* objectCtx) {
+    s32 highestUsedSlot = objectCtx->unk_09;
+
+    for (s32 i = objectCtx->unk_09; i < (OBJECT_EXCHANGE_BANK_MAX - 1); i++) {
+        if (objectCtx->status[i].id != OBJECT_INVALID) {
+            highestUsedSlot = i + 1;
+        }
+    }
+
+    objectCtx->num = highestUsedSlot;
+}
+
+s32 OTRRoom_FindObjectSlotInternal(const ObjectContext* objectCtx, s16 objectId) {
+    for (s32 i = objectCtx->unk_09; i < (OBJECT_EXCHANGE_BANK_MAX - 1); i++) {
+        if ((objectCtx->status[i].id != OBJECT_INVALID) &&
+            (OTRRoom_NormalizeObjectId(objectCtx->status[i].id) == objectId)) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+s32 OTRRoom_FindFreeObjectSlotInternal(const ObjectContext* objectCtx) {
+    for (s32 i = objectCtx->unk_09; i < (OBJECT_EXCHANGE_BANK_MAX - 1); i++) {
+        if (objectCtx->status[i].id == OBJECT_INVALID) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+void OTRRoom_MoveRetainedRoomToBackInternal(s32 retainedRoomIndex) {
+    OTRRetainedRoomEntry movedRoom;
+
+    if ((retainedRoomIndex < 0) || (retainedRoomIndex >= sRetainedRoomCount) ||
+        (retainedRoomIndex == (sRetainedRoomCount - 1))) {
+        return;
+    }
+
+    movedRoom = sRetainedRooms[retainedRoomIndex];
+
+    for (s32 i = retainedRoomIndex; i < (sRetainedRoomCount - 1); i++) {
+        sRetainedRooms[i] = sRetainedRooms[i + 1];
+    }
+
+    sRetainedRooms[sRetainedRoomCount - 1] = movedRoom;
+}
+
+void OTRRoom_RemoveRetainedRoomAtInternal(s32 retainedRoomIndex) {
+    if ((retainedRoomIndex < 0) || (retainedRoomIndex >= sRetainedRoomCount)) {
+        return;
+    }
+
+    for (s32 i = retainedRoomIndex; i < (sRetainedRoomCount - 1); i++) {
+        sRetainedRooms[i] = sRetainedRooms[i + 1];
+    }
+
+    sRetainedRoomCount--;
+
+    if (sRetainedRoomCount >= 0) {
+        sRetainedRooms[sRetainedRoomCount].roomNum = -1;
+        sRetainedRooms[sRetainedRoomCount].roomData = {};
+        sRetainedRooms[sRetainedRoomCount].roomData.num = -1;
+        sRetainedRooms[sRetainedRoomCount].objectIds.clear();
+    }
+}
+
+void OTRRoom_ClearRetainedStateInternal() {
+    sRetainedRoomCount = 0;
+    sPendingObjectListRoomNum = -1;
+    sPendingObjectList.clear();
+
+    for (OTRRetainedRoomEntry& retainedRoom : sRetainedRooms) {
+        retainedRoom.roomNum = -1;
+        retainedRoom.roomData = {};
+        retainedRoom.roomData.num = -1;
+        retainedRoom.objectIds.clear();
+    }
+}
+
+void OTRRoom_SetPendingObjectListInternal(s32 roomNum, const SOH::SetObjectList* cmdObj) {
+    sPendingObjectListRoomNum = roomNum;
+    sPendingObjectList.assign(cmdObj->objects.begin(), cmdObj->objects.end());
+
+    s32 retainedRoomIndex = OTRRoom_FindRetainedRoomIndexInternal(roomNum);
+    if (retainedRoomIndex >= 0) {
+        sRetainedRooms[retainedRoomIndex].objectIds = sPendingObjectList;
+    }
+}
+
+void OTRRoom_EnsureObjectsLoadedForListInternal(PlayState* play, const std::vector<s16>& objectList) {
+    for (s16 objectId : objectList) {
+        s32 freeSlot;
+
+        if (objectId == OBJECT_INVALID) {
+            continue;
+        }
+
+        if (OTRRoom_FindObjectSlotInternal(&play->objectCtx, objectId) >= 0) {
+            continue;
+        }
+
+        freeSlot = OTRRoom_FindFreeObjectSlotInternal(&play->objectCtx);
+        if (freeSlot < 0) {
+            break;
+        }
+
+        OTRfunc_800982FC(&play->objectCtx, freeSlot, objectId);
+    }
+
+    OTRRoom_RefreshObjectContextNumInternal(&play->objectCtx);
+}
+
+void OTRRoom_StoreCurrentRoomDataInternal(PlayState* play) {
+    s32 roomNum = play->roomCtx.curRoom.num;
+    s32 retainedRoomIndex;
+
+    if (roomNum < 0) {
+        return;
+    }
+
+    retainedRoomIndex = OTRRoom_FindRetainedRoomIndexInternal(roomNum);
+    if (retainedRoomIndex < 0) {
+        if (sRetainedRoomCount >= LOCAL_MP_MAX_RETAINED_ROOMS) {
+            s32 evictionIndex = -1;
+
+            for (s32 i = 0; i < sRetainedRoomCount; i++) {
+                s32 candidateRoomNum = sRetainedRooms[i].roomNum;
+
+                if ((candidateRoomNum != roomNum) && (candidateRoomNum != play->roomCtx.prevRoom.num) &&
+                    !OTRRoom_IsRoomOccupiedByAnyPlayerInternal(play, candidateRoomNum)) {
+                    evictionIndex = i;
+                    break;
+                }
+            }
+
+            if (evictionIndex < 0) {
+                for (s32 i = 0; i < sRetainedRoomCount; i++) {
+                    if (!OTRRoom_IsRoomOccupiedByAnyPlayerInternal(play, sRetainedRooms[i].roomNum)) {
+                        evictionIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (evictionIndex < 0) {
+                evictionIndex = 0;
+            }
+
+            OTRRoom_RemoveRetainedRoomAtInternal(evictionIndex);
+        }
+
+        retainedRoomIndex = sRetainedRoomCount++;
+        sRetainedRooms[retainedRoomIndex].roomNum = roomNum;
+        sRetainedRooms[retainedRoomIndex].objectIds.clear();
+    } else {
+        OTRRoom_MoveRetainedRoomToBackInternal(retainedRoomIndex);
+        retainedRoomIndex = sRetainedRoomCount - 1;
+    }
+
+    sRetainedRooms[retainedRoomIndex].roomNum = roomNum;
+    sRetainedRooms[retainedRoomIndex].roomData = play->roomCtx.curRoom;
+
+    if (sPendingObjectListRoomNum == roomNum) {
+        sRetainedRooms[retainedRoomIndex].objectIds = sPendingObjectList;
+    }
+}
+
+void OTRRoom_RebuildObjectContextInternal(PlayState* play) {
+    std::vector<s16> requiredObjects;
+
+    if (!OTRRoom_AreaPersistenceEnabledInternal()) {
+        return;
+    }
+
+    for (s32 i = 0; i < sRetainedRoomCount; i++) {
+        for (s16 objectId : sRetainedRooms[i].objectIds) {
+            if ((objectId != OBJECT_INVALID) && !OTRRoom_ObjectListContains(requiredObjects, objectId)) {
+                requiredObjects.push_back(objectId);
+            }
+        }
+    }
+
+    for (s32 i = play->objectCtx.unk_09; i < (OBJECT_EXCHANGE_BANK_MAX - 1); i++) {
+        s16 objectId = play->objectCtx.status[i].id;
+
+        if ((objectId != OBJECT_INVALID) &&
+            !OTRRoom_ObjectListContains(requiredObjects, OTRRoom_NormalizeObjectId(objectId))) {
+            play->objectCtx.status[i].id = OBJECT_INVALID;
+        }
+    }
+
+    func_80031A28(play, &play->actorCtx);
+
+    OTRRoom_EnsureObjectsLoadedForListInternal(play, requiredObjects);
+}
+} // namespace
+
+extern "C" s32 OTRRoom_AreaPersistenceEnabled(void) {
+    return OTRRoom_AreaPersistenceEnabledInternal();
+}
+
+extern "C" void OTRRoom_ResetAreaPersistence(void) {
+    OTRRoom_ClearRetainedStateInternal();
+}
+
+extern "C" s32 OTRRoom_IsRetainedRoom(s32 roomNum) {
+    if (!OTRRoom_AreaPersistenceEnabledInternal()) {
+        return 0;
+    }
+
+    return OTRRoom_FindRetainedRoomIndexInternal(roomNum) >= 0;
+}
+
+extern "C" s32 OTRRoom_GetRetainedRoomCount(void) {
+    if (!OTRRoom_AreaPersistenceEnabledInternal()) {
+        return 0;
+    }
+
+    return sRetainedRoomCount;
+}
+
+extern "C" Room* OTRRoom_GetRetainedRoom(s32 index) {
+    if (!OTRRoom_AreaPersistenceEnabledInternal() || (index < 0) || (index >= sRetainedRoomCount)) {
+        return NULL;
+    }
+
+    return &sRetainedRooms[index].roomData;
+}
 
 bool Scene_CommandSpawnList(PlayState* play, SOH::ISceneCommand* cmd) {
     // SOH::SetStartPositionList* cmdStartPos = std::static_pointer_cast<SOH::SetStartPositionList>(cmd);
@@ -147,37 +446,38 @@ bool Scene_CommandObjectList(PlayState* play, SOH::ISceneCommand* cmd) {
     // SOH::SetObjectList* cmdObj = static_pointer_cast<SOH::SetObjectList>(cmd);
     SOH::SetObjectList* cmdObj = (SOH::SetObjectList*)cmd;
 
-    s32 i;
-    s32 j;
-    s32 k;
-    ObjectStatus* status2;
-    // s16* objectEntry = SEGMENTED_TO_VIRTUAL(cmd->objectList.segment);
-    s16* objectEntry = (s16*)cmdObj->GetRawPointer();
-    void* nextPtr;
+    if (OTRRoom_AreaPersistenceEnabledInternal() && (play->roomCtx.curRoom.num >= 0)) {
+        OTRRoom_SetPendingObjectListInternal(play->roomCtx.curRoom.num, cmdObj);
+        OTRRoom_EnsureObjectsLoadedForListInternal(play, sPendingObjectList);
+        return false;
+    }
 
-    k = 0;
-    i = play->objectCtx.unk_09;
+    {
+        s32 i;
+        s32 j;
+        s32 k;
 
-    // Loop until a mismatch in the object lists
-    // Then clear all object ids past that in the context object list and kill actors for those objects
-    for (i = play->objectCtx.unk_09, k = 0; i < play->objectCtx.num; i++, k++) {
-        if (k >= cmdObj->objects.size() || play->objectCtx.status[i].id != cmdObj->objects[k]) {
-            for (j = i; j < play->objectCtx.num; j++) {
-                play->objectCtx.status[j].id = OBJECT_INVALID;
+        // Loop until a mismatch in the object lists
+        // Then clear all object ids past that in the context object list and kill actors for those objects
+        for (i = play->objectCtx.unk_09, k = 0; i < play->objectCtx.num; i++, k++) {
+            if (k >= cmdObj->objects.size() || play->objectCtx.status[i].id != cmdObj->objects[k]) {
+                for (j = i; j < play->objectCtx.num; j++) {
+                    play->objectCtx.status[j].id = OBJECT_INVALID;
+                }
+                func_80031A28(play, &play->actorCtx);
+                break;
             }
-            func_80031A28(play, &play->actorCtx);
-            break;
         }
-    }
 
-    // Continuing from the last index, add the remaining object ids from the command object list
-    for (; k < cmdObj->objects.size(); k++, i++) {
-        if (i < OBJECT_EXCHANGE_BANK_MAX - 1) {
-            OTRfunc_800982FC(&play->objectCtx, i, cmdObj->objects[k]);
+        // Continuing from the last index, add the remaining object ids from the command object list
+        for (; k < cmdObj->objects.size(); k++, i++) {
+            if (i < OBJECT_EXCHANGE_BANK_MAX - 1) {
+                OTRfunc_800982FC(&play->objectCtx, i, cmdObj->objects[k]);
+            }
         }
-    }
 
-    play->objectCtx.num = i;
+        play->objectCtx.num = i;
+    }
 
     return false;
 }
@@ -473,6 +773,11 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
 
             OTRScene_ExecuteCommands(play, (SOH::Scene*)roomCtx->roomToLoad);
 
+            if (OTRRoom_AreaPersistenceEnabledInternal()) {
+                OTRRoom_StoreCurrentRoomDataInternal(play);
+                OTRRoom_RebuildObjectContextInternal(play);
+            }
+
             Player_SetBootData(play, GET_PLAYER(play));
             Actor_SpawnTransitionActors(play, &play->actorCtx);
 
@@ -491,15 +796,35 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
     u32 size;
 
     if (roomCtx->status == 0) {
+        if ((roomNum < 0) || (roomNum >= play->numRooms)) {
+            return 0;
+        }
+
+        if (OTRRoom_AreaPersistenceEnabledInternal()) {
+            s32 retainedRoomIndex = OTRRoom_FindRetainedRoomIndexInternal(roomNum);
+
+            if (retainedRoomIndex >= 0) {
+                roomCtx->prevRoom = roomCtx->curRoom;
+                OTRRoom_MoveRetainedRoomToBackInternal(retainedRoomIndex);
+                roomCtx->curRoom = sRetainedRooms[sRetainedRoomCount - 1].roomData;
+                roomCtx->status = 0;
+                roomCtx->roomToLoad = NULL;
+
+                if (roomCtx->curRoom.segment != NULL) {
+                    gSegments[3] = VIRTUAL_TO_PHYSICAL(roomCtx->curRoom.segment);
+                }
+
+                SPDLOG_INFO("Room Fast Swap - curRoom.num: {0:#x}", roomCtx->curRoom.num);
+                return 1;
+            }
+        }
+
         roomCtx->prevRoom = roomCtx->curRoom;
         roomCtx->curRoom.num = roomNum;
         roomCtx->curRoom.segment = NULL;
         roomCtx->status = 1;
 
         assert(roomNum < play->numRooms);
-
-        if (roomNum >= play->numRooms)
-            return 0; // UH OH
 
         size = play->roomList[roomNum].vromEnd - play->roomList[roomNum].vromStart;
         roomCtx->unk_34 =
@@ -513,6 +838,9 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
             ResourceMgr_GetResourceByNameHandlingMQ(play->roomList[roomNum].fileName));
         roomCtx->status = 1;
         roomCtx->roomToLoad = roomData.get();
+
+        sPendingObjectListRoomNum = -1;
+        sPendingObjectList.clear();
 
         roomCtx->unk_30 ^= 1;
 

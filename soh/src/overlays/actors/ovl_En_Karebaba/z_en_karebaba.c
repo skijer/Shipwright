@@ -256,7 +256,7 @@ void EnKarebaba_Awaken(EnKarebaba* this, PlayState* play) {
 }
 
 void EnKarebaba_Upright(EnKarebaba* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
 
     SkelAnime_Update(&this->skelAnime);
 

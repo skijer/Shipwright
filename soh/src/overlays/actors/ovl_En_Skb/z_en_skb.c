@@ -263,7 +263,7 @@ void EnSkb_Advance(EnSkb* this, PlayState* play) {
     s32 thisKeyFrame;
     s32 prevKeyFrame;
     f32 playSpeed;
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
 
     if ((this->unk_283 != 0) && ((play->gameplayFrames & 0xF) == 0)) {
         this->unk_288 = Rand_CenteredFloat(50000.0f);

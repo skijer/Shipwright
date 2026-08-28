@@ -84,8 +84,7 @@ static void DisableFixedCamera_RestoreAllCameraData() {
 
 // Helper to check if a camera type is a fixed camera
 static bool IsFixedCameraType(s16 type) {
-    return type == CAM_SET_PREREND_FIXED || type == CAM_SET_PREREND_PIVOT || type == CAM_SET_PIVOT_FROM_SIDE ||
-           type == CAM_SET_MARKET_BALCONY;
+    return type == CAM_SET_PREREND_FIXED || type == CAM_SET_PREREND_PIVOT || type == CAM_SET_PIVOT_FROM_SIDE;
 }
 
 static void RegisterDisableFixedCamera() {

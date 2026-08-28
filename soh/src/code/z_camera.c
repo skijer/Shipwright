@@ -9,6 +9,35 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/controls/Mouse.h"
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+
+static s32 Camera_IsLocalMultiplayerEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && (CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2) > 1);
+}
+
+static s32 Camera_IsActorInPlayState(PlayState* play, Actor* actor) {
+    if ((play == NULL) || (actor == NULL)) {
+        return false;
+    }
+
+    for (s32 category = 0; category < ACTORCAT_MAX; category++) {
+        Actor* iter = play->actorCtx.actorLists[category].head;
+        s32 sanity = 0;
+
+        while ((iter != NULL) && (sanity < 2000)) {
+            if (iter == actor) {
+                return true;
+            }
+
+            iter = iter->next;
+            sanity++;
+        }
+    }
+
+    return false;
+}
+
 s16 Camera_ChangeSettingFlags(Camera* camera, s16 setting, s16 flags);
 s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags);
 s32 Camera_QRegInit(void);
@@ -755,7 +784,15 @@ s32 Camera_CopyPREGToModeValues(Camera* camera) {
 void Camera_UpdateInterface(s16 flags) {
     s16 interfaceAlpha;
 
-    if ((flags & SHRINKWIN_MASK) != SHRINKWIN_MASK) {
+    if (Camera_IsLocalMultiplayerEnabled()) {
+        sCameraShrinkWindowVal = 0;
+
+        if (flags & SHRINKWIN_CURVAL) {
+            ShrinkWindow_SetCurrentVal(0);
+        } else {
+            ShrinkWindow_SetVal(0);
+        }
+    } else if ((flags & SHRINKWIN_MASK) != SHRINKWIN_MASK) {
         switch (flags & SHRINKWINVAL_MASK) {
             case 0x1000:
                 sCameraShrinkWindowVal = 0x1A;
@@ -6588,7 +6625,12 @@ s32 Camera_Special5(Camera* camera) {
 
     OLib_Vec3fDiffToVecSphGeo(&sp64, at, eye);
     OLib_Vec3fDiffToVecSphGeo(&sp5C, at, eyeNext);
-    Actor_GetWorld(&spA8, camera->target);
+
+    if ((camera->target != NULL) && (camera->target->update != NULL)) {
+        Actor_GetWorld(&spA8, camera->target);
+    } else {
+        camera->target = NULL;
+    }
 
     sCameraInterfaceFlags = spec5->interfaceFlags;
 
@@ -6600,7 +6642,7 @@ s32 Camera_Special5(Camera* camera) {
     if (anim->animTimer > 0) {
         anim->animTimer--;
     } else if (anim->animTimer == 0) {
-        if (camera->target == NULL || camera->target->update == NULL) {
+        if (camera->target == NULL) {
             camera->target = NULL;
             return true;
         }
@@ -6833,9 +6875,10 @@ s32 Camera_Special9(Camera* camera) {
         Camera_CopyPREGToModeValues(camera);
     }
 
-    if (spec9->doorParams.doorActor != NULL) {
+    if ((spec9->doorParams.doorActor != NULL) && Camera_IsActorInPlayState(camera->play, spec9->doorParams.doorActor)) {
         Actor_GetWorldPosShapeRot(&adjustedPlayerPosRot, spec9->doorParams.doorActor);
     } else {
+        spec9->doorParams.doorActor = NULL;
         adjustedPlayerPosRot = *playerPosRot;
         adjustedPlayerPosRot.pos.y += playerYOffset + params->yOffset;
         adjustedPlayerPosRot.rot.x = 0;
@@ -7372,8 +7415,13 @@ s32 Camera_UpdateHotRoom(Camera* camera) {
 
 s32 Camera_DbgChangeMode(Camera* camera) {
     s32 changeDir = 0;
+    s32 localMpPlayerCount = (CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0)
+                                   ? 1
+                                   : CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount"), 2));
+    s32 localMpUsesThirdController = localMpPlayerCount >= 3;
 
-    if (!gDbgCamEnabled && camera->play->activeCamera == MAIN_CAM) {
+    if (!gDbgCamEnabled && camera->play->activeCamera == MAIN_CAM &&
+        CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0) && !localMpUsesThirdController) {
         if (CHECK_BTN_ALL(D_8015BD7C->state.input[2].press.button, BTN_CUP)) {
             osSyncPrintf("attention sound URGENCY\n");
             Sfx_PlaySfxCentered(NA_SE_SY_ATTENTION_URGENCY);
@@ -7632,8 +7680,17 @@ Vec3s Camera_Update(Camera* camera) {
                      sCameraSettings[camera->setting].cameraModes[camera->mode].funcIdx);
     }
 
+    if (gDbgCamEnabled && ((CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0)
+                                 ? 1
+                                 : CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount"), 2)) >= 3)) {
+        gDbgCamEnabled = 0;
+    }
+
     // enable/disable debug cam
     if (CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0) &&
+        ((CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0)
+              ? 1
+              : CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount"), 2)) < 3) &&
         CHECK_BTN_ALL(D_8015BD7C->state.input[2].press.button, BTN_START)) {
         gDbgCamEnabled ^= 1;
         if (gDbgCamEnabled) {

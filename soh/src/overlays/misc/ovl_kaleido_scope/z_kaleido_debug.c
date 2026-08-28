@@ -383,13 +383,13 @@ void KaleidoScope_DrawDebugEditor(PlayState* play) {
 
         case 2:
             if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT)) {
-                Health_ChangeBy(play, -4);
+                Health_ChangeBy(play, -4, GET_PLAYER(play));
             } else if (CHECK_BTN_ALL(input->press.button, BTN_CRIGHT)) {
-                Health_ChangeBy(play, 4);
+                Health_ChangeBy(play, 4, GET_PLAYER(play));
             } else if (CHECK_BTN_ALL(input->press.button, BTN_CUP)) {
-                Health_ChangeBy(play, -FULL_HEART_HEALTH);
+                Health_ChangeBy(play, -FULL_HEART_HEALTH, GET_PLAYER(play));
             } else if (CHECK_BTN_ALL(input->press.button, BTN_CDOWN)) {
-                Health_ChangeBy(play, FULL_HEART_HEALTH);
+                Health_ChangeBy(play, FULL_HEART_HEALTH, GET_PLAYER(play));
             }
             break;
 

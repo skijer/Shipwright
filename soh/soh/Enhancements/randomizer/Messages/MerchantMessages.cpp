@@ -24,8 +24,8 @@ extern PlayState* gPlayState;
      RAND_GET_OPTION(RSK_SHUFFLE_MERCHANTS).Is(RO_SHUFFLE_MERCHANTS_ALL))
 
 void BuildMerchantMessage(CustomMessage& msg, RandomizerCheck rc, bool mysterious = true) {
-    auto location = RAND_GET_ITEM(rc);
-    RandomizerGet rgid = location->GetPlacedRandomizerGet();
+    RandomizerGet rgid = RAND_GET_ITEM(rc)->GetPlacedRandomizerGet();
+    uint16_t price = RAND_GET_ITEM(rc)->GetPrice();
     CustomMessage itemName;
     std::string color = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(rgid)).GetColor();
     if (mysterious) {
@@ -36,15 +36,10 @@ void BuildMerchantMessage(CustomMessage& msg, RandomizerCheck rc, bool mysteriou
         itemName = CustomMessage(RAND_GET_OVERRIDE(rc).GetTrickName());
         color = "%g";
     } else {
-        const Rando::Item& item = Rando::StaticData::RetrieveItem(rgid);
-        if (Rando::StaticData::GetLocation(rc)->IsShop()) {
-            itemName = CustomMessage(Rando::StaticData::RetrieveItem(rgid).GetName());
-        } else {
-            itemName = item.GetHint().GetHintMessage();
-        }
+        itemName = CustomMessage(Rando::StaticData::RetrieveItem(rgid).GetName());
     }
     msg.Replace("[[color]]", color);
-    msg.InsertNames({ itemName, CustomMessage(std::to_string(location->GetPrice())) });
+    msg.InsertNames({ itemName, CustomMessage(std::to_string(price)) });
 }
 
 void BuildBeanGuyMessage(uint16_t* textId, bool* loadFromMessageTable) {

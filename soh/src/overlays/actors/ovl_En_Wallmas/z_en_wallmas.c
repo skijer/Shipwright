@@ -383,7 +383,7 @@ void EnWallmas_JumpToCeiling(EnWallmas* this, PlayState* play) {
 }
 
 void EnWallmas_ReturnToCeiling(EnWallmas* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     SkelAnime_Update(&this->skelAnime);
     if (this->skelAnime.curFrame > 20.0f) {
         this->timer += 9;
@@ -506,7 +506,7 @@ void EnWallmas_TakePlayer(EnWallmas* this, PlayState* play) {
 }
 
 void EnWallmas_WaitForProximity(EnWallmas* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     if (this->actor.params == WMT_SHADOWTAG ||
         Math_Vec3f_DistXZ(&this->actor.home.pos, &player->actor.world.pos) < 200.0f) {
         EnWallmas_TimerInit(this, play);

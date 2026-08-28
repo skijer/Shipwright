@@ -9,5 +9,4 @@ u8 gGfxSPTaskYieldBuffer[OS_YIELD_DATA_SIZE];
 // 0x400 bytes
 u8 gGfxSPTaskStack[0x400];
 
-// 0x12410 bytes each; 0x24820 bytes total
-GfxPool gGfxPools[2];
+GfxPool gGfxPools[4];

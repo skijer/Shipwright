@@ -41,6 +41,42 @@ void ArrowFire_SetupAction(ArrowFire* this, ArrowFireActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
 
+static Player* ArrowFire_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Actor* actor;
+
+    if (controllerPort == 1) {
+        return GET_PLAYER(play);
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* candidate = (Player*)actor;
+
+            if (candidate->isSecondPlayer && (candidate->controllerPort == controllerPort)) {
+                return candidate;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return GET_PLAYER(play);
+}
+
+static Player* ArrowFire_GetShootingPlayer(PlayState* play, Actor* arrowActor) {
+    if ((arrowActor != NULL) && (arrowActor->parent != NULL) && (arrowActor->parent->id == ACTOR_PLAYER) &&
+        (arrowActor->parent->update != NULL)) {
+        return (Player*)arrowActor->parent;
+    }
+
+    if (arrowActor != NULL) {
+        return ArrowFire_FindPlayerByPort(play, arrowActor->home.rot.z);
+    }
+
+    return GET_PLAYER(play);
+}
+
 void ArrowFire_Init(Actor* thisx, PlayState* play) {
     ArrowFire* this = (ArrowFire*)thisx;
 
@@ -55,7 +91,8 @@ void ArrowFire_Init(Actor* thisx, PlayState* play) {
 }
 
 void ArrowFire_Destroy(Actor* thisx, PlayState* play) {
-    Magic_Reset(play);
+    ArrowFire* this = (ArrowFire*)thisx;
+    Magic_ResetForPlayer(play, ArrowFire_GetShootingPlayer(play, this->actor.parent));
     LOG_STRING("消滅"); // "Disappearance"
 }
 

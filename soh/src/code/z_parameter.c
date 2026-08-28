@@ -37,6 +37,16 @@ extern MessageTableEntry* sJpnMessageEntryTablePtr;
 // So, when indexing into it with a item button index, we need to adjust
 #define BUTTON_STATUS_INDEX(button) ((button) >= 4) ? ((button) + 1) : (button)
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_SPLITSCREEN_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreen")
+#define LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreenVertical")
+#define LOCAL_MP_ORIGINAL_ITEMS_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.OriginalItemSystem")
+#define LOCAL_MP_RADIAL_QUICK_ITEM_MENU_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.RadialQuickItemMenu")
+#define LOCAL_MP_INDEPENDENT_SLOT_USAGE_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.IndependentSlotUsage")
+#define LOCAL_MP_SECOND_ITEM_SLOT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SecondItemSlot")
+#define LOCAL_MP_SECOND_ITEM_SLOT_SIDE_BY_SIDE_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SecondItemSlotSideBySide")
+
 s16 Top_HUD_Margin = 0;
 s16 Left_HUD_Margin = 0;
 s16 Right_HUD_Margin = 0;
@@ -158,12 +168,69 @@ static u16 sHBAScoreDigits[] = { 0, 0, 0, 0 };
 
 static u16 sCUpInvisible = 0;
 static u16 sCUpTimer = 0;
+static u8 sP4QuickItem = ITEM_NONE;
+static s16 sP4QuickItemSlot = SLOT_NONE;
+static u8 sQuickItemSlot2[4] = { ITEM_NONE, ITEM_NONE, ITEM_NONE, ITEM_NONE };
+static s16 sQuickItemSlot2InventorySlot[4] = { SLOT_NONE, SLOT_NONE, SLOT_NONE, SLOT_NONE };
+static u8 sQuickItemSelectedSlot[4] = { 0, 0, 0, 0 };
+static u8 sQuickItemUseSlot[4] = { 0, 0, 0, 0 };
+
+typedef struct {
+    u8 active;
+    u8 slotIndex;
+    u8 itemCount;
+    u8 selectedIndex;
+    u8 items[24];
+    s16 inventorySlots[24];
+} LocalMPRadialQuickMenuState;
+
+static LocalMPRadialQuickMenuState sRadialQuickMenuStates[4];
 
 s16 gSpoilingItems[] = { ITEM_ODD_MUSHROOM, ITEM_FROG, ITEM_EYEDROPS };
 s16 gSpoilingItemReverts[] = { ITEM_COJIRO, ITEM_PRESCRIPTION, ITEM_PRESCRIPTION };
 
 static Color_RGB8 sMagicBorder = { 255, 255, 255 };
 static Color_RGB8 sMagicBorder_ori = { 255, 255, 255 };
+
+static s16 sP2MagicCapacity = 0;
+static s16 sP2MagicTarget = 0;
+static s16 sP2MagicFillTarget = 0;
+static s16 sP2MagicState = MAGIC_STATE_IDLE;
+static s16 sP2PrevMagicState = MAGIC_STATE_IDLE;
+static s16 sP2MagicBorderRatio = 2;
+static s16 sP2MagicBorderStep = 1;
+static s16 sP2LensMagicConsumptionTimer = 0;
+static Color_RGB8 sMagicBorder2 = { 255, 255, 255 };
+
+static s8 sP3MagicLevel = 0;
+static s8 sP3Magic = MAGIC_NORMAL_METER;
+static u8 sP3IsMagicAcquired = false;
+static u8 sP3IsDoubleMagicAcquired = false;
+static s16 sP3MagicCapacity = 0;
+static s16 sP3MagicTarget = 0;
+static s16 sP3MagicFillTarget = 0;
+static s16 sP3MagicState = MAGIC_STATE_IDLE;
+static s16 sP3PrevMagicState = MAGIC_STATE_IDLE;
+static s16 sP3MagicBorderRatio = 2;
+static s16 sP3MagicBorderStep = 1;
+static s16 sP3LensMagicConsumptionTimer = 0;
+static Color_RGB8 sMagicBorder3 = { 255, 255, 255 };
+
+static s8 sP4MagicLevel = 0;
+static s8 sP4Magic = MAGIC_NORMAL_METER;
+static u8 sP4IsMagicAcquired = false;
+static u8 sP4IsDoubleMagicAcquired = false;
+static s16 sP4MagicCapacity = 0;
+static s16 sP4MagicTarget = 0;
+static s16 sP4MagicFillTarget = 0;
+static s16 sP4MagicState = MAGIC_STATE_IDLE;
+static s16 sP4PrevMagicState = MAGIC_STATE_IDLE;
+static s16 sP4MagicBorderRatio = 2;
+static s16 sP4MagicBorderStep = 1;
+static s16 sP4LensMagicConsumptionTimer = 0;
+static Color_RGB8 sMagicBorder4 = { 255, 255, 255 };
+
+static Player* sItemGivePlayer = NULL;
 
 static s16 sExtraItemBases[] = {
     ITEM_STICK, ITEM_STICK, ITEM_NUT,   ITEM_NUT,     ITEM_BOMB,    ITEM_BOMB,  ITEM_BOMB,  ITEM_BOMB, ITEM_BOW,
@@ -194,6 +261,11 @@ static const char* actionsTbl[] = {
     gNum4DoActionENGTex,   gNum5DoActionENGTex,  gNum6DoActionENGTex,       gNum7DoActionENGTex,
     gNum8DoActionENGTex,
 };
+
+void Magic_ResetExtraData(void);
+s16 Magic_GetStateForPlayer(Player* player);
+void Magic_FillForPlayer(PlayState* play, Player* player);
+s32 Magic_RequestChangeForPlayer(PlayState* play, Player* player, s16 amount, s16 type);
 
 // original name: "alpha_change"
 void Interface_ChangeAlpha(u16 alphaType) {
@@ -1727,6 +1799,692 @@ void func_800849EC(PlayState* play) {
     Interface_LoadItemIcon1(play, 0);
 }
 
+static s16 Interface_GetLocalMultiplayerPlayerCount(void) {
+    s16 playerCount;
+
+    if (CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0)) {
+        return 1;
+    }
+
+    playerCount = CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2);
+    if (playerCount < 1) {
+        playerCount = 1;
+    } else if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    return playerCount;
+}
+
+static s32 Interface_IsSplitScreenEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && CVarGetInteger(LOCAL_MP_SPLITSCREEN_CVAR, 1);
+}
+
+static void Interface_GetSplitViewportTopLeft(s16 playerCount, s16 playerIndex, s16* leftX, s16* topY) {
+    s16 halfWidth = SCREEN_WIDTH / 2;
+    s16 halfHeight = SCREEN_HEIGHT / 2;
+
+    *leftX = 0;
+    *topY = 0;
+
+    if (playerCount <= 1) {
+        return;
+    }
+
+    if (playerCount == 2) {
+        if (CVarGetInteger(LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR, 1)) {
+            *leftX = (playerIndex == 0) ? 0 : halfWidth;
+        } else {
+            *topY = (playerIndex == 0) ? 0 : halfHeight;
+        }
+        return;
+    }
+
+    if (playerCount == 3) {
+        if (playerIndex == 0) {
+            return;
+        }
+
+        *topY = halfHeight;
+        *leftX = (playerIndex == 1) ? 0 : halfWidth;
+        return;
+    }
+
+    *topY = (playerIndex < 2) ? 0 : halfHeight;
+    *leftX = ((playerIndex % 2) == 0) ? 0 : halfWidth;
+}
+
+static void Interface_GetSplitViewportBounds(s16 playerCount, s16 playerIndex, Viewport* viewport) {
+    s16 halfWidth = SCREEN_WIDTH / 2;
+    s16 halfHeight = SCREEN_HEIGHT / 2;
+
+    viewport->topY = 0;
+    viewport->bottomY = SCREEN_HEIGHT;
+    viewport->leftX = 0;
+    viewport->rightX = SCREEN_WIDTH;
+
+    if (playerCount <= 1) {
+        return;
+    }
+
+    if (playerCount == 2) {
+        if (CVarGetInteger(LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR, 1)) {
+            viewport->leftX = (playerIndex == 0) ? 0 : halfWidth;
+            viewport->rightX = (playerIndex == 0) ? halfWidth : SCREEN_WIDTH;
+        } else {
+            viewport->topY = (playerIndex == 0) ? 0 : halfHeight;
+            viewport->bottomY = (playerIndex == 0) ? halfHeight : SCREEN_HEIGHT;
+        }
+        return;
+    }
+
+    if (playerCount == 3) {
+        if (playerIndex == 0) {
+            viewport->topY = 0;
+            viewport->bottomY = halfHeight;
+            viewport->leftX = 0;
+            viewport->rightX = SCREEN_WIDTH;
+        } else if (playerIndex == 1) {
+            viewport->topY = halfHeight;
+            viewport->bottomY = SCREEN_HEIGHT;
+            viewport->leftX = 0;
+            viewport->rightX = halfWidth;
+        } else {
+            viewport->topY = halfHeight;
+            viewport->bottomY = SCREEN_HEIGHT;
+            viewport->leftX = halfWidth;
+            viewport->rightX = SCREEN_WIDTH;
+        }
+        return;
+    }
+
+    viewport->topY = (playerIndex < 2) ? 0 : halfHeight;
+    viewport->bottomY = (playerIndex < 2) ? halfHeight : SCREEN_HEIGHT;
+    viewport->leftX = ((playerIndex % 2) == 0) ? 0 : halfWidth;
+    viewport->rightX = ((playerIndex % 2) == 0) ? halfWidth : SCREEN_WIDTH;
+}
+
+static s16 Interface_NormalizeQuickItemSlotIndex(s16 slotIndex);
+
+static s32 Interface_IsOriginalMultiplayerItemModeEnabled(void) {
+    return CVarGetInteger(LOCAL_MP_ORIGINAL_ITEMS_CVAR, 1) &&
+           (Interface_GetLocalMultiplayerPlayerCount() > 1);
+}
+
+static s32 Interface_IsSecondQuickItemSlotEnabled(void) {
+    return Interface_IsOriginalMultiplayerItemModeEnabled() &&
+           CVarGetInteger(LOCAL_MP_SECOND_ITEM_SLOT_CVAR, 1);
+}
+
+static s32 Interface_IsSecondQuickItemSlotSideBySideEnabled(void) {
+    return Interface_IsSecondQuickItemSlotEnabled() &&
+           CVarGetInteger(LOCAL_MP_SECOND_ITEM_SLOT_SIDE_BY_SIDE_CVAR, 0);
+}
+
+static s32 Interface_IsRadialQuickItemMenuEnabled(void) {
+    return Interface_IsOriginalMultiplayerItemModeEnabled() &&
+           CVarGetInteger(LOCAL_MP_RADIAL_QUICK_ITEM_MENU_CVAR, 0);
+}
+
+static s32 Interface_CanCycleToItem(u8 item) {
+    if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
+        switch (item) {
+            case ITEM_BOW:
+            case ITEM_ARROW_FIRE:
+            case ITEM_ARROW_ICE:
+            case ITEM_ARROW_LIGHT:
+            case ITEM_HOOKSHOT:
+            case ITEM_LONGSHOT:
+            case ITEM_HAMMER:
+            case ITEM_BOW_ARROW_FIRE:
+            case ITEM_BOW_ARROW_ICE:
+            case ITEM_BOW_ARROW_LIGHT:
+                return false;
+
+            default:
+                return true;
+        }
+    }
+
+    switch (item) {
+        case ITEM_STICK:
+        case ITEM_SLINGSHOT:
+        case ITEM_BOOMERANG:
+        case ITEM_BEAN:
+            return false;
+
+        default:
+            return true;
+    }
+}
+
+static s32 Interface_IsMultiplayerQuickMenuItemBlocked(u8 item) {
+    switch (item) {
+        case ITEM_OCARINA_FAIRY:
+        case ITEM_OCARINA_TIME:
+        case ITEM_BEAN:
+        case ITEM_LENS:
+        case ITEM_DINS_FIRE:
+        case ITEM_NAYRUS_LOVE:
+        case ITEM_FARORES_WIND:
+        case ITEM_WEIRD_EGG:
+        case ITEM_CHICKEN:
+        case ITEM_LETTER_ZELDA:
+        case ITEM_POCKET_EGG:
+        case ITEM_POCKET_CUCCO:
+        case ITEM_COJIRO:
+        case ITEM_ODD_MUSHROOM:
+        case ITEM_ODD_POTION:
+        case ITEM_SAW:
+        case ITEM_SWORD_BROKEN:
+        case ITEM_PRESCRIPTION:
+        case ITEM_FROG:
+        case ITEM_EYEDROPS:
+        case ITEM_CLAIM_CHECK:
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+static Player* Interface_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Player* player;
+
+    if ((controllerPort < 1) || (controllerPort > 4)) {
+        return NULL;
+    }
+
+    player = GET_PLAYER(play);
+
+    while ((player != NULL) && (player->actor.id == ACTOR_PLAYER)) {
+        if (!player->isSecondPlayer) {
+            if (controllerPort == 1) {
+                return player;
+            }
+        } else if (player->controllerPort == controllerPort) {
+            return player;
+        }
+
+        player = (Player*)player->actor.next;
+    }
+
+    return NULL;
+}
+
+static s32 Interface_CanUseRadialQuickMenuForPort(PlayState* play, u8 controllerPort) {
+    Player* player = Interface_FindPlayerByPort(play, controllerPort);
+
+    if (controllerPort == 1) {
+        return player != NULL;
+    }
+
+    if ((player == NULL) || !player->isSecondPlayer) {
+        return false;
+    }
+
+    return player->inputEnabled;
+}
+
+static void Interface_ClearRadialQuickMenuState(LocalMPRadialQuickMenuState* state) {
+    if (state != NULL) {
+        memset(state, 0, sizeof(*state));
+    }
+}
+
+static void Interface_ClearAllRadialQuickMenuStates(void) {
+    s32 i;
+
+    for (i = 0; i < ARRAY_COUNT(sRadialQuickMenuStates); i++) {
+        Interface_ClearRadialQuickMenuState(&sRadialQuickMenuStates[i]);
+    }
+}
+
+static void Interface_BuildRadialQuickMenuItemsForPort(PlayState* play, u8 controllerPort, u8 slotIndex,
+                                                        LocalMPRadialQuickMenuState* state) {
+    s32 i;
+    u8 currentItem;
+    s16 currentInventorySlot;
+    u8 seenItems[ITEM_NONE_FE];
+
+    (void)play;
+
+    if (state == NULL) {
+        return;
+    }
+
+    memset(seenItems, 0, sizeof(seenItems));
+
+    state->itemCount = 0;
+    state->selectedIndex = 0;
+    state->slotIndex = Interface_NormalizeQuickItemSlotIndex(slotIndex);
+
+    for (i = 0; i < 24; i++) {
+        u8 item = gSaveContext.inventory.items[i];
+
+        if ((item == ITEM_NONE) || (item == ITEM_SOLD_OUT) || (item >= ITEM_NONE_FE)) {
+            continue;
+        }
+
+        if (!Interface_CanCycleToItem(item)) {
+            continue;
+        }
+
+        if ((controllerPort > 1) && Interface_IsMultiplayerQuickMenuItemBlocked(item)) {
+            continue;
+        }
+
+        if (seenItems[item]) {
+            continue;
+        }
+
+        if (state->itemCount >= ARRAY_COUNT(state->items)) {
+            break;
+        }
+
+        seenItems[item] = true;
+        state->items[state->itemCount] = item;
+        state->inventorySlots[state->itemCount] = i;
+        state->itemCount++;
+    }
+
+    if (state->itemCount == 0) {
+        return;
+    }
+
+    currentItem = Interface_GetQuickItemForPortAndSlot(controllerPort, state->slotIndex);
+    currentInventorySlot = Interface_GetQuickItemInventorySlotForPortAndSlot(controllerPort, state->slotIndex);
+
+    for (i = 0; i < state->itemCount; i++) {
+        if ((state->inventorySlots[i] == currentInventorySlot) && (state->items[i] == currentItem)) {
+            state->selectedIndex = i;
+            return;
+        }
+    }
+
+    for (i = 0; i < state->itemCount; i++) {
+        if (state->items[i] == currentItem) {
+            state->selectedIndex = i;
+            return;
+        }
+    }
+}
+
+static void Interface_UpdateRadialQuickMenuSelectionForPort(PlayState* play, u8 controllerPort,
+                                                            LocalMPRadialQuickMenuState* state) {
+    Input* input;
+    s16 stickX;
+    s16 stickY;
+    s32 stickMagnitudeSq;
+    f32 angle;
+    u32 scaledIndex;
+
+    if ((state == NULL) || (state->itemCount == 0)) {
+        return;
+    }
+
+    if ((controllerPort < 1) || (controllerPort > ARRAY_COUNT(play->state.input))) {
+        return;
+    }
+
+    input = &play->state.input[controllerPort - 1];
+    stickX = input->cur.stick_x;
+    stickY = input->cur.stick_y;
+    stickMagnitudeSq = SQ(stickX) + SQ(stickY);
+
+    if (stickMagnitudeSq < SQ(30)) {
+        return;
+    }
+
+    // Use atan2(x, y) so 0 radians points straight up, matching the wheel layout.
+    angle = Math_FAtan2F(stickX, stickY);
+
+    if (angle < 0.0f) {
+        angle += (2.0f * M_PI);
+    }
+
+    scaledIndex = (u32)(((angle / (2.0f * M_PI)) * state->itemCount) + 0.5f);
+
+    if (scaledIndex >= state->itemCount) {
+        scaledIndex = 0;
+    }
+
+    if (state->selectedIndex != scaledIndex) {
+        state->selectedIndex = scaledIndex;
+        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    }
+}
+
+static void Interface_UpdateRadialQuickMenu(PlayState* play) {
+    s32 playerCount;
+    s32 port;
+
+    if (!Interface_IsRadialQuickItemMenuEnabled()) {
+        Interface_ClearAllRadialQuickMenuStates();
+        return;
+    }
+
+    playerCount = Interface_GetLocalMultiplayerPlayerCount();
+    if (playerCount <= 1) {
+        Interface_ClearAllRadialQuickMenuStates();
+        return;
+    }
+
+    if (Player_InCsMode(play) || (play->pauseCtx.state != 0) || (play->transitionTrigger != TRANS_TRIGGER_OFF)) {
+        Interface_ClearAllRadialQuickMenuStates();
+        return;
+    }
+
+    for (port = 1; port <= ARRAY_COUNT(sRadialQuickMenuStates); port++) {
+        LocalMPRadialQuickMenuState* state = &sRadialQuickMenuStates[port - 1];
+        Input* input;
+        s32 holdActive;
+        s32 holdReleased;
+        u8 slotIndex;
+
+        if ((port > playerCount) || !Interface_CanUseRadialQuickMenuForPort(play, port)) {
+            Interface_ClearRadialQuickMenuState(state);
+            continue;
+        }
+
+        input = &play->state.input[port - 1];
+        holdActive = CHECK_BTN_ANY(input->cur.button, BTN_DLEFT | BTN_DRIGHT);
+        holdReleased = CHECK_BTN_ANY(input->rel.button, BTN_DLEFT | BTN_DRIGHT);
+        slotIndex = Interface_GetQuickItemSelectedSlotForPort(port);
+
+        if (holdActive) {
+            if (!state->active || (state->slotIndex != Interface_NormalizeQuickItemSlotIndex(slotIndex))) {
+                Interface_BuildRadialQuickMenuItemsForPort(play, port, slotIndex, state);
+                state->active = true;
+            }
+
+            Interface_UpdateRadialQuickMenuSelectionForPort(play, port, state);
+        } else if (state->active) {
+            if ((state->itemCount > 0) && (state->selectedIndex < state->itemCount) &&
+                (holdReleased || !holdActive)) {
+                u8 selectedItem = state->items[state->selectedIndex];
+                s16 selectedInventorySlot = state->inventorySlots[state->selectedIndex];
+                u8 currentItem = Interface_GetQuickItemForPortAndSlot(port, state->slotIndex);
+                s16 currentInventorySlot = Interface_GetQuickItemInventorySlotForPortAndSlot(port, state->slotIndex);
+
+                if ((selectedItem != currentItem) || (selectedInventorySlot != currentInventorySlot)) {
+                    Interface_SetQuickItemForPortAndSlot(play, port, state->slotIndex, selectedItem,
+                                                         selectedInventorySlot);
+                    Audio_PlaySoundGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                }
+            }
+
+            Interface_ClearRadialQuickMenuState(state);
+        }
+    }
+}
+
+void Interface_LoadItemIconForItem(PlayState* play, u16 button, u8 item) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+
+    if (item >= ITEM_NONE_FE) {
+        return;
+    }
+
+    osCreateMesgQueue(&interfaceCtx->loadQueue, &interfaceCtx->loadMsg, OS_MESG_BLOCK);
+    DmaMgr_SendRequest2(&interfaceCtx->dmaRequest_160, interfaceCtx->iconItemSegment + button * 0x1000,
+                        (uintptr_t)_icon_item_staticSegmentRomStart + (item * 0x1000), 0x1000, 0,
+                        &interfaceCtx->loadQueue, OS_MESG_PTR(NULL), __FILE__, __LINE__);
+    osRecvMesg(&interfaceCtx->loadQueue, NULL, OS_MESG_BLOCK);
+}
+
+static s16 Interface_GetQuickItemButtonIndexImpl(u8 controllerPort) {
+    switch (controllerPort) {
+        case 4:
+            return 4;
+
+        case 3:
+            return 2;
+
+        case 2:
+            return 3;
+
+        case 1:
+        default:
+            return 1;
+    }
+}
+
+s16 Interface_GetQuickItemButtonIndex(u8 controllerPort) {
+    return Interface_GetQuickItemButtonIndexImpl(controllerPort);
+}
+
+static s16 Interface_NormalizeQuickItemSlotIndex(s16 slotIndex) {
+    if (!Interface_IsSecondQuickItemSlotEnabled()) {
+        return 0;
+    }
+
+    return (slotIndex != 0) ? 1 : 0;
+}
+
+static s16 Interface_GetQuickItemPortArrayIndex(u8 controllerPort) {
+    if ((controllerPort < 1) || (controllerPort > 4)) {
+        return -1;
+    }
+
+    return controllerPort - 1;
+}
+
+static s16 Interface_GetQuickItemControllerPortByButtonIndex(s16 buttonIndex) {
+    switch (buttonIndex) {
+        case 1:
+            return 1;
+
+        case 3:
+            return 2;
+
+        case 2:
+            return 3;
+
+        case 4:
+            return 4;
+
+        default:
+            return 0;
+    }
+}
+
+s16 Interface_GetQuickItemInventorySlotForPortAndSlot(u8 controllerPort, s16 slotIndex) {
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return SLOT_NONE;
+    }
+
+    if (Interface_NormalizeQuickItemSlotIndex(slotIndex) == 1) {
+        return sQuickItemSlot2InventorySlot[portIndex];
+    }
+
+    switch (controllerPort) {
+        case 4:
+            if (Interface_IsOriginalMultiplayerItemModeEnabled()) {
+                return sP4QuickItemSlot;
+            }
+            return gSaveContext.equips.cButtonSlots[3];
+
+        case 3:
+            return gSaveContext.equips.cButtonSlots[1];
+
+        case 2:
+            return gSaveContext.equips.cButtonSlots[2];
+
+        case 1:
+        default:
+            return gSaveContext.equips.cButtonSlots[0];
+    }
+}
+
+s16 Interface_GetQuickItemInventorySlotForPort(u8 controllerPort) {
+    return Interface_GetQuickItemInventorySlotForPortAndSlot(controllerPort, 0);
+}
+
+u8 Interface_GetQuickItemForPortAndSlot(u8 controllerPort, s16 slotIndex) {
+    s16 buttonIndex = Interface_GetQuickItemButtonIndexImpl(controllerPort);
+    s16 inventorySlot;
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return ITEM_NONE;
+    }
+
+    slotIndex = Interface_NormalizeQuickItemSlotIndex(slotIndex);
+
+    if (slotIndex == 1) {
+        inventorySlot = sQuickItemSlot2InventorySlot[portIndex];
+
+        if ((inventorySlot >= 0) && (inventorySlot < 24)) {
+            return gSaveContext.inventory.items[inventorySlot];
+        }
+
+        return sQuickItemSlot2[portIndex];
+    }
+
+    if ((controllerPort == 4) && Interface_IsOriginalMultiplayerItemModeEnabled()) {
+        if ((sP4QuickItemSlot >= 0) && (sP4QuickItemSlot < 24)) {
+            return gSaveContext.inventory.items[sP4QuickItemSlot];
+        }
+
+        return sP4QuickItem;
+    }
+
+    if ((buttonIndex >= 1) && (buttonIndex < ARRAY_COUNT(gSaveContext.equips.buttonItems))) {
+        return gSaveContext.equips.buttonItems[buttonIndex];
+    }
+
+    return ITEM_NONE;
+}
+
+u8 Interface_GetQuickItemForPort(u8 controllerPort) {
+    return Interface_GetQuickItemForPortAndSlot(controllerPort, 0);
+}
+
+void Interface_SetQuickItemSelectedSlotForPort(u8 controllerPort, s16 slotIndex) {
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return;
+    }
+
+    sQuickItemSelectedSlot[portIndex] = Interface_NormalizeQuickItemSlotIndex(slotIndex);
+}
+
+s16 Interface_GetQuickItemSelectedSlotForPort(u8 controllerPort) {
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return 0;
+    }
+
+    sQuickItemSelectedSlot[portIndex] = Interface_NormalizeQuickItemSlotIndex(sQuickItemSelectedSlot[portIndex]);
+    return sQuickItemSelectedSlot[portIndex];
+}
+
+void Interface_SetQuickItemUseSlotForPort(u8 controllerPort, s16 slotIndex) {
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return;
+    }
+
+    sQuickItemUseSlot[portIndex] = Interface_NormalizeQuickItemSlotIndex(slotIndex);
+}
+
+s16 Interface_GetQuickItemUseSlotForPort(u8 controllerPort) {
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return 0;
+    }
+
+    sQuickItemUseSlot[portIndex] = Interface_NormalizeQuickItemSlotIndex(sQuickItemUseSlot[portIndex]);
+    return sQuickItemUseSlot[portIndex];
+}
+
+void Interface_ResetExtraItemData(void) {
+    s32 i;
+
+    sP4QuickItem = ITEM_NONE;
+    sP4QuickItemSlot = SLOT_NONE;
+
+    for (i = 0; i < ARRAY_COUNT(sQuickItemSlot2); i++) {
+        sQuickItemSlot2[i] = ITEM_NONE;
+        sQuickItemSlot2InventorySlot[i] = SLOT_NONE;
+        sQuickItemSelectedSlot[i] = 0;
+        sQuickItemUseSlot[i] = 0;
+    }
+
+    Interface_ClearAllRadialQuickMenuStates();
+
+    Magic_ResetExtraData();
+}
+
+static void Interface_SetQuickItemForPortAndSlotInternal(PlayState* play, u8 controllerPort, s16 slotIndex, u8 item,
+                                                         s16 inventorySlot) {
+    s16 buttonIndex = Interface_GetQuickItemButtonIndexImpl(controllerPort);
+    s16 portIndex = Interface_GetQuickItemPortArrayIndex(controllerPort);
+
+    if (portIndex < 0) {
+        return;
+    }
+
+    slotIndex = Interface_NormalizeQuickItemSlotIndex(slotIndex);
+
+    if (slotIndex == 1) {
+        sQuickItemSlot2[portIndex] = item;
+        if ((inventorySlot >= 0) && (inventorySlot < 24)) {
+            sQuickItemSlot2InventorySlot[portIndex] = inventorySlot;
+        } else if (item == ITEM_NONE) {
+            sQuickItemSlot2InventorySlot[portIndex] = SLOT_NONE;
+        }
+
+        return;
+    }
+
+    if ((controllerPort == 4) && Interface_IsOriginalMultiplayerItemModeEnabled()) {
+        sP4QuickItem = item;
+        if ((inventorySlot >= 0) && (inventorySlot < 24)) {
+            sP4QuickItemSlot = inventorySlot;
+        } else if (item == ITEM_NONE) {
+            sP4QuickItemSlot = SLOT_NONE;
+        }
+
+        if (item < ITEM_NONE_FE) {
+            Interface_LoadItemIconForItem(play, 4, item);
+        }
+        return;
+    }
+
+    if ((buttonIndex >= 1) && (buttonIndex < ARRAY_COUNT(gSaveContext.equips.buttonItems))) {
+        gSaveContext.equips.buttonItems[buttonIndex] = item;
+        if ((inventorySlot >= 0) && (inventorySlot < 24) && (buttonIndex - 1 < ARRAY_COUNT(gSaveContext.equips.cButtonSlots))) {
+            gSaveContext.equips.cButtonSlots[buttonIndex - 1] = inventorySlot;
+        } else if ((item == ITEM_NONE) && (buttonIndex - 1 < ARRAY_COUNT(gSaveContext.equips.cButtonSlots))) {
+            gSaveContext.equips.cButtonSlots[buttonIndex - 1] = SLOT_NONE;
+        }
+        Interface_LoadItemIcon1(play, buttonIndex);
+    }
+}
+
+void Interface_SetQuickItemForPortAndSlot(PlayState* play, u8 controllerPort, s16 slotIndex, u8 item,
+                                          s16 inventorySlot) {
+    if ((controllerPort < 1) || (controllerPort > 4)) {
+        return;
+    }
+
+    Interface_SetQuickItemForPortAndSlotInternal(play, controllerPort, slotIndex, item, inventorySlot);
+}
+
+void Interface_SetQuickItemForPort(PlayState* play, u8 controllerPort, u8 item, s16 inventorySlot) {
+    Interface_SetQuickItemForPortAndSlot(play, controllerPort, 0, item, inventorySlot);
+}
+
 void Interface_LoadItemIcon1(PlayState* play, u16 button) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
@@ -1856,6 +2614,26 @@ u8 Return_Item(u8 itemID, ModIndex modId, ItemID returnItem) {
     // but leaving this here just in case, as it was in the original behavior
     assert(false);
     return Return_Item_Entry(ItemTable_RetrieveEntry(MOD_RANDOMIZER, itemID), returnItem);
+}
+
+void Item_Give_SetPlayer(Player* player) {
+    sItemGivePlayer = player;
+}
+
+void Item_Give_ClearPlayer(void) {
+    sItemGivePlayer = NULL;
+}
+
+static Player* Item_Give_GetPlayer(PlayState* play) {
+    if (sItemGivePlayer != NULL) {
+        return sItemGivePlayer;
+    }
+
+    if (play != NULL) {
+        return GET_PLAYER(play);
+    }
+
+    return NULL;
 }
 
 /**
@@ -2329,18 +3107,19 @@ u8 Item_Give(PlayState* play, u8 item) {
     } else if (item == ITEM_HEART) {
         osSyncPrintf("回復ハート回復ハート回復ハート\n"); // "Recovery Heart"
         if (play != NULL) {
-            Health_ChangeBy(play, FULL_HEART_HEALTH);
+            Health_ChangeBy(play, FULL_HEART_HEALTH, Item_Give_GetPlayer(play));
         }
         return Return_Item(item, MOD_NONE, item);
     } else if (item == ITEM_MAGIC_SMALL) {
-        if (gSaveContext.magicState != MAGIC_STATE_ADD) {
+        Player* itemPlayer = Item_Give_GetPlayer(play);
+        if (Magic_GetStateForPlayer(itemPlayer) != MAGIC_STATE_ADD) {
             if (play != NULL) {
-                Magic_Fill(play);
+                Magic_FillForPlayer(play, itemPlayer);
             }
         }
 
         if (play != NULL) {
-            Magic_RequestChange(play, 12, MAGIC_ADD);
+            Magic_RequestChangeForPlayer(play, itemPlayer, 12, MAGIC_ADD);
         }
 
         if (!Flags_GetInfTable(INFTABLE_198)) {
@@ -2350,13 +3129,14 @@ u8 Item_Give(PlayState* play, u8 item) {
 
         return Return_Item(item, MOD_NONE, item);
     } else if (item == ITEM_MAGIC_LARGE) {
-        if (gSaveContext.magicState != MAGIC_STATE_ADD) {
+        Player* itemPlayer = Item_Give_GetPlayer(play);
+        if (Magic_GetStateForPlayer(itemPlayer) != MAGIC_STATE_ADD) {
             if (play != NULL) {
-                Magic_Fill(play);
+                Magic_FillForPlayer(play, itemPlayer);
             }
         }
         if (play != NULL) {
-            Magic_RequestChange(play, 24, MAGIC_ADD);
+            Magic_RequestChangeForPlayer(play, itemPlayer, 24, MAGIC_ADD);
         }
 
         if (!Flags_GetInfTable(INFTABLE_198)) {
@@ -2690,6 +3470,36 @@ s32 Inventory_HasSpecificBottle(u8 bottleItem) {
 }
 
 void Inventory_UpdateBottleItem(PlayState* play, u8 item, u8 button) {
+    if (Interface_IsOriginalMultiplayerItemModeEnabled()) {
+        s16 quickControllerPort = Interface_GetQuickItemControllerPortByButtonIndex(button);
+
+        if (quickControllerPort != 0) {
+            s16 quickSlot = Interface_GetQuickItemUseSlotForPort(quickControllerPort);
+            s16 inventorySlot = Interface_GetQuickItemInventorySlotForPortAndSlot(quickControllerPort, quickSlot);
+
+            if ((inventorySlot >= 0) && (inventorySlot < 24)) {
+                // Special case to only empty half of a Lon Lon Milk Bottle.
+                if ((gSaveContext.inventory.items[inventorySlot] == ITEM_MILK_BOTTLE) && (item == ITEM_BOTTLE)) {
+                    item = ITEM_MILK_HALF;
+                }
+
+                if (GameInteractor_Should(VB_UPDATE_BOTTLE_ITEM, true, button, item)) {
+                    gSaveContext.inventory.items[inventorySlot] = item;
+                }
+            }
+
+            Interface_SetQuickItemForPortAndSlot(play, quickControllerPort, quickSlot, item, inventorySlot);
+
+            if (item < ITEM_NONE_FE) {
+                Interface_LoadItemIconForItem(play, button, item);
+            }
+
+            play->pauseCtx.cursorItem[PAUSE_ITEM] = item;
+            gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(button)] = BTN_ENABLED;
+            return;
+        }
+    }
+
     osSyncPrintf("item_no=%x,  c_no=%x,  Pt=%x  Item_Register=%x\n", item, button,
                  gSaveContext.equips.cButtonSlots[button - 1],
                  gSaveContext.inventory.items[gSaveContext.equips.cButtonSlots[button - 1]]);
@@ -2716,18 +3526,58 @@ s32 Inventory_ConsumeFairy(PlayState* play) {
     s32 bottleSlot = SLOT(ITEM_FAIRY);
     s16 i;
     s16 j;
+    s16 quickControllerPort;
+    s16 quickSlot;
 
     for (i = 0; i < 4; i++) {
         if (gSaveContext.inventory.items[bottleSlot + i] == ITEM_FAIRY) {
+            if (Interface_IsOriginalMultiplayerItemModeEnabled()) {
+                for (quickControllerPort = 1; quickControllerPort <= 4; quickControllerPort++) {
+                    for (quickSlot = 0; quickSlot < 2; quickSlot++) {
+                        if (Interface_GetQuickItemForPortAndSlot(quickControllerPort, quickSlot) == ITEM_FAIRY) {
+                            s16 quickInventorySlot =
+                                Interface_GetQuickItemInventorySlotForPortAndSlot(quickControllerPort, quickSlot);
+
+                            Interface_SetQuickItemForPortAndSlot(play, quickControllerPort, quickSlot, ITEM_BOTTLE,
+                                                                 quickInventorySlot);
+
+                            if ((quickInventorySlot >= 0) && (quickInventorySlot < 24)) {
+                                bottleSlot = quickInventorySlot;
+                                i = 0;
+                            }
+
+                            goto Inventory_ConsumeFairy_ApplyBottle;
+                        }
+                    }
+                }
+            }
+
             for (j = 1; j < ARRAY_COUNT(gSaveContext.equips.buttonItems); j++) {
-                if (gSaveContext.equips.buttonItems[j] == ITEM_FAIRY) {
-                    gSaveContext.equips.buttonItems[j] = ITEM_BOTTLE;
-                    Interface_LoadItemIcon1(play, j);
+                u8 equippedItem = gSaveContext.equips.buttonItems[j];
+
+                if (Interface_IsOriginalMultiplayerItemModeEnabled() && (j == 4)) {
+                    equippedItem = sP4QuickItem;
+                }
+
+                if (equippedItem == ITEM_FAIRY) {
                     i = 0;
-                    bottleSlot = gSaveContext.equips.cButtonSlots[j - 1];
+
+                    if (Interface_IsOriginalMultiplayerItemModeEnabled() && (j == 4)) {
+                        sP4QuickItem = ITEM_BOTTLE;
+                        Interface_LoadItemIconForItem(play, 4, ITEM_BOTTLE);
+                        if ((sP4QuickItemSlot >= 0) && (sP4QuickItemSlot < 24)) {
+                            bottleSlot = sP4QuickItemSlot;
+                        }
+                    } else {
+                        gSaveContext.equips.buttonItems[j] = ITEM_BOTTLE;
+                        Interface_LoadItemIcon1(play, j);
+                        bottleSlot = gSaveContext.equips.cButtonSlots[j - 1];
+                    }
                     break;
                 }
             }
+
+Inventory_ConsumeFairy_ApplyBottle:
             osSyncPrintf("妖精使用＝%d\n", bottleSlot); // "Fairy Usage＝%d"
             gSaveContext.inventory.items[bottleSlot + i] = ITEM_BOTTLE;
             return 1;
@@ -2810,6 +3660,11 @@ void Interface_SetDoAction(PlayState* play, u16 action) {
 void Interface_SetNaviCall(PlayState* play, u16 naviCallState) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
+    if (CVarGetInteger(CVAR_ENHANCEMENT("DisableNaviMessages"), 0)) {
+        interfaceCtx->naviCalling = 0;
+        return;
+    }
+
     if (((naviCallState == 0x1D) || (naviCallState == 0x1E)) && !interfaceCtx->naviCalling &&
         (play->csCtx.state == CS_STATE_IDLE)) {
         if (!CVarGetInteger(CVAR_AUDIO("DisableNaviCallAudio"), 0)) {
@@ -2865,13 +3720,47 @@ void Interface_LoadActionLabelB(PlayState* play, u16 action) {
     interfaceCtx->unk_1FA = 1;
 }
 
-s32 Health_ChangeBy(PlayState* play, s16 healthChange) {
+static void Health_GetTargetValuesForPlayer(Player* player, s16** health, s16** healthCapacity) {
+    *health = &gSaveContext.health;
+    *healthCapacity = &gSaveContext.healthCapacity;
+
+    if ((player == NULL) || !player->isSecondPlayer) {
+        return;
+    }
+
+    if (player->controllerPort == 4) {
+        *health = &gSaveContext.health4;
+        *healthCapacity = &gSaveContext.healthCapacity4;
+    } else if (player->controllerPort == 3) {
+        *health = &gSaveContext.health3;
+        *healthCapacity = &gSaveContext.healthCapacity3;
+    } else {
+        *health = &gSaveContext.health2;
+        *healthCapacity = &gSaveContext.healthCapacity2;
+    }
+
+    if (**healthCapacity < STARTING_HEALTH) {
+        **healthCapacity = gSaveContext.healthCapacity;
+        if (**healthCapacity < STARTING_HEALTH) {
+            **healthCapacity = STARTING_HEALTH;
+        }
+
+        if (**health <= 0) {
+            **health = **healthCapacity;
+        }
+    }
+}
+
+s32 Health_ChangeBy(PlayState* play, s16 healthChange, Player* player) {
     u16 heartCount;
     u16 healthLevel;
+    s16* health;
+    s16* healthCapacity;
+
+    Health_GetTargetValuesForPlayer(player, &health, &healthCapacity);
 
     // "＊＊＊＊＊ Fluctuation=%d (now=%d, max=%d) ＊＊＊"
-    osSyncPrintf("＊＊＊＊＊  増減=%d (now=%d, max=%d)  ＊＊＊", healthChange, gSaveContext.health,
-                 gSaveContext.healthCapacity);
+    osSyncPrintf("＊＊＊＊＊  増減=%d (now=%d, max=%d)  ＊＊＊", healthChange, *health, *healthCapacity);
 
     if (healthChange < 0) {
         gSaveContext.ship.stats.count[COUNT_DAMAGE_TAKEN] += -healthChange;
@@ -2880,7 +3769,7 @@ s32 Health_ChangeBy(PlayState* play, s16 healthChange) {
     // If one-hit ko mode is on, any damage kills you and you cannot gain health.
     if (GameInteractor_OneHitKOActive()) {
         if (healthChange < 0) {
-            gSaveContext.health = 0;
+            *health = 0;
         }
 
         return 0;
@@ -2904,13 +3793,13 @@ s32 Health_ChangeBy(PlayState* play, s16 healthChange) {
         }
     }
 
-    gSaveContext.health += healthChange;
+    *health += healthChange;
 
-    if (gSaveContext.health > gSaveContext.healthCapacity) {
-        gSaveContext.health = gSaveContext.healthCapacity;
+    if (*health > *healthCapacity) {
+        *health = *healthCapacity;
     }
 
-    heartCount = gSaveContext.health % FULL_HEART_HEALTH;
+    heartCount = *health % FULL_HEART_HEALTH;
 
     healthLevel = heartCount;
     if (heartCount != 0) {
@@ -2924,12 +3813,12 @@ s32 Health_ChangeBy(PlayState* play, s16 healthChange) {
     }
 
     // "Life=%d ＊＊＊  %d ＊＊＊＊＊＊"
-    osSyncPrintf("  ライフ=%d  ＊＊＊  %d  ＊＊＊＊＊＊\n", gSaveContext.health, healthLevel);
+    osSyncPrintf("  ライフ=%d  ＊＊＊  %d  ＊＊＊＊＊＊\n", *health, healthLevel);
 
     GameInteractor_ExecuteOnPlayerHealthChange(healthChange);
 
-    if (gSaveContext.health <= 0) {
-        gSaveContext.health = 0;
+    if (*health <= 0) {
+        *health = 0;
         return 0;
     } else {
         return 1;
@@ -3044,6 +3933,397 @@ void Inventory_ChangeAmmo(s16 item, s16 ammoChange) {
     if (ammoChange < 0) {
         GameplayStats_UpdateAmmoUsed(item, -ammoChange);
     }
+}
+
+static u8 Magic_GetControllerPortForPlayer(Player* player) {
+    if ((player != NULL) && player->isSecondPlayer) {
+        if ((player->controllerPort >= 2) && (player->controllerPort <= 4)) {
+            return player->controllerPort;
+        }
+        return 2;
+    }
+
+    return 1;
+}
+
+static s32 Magic_IsSecondaryPort(u8 controllerPort) {
+    return (controllerPort >= 2) && (controllerPort <= 4);
+}
+
+static s8* Magic_GetLevelPtrForPort(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicLevel;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicLevel;
+    }
+    if (controllerPort == 2) {
+        return &gSaveContext.magicLevel2;
+    }
+    return &gSaveContext.magicLevel;
+}
+
+static s8* Magic_GetAmountPtrForPort(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4Magic;
+    }
+    if (controllerPort == 3) {
+        return &sP3Magic;
+    }
+    if (controllerPort == 2) {
+        return &gSaveContext.magic2;
+    }
+    return &gSaveContext.magic;
+}
+
+static u8* Magic_GetAcquiredPtrForPort(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4IsMagicAcquired;
+    }
+    if (controllerPort == 3) {
+        return &sP3IsMagicAcquired;
+    }
+    if (controllerPort == 2) {
+        return &gSaveContext.isMagicAcquired2;
+    }
+    return &gSaveContext.isMagicAcquired;
+}
+
+static u8* Magic_GetDoubleAcquiredPtrForPort(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4IsDoubleMagicAcquired;
+    }
+    if (controllerPort == 3) {
+        return &sP3IsDoubleMagicAcquired;
+    }
+    if (controllerPort == 2) {
+        return &gSaveContext.isDoubleMagicAcquired2;
+    }
+    return &gSaveContext.isDoubleMagicAcquired;
+}
+
+static s16* Magic_GetSecondaryCapacityPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicCapacity;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicCapacity;
+    }
+    return &sP2MagicCapacity;
+}
+
+static s16* Magic_GetSecondaryTargetPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicTarget;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicTarget;
+    }
+    return &sP2MagicTarget;
+}
+
+static s16* Magic_GetSecondaryFillTargetPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicFillTarget;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicFillTarget;
+    }
+    return &sP2MagicFillTarget;
+}
+
+static s16* Magic_GetSecondaryStatePtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicState;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicState;
+    }
+    return &sP2MagicState;
+}
+
+static s16* Magic_GetSecondaryPrevStatePtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4PrevMagicState;
+    }
+    if (controllerPort == 3) {
+        return &sP3PrevMagicState;
+    }
+    return &sP2PrevMagicState;
+}
+
+static s16* Magic_GetSecondaryBorderRatioPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicBorderRatio;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicBorderRatio;
+    }
+    return &sP2MagicBorderRatio;
+}
+
+static s16* Magic_GetSecondaryBorderStepPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4MagicBorderStep;
+    }
+    if (controllerPort == 3) {
+        return &sP3MagicBorderStep;
+    }
+    return &sP2MagicBorderStep;
+}
+
+static s16* Magic_GetSecondaryLensTimerPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sP4LensMagicConsumptionTimer;
+    }
+    if (controllerPort == 3) {
+        return &sP3LensMagicConsumptionTimer;
+    }
+    return &sP2LensMagicConsumptionTimer;
+}
+
+static Color_RGB8* Magic_GetSecondaryBorderPtr(u8 controllerPort) {
+    if (controllerPort == 4) {
+        return &sMagicBorder4;
+    }
+    if (controllerPort == 3) {
+        return &sMagicBorder3;
+    }
+    return &sMagicBorder2;
+}
+
+s16 Magic_GetLevelForPort(u8 controllerPort) {
+    return *Magic_GetLevelPtrForPort(controllerPort);
+}
+
+s16 Magic_GetAmountForPort(u8 controllerPort) {
+    return *Magic_GetAmountPtrForPort(controllerPort);
+}
+
+void Magic_InitForPort(u8 controllerPort) {
+    s8* magicLevel;
+    s8* magic;
+    u8* isMagicAcquired;
+    u8* isDoubleMagicAcquired;
+
+    if (!Magic_IsSecondaryPort(controllerPort)) {
+        return;
+    }
+
+    magicLevel = Magic_GetLevelPtrForPort(controllerPort);
+    magic = Magic_GetAmountPtrForPort(controllerPort);
+    isMagicAcquired = Magic_GetAcquiredPtrForPort(controllerPort);
+    isDoubleMagicAcquired = Magic_GetDoubleAcquiredPtrForPort(controllerPort);
+
+    if (gSaveContext.isMagicAcquired && !*isMagicAcquired) {
+        *isMagicAcquired = gSaveContext.isMagicAcquired;
+        *isDoubleMagicAcquired = gSaveContext.isDoubleMagicAcquired;
+        *magicLevel = gSaveContext.magicLevel;
+        *magic = gSaveContext.magic;
+    }
+
+    if (*isMagicAcquired && (*magicLevel == 0)) {
+        *magicLevel = *isDoubleMagicAcquired + 1;
+    }
+}
+
+void Magic_ResetExtraData(void) {
+    sP2MagicCapacity = 0;
+    sP2MagicTarget = 0;
+    sP2MagicFillTarget = 0;
+    sP2MagicState = MAGIC_STATE_IDLE;
+    sP2PrevMagicState = MAGIC_STATE_IDLE;
+    sP2MagicBorderRatio = 2;
+    sP2MagicBorderStep = 1;
+    sP2LensMagicConsumptionTimer = 0;
+    sMagicBorder2 = (Color_RGB8){ 255, 255, 255 };
+
+    sP3MagicLevel = 0;
+    sP3Magic = MAGIC_NORMAL_METER;
+    sP3IsMagicAcquired = false;
+    sP3IsDoubleMagicAcquired = false;
+    sP3MagicCapacity = 0;
+    sP3MagicTarget = 0;
+    sP3MagicFillTarget = 0;
+    sP3MagicState = MAGIC_STATE_IDLE;
+    sP3PrevMagicState = MAGIC_STATE_IDLE;
+    sP3MagicBorderRatio = 2;
+    sP3MagicBorderStep = 1;
+    sP3LensMagicConsumptionTimer = 0;
+    sMagicBorder3 = (Color_RGB8){ 255, 255, 255 };
+
+    sP4MagicLevel = 0;
+    sP4Magic = MAGIC_NORMAL_METER;
+    sP4IsMagicAcquired = false;
+    sP4IsDoubleMagicAcquired = false;
+    sP4MagicCapacity = 0;
+    sP4MagicTarget = 0;
+    sP4MagicFillTarget = 0;
+    sP4MagicState = MAGIC_STATE_IDLE;
+    sP4PrevMagicState = MAGIC_STATE_IDLE;
+    sP4MagicBorderRatio = 2;
+    sP4MagicBorderStep = 1;
+    sP4LensMagicConsumptionTimer = 0;
+    sMagicBorder4 = (Color_RGB8){ 255, 255, 255 };
+}
+
+s16 Magic_GetStateForPlayer(Player* player) {
+    u8 controllerPort = Magic_GetControllerPortForPlayer(player);
+
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return *Magic_GetSecondaryStatePtr(controllerPort);
+    }
+    return gSaveContext.magicState;
+}
+
+void Magic_SetStateForPlayer(Player* player, s16 state) {
+    u8 controllerPort = Magic_GetControllerPortForPlayer(player);
+
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        *Magic_GetSecondaryStatePtr(controllerPort) = state;
+        return;
+    }
+
+    gSaveContext.magicState = state;
+}
+
+void Magic_FillForPlayer(PlayState* play, Player* player) {
+    u8 controllerPort = Magic_GetControllerPortForPlayer(player);
+
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        if (*Magic_GetAcquiredPtrForPort(controllerPort)) {
+            *Magic_GetSecondaryPrevStatePtr(controllerPort) = *Magic_GetSecondaryStatePtr(controllerPort);
+            *Magic_GetSecondaryFillTargetPtr(controllerPort) =
+                (*Magic_GetDoubleAcquiredPtrForPort(controllerPort) + 1) * MAGIC_NORMAL_METER;
+            *Magic_GetSecondaryStatePtr(controllerPort) = MAGIC_STATE_FILL;
+        }
+        return;
+    }
+
+    Magic_Fill(play);
+}
+
+void Magic_ResetForPlayer(PlayState* play, Player* player) {
+    u8 controllerPort = Magic_GetControllerPortForPlayer(player);
+    s16* magicState;
+
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        magicState = Magic_GetSecondaryStatePtr(controllerPort);
+
+        if ((*magicState != MAGIC_STATE_STEP_CAPACITY) && (*magicState != MAGIC_STATE_FILL)) {
+            if (*magicState == MAGIC_STATE_ADD) {
+                *Magic_GetSecondaryPrevStatePtr(controllerPort) = *magicState;
+            }
+            *magicState = MAGIC_STATE_RESET;
+        }
+        return;
+    }
+
+    Magic_Reset(play);
+}
+
+static s32 Magic_RequestChangeSecondary(PlayState* play, u8 controllerPort, s16 amount, s16 type) {
+    s8* magic = Magic_GetAmountPtrForPort(controllerPort);
+    u8* isMagicAcquired = Magic_GetAcquiredPtrForPort(controllerPort);
+    s16* magicCapacity = Magic_GetSecondaryCapacityPtr(controllerPort);
+    s16* magicTarget = Magic_GetSecondaryTargetPtr(controllerPort);
+    s16* magicState = Magic_GetSecondaryStatePtr(controllerPort);
+    s16* prevMagicState = Magic_GetSecondaryPrevStatePtr(controllerPort);
+    s16* lensMagicConsumptionTimer = Magic_GetSecondaryLensTimerPtr(controllerPort);
+
+    if (!*isMagicAcquired) {
+        return false;
+    }
+
+    if ((type != MAGIC_ADD) && ((*magic - amount) < 0)) {
+        if (*magicCapacity != 0) {
+            Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        }
+        return false;
+    }
+
+    switch (type) {
+        case MAGIC_CONSUME_NOW:
+        case MAGIC_CONSUME_NOW_ALT:
+            if ((*magicState == MAGIC_STATE_IDLE) || (*magicState == MAGIC_STATE_CONSUME_LENS)) {
+                if (*magicState == MAGIC_STATE_CONSUME_LENS) {
+                    play->actorCtx.lensActive = false;
+                }
+                *magicTarget = *magic - amount;
+                *magicState = MAGIC_STATE_CONSUME_SETUP;
+                return true;
+            }
+
+            Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            return false;
+
+        case MAGIC_CONSUME_WAIT_NO_PREVIEW:
+            if ((*magicState == MAGIC_STATE_IDLE) || (*magicState == MAGIC_STATE_CONSUME_LENS)) {
+                if (*magicState == MAGIC_STATE_CONSUME_LENS) {
+                    play->actorCtx.lensActive = false;
+                }
+                *magicTarget = *magic - amount;
+                *magicState = MAGIC_STATE_METER_FLASH_3;
+                return true;
+            }
+
+            Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            return false;
+
+        case MAGIC_CONSUME_LENS:
+            if (*magicState == MAGIC_STATE_IDLE) {
+                if (*magic != 0) {
+                    *lensMagicConsumptionTimer = 80;
+                    *magicState = MAGIC_STATE_CONSUME_LENS;
+                    return true;
+                }
+                return false;
+            }
+
+            return *magicState == MAGIC_STATE_CONSUME_LENS;
+
+        case MAGIC_CONSUME_WAIT_PREVIEW:
+            if ((*magicState == MAGIC_STATE_IDLE) || (*magicState == MAGIC_STATE_CONSUME_LENS)) {
+                if (*magicState == MAGIC_STATE_CONSUME_LENS) {
+                    play->actorCtx.lensActive = false;
+                }
+                *magicTarget = *magic - amount;
+                *magicState = MAGIC_STATE_METER_FLASH_2;
+                return true;
+            }
+
+            Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            return false;
+
+        case MAGIC_ADD:
+            if (*magic <= *magicCapacity) {
+                *magicTarget = *magic + amount;
+
+                if (*magicTarget >= *magicCapacity) {
+                    *magicTarget = *magicCapacity;
+                }
+
+                *magicState = MAGIC_STATE_ADD;
+                return true;
+            }
+            break;
+    }
+
+    return false;
+}
+
+s32 Magic_RequestChangeForPlayer(PlayState* play, Player* player, s16 amount, s16 type) {
+    u8 controllerPort = Magic_GetControllerPortForPlayer(player);
+
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return Magic_RequestChangeSecondary(play, controllerPort, amount, type);
+    }
+
+    return Magic_RequestChange(play, amount, type);
 }
 
 void Magic_Fill(PlayState* play) {
@@ -3407,6 +4687,223 @@ void Interface_UpdateMagicBar(PlayState* play) {
     }
 }
 
+static void Magic_UpdateSecondary(PlayState* play, u8 controllerPort) {
+    static s16 sMagicBorderColors[][3] = {
+        { 255, 255, 255 },
+        { 150, 150, 150 },
+        { 255, 255, 150 },
+        { 255, 255, 50 },
+    };
+    static s16 sMagicBorderIndices[] = { 0, 1, 1, 0 };
+    MessageContext* msgCtx = &play->msgCtx;
+    s8* magicLevel = Magic_GetLevelPtrForPort(controllerPort);
+    s8* magic = Magic_GetAmountPtrForPort(controllerPort);
+    s16* magicCapacity = Magic_GetSecondaryCapacityPtr(controllerPort);
+    s16* magicTarget = Magic_GetSecondaryTargetPtr(controllerPort);
+    s16* magicFillTarget = Magic_GetSecondaryFillTargetPtr(controllerPort);
+    s16* magicState = Magic_GetSecondaryStatePtr(controllerPort);
+    s16* prevMagicState = Magic_GetSecondaryPrevStatePtr(controllerPort);
+    s16* magicBorderRatio = Magic_GetSecondaryBorderRatioPtr(controllerPort);
+    s16* magicBorderStep = Magic_GetSecondaryBorderStepPtr(controllerPort);
+    s16* lensMagicConsumptionTimer = Magic_GetSecondaryLensTimerPtr(controllerPort);
+    Color_RGB8* magicBorder = Magic_GetSecondaryBorderPtr(controllerPort);
+    s16 borderChangeR;
+    s16 borderChangeG;
+    s16 borderChangeB;
+    s16 temp;
+
+    switch (*magicState) {
+        case MAGIC_STATE_STEP_CAPACITY:
+            temp = *magicLevel * MAGIC_NORMAL_METER;
+            if (temp != *magicCapacity) {
+                if (*magicCapacity < temp) {
+                    *magicCapacity += 8;
+                    if (*magicCapacity > temp) {
+                        *magicCapacity = temp;
+                    }
+                } else {
+                    *magicCapacity -= 8;
+                    if (*magicCapacity <= temp) {
+                        *magicCapacity = temp;
+                    }
+                }
+            } else {
+                *magicState = MAGIC_STATE_FILL;
+            }
+            break;
+
+        case MAGIC_STATE_FILL:
+            *magic += 4;
+
+            if (gSaveContext.gameMode == GAMEMODE_NORMAL && gSaveContext.sceneSetupIndex < 4) {
+                Audio_PlaySoundGeneral(NA_SE_SY_GAUGE_UP - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            }
+
+            if (*magic >= *magicFillTarget) {
+                *magic = *magicFillTarget;
+                *magicState = *prevMagicState;
+                *prevMagicState = MAGIC_STATE_IDLE;
+            }
+            break;
+
+        case MAGIC_STATE_CONSUME_SETUP:
+            *magicBorderRatio = 2;
+            *magicState = MAGIC_STATE_CONSUME;
+            break;
+
+        case MAGIC_STATE_CONSUME:
+            if (!Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER)) {
+                *magic -= 2;
+
+                if (*magic <= 0) {
+                    *magic = 0;
+                    *magicState = MAGIC_STATE_METER_FLASH_1;
+                    *magicBorder = (Color_RGB8){ 255, 255, 255 };
+                } else if (*magic == *magicTarget) {
+                    *magicState = MAGIC_STATE_METER_FLASH_1;
+                    *magicBorder = (Color_RGB8){ 255, 255, 255 };
+                }
+            }
+            FALLTHROUGH;
+
+        case MAGIC_STATE_METER_FLASH_1:
+        case MAGIC_STATE_METER_FLASH_2:
+        case MAGIC_STATE_METER_FLASH_3:
+            temp = sMagicBorderIndices[*magicBorderStep];
+            borderChangeR = ABS(magicBorder->r - sMagicBorderColors[temp][0]) / *magicBorderRatio;
+            borderChangeG = ABS(magicBorder->g - sMagicBorderColors[temp][1]) / *magicBorderRatio;
+            borderChangeB = ABS(magicBorder->b - sMagicBorderColors[temp][2]) / *magicBorderRatio;
+
+            if (magicBorder->r >= sMagicBorderColors[temp][0]) {
+                magicBorder->r -= borderChangeR;
+            } else {
+                magicBorder->r += borderChangeR;
+            }
+
+            if (magicBorder->g >= sMagicBorderColors[temp][1]) {
+                magicBorder->g -= borderChangeG;
+            } else {
+                magicBorder->g += borderChangeG;
+            }
+
+            if (magicBorder->b >= sMagicBorderColors[temp][2]) {
+                magicBorder->b -= borderChangeB;
+            } else {
+                magicBorder->b += borderChangeB;
+            }
+
+            *magicBorderRatio -= 1;
+            if (*magicBorderRatio == 0) {
+                magicBorder->r = sMagicBorderColors[temp][0];
+                magicBorder->g = sMagicBorderColors[temp][1];
+                magicBorder->b = sMagicBorderColors[temp][2];
+                *magicBorderRatio = YREG(40 + *magicBorderStep);
+                *magicBorderStep += 1;
+                if (*magicBorderStep >= 4) {
+                    *magicBorderStep = 0;
+                }
+            }
+            break;
+
+        case MAGIC_STATE_RESET:
+            *magicBorder = (Color_RGB8){ 255, 255, 255 };
+            *magicState = MAGIC_STATE_IDLE;
+            break;
+
+        case MAGIC_STATE_CONSUME_LENS:
+            if ((play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) && (msgCtx->msgMode == MSGMODE_NONE) &&
+                (play->gameOverCtx.state == GAMEOVER_INACTIVE) && (play->transitionTrigger == TRANS_TRIGGER_OFF) &&
+                (play->transitionMode == TRANS_MODE_OFF) && !Play_InCsMode(play)) {
+                bool hasLens = false;
+
+                for (s32 buttonIndex = 1; buttonIndex < ((CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0)
+                                                             ? ARRAY_COUNT(gSaveContext.equips.buttonItems)
+                                                             : 4);
+                     buttonIndex++) {
+                    if (gSaveContext.equips.buttonItems[buttonIndex] == ITEM_LENS) {
+                        hasLens = true;
+                        break;
+                    }
+                }
+
+                if ((Interface_GetQuickItemForPortAndSlot(controllerPort, 0) == ITEM_LENS) ||
+                    (Interface_GetQuickItemForPortAndSlot(controllerPort, 1) == ITEM_LENS)) {
+                    hasLens = true;
+                }
+
+                if ((*magic == 0) ||
+                    ((Player_GetEnvironmentalHazard(play) >= PLAYER_ENV_HAZARD_UNDERWATER_FLOOR) &&
+                     (Player_GetEnvironmentalHazard(play) <= PLAYER_ENV_HAZARD_UNDERWATER_FREE)) ||
+                    !hasLens || !play->actorCtx.lensActive) {
+                    play->actorCtx.lensActive = false;
+                    Audio_PlaySoundGeneral(NA_SE_SY_GLASSMODE_OFF, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    *magicState = MAGIC_STATE_IDLE;
+                    *magicBorder = (Color_RGB8){ 255, 255, 255 };
+                    break;
+                }
+
+                *lensMagicConsumptionTimer -= 1;
+                if (*lensMagicConsumptionTimer == 0) {
+                    *magic -= 1;
+                    *lensMagicConsumptionTimer = 80;
+                }
+            }
+
+            temp = sMagicBorderIndices[*magicBorderStep];
+            borderChangeR = ABS(magicBorder->r - sMagicBorderColors[temp][0]) / *magicBorderRatio;
+            borderChangeG = ABS(magicBorder->g - sMagicBorderColors[temp][1]) / *magicBorderRatio;
+            borderChangeB = ABS(magicBorder->b - sMagicBorderColors[temp][2]) / *magicBorderRatio;
+
+            if (magicBorder->r >= sMagicBorderColors[temp][0]) {
+                magicBorder->r -= borderChangeR;
+            } else {
+                magicBorder->r += borderChangeR;
+            }
+
+            if (magicBorder->g >= sMagicBorderColors[temp][1]) {
+                magicBorder->g -= borderChangeG;
+            } else {
+                magicBorder->g += borderChangeG;
+            }
+
+            if (magicBorder->b >= sMagicBorderColors[temp][2]) {
+                magicBorder->b -= borderChangeB;
+            } else {
+                magicBorder->b += borderChangeB;
+            }
+
+            *magicBorderRatio -= 1;
+            if (*magicBorderRatio == 0) {
+                magicBorder->r = sMagicBorderColors[temp][0];
+                magicBorder->g = sMagicBorderColors[temp][1];
+                magicBorder->b = sMagicBorderColors[temp][2];
+                *magicBorderRatio = YREG(40 + *magicBorderStep);
+                *magicBorderStep += 1;
+                if (*magicBorderStep >= 4) {
+                    *magicBorderStep = 0;
+                }
+            }
+            break;
+
+        case MAGIC_STATE_ADD:
+            *magic += 4;
+            Audio_PlaySoundGeneral(NA_SE_SY_GAUGE_UP - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            if (*magic >= *magicTarget) {
+                *magic = *magicTarget;
+                *magicState = *prevMagicState;
+                *prevMagicState = MAGIC_STATE_IDLE;
+            }
+            break;
+
+        default:
+            *magicState = MAGIC_STATE_IDLE;
+            break;
+    }
+}
+
 void Interface_DrawLineupTick(PlayState* play) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
@@ -3429,6 +4926,9 @@ void Interface_DrawLineupTick(PlayState* play) {
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
+
+static void Interface_DrawMagicMeterForPortAt(PlayState* play, u8 controllerPort, s16 magicMeterX, s16 magicMeterY);
+static s16 Interface_GetHeartRowCountForPort(u8 controllerPort);
 
 void Interface_DrawMagicBar(PlayState* play) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
@@ -3536,6 +5036,28 @@ void Interface_DrawMagicBar(PlayState* play) {
             rMagicFillX = rMagicFillX_original;
         }
 
+        if (Interface_IsOriginalMultiplayerItemModeEnabled() && !Interface_IsSplitScreenEnabled() &&
+            (CVarGetInteger(CVAR_COSMETIC("HUD.MagicBar.PosType"), 0) == ORIGINAL_LOCATION)) {
+            f32 heartsScale = 0.68f;
+            f32 topHeartsAnchorY;
+            f32 heartsBottomY;
+            s16 heartCount = gSaveContext.healthCapacity / FULL_HEART_HEALTH;
+            s16 heartRows;
+
+            if (heartCount <= 0) {
+                heartCount = STARTING_HEALTH / FULL_HEART_HEALTH;
+            }
+            heartRows = (heartCount + 9) / 10;
+
+            if (CVarGetInteger(CVAR_COSMETIC("HUD.HeartsCount.PosType"), 0) != ORIGINAL_LOCATION) {
+                heartsScale = CVarGetFloat(CVAR_COSMETIC("HUD.HeartsCount.Scale"), 0.7f);
+            }
+
+            topHeartsAnchorY = getHealthMeterYOffset() + 21.0f - (8.0f * heartsScale);
+            heartsBottomY = topHeartsAnchorY + ((heartRows - 1) * 10.0f) + (16.0f * heartsScale);
+            magicBarY = (s16)(heartsBottomY + 0.0f);
+        }
+
         Gfx_SetupDL_39Overlay(play->state.gfxCtx);
 
         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, sMagicBorder.r, sMagicBorder.g, sMagicBorder.b, interfaceCtx->magicAlpha);
@@ -3607,6 +5129,229 @@ void Interface_DrawMagicBar(PlayState* play) {
                                     (rMagicFillX + gSaveContext.magic) << 2, (magicBarY + 10) << 2, G_TX_RENDERTILE, 0,
                                     0, 1 << 10, 1 << 10);
         }
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    if (!Interface_IsOriginalMultiplayerItemModeEnabled()) {
+        s16 playerCount = Interface_GetLocalMultiplayerPlayerCount();
+
+        if (playerCount > 1) {
+            s16 i;
+            f32 heartsScale = 0.68f;
+            f32 topHeartsAnchorY;
+            f32 topHeartsCenterY;
+            f32 bottomHeartsAnchorY;
+            f32 splitViewportScaleX;
+            s32 splitScreenEnabled = Interface_IsSplitScreenEnabled();
+            const s16 leftMagicAnchorX = OTRGetRectDimensionFromLeftEdge(22.0f);
+            const s16 iconSize = 24;
+            const s16 magicHeight = 16;
+            const s16 sharedMagicOffset = 2;
+
+            if (CVarGetInteger(CVAR_COSMETIC("HUD.HeartsCount.PosType"), 0) != ORIGINAL_LOCATION) {
+                heartsScale = CVarGetFloat(CVAR_COSMETIC("HUD.HeartsCount.Scale"), 0.7f);
+            }
+
+            splitViewportScaleX =
+                (OTRGetDimensionFromRightEdge(SCREEN_WIDTH) - OTRGetDimensionFromLeftEdge(0.0f)) / SCREEN_WIDTH;
+
+            topHeartsAnchorY = getHealthMeterYOffset() + 21.0f - (8.0f * heartsScale);
+            topHeartsCenterY = topHeartsAnchorY + (8.0f * heartsScale);
+            bottomHeartsAnchorY = SCREEN_HEIGHT - topHeartsCenterY;
+
+            for (i = 1; i < playerCount; i++) {
+                s16 magicCapacity;
+                s16 magicWidth;
+                s16 heartsTopY;
+                s16 heartsBottomY;
+                s16 heartRows;
+                s16 magicX;
+                s16 magicY;
+                u8 controllerPort = i + 1;
+
+                if (Magic_GetLevelForPort(controllerPort) == 0) {
+                    continue;
+                }
+
+                heartRows = Interface_GetHeartRowCountForPort(controllerPort);
+                magicCapacity = Magic_GetLevelForPort(controllerPort) * MAGIC_NORMAL_METER;
+                magicWidth = 16 + magicCapacity;
+
+                if (splitScreenEnabled) {
+                    s16 viewportLeftX;
+                    s16 viewportTopY;
+                    s16 viewportLeftHudSpace;
+
+                    Interface_GetSplitViewportTopLeft(playerCount, i, &viewportLeftX, &viewportTopY);
+                    viewportLeftHudSpace =
+                        (s16)(OTRGetDimensionFromLeftEdge((f32)viewportLeftX) + (viewportLeftX * splitViewportScaleX));
+
+                    heartsTopY = (s16)(viewportTopY + topHeartsAnchorY);
+                    heartsBottomY = (s16)(heartsTopY + ((heartRows - 1) * 10.0f) + (16.0f * heartsScale));
+                    magicX = viewportLeftHudSpace + leftMagicAnchorX;
+                    magicY = (s16)(heartsBottomY + 1.0f);
+                } else {
+                    s16 playerSideAnchorX = (i % 2) ? (SCREEN_WIDTH - iconSize - leftMagicAnchorX) : leftMagicAnchorX;
+
+                    heartsTopY = (s16)((i < 2) ? topHeartsAnchorY : bottomHeartsAnchorY);
+                    heartsBottomY = (s16)(heartsTopY + ((heartRows - 1) * 10.0f) + (16.0f * heartsScale));
+
+                    if (i % 2) {
+                        magicX = playerSideAnchorX + iconSize - magicWidth;
+                    } else {
+                        magicX = playerSideAnchorX;
+                    }
+
+                    if (i < 2) {
+                        magicY = (s16)(heartsBottomY + sharedMagicOffset);
+                    } else {
+                        magicY = (s16)(heartsTopY - magicHeight + sharedMagicOffset);
+                    }
+                }
+
+                Interface_DrawMagicMeterForPortAt(play, controllerPort, magicX, magicY);
+            }
+        }
+    }
+}
+
+static s16 Magic_GetMeterCapacityForPort(u8 controllerPort) {
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return *Magic_GetSecondaryCapacityPtr(controllerPort);
+    }
+
+    return gSaveContext.magicCapacity;
+}
+
+static s16 Magic_GetMeterTargetForPort(u8 controllerPort) {
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return *Magic_GetSecondaryTargetPtr(controllerPort);
+    }
+
+    return gSaveContext.magicTarget;
+}
+
+static s16 Magic_GetMeterStateForPort(u8 controllerPort) {
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return *Magic_GetSecondaryStatePtr(controllerPort);
+    }
+
+    return gSaveContext.magicState;
+}
+
+static Color_RGB8 Magic_GetBorderColorForPort(u8 controllerPort) {
+    if (Magic_IsSecondaryPort(controllerPort)) {
+        return *Magic_GetSecondaryBorderPtr(controllerPort);
+    }
+
+    return sMagicBorder;
+}
+
+static void Interface_DrawMagicMeterForPortAt(PlayState* play, u8 controllerPort, s16 magicMeterX, s16 magicMeterY) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    s16 magicCapacity;
+    s16 currentMagic;
+    s16 magicTarget;
+    s16 magicState;
+    s16 magicFillX;
+    Color_RGB8 magicBorder;
+    Color_RGB8 magicbarYellow = { 250, 250, 0 };
+    Color_RGB8 magicbarGreen = { R_MAGIC_FILL_COLOR(0), R_MAGIC_FILL_COLOR(1), R_MAGIC_FILL_COLOR(2) };
+    Color_RGB8 magicbarBlue = { 0, 0, 200 };
+
+    if (Magic_GetLevelForPort(controllerPort) == 0) {
+        return;
+    }
+
+    magicCapacity = Magic_GetMeterCapacityForPort(controllerPort);
+    if (magicCapacity <= 0) {
+        magicCapacity = Magic_GetLevelForPort(controllerPort) * MAGIC_NORMAL_METER;
+    }
+
+    currentMagic = Magic_GetAmountForPort(controllerPort);
+    magicTarget = Magic_GetMeterTargetForPort(controllerPort);
+    magicState = Magic_GetMeterStateForPort(controllerPort);
+    magicFillX = magicMeterX + 8;
+    magicBorder = Magic_GetBorderColorForPort(controllerPort);
+
+    if (CVarGetInteger(CVAR_COSMETIC("Consumable.MagicActive.Changed"), 0)) {
+        magicbarYellow = CVarGetColor24(CVAR_COSMETIC("Consumable.MagicActive.Value"), magicbarYellow);
+    }
+
+    if (CVarGetInteger(CVAR_COSMETIC("Consumable.Magic.Changed"), 0)) {
+        magicbarGreen = CVarGetColor24(CVAR_COSMETIC("Consumable.Magic.Value"), magicbarGreen);
+    }
+
+    if (CVarGetInteger("gCosmetics.Consumable_MagicInfinite.Changed", 0)) {
+        magicbarBlue = CVarGetColor24("gCosmetics.Consumable_MagicInfinite.Value", magicbarBlue);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicBorder.r, magicBorder.g, magicBorder.b, interfaceCtx->magicAlpha);
+    gDPSetEnvColor(OVERLAY_DISP++, 100, 50, 50, 255);
+
+    OVERLAY_DISP =
+        Gfx_TextureIA8(OVERLAY_DISP, gMagicMeterEndTex, 8, 16, magicMeterX, magicMeterY, 8, 16, 1 << 10, 1 << 10);
+
+    OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gMagicMeterMidTex, 24, 16, magicMeterX + 8, magicMeterY,
+                                  magicCapacity, 16, 1 << 10, 1 << 10);
+
+    gDPLoadTextureBlock(OVERLAY_DISP++, gMagicMeterEndTex, G_IM_FMT_IA, G_IM_SIZ_8b, 8, 16, 0,
+                        G_TX_MIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 3, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+
+    gSPWideTextureRectangle(OVERLAY_DISP++, (magicMeterX + 8 + magicCapacity) << 2, magicMeterY << 2,
+                            (magicMeterX + 8 + magicCapacity + 8) << 2, (magicMeterY + 16) << 2, G_TX_RENDERTILE,
+                            256, 0, 1 << 10, 1 << 10);
+
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, 0, 0, 0, PRIMITIVE, PRIMITIVE,
+                      ENVIRONMENT, TEXEL0, ENVIRONMENT, 0, 0, 0, PRIMITIVE);
+    gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
+
+    if (magicState == MAGIC_STATE_METER_FLASH_2) {
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicbarYellow.r, magicbarYellow.g, magicbarYellow.b,
+                        interfaceCtx->magicAlpha);
+
+        gDPLoadMultiBlock_4b(OVERLAY_DISP++, gMagicMeterFillTex, 0x0000, G_TX_RENDERTILE, G_IM_FMT_I, 16, 16, 0,
+                             G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                             G_TX_NOLOD, G_TX_NOLOD);
+
+        gSPWideTextureRectangle(OVERLAY_DISP++, magicFillX << 2, (magicMeterY + 3) << 2,
+                                (magicFillX + currentMagic) << 2, (magicMeterY + 10) << 2, G_TX_RENDERTILE, 0, 0,
+                                1 << 10, 1 << 10);
+
+        gDPPipeSync(OVERLAY_DISP++);
+        if (Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER)) {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicbarBlue.r, magicbarBlue.g, magicbarBlue.b,
+                            interfaceCtx->magicAlpha);
+        } else {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicbarGreen.r, magicbarGreen.g, magicbarGreen.b,
+                            interfaceCtx->magicAlpha);
+        }
+
+        gSPWideTextureRectangle(OVERLAY_DISP++, magicFillX << 2, (magicMeterY + 3) << 2,
+                                (magicFillX + magicTarget) << 2, (magicMeterY + 10) << 2, G_TX_RENDERTILE, 0, 0,
+                                1 << 10, 1 << 10);
+    } else {
+        if (Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER)) {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicbarBlue.r, magicbarBlue.g, magicbarBlue.b,
+                            interfaceCtx->magicAlpha);
+        } else {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, magicbarGreen.r, magicbarGreen.g, magicbarGreen.b,
+                            interfaceCtx->magicAlpha);
+        }
+
+        gDPLoadMultiBlock_4b(OVERLAY_DISP++, gMagicMeterFillTex, 0x0000, G_TX_RENDERTILE, G_IM_FMT_I, 16, 16, 0,
+                             G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                             G_TX_NOLOD, G_TX_NOLOD);
+
+        gSPWideTextureRectangle(OVERLAY_DISP++, magicFillX << 2, (magicMeterY + 3) << 2,
+                                (magicFillX + currentMagic) << 2, (magicMeterY + 10) << 2, G_TX_RENDERTILE, 0, 0,
+                                1 << 10, 1 << 10);
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -3819,6 +5564,7 @@ void Interface_DrawItemButtons(PlayState* play) {
     s16 dxdy;
     s16 width;
     s16 height;
+    s32 originalQuickItemModeEnabled = Interface_IsOriginalMultiplayerItemModeEnabled();
 
     Color_RGB8 bButtonColor = { 0, 150, 0 };
     if (CVarGetInteger(CVAR_COSMETIC("HUD.BButton.Changed"), 0)) {
@@ -3900,6 +5646,12 @@ void Interface_DrawItemButtons(PlayState* play) {
         PosY_BtnB = PosY_BtnB_ori;
         PosX_BtnB = PosX_BtnB_ori;
     }
+
+    if (originalQuickItemModeEnabled) {
+        PosX_BtnB = -9999;
+        PosY_BtnB = -9999;
+    }
+
     // Start Button
     s16 X_Margins_StartBtn;
     s16 Y_Margins_StartBtn;
@@ -4150,30 +5902,32 @@ void Interface_DrawItemButtons(PlayState* play) {
     OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, BBtn_Size, BBtn_Size, PosX_BtnB, PosY_BtnB,
                                   BBtnScaled, BBtnScaled, BBtn_factor, BBtn_factor);
 
-    // C-Left Button Color & Texture
-    gDPPipeSync(OVERLAY_DISP++);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cLeftButtonColor.r, cLeftButtonColor.g, cLeftButtonColor.b,
-                    interfaceCtx->cLeftAlpha);
-    gSPWideTextureRectangle(OVERLAY_DISP++, C_Left_BTN_Pos[0] << 2, C_Left_BTN_Pos[1] << 2,
-                            (C_Left_BTN_Pos[0] + R_ITEM_BTN_WIDTH(1)) << 2,
-                            (C_Left_BTN_Pos[1] + R_ITEM_BTN_WIDTH(1)) << 2, G_TX_RENDERTILE, 0, 0,
-                            R_ITEM_BTN_DD(1) << 1, R_ITEM_BTN_DD(1) << 1);
+    if (!originalQuickItemModeEnabled) {
+        // C-Left Button Color & Texture
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cLeftButtonColor.r, cLeftButtonColor.g, cLeftButtonColor.b,
+                        interfaceCtx->cLeftAlpha);
+        gSPWideTextureRectangle(OVERLAY_DISP++, C_Left_BTN_Pos[0] << 2, C_Left_BTN_Pos[1] << 2,
+                                (C_Left_BTN_Pos[0] + R_ITEM_BTN_WIDTH(1)) << 2,
+                                (C_Left_BTN_Pos[1] + R_ITEM_BTN_WIDTH(1)) << 2, G_TX_RENDERTILE, 0, 0,
+                                R_ITEM_BTN_DD(1) << 1, R_ITEM_BTN_DD(1) << 1);
 
-    // C-Down Button Color & Texture
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cDownButtonColor.r, cDownButtonColor.g, cDownButtonColor.b,
-                    interfaceCtx->cDownAlpha);
-    gSPWideTextureRectangle(OVERLAY_DISP++, C_Down_BTN_Pos[0] << 2, C_Down_BTN_Pos[1] << 2,
-                            (C_Down_BTN_Pos[0] + R_ITEM_BTN_WIDTH(2)) << 2,
-                            (C_Down_BTN_Pos[1] + R_ITEM_BTN_WIDTH(2)) << 2, G_TX_RENDERTILE, 0, 0,
-                            R_ITEM_BTN_DD(2) << 1, R_ITEM_BTN_DD(2) << 1);
+        // C-Down Button Color & Texture
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cDownButtonColor.r, cDownButtonColor.g, cDownButtonColor.b,
+                        interfaceCtx->cDownAlpha);
+        gSPWideTextureRectangle(OVERLAY_DISP++, C_Down_BTN_Pos[0] << 2, C_Down_BTN_Pos[1] << 2,
+                                (C_Down_BTN_Pos[0] + R_ITEM_BTN_WIDTH(2)) << 2,
+                                (C_Down_BTN_Pos[1] + R_ITEM_BTN_WIDTH(2)) << 2, G_TX_RENDERTILE, 0, 0,
+                                R_ITEM_BTN_DD(2) << 1, R_ITEM_BTN_DD(2) << 1);
 
-    // C-Right Button Color & Texture
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cRightButtonColor.r, cRightButtonColor.g, cRightButtonColor.b,
-                    interfaceCtx->cRightAlpha);
-    gSPWideTextureRectangle(OVERLAY_DISP++, C_Right_BTN_Pos[0] << 2, C_Right_BTN_Pos[1] << 2,
-                            (C_Right_BTN_Pos[0] + R_ITEM_BTN_WIDTH(3)) << 2,
-                            (C_Right_BTN_Pos[1] + R_ITEM_BTN_WIDTH(3)) << 2, G_TX_RENDERTILE, 0, 0,
-                            R_ITEM_BTN_DD(3) << 1, R_ITEM_BTN_DD(3) << 1);
+        // C-Right Button Color & Texture
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, cRightButtonColor.r, cRightButtonColor.g, cRightButtonColor.b,
+                        interfaceCtx->cRightAlpha);
+        gSPWideTextureRectangle(OVERLAY_DISP++, C_Right_BTN_Pos[0] << 2, C_Right_BTN_Pos[1] << 2,
+                                (C_Right_BTN_Pos[0] + R_ITEM_BTN_WIDTH(3)) << 2,
+                                (C_Right_BTN_Pos[1] + R_ITEM_BTN_WIDTH(3)) << 2, G_TX_RENDERTILE, 0, 0,
+                                R_ITEM_BTN_DD(3) << 1, R_ITEM_BTN_DD(3) << 1);
+    }
 
     if ((pauseCtx->state < 8) || (pauseCtx->state >= 18)) {
         if ((play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0)) {
@@ -4213,7 +5967,8 @@ void Interface_DrawItemButtons(PlayState* play) {
         }
     }
 
-    if (interfaceCtx->naviCalling && (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) &&
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("DisableNaviMessages"), 0) && interfaceCtx->naviCalling &&
+        (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) &&
         (play->csCtx.state == CS_STATE_IDLE)) {
         if (!sCUpInvisible) {
             // C-Up Button Texture, Color & Label (Navi Text)
@@ -4255,11 +6010,12 @@ void Interface_DrawItemButtons(PlayState* play) {
         }
     }
 
-    gDPPipeSync(OVERLAY_DISP++);
+    if (!originalQuickItemModeEnabled) {
+        gDPPipeSync(OVERLAY_DISP++);
 
-    // Empty C Button Arrows
-    for (temp = 1; temp < 4; temp++) {
-        if (gSaveContext.equips.buttonItems[temp] > 0xF0) {
+        // Empty C Button Arrows
+        for (temp = 1; temp < 4; temp++) {
+            if (gSaveContext.equips.buttonItems[temp] > 0xF0) {
             s16 X_Margins_CL;
             s16 X_Margins_CR;
             s16 X_Margins_CD;
@@ -4400,6 +6156,7 @@ void Interface_DrawItemButtons(PlayState* play) {
                                           ItemIconPos[temp - 1][1], ItemIconWidthFactor[temp - 1][0],
                                           ItemIconWidthFactor[temp - 1][0], ItemIconWidthFactor[temp - 1][1],
                                           ItemIconWidthFactor[temp - 1][1]);
+            }
         }
     }
 
@@ -4942,6 +6699,550 @@ void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static void Interface_DrawItemIconTextureAt(PlayState* play, void* texture, s16 x, s16 y, s16 width, s16 height) {
+    u16 dsdx = (32 << 10) / width;
+    u16 dtdy = (32 << 10) / height;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    gDPLoadTextureBlock(OVERLAY_DISP++, texture, G_IM_FMT_RGBA, G_IM_SIZ_32b, 32, 32, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                        G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+
+    gSPWideTextureRectangle(OVERLAY_DISP++, x << 2, y << 2, (x + width) << 2, (y + height) << 2, G_TX_RENDERTILE,
+                            0, 0, dsdx, dtdy);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void Interface_DrawAmmoCountForItemAt(PlayState* play, s16 item, s16 alpha, s16 x, s16 y) {
+    s16 tens;
+    s16 ammo;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    if (GameInteractor_Should(VB_DRAW_AMMO_COUNT,
+                              ((item == ITEM_STICK) || (item == ITEM_NUT) || (item == ITEM_BOMB) ||
+                               (item == ITEM_BOW) || ((item >= ITEM_BOW_ARROW_FIRE) && (item <= ITEM_BOW_ARROW_LIGHT)) ||
+                               (item == ITEM_SLINGSHOT) || (item == ITEM_BOMBCHU) || (item == ITEM_BEAN)),
+                              &item)) {
+        if ((item >= ITEM_BOW_ARROW_FIRE) && (item <= ITEM_BOW_ARROW_LIGHT)) {
+            item = ITEM_BOW;
+        }
+
+        ammo = AMMO(item);
+
+        gDPPipeSync(OVERLAY_DISP++);
+
+        if (((item == ITEM_BOW) && (ammo == CUR_CAPACITY(UPG_QUIVER))) ||
+            ((item == ITEM_BOMB) && (ammo == CUR_CAPACITY(UPG_BOMB_BAG))) ||
+            ((item == ITEM_SLINGSHOT) && (ammo == CUR_CAPACITY(UPG_BULLET_BAG))) ||
+            ((item == ITEM_STICK) && (ammo == CUR_CAPACITY(UPG_STICKS))) ||
+            ((item == ITEM_NUT) && (ammo == CUR_CAPACITY(UPG_NUTS))) || ((item == ITEM_BOMBCHU) && (ammo == 50)) ||
+            ((item == ITEM_BEAN) && (ammo == 15)) || GameInteractor_Should(VB_COLOR_AMMO_GREEN, false, item)) {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 120, 255, 0, alpha);
+        }
+
+        if (ammo == 0) {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 100, 100, 100, alpha);
+        }
+
+        for (tens = 0; ammo >= 10; tens++) {
+            ammo -= 10;
+        }
+
+        if (tens != 0) {
+            OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, (u8*)_gAmmoDigit0Tex[tens], 8, 8, x, y, 8, 8, 1 << 10,
+                                          1 << 10);
+        }
+
+        OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, (u8*)_gAmmoDigit0Tex[ammo], 8, 8, x + 6, y, 8, 8, 1 << 10,
+                                      1 << 10);
+    }
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static s16 Interface_GetQuickItemAlpha(InterfaceContext* interfaceCtx, u8 controllerPort, s16 slotIndex) {
+    (void)slotIndex;
+
+    switch (Interface_GetQuickItemButtonIndexImpl(controllerPort)) {
+        case 1:
+            return interfaceCtx->cLeftAlpha;
+
+        case 2:
+            return interfaceCtx->cDownAlpha;
+
+        case 3:
+            return interfaceCtx->cRightAlpha;
+
+        case 4:
+        default:
+            return interfaceCtx->dpadUpAlpha;
+    }
+}
+
+static void Interface_DrawQuickItemHudAt(PlayState* play, u8 controllerPort, s16 slotIndex, s16 x, s16 y) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    u8 item = Interface_GetQuickItemForPortAndSlot(controllerPort, slotIndex);
+    s16 alpha = Interface_GetQuickItemAlpha(interfaceCtx, controllerPort, slotIndex);
+
+    if ((item == ITEM_NONE) || (item >= ITEM_NONE_FE)) {
+        return;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, alpha);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    Interface_DrawItemIconTextureAt(play, gItemIcons[item], x, y, 24, 24);
+    Interface_DrawAmmoCountForItemAt(play, item, alpha, x + 1, y + 13);
+}
+
+static void Interface_DrawRadialQuickMenuHud(PlayState* play, s16 playerCount) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    s32 splitScreenEnabled = Interface_IsSplitScreenEnabled();
+    const s16 iconSize = 24;
+    const s16 bgSize = 18;
+    const s16 bgOffset = (iconSize - bgSize) / 2;
+    const s16 ringOuterSize = 112;
+    const s16 ringInnerSize = 84;
+    const s16 ringRadius = 60;
+    const s16 ringOuterHalf = ringOuterSize / 2;
+    const s16 ringInnerHalf = ringInnerSize / 2;
+    Color_RGB8 wheelColor = { 255, 255, 255 };
+    Color_RGB8 centerColor = { 255, 255, 255 };
+    Color_RGB8 itemButtonColor = { 255, 160, 0 };
+    Color_RGB8 selectedItemButtonColor = { 255, 255, 170 };
+    u8 wheelAlpha = interfaceCtx->bAlpha / 3;
+    u8 centerAlpha = interfaceCtx->bAlpha / 5;
+    u8 slotAlpha = interfaceCtx->bAlpha / 2;
+    u8 selectedSlotAlpha = (interfaceCtx->bAlpha * 3) / 4;
+    s32 i;
+
+    if (wheelAlpha < 35) {
+        wheelAlpha = 35;
+    }
+
+    if (centerAlpha < 20) {
+        centerAlpha = 20;
+    }
+
+    if (slotAlpha < 60) {
+        slotAlpha = 60;
+    }
+
+    if (selectedSlotAlpha < 90) {
+        selectedSlotAlpha = 90;
+    }
+
+    if (!Interface_IsRadialQuickItemMenuEnabled()) {
+        return;
+    }
+
+    for (i = 0; i < playerCount; i++) {
+        LocalMPRadialQuickMenuState* state = &sRadialQuickMenuStates[i];
+        s16 controllerPort = i + 1;
+        s16 centerX;
+        s16 centerY;
+        s16 j;
+        Viewport viewport;
+
+        if (!state->active || (state->itemCount == 0)) {
+            continue;
+        }
+
+        if (splitScreenEnabled) {
+            Interface_GetSplitViewportBounds(playerCount, i, &viewport);
+            centerX = (viewport.leftX + viewport.rightX) / 2;
+            centerY = (viewport.topY + viewport.bottomY) / 2;
+        } else {
+            centerX = SCREEN_WIDTH / 2;
+            centerY = SCREEN_HEIGHT / 2;
+        }
+
+        OPEN_DISPS(play->state.gfxCtx);
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+        gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
+
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, wheelColor.r, wheelColor.g, wheelColor.b, wheelAlpha);
+        OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32, centerX - ringOuterHalf,
+                                      centerY - ringOuterHalf, ringOuterSize, ringOuterSize,
+                                      (32 << 10) / ringOuterSize, (32 << 10) / ringOuterSize);
+
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, centerColor.r, centerColor.g, centerColor.b, centerAlpha);
+        OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32, centerX - ringInnerHalf,
+                                      centerY - ringInnerHalf, ringInnerSize, ringInnerSize,
+                                      (32 << 10) / ringInnerSize, (32 << 10) / ringInnerSize);
+        CLOSE_DISPS(play->state.gfxCtx);
+
+        Interface_DrawQuickItemHudAt(play, controllerPort, state->slotIndex, centerX - (iconSize / 2),
+                                     centerY - (iconSize / 2));
+
+        for (j = 0; j < state->itemCount; j++) {
+            u16 angle = (u16)((0x10000 / state->itemCount) * j);
+            s16 itemX = centerX + (s16)(Math_SinS(angle) * ringRadius) - (iconSize / 2);
+            s16 itemY = centerY - (s16)(Math_CosS(angle) * ringRadius) - (iconSize / 2);
+
+            OPEN_DISPS(play->state.gfxCtx);
+            gDPPipeSync(OVERLAY_DISP++);
+            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+            gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
+
+            if (j == state->selectedIndex) {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, selectedItemButtonColor.r, selectedItemButtonColor.g,
+                                selectedItemButtonColor.b, selectedSlotAlpha);
+            } else {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, itemButtonColor.r, itemButtonColor.g, itemButtonColor.b,
+                                slotAlpha);
+            }
+
+            OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32, itemX + bgOffset,
+                                          itemY + bgOffset, bgSize, bgSize, (32 << 10) / bgSize,
+                                          (32 << 10) / bgSize);
+            CLOSE_DISPS(play->state.gfxCtx);
+
+            Interface_DrawItemIconTextureAt(play, gItemIcons[state->items[j]], itemX, itemY, iconSize, iconSize);
+            Interface_DrawAmmoCountForItemAt(play, state->items[j], interfaceCtx->bAlpha, itemX + 1, itemY + 13);
+        }
+    }
+}
+
+static s16 Interface_GetHealthCapacityForPort(u8 controllerPort) {
+    s16 healthCapacity = gSaveContext.healthCapacity;
+
+    if (controllerPort == 4) {
+        healthCapacity = gSaveContext.healthCapacity4;
+    } else if (controllerPort == 3) {
+        healthCapacity = gSaveContext.healthCapacity3;
+    } else if (controllerPort == 2) {
+        healthCapacity = gSaveContext.healthCapacity2;
+    }
+
+    if ((controllerPort >= 2) && (healthCapacity < STARTING_HEALTH)) {
+        healthCapacity = gSaveContext.healthCapacity;
+        if (healthCapacity < STARTING_HEALTH) {
+            healthCapacity = STARTING_HEALTH;
+        }
+    }
+
+    return healthCapacity;
+}
+
+static s16 Interface_GetHeartRowCountForPort(u8 controllerPort) {
+    s16 heartCount = Interface_GetHealthCapacityForPort(controllerPort) / FULL_HEART_HEALTH;
+
+    if (heartCount <= 0) {
+        heartCount = STARTING_HEALTH / FULL_HEART_HEALTH;
+    }
+
+    return (heartCount + 9) / 10;
+}
+
+static void Interface_DrawOriginalMultiplayerItemHud(PlayState* play) {
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    s16 playerCount;
+    s16 playerIconY[4];
+    s16 playerItemSlot2X[4];
+    s16 playerItemSlot2Y[4];
+    s16 playerMagicX[4];
+    s16 playerMagicY[4];
+    u8 playerDrawMagic[4];
+    s16 playerSwordX[4];
+    s16 playerItemX[4];
+    s16 playerHeartRows[4];
+    f32 heartsScale = 0.68f;
+    f32 topHeartsAnchorY;
+    f32 topHeartsCenterY;
+    f32 bottomHeartsAnchorY;
+    f32 splitViewportScaleX;
+    s32 splitScreenEnabled;
+    s32 secondSlotEnabled;
+    s32 sideBySideQuickSlotLayout;
+    const f32 topIconGap = 3.0f;
+    const f32 bottomIconGap = 1.0f;
+    const f32 sharedTopIconGap = 1.0f;
+    const f32 sharedBottomIconGap = 0.0f;
+    const s16 magicHeight = 16;
+    const s16 magicGap = 3;
+    const s16 sharedMagicGap = 1;
+    const s16 sharedMagicOffset = 2; /* small Y offset to nudge shared-screen magic bars closer */
+    const s16 iconSize = 24;
+    const s16 bgSize = 18; /* smaller background circle size */
+    const s16 buttonGap = 1;
+    const s16 buttonStep = bgSize + buttonGap;
+    const s16 bgOffset = (iconSize - bgSize) / 2;
+    s16 i;
+    s16 selectedSlot;
+    const s16 leftSwordX = OTRGetRectDimensionFromLeftEdge(22.0f);
+    const s16 leftItemX = leftSwordX + buttonStep;
+    const s16 rightSwordX = SCREEN_WIDTH - iconSize - leftSwordX;
+    const s16 rightItemX = SCREEN_WIDTH - iconSize - leftItemX;
+    Color_RGB8 swordButtonColor = { 0, 150, 0 };
+    Color_RGB8 itemButtonColor = { 255, 160, 0 };
+    Color_RGB8 selectedItemButtonColor = { 255, 255, 150 };
+
+    if (!Interface_IsOriginalMultiplayerItemModeEnabled()) {
+        return;
+    }
+
+    playerCount = Interface_GetLocalMultiplayerPlayerCount();
+    if (playerCount <= 1) {
+        return;
+    }
+
+    secondSlotEnabled = Interface_IsSecondQuickItemSlotEnabled();
+    sideBySideQuickSlotLayout = Interface_IsSecondQuickItemSlotSideBySideEnabled();
+
+    if (CVarGetInteger(CVAR_COSMETIC("HUD.HeartsCount.PosType"), 0) != ORIGINAL_LOCATION) {
+        heartsScale = CVarGetFloat(CVAR_COSMETIC("HUD.HeartsCount.Scale"), 0.7f);
+    }
+
+    splitScreenEnabled = Interface_IsSplitScreenEnabled();
+    splitViewportScaleX =
+        (OTRGetDimensionFromRightEdge(SCREEN_WIDTH) - OTRGetDimensionFromLeftEdge(0.0f)) / SCREEN_WIDTH;
+
+    topHeartsAnchorY = getHealthMeterYOffset() + 21.0f - (8.0f * heartsScale);
+    topHeartsCenterY = topHeartsAnchorY + (8.0f * heartsScale);
+    bottomHeartsAnchorY = SCREEN_HEIGHT - topHeartsCenterY;
+
+    for (i = 0; i < ARRAY_COUNT(playerDrawMagic); i++) {
+        playerDrawMagic[i] = false;
+        playerMagicX[i] = 0;
+        playerMagicY[i] = 0;
+    }
+
+    if (splitScreenEnabled) {
+        for (i = 0; i < 4; i++) {
+            s16 viewportLeftX;
+            s16 viewportTopY;
+            s16 viewportLeftHudSpace;
+            s16 magicCapacity;
+            s16 magicWidth;
+            f32 heartsTopY;
+            f32 heartsBottomY;
+
+            Interface_GetSplitViewportTopLeft(playerCount, i, &viewportLeftX, &viewportTopY);
+            viewportLeftHudSpace = (s16)(viewportLeftX * splitViewportScaleX);
+
+            playerHeartRows[i] = Interface_GetHeartRowCountForPort(i + 1);
+            heartsTopY = viewportTopY + topHeartsAnchorY;
+            heartsBottomY = heartsTopY + ((playerHeartRows[i] - 1) * 10.0f) + (16.0f * heartsScale);
+            playerIconY[i] = (s16)(heartsBottomY + topIconGap + 0.999f);
+            playerSwordX[i] = viewportLeftHudSpace + leftSwordX;
+            playerItemX[i] = viewportLeftHudSpace + leftItemX;
+            playerItemSlot2X[i] = playerItemX[i] + (sideBySideQuickSlotLayout ? buttonStep : 0);
+
+            if ((i > 0) && (i < playerCount) && (Magic_GetLevelForPort(i + 1) != 0)) {
+                magicCapacity = Magic_GetMeterCapacityForPort(i + 1);
+                if (magicCapacity <= 0) {
+                    magicCapacity = Magic_GetLevelForPort(i + 1) * MAGIC_NORMAL_METER;
+                }
+
+                magicWidth = 16 + magicCapacity;
+                playerMagicX[i] = playerSwordX[i];
+                playerMagicY[i] = (s16)(heartsBottomY + 1.0f);
+                playerIconY[i] = playerMagicY[i] + magicHeight + magicGap;
+                playerDrawMagic[i] = magicWidth > 0;
+            }
+
+            playerItemSlot2Y[i] = playerIconY[i] + (sideBySideQuickSlotLayout ? 0 : buttonStep);
+        }
+    } else {
+        const s16 sharedLeftItemX = leftSwordX + buttonStep;
+        const s16 sharedRightItemX = SCREEN_WIDTH - iconSize - sharedLeftItemX;
+
+        playerSwordX[0] = leftSwordX;
+        playerSwordX[1] = rightSwordX;
+        playerSwordX[2] = leftSwordX;
+        playerSwordX[3] = rightSwordX;
+
+        playerItemX[0] = sharedLeftItemX;
+        playerItemX[1] = sharedRightItemX;
+        playerItemX[2] = sharedLeftItemX;
+        playerItemX[3] = sharedRightItemX;
+
+        for (i = 0; i < 4; i++) {
+            f32 heartsTopY;
+            f32 heartsBottomY;
+            s16 magicCapacity;
+            s16 magicWidth;
+            s16 magicX;
+            s32 rightAligned;
+
+            playerHeartRows[i] = Interface_GetHeartRowCountForPort(i + 1);
+
+            if (i < 2) {
+                heartsTopY = topHeartsAnchorY;
+                heartsBottomY = heartsTopY + ((playerHeartRows[i] - 1) * 10.0f) + (16.0f * heartsScale);
+                playerIconY[i] = (s16)(heartsBottomY + sharedTopIconGap + 0.999f);
+
+                if ((i < playerCount) && (Magic_GetLevelForPort(i + 1) != 0)) {
+                    magicCapacity = Magic_GetMeterCapacityForPort(i + 1);
+                    if (magicCapacity <= 0) {
+                        magicCapacity = Magic_GetLevelForPort(i + 1) * MAGIC_NORMAL_METER;
+                    }
+
+                    magicWidth = 16 + magicCapacity;
+                    rightAligned = (i % 2) == 1;
+                    magicX = rightAligned ? (playerSwordX[i] + iconSize - magicWidth) : playerSwordX[i];
+
+                    if (i > 0) {
+                        playerMagicX[i] = magicX;
+                        playerMagicY[i] = (s16)(heartsBottomY + sharedMagicOffset);
+                        playerIconY[i] = playerMagicY[i] + magicHeight + sharedMagicGap;
+                        playerDrawMagic[i] = true;
+                    } else {
+                        /* Player 1 uses the base magic meter draw path; only push icon row below it here. */
+                        playerIconY[i] = (s16)(heartsBottomY + sharedMagicOffset) + magicHeight + sharedMagicGap;
+                    }
+                }
+            } else {
+                heartsBottomY = bottomHeartsAnchorY + (8.0f * heartsScale);
+                heartsTopY = bottomHeartsAnchorY - ((playerHeartRows[i] - 1) * 10.0f) - (8.0f * heartsScale);
+                playerIconY[i] = (s16)(heartsTopY - sharedBottomIconGap - iconSize);
+
+                if ((i < playerCount) && (Magic_GetLevelForPort(i + 1) != 0)) {
+                    magicCapacity = Magic_GetMeterCapacityForPort(i + 1);
+                    if (magicCapacity <= 0) {
+                        magicCapacity = Magic_GetLevelForPort(i + 1) * MAGIC_NORMAL_METER;
+                    }
+
+                    magicWidth = 16 + magicCapacity;
+                    rightAligned = (i % 2) == 1;
+                    magicX = rightAligned ? (playerSwordX[i] + iconSize - magicWidth) : playerSwordX[i];
+
+                    playerMagicX[i] = magicX;
+                    playerMagicY[i] = (s16)(heartsTopY - magicHeight + sharedMagicOffset);
+                    playerIconY[i] = playerMagicY[i] - sharedMagicGap - iconSize;
+                    playerDrawMagic[i] = true;
+                }
+            }
+
+            if (sideBySideQuickSlotLayout) {
+                playerItemSlot2X[i] = playerItemX[i] + (((i % 2) == 1) ? -buttonStep : buttonStep);
+                playerItemSlot2Y[i] = playerIconY[i];
+            } else {
+                playerItemSlot2X[i] = playerItemX[i];
+                playerItemSlot2Y[i] = playerIconY[i] + buttonStep;
+            }
+        }
+    }
+
+    if (CVarGetInteger(CVAR_COSMETIC("HUD.BButton.Changed"), 0)) {
+        swordButtonColor = CVarGetColor24(CVAR_COSMETIC("HUD.BButton.Value"), swordButtonColor);
+    } else if (CVarGetInteger(CVAR_COSMETIC("DefaultColorScheme"), COLORSCHEME_N64) == COLORSCHEME_GAMECUBE) {
+        swordButtonColor = (Color_RGB8){ 255, 30, 30 };
+    }
+
+    if (CVarGetInteger(CVAR_COSMETIC("HUD.CButtons.Changed"), 0)) {
+        itemButtonColor = CVarGetColor24(CVAR_COSMETIC("HUD.CButtons.Value"), itemButtonColor);
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
+
+    for (i = 0; i < playerCount; i++) {
+        s16 controllerPort = i + 1;
+
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, swordButtonColor.r, swordButtonColor.g, swordButtonColor.b,
+                        interfaceCtx->bAlpha);
+        OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32, playerSwordX[i] + bgOffset,
+                                      playerIconY[i] + bgOffset, bgSize, bgSize, (32 << 10) / bgSize,
+                                      (32 << 10) / bgSize);
+
+        selectedSlot = secondSlotEnabled ? Interface_GetQuickItemSelectedSlotForPort(controllerPort) : 0;
+
+        if (selectedSlot == 0) {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, selectedItemButtonColor.r, selectedItemButtonColor.g,
+                            selectedItemButtonColor.b, Interface_GetQuickItemAlpha(interfaceCtx, controllerPort, 0));
+        } else {
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, itemButtonColor.r, itemButtonColor.g, itemButtonColor.b,
+                            Interface_GetQuickItemAlpha(interfaceCtx, controllerPort, 0));
+        }
+
+        OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32, playerItemX[i] + bgOffset,
+                                      playerIconY[i] + bgOffset, bgSize, bgSize, (32 << 10) / bgSize,
+                                      (32 << 10) / bgSize);
+
+        if (secondSlotEnabled) {
+            if (selectedSlot == 1) {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, selectedItemButtonColor.r, selectedItemButtonColor.g,
+                                selectedItemButtonColor.b, Interface_GetQuickItemAlpha(interfaceCtx, controllerPort, 1));
+            } else {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, itemButtonColor.r, itemButtonColor.g, itemButtonColor.b,
+                                Interface_GetQuickItemAlpha(interfaceCtx, controllerPort, 1));
+            }
+
+            OVERLAY_DISP = Gfx_TextureIA8(OVERLAY_DISP, gButtonBackgroundTex, 32, 32,
+                                          playerItemSlot2X[i] + bgOffset, playerItemSlot2Y[i] + bgOffset, bgSize,
+                                          bgSize, (32 << 10) / bgSize, (32 << 10) / bgSize);
+        }
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    /* Ensure icons are drawn without being tinted by the button primitive color */
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->bAlpha);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    for (i = 1; i < playerCount; i++) {
+        if (playerDrawMagic[i]) {
+            Interface_DrawMagicMeterForPortAt(play, i + 1, playerMagicX[i], playerMagicY[i]);
+        }
+    }
+
+    /* Magic meter drawing changes combine/env state; restore icon-friendly state before item icon draws. */
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->bAlpha);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+    gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 255);
+    CLOSE_DISPS(play->state.gfxCtx);
+
+    if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) && (gSaveContext.equips.buttonItems[0] < ITEM_NONE_FE)) {
+        Interface_DrawItemIconTextureAt(play, gItemIcons[gSaveContext.equips.buttonItems[0]], playerSwordX[0],
+                                        playerIconY[0], 24, 24);
+        Interface_DrawAmmoCountForItemAt(play, gSaveContext.equips.buttonItems[0], interfaceCtx->bAlpha,
+                                         playerSwordX[0] + 1, playerIconY[0] + 13);
+
+        Interface_DrawItemIconTextureAt(play, gItemIcons[gSaveContext.equips.buttonItems[0]], playerSwordX[1],
+                                        playerIconY[1], 24, 24);
+        Interface_DrawAmmoCountForItemAt(play, gSaveContext.equips.buttonItems[0], interfaceCtx->bAlpha,
+                                         playerSwordX[1] + 1, playerIconY[1] + 13);
+
+        if (playerCount >= 3) {
+            Interface_DrawItemIconTextureAt(play, gItemIcons[gSaveContext.equips.buttonItems[0]], playerSwordX[2],
+                                            playerIconY[2], 24, 24);
+            Interface_DrawAmmoCountForItemAt(play, gSaveContext.equips.buttonItems[0], interfaceCtx->bAlpha,
+                                             playerSwordX[2] + 1, playerIconY[2] + 13);
+        }
+
+        if (playerCount >= 4) {
+            Interface_DrawItemIconTextureAt(play, gItemIcons[gSaveContext.equips.buttonItems[0]], playerSwordX[3],
+                                            playerIconY[3], 24, 24);
+            Interface_DrawAmmoCountForItemAt(play, gSaveContext.equips.buttonItems[0], interfaceCtx->bAlpha,
+                                             playerSwordX[3] + 1, playerIconY[3] + 13);
+        }
+    }
+
+    for (i = 0; i < playerCount; i++) {
+        s16 controllerPort = i + 1;
+
+        Interface_DrawQuickItemHudAt(play, controllerPort, 0, playerItemX[i], playerIconY[i]);
+
+        if (secondSlotEnabled) {
+            Interface_DrawQuickItemHudAt(play, controllerPort, 1, playerItemSlot2X[i], playerItemSlot2Y[i]);
+        }
+    }
+    Interface_DrawRadialQuickMenuHud(play, playerCount);
+}
+
 void Interface_DrawActionButton(PlayState* play, f32 x, f32 y) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
@@ -5140,6 +7441,9 @@ void Interface_Draw(PlayState* play) {
     s16 svar5;
     s16 timerId;
     bool fullUi = !CVarGetInteger(CVAR_ENHANCEMENT("MinimalUI"), 0) || !R_MINIMAP_DISABLED || play->pauseCtx.state != 0;
+    s16 localMultiplayerPlayerCount = Interface_GetLocalMultiplayerPlayerCount();
+    bool localMultiplayerEnabled = localMultiplayerPlayerCount > 1;
+    s32 originalQuickItemModeEnabled = Interface_IsOriginalMultiplayerItemModeEnabled();
     // #region SOH [NTSC]
     s32 languageOffset = gSaveContext.language;
 
@@ -5151,6 +7455,8 @@ void Interface_Draw(PlayState* play) {
     if (GameInteractor_NoUIActive()) {
         return;
     }
+
+    Interface_UpdateRadialQuickMenu(play);
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -5228,8 +7534,19 @@ void Interface_Draw(PlayState* play) {
                     X_Margins_RC = 0;
                     Y_Margins_RC = 0;
                 }
-                s16 PosX_RC_ori = OTRGetRectDimensionFromLeftEdge(26 + X_Margins_RC);
-                s16 PosY_RC_ori = 206 + Y_Margins_RC;
+                s16 PosX_RC_ori = OTRGetRectDimensionFromLeftEdge(0 + X_Margins_RC);
+                s16 PosY_RC_ori = (SCREEN_HEIGHT - 16) + Y_Margins_RC;
+
+                if (PosX_RC_ori < 0) {
+                    PosX_RC_ori = 0;
+                }
+
+                if (PosY_RC_ori < 0) {
+                    PosY_RC_ori = 0;
+                } else if (PosY_RC_ori > (SCREEN_HEIGHT - 16)) {
+                    PosY_RC_ori = SCREEN_HEIGHT - 16;
+                }
+
                 if (CVarGetInteger(CVAR_COSMETIC("HUD.Rupees.PosType"), 0) != ORIGINAL_LOCATION) {
                     PosY_RC = CVarGetInteger(CVAR_COSMETIC("HUD.Rupees.PosY"), 0) + Y_Margins_RC;
                     if (CVarGetInteger(CVAR_COSMETIC("HUD.Rupees.PosType"), 0) == ANCHOR_LEFT) {
@@ -5412,6 +7729,15 @@ void Interface_Draw(PlayState* play) {
         Minimap_Draw(play);
 
         if ((R_PAUSE_MENU_MODE != 2) && (R_PAUSE_MENU_MODE != 3)) {
+            s32 useSplitTargetViewport = false;
+
+            if (localMultiplayerEnabled && Interface_IsSplitScreenEnabled()) {
+                Interface_GetSplitViewportBounds(localMultiplayerPlayerCount, 0, &interfaceCtx->viewport);
+                View_SetViewport(&interfaceCtx->view, &interfaceCtx->viewport);
+                func_800AB2C4(&interfaceCtx->view);
+                useSplitTargetViewport = true;
+            }
+
             if (CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) {
                 gSPMatrix(OVERLAY_DISP++, interfaceCtx->view.projectionFlippedPtr,
                           G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
@@ -5426,6 +7752,10 @@ void Interface_Draw(PlayState* play) {
             if (CVarGetInteger(CVAR_ENHANCEMENT("EnemyHealthBar"), 0)) {
                 Interface_DrawEnemyHealthBar(&play->actorCtx.targetCtx, play);
             }
+
+            if (useSplitTargetViewport) {
+                func_8008A994(interfaceCtx);
+            }
         }
 
         Gfx_SetupDL_39Overlay(play->state.gfxCtx);
@@ -5438,7 +7768,8 @@ void Interface_Draw(PlayState* play) {
         gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->bAlpha);
         gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
 
-        if (!(interfaceCtx->unk_1FA)) {
+        if (!originalQuickItemModeEnabled) {
+            if (!(interfaceCtx->unk_1FA)) {
             // B Button Icon & Ammo Count
             if (gSaveContext.equips.buttonItems[0] != ITEM_NONE) {
                 if (fullUi) {
@@ -5458,7 +7789,7 @@ void Interface_Draw(PlayState* play) {
                     Interface_DrawAmmoCount(play, 0, interfaceCtx->bAlpha);
                 }
             }
-        } else {
+            } else {
             // B Button Do Action Label
             s16 PosX_adjust;
             s16 PosY_adjust;
@@ -5522,52 +7853,61 @@ void Interface_Draw(PlayState* play) {
             gSPWideTextureRectangle(OVERLAY_DISP++, BbtnPosX << 2, BbtnPosY << 2,
                                     (BbtnPosX + DO_ACTION_TEX_WIDTH()) << 2, (BbtnPosY + DO_ACTION_TEX_HEIGHT()) << 2,
                                     G_TX_RENDERTILE, 0, 0, R_B_LABEL_DD, R_B_LABEL_DD);
+            }
         }
 
-        gDPPipeSync(OVERLAY_DISP++);
+        if (fullUi && originalQuickItemModeEnabled) {
+            Interface_DrawOriginalMultiplayerItemHud(play);
+        }
 
-        // C-Left Button Icon & Ammo Count
-        if (gSaveContext.equips.buttonItems[1] < 0xF0) {
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cLeftAlpha);
-            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[1]], 1);
+        if (!originalQuickItemModeEnabled) {
             gDPPipeSync(OVERLAY_DISP++);
-            gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
-                              PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-            Interface_DrawAmmoCount(play, 1, interfaceCtx->cLeftAlpha);
-        }
 
-        gDPPipeSync(OVERLAY_DISP++);
+            // C-Left Button Icon & Ammo Count
+            if (gSaveContext.equips.buttonItems[1] < 0xF0) {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cLeftAlpha);
+                gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[1]], 1);
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0,
+                                  PRIMITIVE, 0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE,
+                                  0);
+                Interface_DrawAmmoCount(play, 1, interfaceCtx->cLeftAlpha);
+            }
 
-        // C-Down Button Icon & Ammo Count
-        if (gSaveContext.equips.buttonItems[2] < 0xF0) {
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cDownAlpha);
-            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[2]], 2);
             gDPPipeSync(OVERLAY_DISP++);
-            gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
-                              PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-            Interface_DrawAmmoCount(play, 2, interfaceCtx->cDownAlpha);
-        }
 
-        gDPPipeSync(OVERLAY_DISP++);
+            // C-Down Button Icon & Ammo Count
+            if (gSaveContext.equips.buttonItems[2] < 0xF0) {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cDownAlpha);
+                gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[2]], 2);
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0,
+                                  PRIMITIVE, 0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE,
+                                  0);
+                Interface_DrawAmmoCount(play, 2, interfaceCtx->cDownAlpha);
+            }
 
-        // C-Right Button Icon & Ammo Count
-        if (gSaveContext.equips.buttonItems[3] < 0xF0) {
-            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cRightAlpha);
-            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[3]], 3);
             gDPPipeSync(OVERLAY_DISP++);
-            gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
-                              PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-            Interface_DrawAmmoCount(play, 3, interfaceCtx->cRightAlpha);
-        }
 
-        if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
-            // DPad is only greyed-out when all 4 DPad directions are too
-            uint16_t dpadAlpha =
-                MAX(MAX(MAX(interfaceCtx->dpadUpAlpha, interfaceCtx->dpadDownAlpha), interfaceCtx->dpadLeftAlpha),
-                    interfaceCtx->dpadRightAlpha);
+            // C-Right Button Icon & Ammo Count
+            if (gSaveContext.equips.buttonItems[3] < 0xF0) {
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cRightAlpha);
+                gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[3]], 3);
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0,
+                                  PRIMITIVE, 0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE,
+                                  0);
+                Interface_DrawAmmoCount(play, 3, interfaceCtx->cRightAlpha);
+            }
+
+            if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+                // DPad is only greyed-out when all 4 DPad directions are too
+                uint16_t dpadAlpha =
+                    MAX(MAX(MAX(interfaceCtx->dpadUpAlpha, interfaceCtx->dpadDownAlpha), interfaceCtx->dpadLeftAlpha),
+                        interfaceCtx->dpadRightAlpha);
 
             // Draw DPad
             s16 DpadPosX;
@@ -5651,94 +7991,98 @@ void Interface_Draw(PlayState* play) {
                 Interface_DrawAmmoCount(play, 6, interfaceCtx->dpadLeftAlpha);
             }
 
-            // DPad-Right Button Icon & Ammo Count
-            if (gSaveContext.equips.buttonItems[7] < 0xF0) {
-                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadRightAlpha);
-                gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[7]], 7);
-                gDPPipeSync(OVERLAY_DISP++);
-                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
-                                  PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-                Interface_DrawAmmoCount(play, 7, interfaceCtx->dpadRightAlpha);
+                // DPad-Right Button Icon & Ammo Count
+                if (gSaveContext.equips.buttonItems[7] < 0xF0) {
+                    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadRightAlpha);
+                    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
+                    Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[7]], 7);
+                    gDPPipeSync(OVERLAY_DISP++);
+                    gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0,
+                                      PRIMITIVE, 0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0,
+                                      PRIMITIVE, 0);
+                    Interface_DrawAmmoCount(play, 7, interfaceCtx->dpadRightAlpha);
+                }
             }
         }
 
-        // A Button
-        Gfx_SetupDL_42Overlay(play->state.gfxCtx);
-        s16 X_Margins_BtnA;
-        s16 Y_Margins_BtnA;
-        if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
-            X_Margins_BtnA = Right_HUD_Margin;
-            Y_Margins_BtnA = (Top_HUD_Margin * -1);
-        } else {
-            X_Margins_BtnA = 0;
-            Y_Margins_BtnA = 0;
-        }
-        s16 PosX_BtnA_ori = OTRGetDimensionFromRightEdge(R_A_BTN_X + X_Margins_BtnA);
-        s16 PosY_BtnA_ori = R_A_BTN_Y + Y_Margins_BtnA;
-        const f32 rAIconX_ori = OTRGetDimensionFromRightEdge(R_A_ICON_X + X_Margins_BtnA);
-        const f32 rAIconY_ori = 98.0f - (R_A_ICON_Y + Y_Margins_BtnA);
-        s16 PosX_BtnA;
-        s16 PosY_BtnA;
-        s16 rAIconX;
-        s16 rAIconY;
-        if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) != ORIGINAL_LOCATION) {
-            PosY_BtnA = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosY"), 0) + Y_Margins_BtnA;
-            rAIconY = 98.0f - PosY_BtnA;
-            if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_LEFT) {
-                if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
-                    X_Margins_BtnA = Left_HUD_Margin;
-                };
-                PosX_BtnA =
-                    OTRGetDimensionFromLeftEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) + X_Margins_BtnA);
-                rAIconX =
-                    OTRGetDimensionFromLeftEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) + X_Margins_BtnA);
-            } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_RIGHT) {
-                if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
-                    X_Margins_BtnA = Right_HUD_Margin;
-                };
-                PosX_BtnA =
-                    OTRGetDimensionFromRightEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) + X_Margins_BtnA);
-                rAIconX =
-                    OTRGetDimensionFromRightEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) + X_Margins_BtnA);
-            } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_NONE) {
-                PosX_BtnA = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0);
-                rAIconX = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0);
-            } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == HIDDEN) {
-                PosX_BtnA = -9999;
-                rAIconX = -9999;
+        if (!localMultiplayerEnabled) {
+            // A Button
+            Gfx_SetupDL_42Overlay(play->state.gfxCtx);
+            s16 X_Margins_BtnA;
+            s16 Y_Margins_BtnA;
+            if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
+                X_Margins_BtnA = Right_HUD_Margin;
+                Y_Margins_BtnA = (Top_HUD_Margin * -1);
+            } else {
+                X_Margins_BtnA = 0;
+                Y_Margins_BtnA = 0;
             }
-        } else {
-            PosY_BtnA = PosY_BtnA_ori;
-            PosX_BtnA = PosX_BtnA_ori;
-            rAIconY = rAIconY_ori;
-            rAIconX = rAIconX_ori;
-        }
-        gSPClearGeometryMode(OVERLAY_DISP++, G_CULL_BOTH);
-        gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
-        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, aButtonColor.r, aButtonColor.g, aButtonColor.b, interfaceCtx->aAlpha);
-        if (fullUi) {
-            Interface_DrawActionButton(play, PosX_BtnA, PosY_BtnA);
-        }
-        gDPPipeSync(OVERLAY_DISP++);
-        gSPSetGeometryMode(OVERLAY_DISP++, G_CULL_BACK);
-        gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
-                          PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
-        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->aAlpha);
-        gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
-        Matrix_Translate(-138.0f + rAIconX, rAIconY, WREG(46 + languageOffset) / 10.0f, MTXMODE_NEW);
-        Matrix_Scale(1.0f, 1.0f, 1.0f, MTXMODE_APPLY);
-        Matrix_RotateX(interfaceCtx->unk_1F4 / 10000.0f, MTXMODE_APPLY);
-        gSPMatrix(OVERLAY_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-        gSPVertex(OVERLAY_DISP++, &interfaceCtx->actionVtx[4], 4, 0);
+            s16 PosX_BtnA_ori = OTRGetDimensionFromRightEdge(R_A_BTN_X + X_Margins_BtnA);
+            s16 PosY_BtnA_ori = R_A_BTN_Y + Y_Margins_BtnA;
+            const f32 rAIconX_ori = OTRGetDimensionFromRightEdge(R_A_ICON_X + X_Margins_BtnA);
+            const f32 rAIconY_ori = 98.0f - (R_A_ICON_Y + Y_Margins_BtnA);
+            s16 PosX_BtnA;
+            s16 PosY_BtnA;
+            s16 rAIconX;
+            s16 rAIconY;
+            if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) != ORIGINAL_LOCATION) {
+                PosY_BtnA = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosY"), 0) + Y_Margins_BtnA;
+                rAIconY = 98.0f - PosY_BtnA;
+                if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_LEFT) {
+                    if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
+                        X_Margins_BtnA = Left_HUD_Margin;
+                    };
+                    PosX_BtnA = OTRGetDimensionFromLeftEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) +
+                                                            X_Margins_BtnA);
+                    rAIconX = OTRGetDimensionFromLeftEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) +
+                                                          X_Margins_BtnA);
+                } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_RIGHT) {
+                    if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.UseMargins"), 0) != 0) {
+                        X_Margins_BtnA = Right_HUD_Margin;
+                    };
+                    PosX_BtnA = OTRGetDimensionFromRightEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) +
+                                                             X_Margins_BtnA);
+                    rAIconX = OTRGetDimensionFromRightEdge(CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0) +
+                                                           X_Margins_BtnA);
+                } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == ANCHOR_NONE) {
+                    PosX_BtnA = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0);
+                    rAIconX = CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosX"), 0);
+                } else if (CVarGetInteger(CVAR_COSMETIC("HUD.AButton.PosType"), 0) == HIDDEN) {
+                    PosX_BtnA = -9999;
+                    rAIconX = -9999;
+                }
+            } else {
+                PosY_BtnA = PosY_BtnA_ori;
+                PosX_BtnA = PosX_BtnA_ori;
+                rAIconY = rAIconY_ori;
+                rAIconX = rAIconX_ori;
+            }
+            gSPClearGeometryMode(OVERLAY_DISP++, G_CULL_BOTH);
+            gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, aButtonColor.r, aButtonColor.g, aButtonColor.b, interfaceCtx->aAlpha);
+            if (fullUi) {
+                Interface_DrawActionButton(play, PosX_BtnA, PosY_BtnA);
+            }
+            gDPPipeSync(OVERLAY_DISP++);
+            gSPSetGeometryMode(OVERLAY_DISP++, G_CULL_BACK);
+            gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
+                              PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+            gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->aAlpha);
+            gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
+            Matrix_Translate(-138.0f + rAIconX, rAIconY, WREG(46 + languageOffset) / 10.0f, MTXMODE_NEW);
+            Matrix_Scale(1.0f, 1.0f, 1.0f, MTXMODE_APPLY);
+            Matrix_RotateX(interfaceCtx->unk_1F4 / 10000.0f, MTXMODE_APPLY);
+            gSPMatrix(OVERLAY_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+            gSPVertex(OVERLAY_DISP++, &interfaceCtx->actionVtx[4], 4, 0);
 
-        if ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3)) {
-            Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[0]);
-        } else {
-            Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[1]);
-        }
+            if ((interfaceCtx->unk_1EC < 2) || (interfaceCtx->unk_1EC == 3)) {
+                Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[0]);
+            } else {
+                Interface_DrawActionLabel(play->state.gfxCtx, interfaceCtx->doActionSegment[1]);
+            }
 
-        gDPPipeSync(OVERLAY_DISP++);
+            gDPPipeSync(OVERLAY_DISP++);
+        }
 
         func_8008A994(interfaceCtx);
         svar3 = 16;
@@ -6044,7 +8388,7 @@ void Interface_Draw(PlayState* play) {
                                 gSaveContext.timerState = TIMER_STATE_STOP;
                                 if (sEnvHazardActive) {
                                     gSaveContext.health = 0;
-                                    play->damagePlayer(play, -(gSaveContext.health + 2));
+                                    play->damagePlayer(play, GET_PLAYER(play), -(gSaveContext.health + 2));
                                 }
                                 sEnvHazardActive = false;
                             } else if (gSaveContext.timerSeconds > 60) {
@@ -6510,23 +8854,30 @@ void Interface_Update(PlayState* play) {
 
     bool isPal = ResourceMgr_GetGameRegion(0) == GAME_REGION_PAL;
 
-    if (CHECK_BTN_ALL(debugInput->press.button, BTN_DLEFT)) {
-        gSaveContext.language = LANGUAGE_ENG;
-        CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_ENG);
-        osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
-    } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DUP) && sGerMessageEntryTablePtr != NULL) {
-        gSaveContext.language = LANGUAGE_GER;
-        CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_GER);
-        osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
-    } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DRIGHT) && sFraMessageEntryTablePtr != NULL) {
-        gSaveContext.language = LANGUAGE_FRA;
-        CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_FRA);
-        osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
-    } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DDOWN) && sJpnMessageEntryTablePtr != NULL) {
-        // Add this in to have an equivalent ntsc language debugging feature
-        gSaveContext.language = LANGUAGE_JPN;
-        CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_JPN);
-        osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
+    if ((CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0) ? 1
+                                                                      : CVarGetInteger(
+                                                                            CVAR_ENHANCEMENT(
+                                                                                "LocalMultiplayer.PlayerCount"),
+                                                                            2)) <
+        3) {
+        if (CHECK_BTN_ALL(debugInput->press.button, BTN_DLEFT)) {
+            gSaveContext.language = LANGUAGE_ENG;
+            CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_ENG);
+            osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
+        } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DUP) && sGerMessageEntryTablePtr != NULL) {
+            gSaveContext.language = LANGUAGE_GER;
+            CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_GER);
+            osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
+        } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DRIGHT) && sFraMessageEntryTablePtr != NULL) {
+            gSaveContext.language = LANGUAGE_FRA;
+            CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_FRA);
+            osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
+        } else if (CHECK_BTN_ALL(debugInput->press.button, BTN_DDOWN) && sJpnMessageEntryTablePtr != NULL) {
+            // Add this in to have an equivalent ntsc language debugging feature
+            gSaveContext.language = LANGUAGE_JPN;
+            CVarSetInteger(CVAR_SETTING("Languages"), LANGUAGE_JPN);
+            osSyncPrintf("J_N=%x J_N=%x\n", gSaveContext.language, &gSaveContext.language);
+        }
     }
 
     if ((play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0)) {
@@ -6796,6 +9147,26 @@ void Interface_Update(PlayState* play) {
         }
 
         Interface_UpdateMagicBar(play);
+
+        if (Interface_GetLocalMultiplayerPlayerCount() > 1) {
+            s16 localMpCount = Interface_GetLocalMultiplayerPlayerCount();
+
+            for (u8 controllerPort = 2; controllerPort <= localMpCount; controllerPort++) {
+                s16* magicState = Magic_GetSecondaryStatePtr(controllerPort);
+                s16* magicCapacity = Magic_GetSecondaryCapacityPtr(controllerPort);
+
+                Magic_InitForPort(controllerPort);
+
+                if ((Magic_GetLevelForPort(controllerPort) != 0) && (*magicCapacity == 0) &&
+                    (*magicState == MAGIC_STATE_IDLE)) {
+                    *magicState = MAGIC_STATE_STEP_CAPACITY;
+                }
+
+                if ((Magic_GetLevelForPort(controllerPort) != 0) || (*magicState != MAGIC_STATE_IDLE)) {
+                    Magic_UpdateSecondary(play, controllerPort);
+                }
+            }
+        }
     }
 
     if (gSaveContext.timerState == TIMER_STATE_OFF) {

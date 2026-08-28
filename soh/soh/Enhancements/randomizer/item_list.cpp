@@ -1,6 +1,7 @@
 #include "soh_assets.h"
 #include "static_data.h"
 #include "SeedContext.h"
+#include "logic.h"
 #include "textures/icon_item_24_static/icon_item_24_static.h"
 #include "textures/icon_item_static/icon_item_static.h"
 #include "z64object.h"

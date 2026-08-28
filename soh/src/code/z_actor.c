@@ -90,6 +90,7 @@ f32 iceTrapScale;
 
 // For Link's voice pitch SFX modifier
 static f32 freqMultiplier = 1;
+static s32 sActorSfxUpdatesSuppressed = false;
 
 void ActorShape_Init(ActorShape* shape, f32 yOffset, ActorShadowFunc shadowDraw, f32 shadowScale) {
     shape->yOffset = yOffset;
@@ -439,8 +440,47 @@ void func_8002C0C0(TargetContext* targetCtx, Actor* actor, PlayState* play) {
     func_8002BE98(targetCtx, actor->category, play);
 }
 
+static s32 Actor_IsLocalMultiplayerActive(PlayState* play) {
+    Actor* playerActor;
+    s32 activePlayers = 0;
+    s32 sanity = 0;
+    s32 configuredPlayers;
+
+    if (play == NULL) {
+        return false;
+    }
+
+    configuredPlayers = CVarGetInteger("gEnhancements.LocalMultiplayer.Disable", 0)
+                            ? 1
+                            : CVarGetInteger("gEnhancements.LocalMultiplayer.PlayerCount", 2);
+
+    if (configuredPlayers > 1) {
+        return true;
+    }
+
+    playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+            activePlayers++;
+            if (activePlayers > 1) {
+                return true;
+            }
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
+    }
+
+    return false;
+}
+
 void func_8002C124(TargetContext* targetCtx, PlayState* play) {
     Actor* actor = targetCtx->targetedActor;
+
+    if (Actor_IsLocalMultiplayerActive(play)) {
+        return;
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -1398,6 +1438,126 @@ f32 Actor_HeightDiff(Actor* actorA, Actor* actorB) {
     return actorB->world.pos.y - actorA->world.pos.y;
 }
 
+static Player* Actor_FindClosestActivePlayerToPos(PlayState* play, const Vec3f* pos, Player* fallbackPlayer) {
+    Actor* playerActor;
+    Player* closestPlayer = fallbackPlayer;
+    f32 bestDistSq = FLT_MAX;
+    s32 sanity = 0;
+
+    if ((play == NULL) || (pos == NULL)) {
+        return fallbackPlayer;
+    }
+
+    playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+            Player* player = (Player*)playerActor;
+            f32 dx = pos->x - player->actor.world.pos.x;
+            f32 dy = pos->y - player->actor.world.pos.y;
+            f32 dz = pos->z - player->actor.world.pos.z;
+            f32 distSq = SQ(dx) + SQ(dy) + SQ(dz);
+
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                closestPlayer = player;
+            }
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
+    }
+
+    return closestPlayer;
+}
+
+Player* Actor_GetClosestPlayerFromPos(PlayState* play, const Vec3f* pos) {
+    Player* fallbackPlayer = (play != NULL) ? GET_PLAYER(play) : NULL;
+
+    return Actor_FindClosestActivePlayerToPos(play, pos, fallbackPlayer);
+}
+
+Player* Actor_GetClosestPlayer(PlayState* play, Actor* actor) {
+    if (actor == NULL) {
+        return (play != NULL) ? GET_PLAYER(play) : NULL;
+    }
+
+    return Actor_GetClosestPlayerFromPos(play, &actor->world.pos);
+}
+
+static Player* Actor_FindClosestActivePlayer(PlayState* play, Actor* actor, Player* fallbackPlayer) {
+    if (actor == NULL) {
+        return fallbackPlayer;
+    }
+
+    return Actor_FindClosestActivePlayerToPos(play, &actor->world.pos, fallbackPlayer);
+}
+
+static s32 Actor_ShouldTrackClosestPlayer(const Actor* actor) {
+    if (actor == NULL) {
+        return false;
+    }
+
+    switch (actor->category) {
+        case ACTORCAT_BG:
+        case ACTORCAT_ENEMY:
+        case ACTORCAT_PROP:
+        case ACTORCAT_ITEMACTION:
+        case ACTORCAT_MISC:
+        case ACTORCAT_BOSS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static s32 Actor_IsEnemyCategory(const Actor* actor) {
+    if (actor == NULL) {
+        return false;
+    }
+
+    return (actor->category == ACTORCAT_ENEMY) || (actor->category == ACTORCAT_BOSS);
+}
+
+static s32 Actor_IsRoomOccupiedByAnyActivePlayer(PlayState* play, s32 roomNum) {
+    Actor* playerActor;
+    s32 sanity = 0;
+
+    if ((play == NULL) || (roomNum < 0)) {
+        return false;
+    }
+
+    playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL) && (playerActor->room == roomNum)) {
+            return true;
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
+    }
+
+    return false;
+}
+
+static s32 Actor_AnyPlayerHasFocusActor(PlayState* play) {
+    Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    s32 sanity = 0;
+
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL) &&
+            (((Player*)playerActor)->focusActor != NULL)) {
+            return true;
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
+    }
+
+    return false;
+}
+
 f32 Player_GetHeight(Player* player) {
     f32 offset = (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) ? 32.0f : 0.0f;
 
@@ -1509,7 +1669,7 @@ void func_8002DFA4(DynaPolyActor* dynaActor, f32 arg1, s16 arg2) {
  * The maximum angle difference that qualifies as "facing" is specified by `maxAngle`.
  */
 s32 Player_IsFacingActor(Actor* actor, s16 maxAngle, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_FindClosestActivePlayer(play, actor, GET_PLAYER(play));
     s16 yawDiff = (s16)(actor->yawTowardsPlayer + 0x8000) - player->actor.shape.rot.y;
 
     if (ABS(yawDiff) < maxAngle) {
@@ -1882,15 +2042,17 @@ PosRot* Actor_GetWorldPosShapeRot(PosRot* arg0, Actor* actor) {
 }
 
 f32 func_8002EFC0(Actor* actor, Player* player, s16 arg2) {
-    s16 yawTemp = (s16)(actor->yawTowardsPlayer - 0x8000) - arg2;
+    f32 distSq = SQ(actor->world.pos.x - player->actor.world.pos.x) +
+                 SQ(actor->world.pos.y - player->actor.world.pos.y) +
+                 SQ(actor->world.pos.z - player->actor.world.pos.z);
+    s16 yawTemp = (s16)(Actor_WorldYawTowardActor(actor, &player->actor) - 0x8000) - arg2;
     s16 yawTempAbs = ABS(yawTemp);
 
     if (player->focusActor != NULL) {
         if ((yawTempAbs > 0x4000) || (actor->flags & ACTOR_FLAG_LOCK_ON_DISABLED)) {
             return FLT_MAX;
         } else {
-            f32 ret =
-                actor->xyzDistToPlayerSq - actor->xyzDistToPlayerSq * 0.8f * ((0x4000 - yawTempAbs) * (1.0f / 0x8000));
+            f32 ret = distSq - distSq * 0.8f * ((0x4000 - yawTempAbs) * (1.0f / 0x8000));
 
             return ret;
         }
@@ -1900,7 +2062,7 @@ f32 func_8002EFC0(Actor* actor, Player* player, s16 arg2) {
         return FLT_MAX;
     }
 
-    return actor->xyzDistToPlayerSq;
+    return distSq;
 }
 
 typedef struct {
@@ -1927,14 +2089,16 @@ s32 func_8002F0C8(Actor* actor, Player* player, s32 flag) {
     }
 
     if (!flag) {
-        s16 var = (s16)(actor->yawTowardsPlayer - 0x8000) - player->actor.shape.rot.y;
+        s16 var = (s16)(Actor_WorldYawTowardActor(actor, &player->actor) - 0x8000) - player->actor.shape.rot.y;
         s16 abs_var = ABS(var);
         f32 dist;
 
         if ((player->focusActor == NULL) && (abs_var > 0x2AAA)) {
             dist = FLT_MAX;
         } else {
-            dist = actor->xyzDistToPlayerSq;
+            dist = SQ(actor->world.pos.x - player->actor.world.pos.x) +
+                   SQ(actor->world.pos.y - player->actor.world.pos.y) +
+                   SQ(actor->world.pos.z - player->actor.world.pos.z);
         }
 
         return !func_8002F090(actor, D_80115FF8[actor->targetMode].leashScale * dist);
@@ -2108,8 +2272,67 @@ s32 GiveItemEntryFromActorWithFixedRange(Actor* actor, PlayState* play, GetItemE
     return GiveItemEntryFromActor(actor, play, getItemEntry, 50.0f, 10.0f);
 }
 
+static Player* Actor_FindCarryTargetPlayer(Actor* actor, PlayState* play, f32 xzRange, f32 yRange,
+                                           s32* outAbsYawDiff) {
+    Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    Player* bestPlayer = NULL;
+    f32 bestDistSq = FLT_MAX;
+    f32 maxDistSq = SQ(xzRange);
+    s32 sanity = 0;
+
+    *outAbsYawDiff = 0;
+
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+            Player* player = (Player*)playerActor;
+
+            if (!(player->stateFlags1 &
+                  (PLAYER_STATE1_DEAD | PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                   PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+                   PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER)) &&
+                (Player_GetExplosiveHeld(player) < 0) &&
+                !(player->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE))) {
+                f32 dx = actor->world.pos.x - player->actor.world.pos.x;
+                f32 dy = actor->world.pos.y - player->actor.world.pos.y;
+                f32 dz = actor->world.pos.z - player->actor.world.pos.z;
+                f32 distSq = SQ(dx) + SQ(dz);
+
+                if ((distSq < maxDistSq) && (fabsf(dy) < yRange)) {
+                    s16 yawDiff = Actor_WorldYawTowardActor(actor, &player->actor) - player->actor.shape.rot.y;
+                    s32 absYawDiff = ABS(yawDiff);
+
+                    if ((player->getItemDirection < absYawDiff) && (distSq < bestDistSq)) {
+                        bestDistSq = distSq;
+                        bestPlayer = player;
+                        *outAbsYawDiff = absYawDiff;
+                    }
+                }
+            }
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
+    }
+
+    return bestPlayer;
+}
+
 // If you're doing something for randomizer, you're probably looking for GiveItemEntryFromActor
 s32 Actor_OfferGetItem(Actor* actor, PlayState* play, s32 getItemId, f32 xzRange, f32 yRange) {
+    if (getItemId == GI_NONE) {
+        s32 absYawDiff = 0;
+        Player* carryPlayer = Actor_FindCarryTargetPlayer(actor, play, xzRange, yRange, &absYawDiff);
+
+        if (carryPlayer != NULL) {
+            carryPlayer->getItemId = getItemId;
+            carryPlayer->interactRangeActor = actor;
+            carryPlayer->getItemDirection = absYawDiff;
+            return true;
+        }
+
+        return false;
+    }
+
     Player* player = GET_PLAYER(play);
 
     if (!(player->stateFlags1 &
@@ -2210,7 +2433,11 @@ s32 Actor_NotMounted(PlayState* play, Actor* horse) {
 }
 
 void func_8002F698(PlayState* play, Actor* actor, f32 arg2, s16 arg3, f32 arg4, u32 arg5, u32 arg6) {
-    Player* player = GET_PLAYER(play);
+    Player* player = (actor != NULL) ? Actor_FindClosestActivePlayer(play, actor, GET_PLAYER(play)) : GET_PLAYER(play);
+
+    if (player == NULL) {
+        return;
+    }
 
     player->knockbackDamage = arg6;
     player->knockbackType = arg5;
@@ -2573,6 +2800,7 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
     Actor* refActor;
     Actor* actor;
     Player* player;
+    s32 localMultiplayerRetainedUpdatesEnabled;
     u32* sp80;
     u32 unkFlag;
     u32 unkCondition;
@@ -2581,6 +2809,8 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
     s32 i;
 
     player = GET_PLAYER(play);
+    localMultiplayerRetainedUpdatesEnabled =
+        OTRRoom_AreaPersistenceEnabled() && Actor_IsLocalMultiplayerActive(play);
 
     sp74 = NULL;
     unkFlag = 0;
@@ -2661,23 +2891,31 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                     actor = actor->next;
                 }
             } else {
+                Player* distPlayer = player;
+
+                if (Actor_ShouldTrackClosestPlayer(actor)) {
+                    distPlayer = Actor_FindClosestActivePlayer(play, actor, player);
+                }
+
                 Math_Vec3f_Copy(&actor->prevPos, &actor->world.pos);
-                actor->xzDistToPlayer = Actor_WorldDistXZToActor(actor, &player->actor);
-                actor->yDistToPlayer = Actor_HeightDiff(actor, &player->actor);
+                actor->xzDistToPlayer = Actor_WorldDistXZToActor(actor, &distPlayer->actor);
+                actor->yDistToPlayer = Actor_HeightDiff(actor, &distPlayer->actor);
                 actor->xyzDistToPlayerSq = SQ(actor->xzDistToPlayer) + SQ(actor->yDistToPlayer);
 
-                actor->yawTowardsPlayer = Actor_WorldYawTowardActor(actor, &player->actor);
+                actor->yawTowardsPlayer = Actor_WorldYawTowardActor(actor, &distPlayer->actor);
                 actor->flags &= ~ACTOR_FLAG_SFX_FOR_PLAYER_BODY_HIT;
 
-                if ((DECR(actor->freezeTimer) == 0) &&
-                    (actor->flags & (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_INSIDE_CULLING_VOLUME))) {
-                    if (actor == player->focusActor) {
-                        actor->isTargeted = true;
-                    } else {
-                        actor->isTargeted = false;
-                    }
+                s32 shouldBypassUpdateCulling =
+                    localMultiplayerRetainedUpdatesEnabled && Actor_IsEnemyCategory(actor) &&
+                    (actor->room >= 0) && OTRRoom_IsRetainedRoom(actor->room) &&
+                    Actor_IsRoomOccupiedByAnyActivePlayer(play, actor->room);
 
-                    if ((actor->targetPriority != 0) && (player->focusActor == NULL)) {
+                if ((DECR(actor->freezeTimer) == 0) &&
+                    ((actor->flags & (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_INSIDE_CULLING_VOLUME)) ||
+                     shouldBypassUpdateCulling)) {
+                    actor->isTargeted = Actor_IsTargeted(play, actor);
+
+                    if ((actor->targetPriority != 0) && !Actor_AnyPlayerHasFocusActor(play)) {
                         actor->targetPriority = 0;
                     }
 
@@ -2827,6 +3065,18 @@ void func_80030ED8(Actor* actor) {
     } else {
         Sfx_PlaySfxAtPos(&actor->projectedPos, actor->sfx);
     }
+}
+
+void Actor_PlaySfx(Actor* actor) {
+    if (actor == NULL) {
+        return;
+    }
+
+    func_80030ED8(actor);
+}
+
+void Actor_SetSfxUpdatesSuppressed(s32 suppressed) {
+    sActorSfxUpdatesSuppressed = (suppressed != 0);
 }
 
 #define LENS_MASK_WIDTH 64
@@ -3066,7 +3316,7 @@ void func_800315AC(PlayState* play, ActorContext* actorCtx) {
             }
 
             if ((HREG(64) != 1) || ((HREG(65) != -1) && (HREG(65) != HREG(66))) || (HREG(69) == 0)) {
-                if (actor->sfx != 0) {
+                    if (!sActorSfxUpdatesSuppressed && (actor->sfx != 0)) {
                     func_80030ED8(actor);
                 }
             }
@@ -3192,7 +3442,7 @@ void func_80031B14(PlayState* play, ActorContext* actorCtx) {
         actor = actorCtx->actorLists[i].head;
         while (actor != NULL) {
             if ((actor->room >= 0) && (actor->room != play->roomCtx.curRoom.num) &&
-                (actor->room != play->roomCtx.prevRoom.num)) {
+                (actor->room != play->roomCtx.prevRoom.num) && !OTRRoom_IsRetainedRoom(actor->room)) {
                 if (!actor->isDrawn) {
                     actor = Actor_Delete(actorCtx, actor, play);
                 } else {
@@ -3449,12 +3699,23 @@ void Actor_SpawnTransitionActors(PlayState* play, ActorContext* actorCtx) {
 
     for (i = 0; i < numActors; i++) {
         if (transitionActor->id >= 0) {
-            if (((transitionActor->sides[0].room >= 0) &&
+            s32 shouldSpawnTransitionActor = 0;
+
+            if (OTRRoom_AreaPersistenceEnabled()) {
+            shouldSpawnTransitionActor =
+                ((transitionActor->sides[0].room >= 0) && OTRRoom_IsRetainedRoom(transitionActor->sides[0].room)) ||
+                ((transitionActor->sides[1].room >= 0) && OTRRoom_IsRetainedRoom(transitionActor->sides[1].room));
+            } else {
+            shouldSpawnTransitionActor =
+                ((transitionActor->sides[0].room >= 0) &&
                  ((transitionActor->sides[0].room == play->roomCtx.curRoom.num) ||
                   (transitionActor->sides[0].room == play->roomCtx.prevRoom.num))) ||
                 ((transitionActor->sides[1].room >= 0) &&
                  ((transitionActor->sides[1].room == play->roomCtx.curRoom.num) ||
-                  (transitionActor->sides[1].room == play->roomCtx.prevRoom.num)))) {
+                  (transitionActor->sides[1].room == play->roomCtx.prevRoom.num)));
+            }
+
+            if (shouldSpawnTransitionActor) {
                 Actor_Spawn(actorCtx, play, (s16)(transitionActor->id & 0x1FFF), transitionActor->pos.x,
                             transitionActor->pos.y, transitionActor->pos.z, 0, transitionActor->rotY, 0,
                             (i << 0xA) + transitionActor->params);
@@ -3559,6 +3820,10 @@ void func_800328D4(PlayState* play, ActorContext* actorCtx, Player* player, u32 
     sp84 = player->focusActor;
 
     while (actor != NULL) {
+        f32 distSqToPlayer = SQ(actor->world.pos.x - player->actor.world.pos.x) +
+                             SQ(actor->world.pos.y - player->actor.world.pos.y) +
+                             SQ(actor->world.pos.z - player->actor.world.pos.z);
+
         if ((actor->update != NULL) && ((Player*)actor != player) &&
             CHECK_FLAG_ALL(actor->flags, ACTOR_FLAG_ATTENTION_ENABLED)) {
 
@@ -3568,15 +3833,16 @@ void func_800328D4(PlayState* play, ActorContext* actorCtx, Player* player, u32 
                     VB_DETECT_BGM_ENEMY,
                     (actorCategory == ACTORCAT_ENEMY) &&
                         CHECK_FLAG_ALL(actor->flags, ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE) &&
-                        (actor->xyzDistToPlayerSq < SQ(500.0f)) && (actor->xyzDistToPlayerSq < sbgmEnemyDistSq),
+                        (distSqToPlayer < SQ(500.0f)) && (distSqToPlayer < sbgmEnemyDistSq),
                     actor, &sbgmEnemyDistSq, (int32_t)actorCategory)) {
                 actorCtx->targetCtx.bgmEnemy = actor;
-                sbgmEnemyDistSq = actor->xyzDistToPlayerSq;
+                sbgmEnemyDistSq = distSqToPlayer;
             }
 
             if (actor != sp84) {
                 var = func_8002EFC0(actor, player, D_8015BBFC);
-                if ((var < D_8015BBF0) && func_8002F090(actor, var) && func_80032880(play, actor) &&
+                if ((var < D_8015BBF0) && func_8002F090(actor, var) &&
+                    (player->isSecondPlayer || func_80032880(play, actor)) &&
                     (!BgCheck_CameraLineTest1(&play->colCtx, &player->actor.focus.pos, &actor->focus.pos, &sp70, &sp80,
                                               1, 1, 1, 1, &sp7C) ||
                      SurfaceType_IsIgnoredByProjectiles(&play->colCtx, sp80, sp7C))) {
@@ -4065,26 +4331,47 @@ s16 Actor_TestFloorInDirection(Actor* actor, PlayState* play, f32 distance, s16 
  * Returns true if the player is targeting the provided actor
  */
 s32 Actor_IsTargeted(PlayState* play, Actor* actor) {
-    Player* player = GET_PLAYER(play);
+    Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    s32 sanity = 0;
 
-    if ((player->stateFlags1 & PLAYER_STATE1_HOSTILE_LOCK_ON) && actor->isTargeted) {
-        return true;
-    } else {
-        return false;
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+            Player* player = (Player*)playerActor;
+
+            if ((player->stateFlags1 & PLAYER_STATE1_HOSTILE_LOCK_ON) && (player->focusActor == actor)) {
+                return true;
+            }
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
     }
+
+    return false;
 }
 
 /**
  * Returns true if the player is targeting an actor other than the provided actor
  */
 s32 Actor_OtherIsTargeted(PlayState* play, Actor* actor) {
-    Player* player = GET_PLAYER(play);
+    Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    s32 sanity = 0;
 
-    if ((player->stateFlags1 & PLAYER_STATE1_HOSTILE_LOCK_ON) && !actor->isTargeted) {
-        return true;
-    } else {
-        return false;
+    while ((playerActor != NULL) && (sanity < 2000)) {
+        if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+            Player* player = (Player*)playerActor;
+
+            if ((player->stateFlags1 & PLAYER_STATE1_HOSTILE_LOCK_ON) && (player->focusActor != NULL) &&
+                (player->focusActor != actor)) {
+                return true;
+            }
+        }
+
+        playerActor = playerActor->next;
+        sanity++;
     }
+
+    return false;
 }
 
 f32 func_80033AEC(Vec3f* arg0, Vec3f* arg1, f32 arg2, f32 arg3, f32 arg4, f32 arg5) {
@@ -4716,7 +5003,7 @@ Actor* Actor_FindNearby(PlayState* play, Actor* refActor, s16 actorId, u8 actorC
 }
 
 s32 func_800354B4(PlayState* play, Actor* actor, f32 range, s16 arg3, s16 arg4, s16 arg5) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_FindClosestActivePlayer(play, actor, GET_PLAYER(play));
     s16 var1;
     s16 var2;
 

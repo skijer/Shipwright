@@ -352,17 +352,15 @@ void ModMenuWindow::DrawElement() {
 
         if (ImGui::BeginChild("Enabled Mods", ImVec2(0, -8))) {
             DrawMods(true);
-
-            ImGui::EndChild();
         }
+        ImGui::EndChild();
 
         /*ImGui::TableNextColumn();
 
         if (ImGui::BeginChild("Disabled Mods", ImVec2(0, -8))) {
             DrawMods(false);
-
-            ImGui::EndChild();
-        }*/
+        }
+        ImGui::EndChild();*/
 
         ImGui::EndTable();
     }

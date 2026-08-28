@@ -551,9 +551,7 @@ void ObjBean_WaitForBean(ObjBean* this, PlayState* play) {
 void func_80B8FE00(ObjBean* this) {
     this->actionFunc = func_80B8FE3C;
     ObjBean_SetDrawMode(this, BEAN_STATE_DRAW_LEAVES);
-    if (GameInteractor_Should(VB_PLAY_BEAN_PLANTING_CS, true)) {
-        this->timer = 60;
-    }
+    this->timer = 60;
 }
 
 // Link is looking at the soft soil

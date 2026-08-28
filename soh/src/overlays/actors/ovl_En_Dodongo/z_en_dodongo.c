@@ -530,7 +530,7 @@ void EnDodongo_SwallowBomb(EnDodongo* this, PlayState* play) {
 void EnDodongo_Walk(EnDodongo* this, PlayState* play) {
     s32 pad;
     f32 playbackSpeed;
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     s16 yawDiff = (s16)(this->actor.yawTowardsPlayer - this->actor.shape.rot.y);
 
     yawDiff = ABS(yawDiff);

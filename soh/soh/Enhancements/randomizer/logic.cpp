@@ -1334,6 +1334,10 @@ bool Logic::CanBonkTrees() {
     return true;
 }
 
+bool Logic::CanRead() {
+    return true;
+}
+
 bool Logic::HasExplosives() {
     return CanUse(RG_BOMB_BAG) || CanUse(RG_BOMBCHU_5);
 }
@@ -2211,7 +2215,16 @@ void Logic::InitSaveContext() {
         mSaveContext->adultEquips.cButtonSlots[button] = SLOT_NONE;
     }
     mSaveContext->adultEquips.equipment = 0;
-    mSaveContext->unk_54 = 0;
+    mSaveContext->healthCapacity4 = 0;
+    mSaveContext->health4 = 0;
+    mSaveContext->healthCapacity2 = 0;
+    mSaveContext->health2 = 0;
+    mSaveContext->magicLevel2 = 0;
+    mSaveContext->magic2 = MAGIC_NORMAL_METER;
+    mSaveContext->isMagicAcquired2 = 0;
+    mSaveContext->isDoubleMagicAcquired2 = 0;
+    mSaveContext->healthCapacity3 = 0;
+    mSaveContext->health3 = 0;
     mSaveContext->savedSceneNum = SCENE_LINKS_HOUSE;
 
     // Equipment

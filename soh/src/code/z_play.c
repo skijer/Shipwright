@@ -38,6 +38,1245 @@ s16 firstInit = 0;
 s16 gEnPartnerId;
 
 void Play_SpawnScene(PlayState* play, s32 sceneId, s32 spawn);
+void Actor_Draw(PlayState* play, Actor* actor);
+
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DEBUG_MARKERS_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.DebugMarkers")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_SPLITSCREEN_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreen")
+#define LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreenVertical")
+#define LOCAL_MP_SPLITSCREEN_PERF_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreenPerformanceMode")
+#define LOCAL_MP_SPLITSCREEN_AGGRESSIVE_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreenAggressiveMode")
+#define LOCAL_MP_TELEPORT_TARGET_PORT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.TeleportTargetPlayer")
+#define LOCAL_MP_TELEPORT_REQUEST_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.TeleportAllToSelectedRequest")
+
+typedef struct LocalMPCameraState {
+    Vec3f midpoint;
+    f32 maxRadius;
+    f32 heightSpan;
+    f32 forwardX;
+    f32 forwardZ;
+    s32 playerCount;
+    u8 hasForward;
+    u8 initialized;
+    Vec3f smoothedAt;
+    f32 smoothedDist;
+    f32 smoothedEyeLift;
+    s16 smoothedYaw;
+} LocalMPCameraState;
+
+static LocalMPCameraState sLocalMPCameraState;
+static s16 sLocalMPSplitCamIds[3] = { SUBCAM_NONE, SUBCAM_NONE, SUBCAM_NONE };
+static u16 sMergedStartPrevCur = 0;
+static s32 sLocalMPLastTeleportRequest = 0;
+
+static void LocalMP_DrawDebugMarkers(PlayState* play);
+
+static s32 LocalMP_GetDesiredPlayerCount(void) {
+    if (CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0)) {
+        return 1;
+    }
+
+    s32 desiredPlayers = CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2);
+
+    if (desiredPlayers < 1) {
+        desiredPlayers = 1;
+    } else if (desiredPlayers > 4) {
+        desiredPlayers = 4;
+    }
+
+    return desiredPlayers;
+}
+
+static Player* LocalMP_FindPlayerByPort(PlayState* play, s32 controllerPort) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            if (player->controllerPort == controllerPort) {
+                return player;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return NULL;
+}
+
+static void LocalMP_HandleTeleportAllToSelected(PlayState* play) {
+    s32 request = CVarGetInteger(LOCAL_MP_TELEPORT_REQUEST_CVAR, 0);
+    s32 targetPort;
+    Player* targetPlayer;
+    Vec3f targetPos;
+    s16 targetYaw;
+    s32 targetRoom;
+    Actor* actor;
+
+    if (request == sLocalMPLastTeleportRequest) {
+        return;
+    }
+
+    if ((play->transitionTrigger != TRANS_TRIGGER_OFF) || (play->roomCtx.status != 0) || Play_InCsMode(play) ||
+        (play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0)) {
+        return;
+    }
+
+    if (LocalMP_GetDesiredPlayerCount() <= 1) {
+        return;
+    }
+
+    targetPort = CVarGetInteger(LOCAL_MP_TELEPORT_TARGET_PORT_CVAR, 1);
+
+    if (targetPort < 1) {
+        targetPort = 1;
+    } else if (targetPort > 4) {
+        targetPort = 4;
+    }
+
+    targetPlayer = LocalMP_FindPlayerByPort(play, targetPort);
+    if ((targetPlayer == NULL) || (targetPlayer->actor.update == NULL)) {
+        targetPlayer = LocalMP_FindPlayerByPort(play, 1);
+    }
+
+    if ((targetPlayer == NULL) || (targetPlayer->actor.update == NULL)) {
+        return;
+    }
+
+    targetPos = targetPlayer->actor.world.pos;
+    targetYaw = targetPlayer->actor.shape.rot.y;
+    targetRoom = targetPlayer->actor.room;
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            actor->world.pos = targetPos;
+            actor->home.pos = targetPos;
+            actor->prevPos = targetPos;
+            actor->shape.rot.y = targetYaw;
+            actor->world.rot.y = targetYaw;
+            actor->velocity.x = 0.0f;
+            actor->velocity.y = 0.0f;
+            actor->velocity.z = 0.0f;
+            actor->speedXZ = 0.0f;
+            actor->room = targetRoom;
+            player->yaw = targetYaw;
+            player->linearVelocity = 0.0f;
+            player->pushedSpeed = 0.0f;
+            player->fallStartHeight = targetPos.y;
+        }
+
+        actor = actor->next;
+    }
+
+    sLocalMPLastTeleportRequest = request;
+}
+
+static void LocalMP_ReorderPlayerList(PlayState* play, Player* mainPlayer) {
+    Actor* head;
+    Actor* prev;
+    Actor* next;
+
+    if (mainPlayer == NULL) {
+        return;
+    }
+
+    head = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    if ((head == NULL) || (head == &mainPlayer->actor)) {
+        return;
+    }
+
+    prev = mainPlayer->actor.prev;
+    next = mainPlayer->actor.next;
+
+    if (prev != NULL) {
+        prev->next = next;
+    }
+
+    if (next != NULL) {
+        next->prev = prev;
+    }
+
+    mainPlayer->actor.prev = NULL;
+    mainPlayer->actor.next = head;
+    head->prev = &mainPlayer->actor;
+    play->actorCtx.actorLists[ACTORCAT_PLAYER].head = &mainPlayer->actor;
+}
+
+static Player* LocalMP_SpawnPlayer(PlayState* play, Player* mainPlayer, s32 controllerPort) {
+    static Vec3f sSpawnOffsets[] = {
+        { 40.0f, 0.0f, 0.0f },
+        { -40.0f, 0.0f, 40.0f },
+        { 0.0f, 0.0f, -40.0f },
+    };
+    Vec3f spawnOffset;
+    Actor* actor;
+    Player* player;
+
+    if ((mainPlayer == NULL) || (controllerPort < 2) || (controllerPort > 4)) {
+        return NULL;
+    }
+
+    spawnOffset = sSpawnOffsets[controllerPort - 2];
+
+    actor = Actor_Spawn(&play->actorCtx, play, ACTOR_PLAYER, mainPlayer->actor.world.pos.x + spawnOffset.x,
+                        mainPlayer->actor.world.pos.y + spawnOffset.y, mainPlayer->actor.world.pos.z + spawnOffset.z,
+                        mainPlayer->actor.shape.rot.x, mainPlayer->actor.shape.rot.y, mainPlayer->actor.shape.rot.z,
+                        mainPlayer->actor.params | 0x8000);
+
+    if (actor == NULL) {
+        return NULL;
+    }
+
+    player = (Player*)actor;
+    player->controllerPort = controllerPort;
+    player->inputEnabled = true;
+    player->isSecondPlayer = true;
+    player->linkedPlayer = mainPlayer;
+    Magic_InitForPort(controllerPort);
+    player->actor.room = mainPlayer->actor.room;
+    player->yaw = mainPlayer->yaw;
+
+    if (controllerPort == 2) {
+        player->currentTunic = PLAYER_TUNIC_GORON;
+    } else if (controllerPort == 3) {
+        player->currentTunic = PLAYER_TUNIC_ZORA;
+    } else {
+        player->currentTunic = PLAYER_TUNIC_KOKIRI;
+    }
+
+    return player;
+}
+
+static void LocalMP_EnsurePlayers(PlayState* play) {
+    Player* mainPlayer;
+    bool seenPorts[5] = { false, false, false, false, false };
+    Actor* actor;
+    s32 desiredPlayers;
+    s32 controllerPort;
+
+    desiredPlayers = LocalMP_GetDesiredPlayerCount();
+
+    // Keep the player list stable while rooms/transitions are in-flight.
+    if ((play->transitionTrigger != TRANS_TRIGGER_OFF) || (play->roomCtx.status != 0) || Play_InCsMode(play)) {
+        return;
+    }
+
+    if (desiredPlayers <= 1) {
+        Actor* nextActor;
+
+        actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        while (actor != NULL) {
+            nextActor = actor->next;
+
+            if ((actor->id == ACTOR_PLAYER) && (actor != play->actorCtx.actorLists[ACTORCAT_PLAYER].head)) {
+                Player* player = (Player*)actor;
+                if ((player->controllerPort >= 2) && (player->controllerPort <= 4)) {
+                    Actor_Kill(actor);
+                }
+            }
+
+            actor = nextActor;
+        }
+
+        sLocalMPCameraState.playerCount = 1;
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    mainPlayer = LocalMP_FindPlayerByPort(play, 1);
+    if (mainPlayer == NULL) {
+        mainPlayer = GET_PLAYER(play);
+    }
+
+    if (mainPlayer == NULL) {
+        return;
+    }
+
+    mainPlayer->controllerPort = 1;
+    mainPlayer->inputEnabled = true;
+    mainPlayer->isSecondPlayer = false;
+    mainPlayer->linkedPlayer = NULL;
+    seenPorts[1] = true;
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        Actor* nextActor = actor->next;
+
+        if ((actor->id == ACTOR_PLAYER) && (actor != &mainPlayer->actor)) {
+            Player* player = (Player*)actor;
+            controllerPort = player->controllerPort;
+
+            if ((controllerPort < 2) || (controllerPort > desiredPlayers) || (controllerPort > 4) ||
+                seenPorts[controllerPort]) {
+                Actor_Kill(actor);
+            } else {
+                seenPorts[controllerPort] = true;
+                player->isSecondPlayer = true;
+                player->inputEnabled = true;
+                player->linkedPlayer = mainPlayer;
+                player->actor.room = mainPlayer->actor.room;
+            }
+        }
+
+        actor = nextActor;
+    }
+
+    for (controllerPort = 2; controllerPort <= desiredPlayers; controllerPort++) {
+        if (!seenPorts[controllerPort]) {
+            Player* spawned = LocalMP_SpawnPlayer(play, mainPlayer, controllerPort);
+
+            if (spawned != NULL) {
+                seenPorts[controllerPort] = true;
+            }
+        }
+    }
+
+    LocalMP_ReorderPlayerList(play, mainPlayer);
+}
+
+static s32 LocalMP_UpdateMidpointState(PlayState* play) {
+    Vec3f sum = { 0.0f, 0.0f, 0.0f };
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    f32 forwardX = 0.0f;
+    f32 forwardZ = 0.0f;
+    f32 forwardMag;
+    f32 minY = 32767.0f;
+    f32 maxY = -32767.0f;
+    s32 count = 0;
+
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            if ((player->controllerPort >= 1) && (player->controllerPort <= 4)) {
+                sum.x += actor->world.pos.x;
+                sum.y += actor->world.pos.y;
+                sum.z += actor->world.pos.z;
+                forwardX += Math_SinS(actor->shape.rot.y);
+                forwardZ += Math_CosS(actor->shape.rot.y);
+
+                if (actor->world.pos.y < minY) {
+                    minY = actor->world.pos.y;
+                }
+                if (actor->world.pos.y > maxY) {
+                    maxY = actor->world.pos.y;
+                }
+
+                count++;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    sLocalMPCameraState.playerCount = count;
+
+    if (count < 2) {
+        sLocalMPCameraState.maxRadius = 0.0f;
+        sLocalMPCameraState.heightSpan = 0.0f;
+        sLocalMPCameraState.hasForward = false;
+        return false;
+    }
+
+    sLocalMPCameraState.midpoint.x = sum.x / count;
+    sLocalMPCameraState.midpoint.y = sum.y / count;
+    sLocalMPCameraState.midpoint.z = sum.z / count;
+    sLocalMPCameraState.maxRadius = 0.0f;
+    sLocalMPCameraState.heightSpan = maxY - minY;
+    forwardMag = sqrtf(SQ(forwardX) + SQ(forwardZ));
+
+    if (forwardMag > 0.1f) {
+        sLocalMPCameraState.forwardX = forwardX / forwardMag;
+        sLocalMPCameraState.forwardZ = forwardZ / forwardMag;
+        sLocalMPCameraState.hasForward = true;
+    } else {
+        sLocalMPCameraState.forwardX = 0.0f;
+        sLocalMPCameraState.forwardZ = 0.0f;
+        sLocalMPCameraState.hasForward = false;
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            if ((player->controllerPort >= 1) && (player->controllerPort <= 4)) {
+                f32 dx = actor->world.pos.x - sLocalMPCameraState.midpoint.x;
+                f32 dz = actor->world.pos.z - sLocalMPCameraState.midpoint.z;
+                f32 radius = sqrtf(SQ(dx) + SQ(dz));
+
+                if (radius > sLocalMPCameraState.maxRadius) {
+                    sLocalMPCameraState.maxRadius = radius;
+                }
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return true;
+}
+
+static bool LocalMP_IsSplitScreenEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && CVarGetInteger(LOCAL_MP_SPLITSCREEN_CVAR, 1);
+}
+
+static bool LocalMP_IsVerticalSplitScreenEnabled(void) {
+    return LocalMP_IsSplitScreenEnabled() && CVarGetInteger(LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR, 1);
+}
+
+static bool LocalMP_IsSplitScreenPerformanceModeEnabled(void) {
+    return LocalMP_IsSplitScreenEnabled() && CVarGetInteger(LOCAL_MP_SPLITSCREEN_PERF_CVAR, 1);
+}
+
+static bool LocalMP_IsSplitScreenAggressiveModeEnabled(void) {
+    return LocalMP_IsSplitScreenPerformanceModeEnabled() && CVarGetInteger(LOCAL_MP_SPLITSCREEN_AGGRESSIVE_CVAR, 0);
+}
+
+static s32 LocalMP_CollectPlayersByPort(PlayState* play, Player* players[4]) {
+    Player* portPlayers[5] = { NULL, NULL, NULL, NULL, NULL };
+    Actor* actor;
+    s32 port;
+    s32 count = 0;
+
+    memset(players, 0, sizeof(Player*) * 4);
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+            port = player->controllerPort;
+
+            if ((port >= 1) && (port <= 4) && (portPlayers[port] == NULL)) {
+                portPlayers[port] = player;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    if ((portPlayers[1] == NULL) && (GET_PLAYER(play) != NULL) && (GET_PLAYER(play)->actor.update != NULL)) {
+        portPlayers[1] = GET_PLAYER(play);
+    }
+
+    for (port = 1; port <= 4; port++) {
+        if (portPlayers[port] != NULL) {
+            players[count++] = portPlayers[port];
+        }
+    }
+
+    return count;
+}
+
+static void LocalMP_ClearSplitScreenCameras(PlayState* play) {
+    s32 i;
+
+    for (i = 0; i < ARRAY_COUNT(sLocalMPSplitCamIds); i++) {
+        s16 camId = sLocalMPSplitCamIds[i];
+
+        if ((camId >= SUBCAM_FIRST) && (camId < NUM_CAMS) && (play->cameraPtrs[camId] != NULL)) {
+            Play_ClearCamera(play, camId);
+        }
+
+        sLocalMPSplitCamIds[i] = SUBCAM_NONE;
+    }
+}
+
+// Returns true for camera settings driven by P1's item/animation state that should not be forced
+// onto split-screen cameras (those cameras track their own players independently).
+static bool LocalMP_IsCameraSettingPlayerAnimation(s16 setting) {
+    return (setting == CAM_SET_TURN_AROUND) ||  // bottle use, first-person item animations
+           (setting == CAM_SET_SLOW_CHEST_CS);  // big-chest opening cutscene
+}
+
+static void LocalMP_SyncSplitCamera(Camera* splitCam, Camera* mainCam, Player* player) {
+    if ((splitCam == NULL) || (mainCam == NULL) || (player == NULL)) {
+        return;
+    }
+
+    if (splitCam->player != player) {
+        Camera_InitPlayerSettings(splitCam, player);
+    }
+
+    if ((mainCam->camDataIdx >= 0) && (splitCam->camDataIdx != mainCam->camDataIdx)) {
+        Camera_ChangeDataIdx(splitCam, mainCam->camDataIdx);
+    } else if ((splitCam->setting != mainCam->setting) &&
+               !LocalMP_IsCameraSettingPlayerAnimation(mainCam->setting)) {
+        // Don't propagate player-item-animation camera modes; each player's camera should stay
+        // in its own movement mode while another player is using an item.
+        Camera_ChangeSetting(splitCam, mainCam->setting);
+    }
+}
+
+static void LocalMP_GetSplitViewport(s32 playerCount, s32 playerIndex, Viewport* viewport) {
+    s32 halfWidth = SCREEN_WIDTH / 2;
+    s32 halfHeight = SCREEN_HEIGHT / 2;
+
+    if (playerCount <= 1) {
+        viewport->topY = 0;
+        viewport->bottomY = SCREEN_HEIGHT;
+        viewport->leftX = 0;
+        viewport->rightX = SCREEN_WIDTH;
+        return;
+    }
+
+    if (playerCount == 2) {
+        if (LocalMP_IsVerticalSplitScreenEnabled()) {
+            viewport->topY = 0;
+            viewport->bottomY = SCREEN_HEIGHT;
+            viewport->leftX = (playerIndex == 0) ? 0 : halfWidth;
+            viewport->rightX = (playerIndex == 0) ? halfWidth : SCREEN_WIDTH;
+        } else {
+            viewport->topY = (playerIndex == 0) ? 0 : halfHeight;
+            viewport->bottomY = (playerIndex == 0) ? halfHeight : SCREEN_HEIGHT;
+            viewport->leftX = 0;
+            viewport->rightX = SCREEN_WIDTH;
+        }
+        return;
+    }
+
+    if (playerCount == 3) {
+        if (playerIndex == 0) {
+            viewport->topY = 0;
+            viewport->bottomY = halfHeight;
+            viewport->leftX = 0;
+            viewport->rightX = SCREEN_WIDTH;
+        } else if (playerIndex == 1) {
+            viewport->topY = halfHeight;
+            viewport->bottomY = SCREEN_HEIGHT;
+            viewport->leftX = 0;
+            viewport->rightX = halfWidth;
+        } else {
+            viewport->topY = halfHeight;
+            viewport->bottomY = SCREEN_HEIGHT;
+            viewport->leftX = halfWidth;
+            viewport->rightX = SCREEN_WIDTH;
+        }
+        return;
+    }
+
+    viewport->topY = (playerIndex < 2) ? 0 : halfHeight;
+    viewport->bottomY = (playerIndex < 2) ? halfHeight : SCREEN_HEIGHT;
+    viewport->leftX = ((playerIndex % 2) == 0) ? 0 : halfWidth;
+    viewport->rightX = ((playerIndex % 2) == 0) ? halfWidth : SCREEN_WIDTH;
+}
+
+static bool LocalMP_IsSplitScreenRenderAllowed(PlayState* play) {
+    if (!LocalMP_IsSplitScreenEnabled()) {
+        return false;
+    }
+
+    if ((play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0)) {
+        return false;
+    }
+
+    if (Play_InCsMode(play)) {
+        return false;
+    }
+
+    if ((play->transitionTrigger != TRANS_TRIGGER_OFF) || (play->transitionMode != TRANS_MODE_OFF)) {
+        return false;
+    }
+
+    if ((R_PAUSE_MENU_MODE != 0) || (gTrnsnUnkState != 0)) {
+        return false;
+    }
+
+    if (gDbgCamEnabled) {
+        return false;
+    }
+
+    return true;
+}
+
+static void LocalMP_EnsureSplitScreenCameras(PlayState* play) {
+    Player* players[4];
+    Camera* mainCam;
+    s32 playerCount;
+    s32 i;
+
+    if (!LocalMP_IsSplitScreenRenderAllowed(play)) {
+        LocalMP_ClearSplitScreenCameras(play);
+        return;
+    }
+
+    playerCount = LocalMP_CollectPlayersByPort(play, players);
+    if (playerCount <= 1) {
+        LocalMP_ClearSplitScreenCameras(play);
+        return;
+    }
+
+    if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    mainCam = play->cameraPtrs[MAIN_CAM];
+    if (mainCam == NULL) {
+        LocalMP_ClearSplitScreenCameras(play);
+        return;
+    }
+
+    for (i = 1; i < playerCount; i++) {
+        s32 slot = i - 1;
+        s16 camId = sLocalMPSplitCamIds[slot];
+        Camera* splitCam;
+        bool createdCamera = false;
+
+        if ((camId < SUBCAM_FIRST) || (camId >= NUM_CAMS) || (play->cameraPtrs[camId] == NULL)) {
+            camId = Play_CreateSubCamera(play);
+            sLocalMPSplitCamIds[slot] = camId;
+            createdCamera = true;
+        }
+
+        if ((camId < SUBCAM_FIRST) || (camId >= NUM_CAMS) || (play->cameraPtrs[camId] == NULL)) {
+            sLocalMPSplitCamIds[slot] = SUBCAM_NONE;
+            continue;
+        }
+
+        if (createdCamera) {
+            Play_CopyCamera(play, camId, MAIN_CAM);
+        }
+
+        splitCam = play->cameraPtrs[camId];
+
+        LocalMP_SyncSplitCamera(splitCam, mainCam, players[i]);
+
+        Camera_ChangeStatus(splitCam, CAM_STAT_ACTIVE);
+    }
+
+    for (i = playerCount - 1; i < ARRAY_COUNT(sLocalMPSplitCamIds); i++) {
+        s16 camId = sLocalMPSplitCamIds[i];
+
+        if ((camId >= SUBCAM_FIRST) && (camId < NUM_CAMS) && (play->cameraPtrs[camId] != NULL)) {
+            Play_ClearCamera(play, camId);
+        }
+
+        sLocalMPSplitCamIds[i] = SUBCAM_NONE;
+    }
+}
+
+static void LocalMP_SetViewForCamera(PlayState* play, Camera* camera, Viewport* viewport) {
+    if ((play->sceneNum == SCENE_HYRULE_FIELD) && (camera->fov < 59.0f)) {
+        View_SetScale(&play->view, 0.79f);
+    } else {
+        View_SetScale(&play->view, 1.0f);
+    }
+
+    play->view.fovy = camera->fov;
+    func_800AA358(&play->view, &camera->eye, &camera->at, &camera->up);
+    View_SetViewport(&play->view, viewport);
+    func_800AA460(&play->view, play->view.fovy, play->view.zNear, play->lightCtx.fogFar);
+    func_800AAA50(&play->view, 15);
+    // Keep OVERLAY-space world effects (hookshot reticle, lock-on indicators) in the same split viewport.
+    func_800AB560(&play->view);
+}
+
+static f32 LocalMP_DotVec3f(const Vec3f* a, const Vec3f* b) {
+    return (a->x * b->x) + (a->y * b->y) + (a->z * b->z);
+}
+
+static void LocalMP_WorldToAudioSpace(const Camera* camera, const Vec3f* worldPos, Vec3f* outAudioPos) {
+    Vec3f forward;
+    Vec3f right;
+    Vec3f up;
+    Vec3f delta;
+    f32 mag;
+
+    if ((camera == NULL) || (worldPos == NULL) || (outAudioPos == NULL)) {
+        if (outAudioPos != NULL) {
+            outAudioPos->x = 0.0f;
+            outAudioPos->y = 0.0f;
+            outAudioPos->z = 0.0f;
+        }
+        return;
+    }
+
+    forward.x = camera->at.x - camera->eye.x;
+    forward.y = camera->at.y - camera->eye.y;
+    forward.z = camera->at.z - camera->eye.z;
+
+    mag = sqrtf(SQ(forward.x) + SQ(forward.y) + SQ(forward.z));
+    if (mag < 0.001f) {
+        forward.x = 0.0f;
+        forward.y = 0.0f;
+        forward.z = 1.0f;
+        mag = 1.0f;
+    }
+
+    forward.x /= mag;
+    forward.y /= mag;
+    forward.z /= mag;
+
+    right.x = (forward.y * camera->up.z) - (forward.z * camera->up.y);
+    right.y = (forward.z * camera->up.x) - (forward.x * camera->up.z);
+    right.z = (forward.x * camera->up.y) - (forward.y * camera->up.x);
+
+    mag = sqrtf(SQ(right.x) + SQ(right.y) + SQ(right.z));
+    if (mag < 0.001f) {
+        Vec3f fallbackUp = { 0.0f, 1.0f, 0.0f };
+
+        if (fabsf(forward.y) > 0.99f) {
+            fallbackUp.x = 1.0f;
+            fallbackUp.y = 0.0f;
+            fallbackUp.z = 0.0f;
+        }
+
+        right.x = (forward.y * fallbackUp.z) - (forward.z * fallbackUp.y);
+        right.y = (forward.z * fallbackUp.x) - (forward.x * fallbackUp.z);
+        right.z = (forward.x * fallbackUp.y) - (forward.y * fallbackUp.x);
+        mag = sqrtf(SQ(right.x) + SQ(right.y) + SQ(right.z));
+    }
+
+    if (mag < 0.001f) {
+        right.x = 1.0f;
+        right.y = 0.0f;
+        right.z = 0.0f;
+        mag = 1.0f;
+    }
+
+    right.x /= mag;
+    right.y /= mag;
+    right.z /= mag;
+
+    up.x = (right.y * forward.z) - (right.z * forward.y);
+    up.y = (right.z * forward.x) - (right.x * forward.z);
+    up.z = (right.x * forward.y) - (right.y * forward.x);
+
+    mag = sqrtf(SQ(up.x) + SQ(up.y) + SQ(up.z));
+    if (mag < 0.001f) {
+        up.x = camera->up.x;
+        up.y = camera->up.y;
+        up.z = camera->up.z;
+        mag = sqrtf(SQ(up.x) + SQ(up.y) + SQ(up.z));
+    }
+
+    if (mag < 0.001f) {
+        up.x = 0.0f;
+        up.y = 1.0f;
+        up.z = 0.0f;
+        mag = 1.0f;
+    }
+
+    up.x /= mag;
+    up.y /= mag;
+    up.z /= mag;
+
+    delta.x = worldPos->x - camera->eye.x;
+    delta.y = worldPos->y - camera->eye.y;
+    delta.z = worldPos->z - camera->eye.z;
+
+    outAudioPos->x = LocalMP_DotVec3f(&delta, &right);
+    outAudioPos->y = LocalMP_DotVec3f(&delta, &up);
+    outAudioPos->z = LocalMP_DotVec3f(&delta, &forward);
+}
+
+static s32 LocalMP_GetClosestPlayerSlotForPos(Player* players[4], s32 playerCount, const Vec3f* worldPos) {
+    s32 bestSlot = 0;
+    f32 bestDistSq = FLT_MAX;
+    s32 i;
+
+    if ((players == NULL) || (worldPos == NULL) || (playerCount <= 0)) {
+        return 0;
+    }
+
+    if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    for (i = 0; i < playerCount; i++) {
+        if (players[i] != NULL) {
+            f32 dx = worldPos->x - players[i]->actor.world.pos.x;
+            f32 dy = worldPos->y - players[i]->actor.world.pos.y;
+            f32 dz = worldPos->z - players[i]->actor.world.pos.z;
+            f32 distSq = SQ(dx) + SQ(dy) + SQ(dz);
+
+            if (distSq < bestDistSq) {
+                bestDistSq = distSq;
+                bestSlot = i;
+            }
+        }
+    }
+
+    return bestSlot;
+}
+
+static void LocalMP_ProcessActorAudio(PlayState* play, Player* players[4], Camera* cameras[4], s32 playerCount) {
+    ActorListEntry* actorListEntry = &play->actorCtx.actorLists[0];
+    s32 i;
+
+    if ((play == NULL) || (players == NULL) || (cameras == NULL) || (playerCount <= 0)) {
+        return;
+    }
+
+    if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    for (i = 0; i < ARRAY_COUNT(play->actorCtx.actorLists); i++, actorListEntry++) {
+        Actor* actor = actorListEntry->head;
+        s32 sanity = 0;
+
+        while ((actor != NULL) && (sanity < 2000)) {
+            if ((actor->update != NULL) && (actor->sfx != 0)) {
+                s32 playerSlot = LocalMP_GetClosestPlayerSlotForPos(players, playerCount, &actor->world.pos);
+                Camera* listenerCamera = cameras[playerSlot];
+
+                if (listenerCamera == NULL) {
+                    listenerCamera = cameras[0];
+                }
+
+                LocalMP_WorldToAudioSpace(listenerCamera, &actor->world.pos, &actor->projectedPos);
+                Actor_PlaySfx(actor);
+            }
+
+            actor = actor->next;
+            sanity++;
+        }
+    }
+}
+
+static void LocalMP_DrawPlayerActorsOnly(PlayState* play) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+
+    while (actor != NULL) {
+        Actor* next = actor->next;
+
+        if ((actor->update != NULL) && (actor->draw != NULL)) {
+            Actor_Draw(play, actor);
+        }
+
+        actor = next;
+    }
+}
+
+static bool LocalMP_DrawSplitScreen(PlayState* play) {
+    GraphicsContext* __gfxCtx = play->state.gfxCtx;
+    Player* players[4];
+    Camera* cameras[4];
+    View mainView = play->view;
+    MtxF mainViewProjection = play->viewProjectionMtxF;
+    MtxF mainBillboardMtxF = play->billboardMtxF;
+    Mtx* mainBillboardMtx = play->billboardMtx;
+    Lights* lights;
+    Vec3f sunPos;
+    s32 playerCount;
+    s32 i;
+    bool performanceMode = LocalMP_IsSplitScreenPerformanceModeEnabled();
+    bool aggressiveMode = LocalMP_IsSplitScreenAggressiveModeEnabled();
+
+    if (!LocalMP_IsSplitScreenRenderAllowed(play)) {
+        return false;
+    }
+
+    playerCount = LocalMP_CollectPlayersByPort(play, players);
+    if (playerCount <= 1) {
+        return false;
+    }
+
+    if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    cameras[0] = play->cameraPtrs[MAIN_CAM];
+    if (cameras[0] == NULL) {
+        return false;
+    }
+
+    for (i = 1; i < playerCount; i++) {
+        s16 camId = sLocalMPSplitCamIds[i - 1];
+
+        if ((camId < SUBCAM_FIRST) || (camId >= NUM_CAMS) || (play->cameraPtrs[camId] == NULL)) {
+            return false;
+        }
+
+        cameras[i] = play->cameraPtrs[camId];
+        LocalMP_SyncSplitCamera(cameras[i], cameras[0], players[i]);
+    }
+
+    if (!aggressiveMode && ((HREG(80) != 10) || (HREG(83) != 0))) {
+        if (play->skyboxId && (play->skyboxId != SKYBOX_UNSET_1D) && !play->envCtx.skyboxDisabled) {
+            if ((play->skyboxId == SKYBOX_NORMAL_SKY) || (play->skyboxId == SKYBOX_CUTSCENE_MAP)) {
+                Environment_UpdateSkybox(play, play->skyboxId, &play->envCtx, &play->skyboxCtx);
+                SkyboxDraw_Draw(&play->skyboxCtx, play->state.gfxCtx, play->skyboxId, play->envCtx.skyboxBlend,
+                                play->view.eye.x, play->view.eye.y, play->view.eye.z);
+            } else if (play->skyboxCtx.unk_140 == 0) {
+                SkyboxDraw_Draw(&play->skyboxCtx, play->state.gfxCtx, play->skyboxId, 0, play->view.eye.x,
+                                play->view.eye.y, play->view.eye.z);
+            }
+        }
+    }
+
+    if (!aggressiveMode && ((HREG(80) != 10) || (HREG(90) & 2))) {
+        if (!play->envCtx.sunMoonDisabled) {
+            Environment_DrawSunAndMoon(play);
+        }
+    }
+
+    if (!aggressiveMode && ((HREG(80) != 10) || (HREG(90) & 1))) {
+        Environment_DrawSkyboxFilters(play);
+    }
+
+    if (!aggressiveMode && ((HREG(80) != 10) || (HREG(90) & 4))) {
+        Environment_UpdateLightningStrike(play);
+        Environment_DrawLightning(play, 0);
+    }
+
+    if (!aggressiveMode && ((HREG(80) != 10) || (HREG(90) & 8))) {
+        lights = LightContext_NewLights(&play->lightCtx, play->state.gfxCtx);
+        Lights_BindAll(lights, play->lightCtx.listHead, NULL);
+        Lights_Draw(lights, play->state.gfxCtx);
+    }
+
+    Actor_SetSfxUpdatesSuppressed(true);
+
+    for (i = 0; i < playerCount; i++) {
+        Viewport viewport;
+        Camera* camera = cameras[i];
+        bool skipSecondaryViewportEffects = performanceMode && (i > 0);
+        bool skipViewportEffects = skipSecondaryViewportEffects || aggressiveMode;
+        bool drawPlayersOnly = aggressiveMode && (i > 0);
+
+        // Keep frame interpolation history isolated per viewport so higher-FPS interpolation
+        // does not cross-match matrices between split-screen players.
+        FrameInterpolation_RecordOpenChild("LocalMPSplitViewport", i);
+
+        LocalMP_GetSplitViewport(playerCount, i, &viewport);
+        LocalMP_SetViewForCamera(play, camera, &viewport);
+
+        if ((R_PAUSE_MENU_MODE <= 1) && CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) {
+            gSPSetExtraGeometryMode(POLY_OPA_DISP++, G_EX_INVERT_CULLING);
+            gSPSetExtraGeometryMode(POLY_XLU_DISP++, G_EX_INVERT_CULLING);
+            gSPMatrix(POLY_OPA_DISP++, play->view.projectionFlippedPtr, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+            gSPMatrix(POLY_XLU_DISP++, play->view.projectionFlippedPtr, G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_PROJECTION);
+            gSPMatrix(POLY_OPA_DISP++, play->view.viewingPtr, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+            gSPMatrix(POLY_XLU_DISP++, play->view.viewingPtr, G_MTX_NOPUSH | G_MTX_MUL | G_MTX_PROJECTION);
+        }
+
+        Matrix_MtxToMtxF(&play->view.viewing, &play->billboardMtxF);
+        Matrix_MtxToMtxF(&play->view.projection, &play->viewProjectionMtxF);
+        Matrix_Mult(&play->viewProjectionMtxF, MTXMODE_NEW);
+        Matrix_Mult(&play->billboardMtxF, MTXMODE_APPLY);
+        Matrix_Get(&play->viewProjectionMtxF);
+        play->billboardMtxF.mf[0][3] = play->billboardMtxF.mf[1][3] = play->billboardMtxF.mf[2][3] =
+            play->billboardMtxF.mf[3][0] = play->billboardMtxF.mf[3][1] = play->billboardMtxF.mf[3][2] = 0.0f;
+        Matrix_Transpose(&play->billboardMtxF);
+        play->billboardMtx =
+            Matrix_MtxFToMtx(MATRIX_CHECKFLOATS(&play->billboardMtxF), Graph_Alloc(play->state.gfxCtx, sizeof(Mtx)));
+
+        gSPSegment(POLY_OPA_DISP++, 0x01, play->billboardMtx);
+
+        if (i == 0) {
+            mainView = play->view;
+            mainViewProjection = play->viewProjectionMtxF;
+            mainBillboardMtxF = play->billboardMtxF;
+            mainBillboardMtx = play->billboardMtx;
+        }
+
+        if ((HREG(80) != 10) || (HREG(84) != 0)) {
+            if (VREG(94) == 0) {
+                s32 roomDrawFlags;
+
+                if (HREG(80) != 10) {
+                    roomDrawFlags = 3;
+                } else {
+                    roomDrawFlags = HREG(84);
+                }
+
+                if (aggressiveMode) {
+                    roomDrawFlags &= 1;
+                }
+
+                Scene_Draw(play);
+                if (OTRRoom_AreaPersistenceEnabled()) {
+                    s32 retainedRoomCount = OTRRoom_GetRetainedRoomCount();
+
+                    if (retainedRoomCount > 0) {
+                        s32 retainedRoomIndex;
+
+                        for (retainedRoomIndex = 0; retainedRoomIndex < retainedRoomCount; retainedRoomIndex++) {
+                            Room* retainedRoom = OTRRoom_GetRetainedRoom(retainedRoomIndex);
+
+                            if ((retainedRoom != NULL) && (retainedRoom->num >= 0)) {
+                                Room_Draw(play, retainedRoom, roomDrawFlags & 3);
+                            }
+                        }
+                    } else {
+                        Room_Draw(play, &play->roomCtx.curRoom, roomDrawFlags & 3);
+                        if (!skipViewportEffects) {
+                            Room_Draw(play, &play->roomCtx.prevRoom, roomDrawFlags & 3);
+                        }
+                    }
+                } else {
+                    Room_Draw(play, &play->roomCtx.curRoom, roomDrawFlags & 3);
+                    if (!skipViewportEffects) {
+                        Room_Draw(play, &play->roomCtx.prevRoom, roomDrawFlags & 3);
+                    }
+                }
+            }
+        }
+
+        if ((HREG(80) != 10) || (HREG(83) != 0)) {
+            if (!skipViewportEffects && (play->skyboxCtx.unk_140 != 0) &&
+                (camera->setting != CAM_SET_PREREND_FIXED)) {
+                Vec3f quakeOffset;
+
+                Camera_GetSkyboxOffset(&quakeOffset, camera);
+                SkyboxDraw_Draw(&play->skyboxCtx, play->state.gfxCtx, play->skyboxId, 0, play->view.eye.x + quakeOffset.x,
+                                play->view.eye.y + quakeOffset.y, play->view.eye.z + quakeOffset.z);
+            }
+        }
+
+        if (!skipViewportEffects && (play->envCtx.unk_EE[1] != 0)) {
+            Environment_DrawRain(play, &play->view, play->state.gfxCtx);
+        }
+
+        if ((HREG(80) != 10) || (HREG(84) != 0)) {
+            Environment_FillScreen(play->state.gfxCtx, 0, 0, 0, play->unk_11E18, FILL_SCREEN_OPA);
+        }
+
+        if ((HREG(80) != 10) || (HREG(85) != 0)) {
+            if (drawPlayersOnly) {
+                LocalMP_DrawPlayerActorsOnly(play);
+            } else {
+                func_800315AC(play, &play->actorCtx);
+            }
+        }
+
+        if (!skipViewportEffects && ((HREG(80) != 10) || (HREG(86) != 0))) {
+            if (!play->envCtx.sunMoonDisabled) {
+                sunPos.x = play->view.eye.x + play->envCtx.sunPos.x;
+                sunPos.y = play->view.eye.y + play->envCtx.sunPos.y;
+                sunPos.z = play->view.eye.z + play->envCtx.sunPos.z;
+                Environment_DrawSunLensFlare(play, &play->envCtx, &play->view, play->state.gfxCtx, sunPos, 0);
+            }
+            Environment_DrawCustomLensFlare(play);
+        }
+
+        FrameInterpolation_RecordCloseChild();
+    }
+
+    Actor_SetSfxUpdatesSuppressed(false);
+    LocalMP_ProcessActorAudio(play, players, cameras, playerCount);
+
+    play->view = mainView;
+    play->viewProjectionMtxF = mainViewProjection;
+    play->billboardMtxF = mainBillboardMtxF;
+    play->billboardMtx = mainBillboardMtx;
+    play->view.unk_124 = 0;
+
+    SET_FULLSCREEN_VIEWPORT(&play->view);
+    func_800AA460(&play->view, play->view.fovy, play->view.zNear, play->lightCtx.fogFar);
+    func_800AAA50(&play->view, 15);
+    func_800AB560(&play->view);
+
+    if ((HREG(80) != 10) || (HREG(87) != 0)) {
+        if (MREG(64) != 0) {
+            Environment_FillScreen(play->state.gfxCtx, MREG(65), MREG(66), MREG(67), MREG(68),
+                                   FILL_SCREEN_OPA | FILL_SCREEN_XLU);
+        }
+
+        switch (play->envCtx.fillScreen) {
+            case 1:
+                Environment_FillScreen(play->state.gfxCtx, play->envCtx.screenFillColor[0], play->envCtx.screenFillColor[1],
+                                       play->envCtx.screenFillColor[2], play->envCtx.screenFillColor[3],
+                                       FILL_SCREEN_OPA | FILL_SCREEN_XLU);
+                break;
+            default:
+                break;
+        }
+    }
+
+    if ((HREG(80) != 10) || (HREG(88) != 0)) {
+        if (play->envCtx.sandstormState != SANDSTORM_OFF) {
+            Environment_DrawSandstorm(play, play->envCtx.sandstormState);
+        }
+    }
+
+    if (!aggressiveMode) {
+        LocalMP_DrawDebugMarkers(play);
+    }
+
+    if ((HREG(80) != 10) || (HREG(93) != 0)) {
+        DebugDisplay_DrawObjects(play);
+    }
+
+    play->viewProjectionMtxF = mainViewProjection;
+    play->billboardMtxF = mainBillboardMtxF;
+    play->billboardMtx = mainBillboardMtx;
+
+    return true;
+}
+
+static void LocalMP_FinishSplitScreenCameras(PlayState* play) {
+    s32 i;
+
+    for (i = 0; i < ARRAY_COUNT(sLocalMPSplitCamIds); i++) {
+        s16 camId = sLocalMPSplitCamIds[i];
+
+        if ((camId >= SUBCAM_FIRST) && (camId < NUM_CAMS) && (play->cameraPtrs[camId] != NULL)) {
+            Camera_Finish(play->cameraPtrs[camId]);
+        }
+    }
+}
+
+static void LocalMP_UpdateSharedCamera(PlayState* play) {
+    static s16 sSharedCamLastScene = -1;
+    Camera* camera;
+    Player* mainPlayer;
+    f32 forwardLookAhead;
+    f32 eyeLift;
+    f32 yawStepScale;
+    Vec3f at;
+    Vec3f eye;
+    f32 cameraDist;
+    f32 atHeight;
+    s16 yaw;
+
+    if (sSharedCamLastScene != play->sceneNum) {
+        sSharedCamLastScene = play->sceneNum;
+        sLocalMPCameraState.initialized = false;
+    }
+
+    if (LocalMP_IsSplitScreenEnabled()) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    if (LocalMP_GetDesiredPlayerCount() <= 1) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    if ((play->pauseCtx.state != 0) || (play->pauseCtx.debugState != 0) || Play_InCsMode(play)) {
+        return;
+    }
+
+    if ((play->transitionTrigger != TRANS_TRIGGER_OFF) || (play->transitionMode != TRANS_MODE_OFF) ||
+        (play->roomCtx.status != 0)) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    camera = play->cameraPtrs[MAIN_CAM];
+    if ((camera == NULL) || (play->activeCamera != MAIN_CAM) || (camera->setting == CAM_SET_PREREND_FIXED)) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    // Keep mode-specific camera behavior (like hookshot) from being overridden.
+    if (camera->mode == CAM_MODE_HOOKSHOT) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    if (!LocalMP_UpdateMidpointState(play)) {
+        sLocalMPCameraState.initialized = false;
+        return;
+    }
+
+    mainPlayer = LocalMP_FindPlayerByPort(play, 1);
+    if (mainPlayer == NULL) {
+        mainPlayer = GET_PLAYER(play);
+    }
+
+    cameraDist = 180.0f + (sLocalMPCameraState.maxRadius * 1.8f);
+    cameraDist = CLAMP(cameraDist, 190.0f, 560.0f);
+
+    atHeight = 26.0f + (sLocalMPCameraState.heightSpan * 0.35f);
+    eyeLift = 84.0f + (sLocalMPCameraState.heightSpan * 0.2f) + (sLocalMPCameraState.maxRadius * 0.25f);
+    eyeLift = CLAMP(eyeLift, 84.0f, 190.0f);
+
+    if (sLocalMPCameraState.hasForward) {
+        yaw = Math_Atan2S(sLocalMPCameraState.forwardX, sLocalMPCameraState.forwardZ);
+    } else if (mainPlayer != NULL) {
+        yaw = mainPlayer->actor.shape.rot.y;
+    } else {
+        yaw = camera->inputDir.y;
+    }
+
+    forwardLookAhead = sLocalMPCameraState.hasForward ? CLAMP(sLocalMPCameraState.maxRadius * 0.25f, 8.0f, 40.0f)
+                                                      : 0.0f;
+
+    at.x = sLocalMPCameraState.midpoint.x + (sLocalMPCameraState.forwardX * forwardLookAhead);
+    at.y = sLocalMPCameraState.midpoint.y + atHeight;
+    at.z = sLocalMPCameraState.midpoint.z + (sLocalMPCameraState.forwardZ * forwardLookAhead);
+
+    if (!sLocalMPCameraState.initialized) {
+        sLocalMPCameraState.smoothedAt = at;
+        sLocalMPCameraState.smoothedDist = cameraDist;
+        sLocalMPCameraState.smoothedEyeLift = eyeLift;
+        sLocalMPCameraState.smoothedYaw = yaw;
+        sLocalMPCameraState.initialized = true;
+
+        // Scene loads/mode handoffs can produce large one-frame jumps.
+        FrameInterpolation_DontInterpolateCamera();
+    } else {
+        Math_SmoothStepToF(&sLocalMPCameraState.smoothedAt.x, at.x, 0.18f, 24.0f, 0.1f);
+        Math_SmoothStepToF(&sLocalMPCameraState.smoothedAt.y, at.y, 0.2f, 12.0f, 0.1f);
+        Math_SmoothStepToF(&sLocalMPCameraState.smoothedAt.z, at.z, 0.18f, 24.0f, 0.1f);
+        Math_SmoothStepToF(&sLocalMPCameraState.smoothedDist, cameraDist, 0.12f, 14.0f, 0.1f);
+        Math_SmoothStepToF(&sLocalMPCameraState.smoothedEyeLift, eyeLift, 0.12f, 8.0f, 0.1f);
+
+        yawStepScale = CLAMP(220.0f + (sLocalMPCameraState.maxRadius * 3.0f), 220.0f, 900.0f);
+        Math_ScaledStepToS(&sLocalMPCameraState.smoothedYaw, yaw, yawStepScale);
+    }
+
+    at = sLocalMPCameraState.smoothedAt;
+
+    eye.x = at.x - Math_SinS(sLocalMPCameraState.smoothedYaw) * sLocalMPCameraState.smoothedDist;
+    eye.y = at.y + sLocalMPCameraState.smoothedEyeLift;
+    eye.z = at.z - Math_CosS(sLocalMPCameraState.smoothedYaw) * sLocalMPCameraState.smoothedDist;
+
+    Play_CameraSetAtEye(play, MAIN_CAM, &at, &eye);
+}
+
+static void LocalMP_DrawDebugMarkers(PlayState* play) {
+    static Color_RGBA8 sPortColors[] = {
+        { 255, 255, 255, 200 },
+        { 255, 96, 96, 200 },
+        { 96, 128, 255, 200 },
+        { 255, 220, 64, 200 },
+    };
+    Actor* actor;
+
+    if (!CVarGetInteger(LOCAL_MP_DEBUG_MARKERS_CVAR, 0)) {
+        return;
+    }
+
+    if (LocalMP_GetDesiredPlayerCount() <= 1) {
+        return;
+    }
+
+    if (!LocalMP_UpdateMidpointState(play)) {
+        return;
+    }
+
+    DebugDisplay_AddObject(sLocalMPCameraState.midpoint.x, sLocalMPCameraState.midpoint.y + 10.0f,
+                           sLocalMPCameraState.midpoint.z, 0, 0, 0, 8.0f, 8.0f, 8.0f, 255, 80, 80, 210, 2,
+                           play->state.gfxCtx);
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            if ((player->controllerPort >= 1) && (player->controllerPort <= 4)) {
+                Color_RGBA8 color = sPortColors[player->controllerPort - 1];
+
+                DebugDisplay_AddObject(actor->world.pos.x, actor->world.pos.y + 70.0f, actor->world.pos.z, 0, 0, 0,
+                                       3.0f, 3.0f, 3.0f, color.r, color.g, color.b, color.a, 0, play->state.gfxCtx);
+            }
+        }
+
+        actor = actor->next;
+    }
+}
 
 // This macro prints the number "1" with a file and line number if R_ENABLE_PLAY_LOGS is enabled.
 // For example, it can be used to trace the play state execution at a high level.
@@ -202,6 +1441,7 @@ void Play_Destroy(GameState* thisx) {
     Player* player = GET_PLAYER(play);
 
     GameInteractor_ExecuteOnPlayDestroy();
+    LocalMP_ClearSplitScreenCameras(play);
 
     play->state.gfxCtx->callback = NULL;
     play->state.gfxCtx->callbackParam = 0;
@@ -684,10 +1924,10 @@ void Play_Init(GameState* thisx) {
 #endif
 
     if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0)) {
-        Actor_Spawn(&play->actorCtx, play, gEnPartnerId, GET_PLAYER(play)->actor.world.pos.x,
-                    GET_PLAYER(play)->actor.world.pos.y + Player_GetHeight(GET_PLAYER(play)) + 5.0f,
-                    GET_PLAYER(play)->actor.world.pos.z, 0, 0, 0, 1);
+        CVarSetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0);
     }
+
+    sLocalMPLastTeleportRequest = CVarGetInteger(LOCAL_MP_TELEPORT_REQUEST_CVAR, 0);
 
     // nextEntranceIndex was not initialized, so the previous value was carried over during soft resets.
     gPlayState->nextEntranceIndex = gSaveContext.entranceIndex;
@@ -1215,6 +2455,8 @@ void Play_Update(PlayState* play) {
                     PLAY_LOG(3637);
 
                     if (!play->unk_11DE9) {
+                        LocalMP_EnsurePlayers(play);
+                        LocalMP_HandleTeleportAllToSelected(play);
                         Actor_UpdateAll(play, &play->actorCtx);
                     }
 
@@ -1308,6 +2550,7 @@ skip:
     PLAY_LOG(3801);
 
     GameInteractor_ExecuteOnCameraState(play);
+    LocalMP_EnsureSplitScreenCameras(play);
 
     if (!isPaused || gDbgCamEnabled) {
         s32 i;
@@ -1324,6 +2567,7 @@ skip:
         }
 
         Camera_Update(play->cameraPtrs[play->nextCamera]);
+        LocalMP_UpdateSharedCamera(play);
 
         PLAY_LOG(3814);
     }
@@ -1501,6 +2745,11 @@ void Play_Draw(PlayState* play) {
             goto Play_Draw_DrawOverlayElements;
         }
 
+        if (LocalMP_DrawSplitScreen(play)) {
+            GameInteractor_ExecuteOnPlayDrawEnd();
+            goto Play_Draw_DrawOverlayElements;
+        }
+
         if ((HREG(80) != 10) || (HREG(83) != 0)) {
             if (play->skyboxId && (play->skyboxId != SKYBOX_UNSET_1D) && !play->envCtx.skyboxDisabled) {
                 if ((play->skyboxId == SKYBOX_NORMAL_SKY) || (play->skyboxId == SKYBOX_CUTSCENE_MAP)) {
@@ -1545,8 +2794,27 @@ void Play_Draw(PlayState* play) {
                     roomDrawFlags = HREG(84);
                 }
                 Scene_Draw(play);
-                Room_Draw(play, &play->roomCtx.curRoom, roomDrawFlags & 3);
-                Room_Draw(play, &play->roomCtx.prevRoom, roomDrawFlags & 3);
+                if (OTRRoom_AreaPersistenceEnabled()) {
+                    s32 retainedRoomCount = OTRRoom_GetRetainedRoomCount();
+
+                    if (retainedRoomCount > 0) {
+                        s32 retainedRoomIndex;
+
+                        for (retainedRoomIndex = 0; retainedRoomIndex < retainedRoomCount; retainedRoomIndex++) {
+                            Room* retainedRoom = OTRRoom_GetRetainedRoom(retainedRoomIndex);
+
+                            if ((retainedRoom != NULL) && (retainedRoom->num >= 0)) {
+                                Room_Draw(play, retainedRoom, roomDrawFlags & 3);
+                            }
+                        }
+                    } else {
+                        Room_Draw(play, &play->roomCtx.curRoom, roomDrawFlags & 3);
+                        Room_Draw(play, &play->roomCtx.prevRoom, roomDrawFlags & 3);
+                    }
+                } else {
+                    Room_Draw(play, &play->roomCtx.curRoom, roomDrawFlags & 3);
+                    Room_Draw(play, &play->roomCtx.prevRoom, roomDrawFlags & 3);
+                }
             }
         }
 
@@ -1604,6 +2872,8 @@ void Play_Draw(PlayState* play) {
                 Environment_DrawSandstorm(play, play->envCtx.sandstormState);
             }
         }
+
+        LocalMP_DrawDebugMarkers(play);
 
         if ((HREG(80) != 10) || (HREG(93) != 0)) {
             DebugDisplay_DrawObjects(play);
@@ -1677,6 +2947,7 @@ Play_Draw_skip:
     }
 
     Camera_Finish(GET_ACTIVE_CAM(play));
+    LocalMP_FinishSplitScreenCameras(play);
 
     CLOSE_DISPS(gfxCtx);
 
@@ -1704,6 +2975,27 @@ void Play_Main(GameState* thisx) {
     }
 
     D_8012D1F8 = &play->state.input[0];
+
+    /* Route START from any controller into input[0] because pause/menu code
+     * only checks pad 1. Also synthesize a one-frame START press from cur
+     * button rising edges for input backends that miss press for START. */
+    {
+        u16 mergedStartCur = 0;
+        u16 mergedStartPress = 0;
+
+        for (s32 _i = 0; _i < ARRAY_COUNT(play->state.input); _i++) {
+            mergedStartCur |= play->state.input[_i].cur.button & BTN_START;
+            mergedStartPress |= play->state.input[_i].press.button & BTN_START;
+        }
+
+        if ((mergedStartCur & BTN_START) && !(sMergedStartPrevCur & BTN_START)) {
+            mergedStartPress |= BTN_START;
+        }
+
+        play->state.input[0].cur.button |= mergedStartCur & BTN_START;
+        play->state.input[0].press.button |= mergedStartPress & BTN_START;
+        sMergedStartPrevCur = mergedStartCur & BTN_START;
+    }
 
     DebugDisplay_Init();
 

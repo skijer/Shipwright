@@ -520,6 +520,15 @@ void DbCamera_Update(DbCamera* dbCamera, Camera* cam) {
     s16 spAA;
     VecSph spA0;
 
+    if ((CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0) ? 1
+                                                                           : CVarGetInteger(
+                                                                                 CVAR_ENHANCEMENT(
+                                                                                     "LocalMultiplayer.PlayerCount"),
+                                                                                 2)) >=
+        3) {
+        return;
+    }
+
     sp90 = &dbCamera->unk_54;
     temp_s6 = &cam->playerPosRot;
     at = &cam->at;

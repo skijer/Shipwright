@@ -49,7 +49,8 @@
 
 #define RGBA8(r, g, b, a) ((((r) & 0xFF) << 24) | (((g) & 0xFF) << 16) | (((b) & 0xFF) << 8) | (((a) & 0xFF) << 0))
 
-#define GET_PLAYER(play) ((Player*)(play)->actorCtx.actorLists[ACTORCAT_PLAYER].head)
+#define GET_PLAYER1(play) ((Player*)(play)->actorCtx.actorLists[ACTORCAT_PLAYER].head)
+#define GET_PLAYER(play) GET_PLAYER1(play)
 
 #define GET_ACTIVE_CAM(play) ((play)->cameraPtrs[(play)->activeCamera]) // Upstream TODO: Camera
 

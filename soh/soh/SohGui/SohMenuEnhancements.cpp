@@ -309,6 +309,10 @@ void SohMenu::AddMenuEnhancements() {
         .Options(
             CheckboxOptions().Tooltip("Resets the Navi timer on scene change. If you have already talked to her, "
                                       "she will try and talk to you again, instead of needing a save warp or death."));
+    AddWidget(path, "Disable Navi Messages", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DisableNaviMessages"))
+        .Options(CheckboxOptions().Tooltip(
+            "Disables Navi call prompts and Navi-triggered message popups."));
     AddWidget(path, "Link's Cow in Both Time Periods", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("CowOfTime"))
         .Options(CheckboxOptions().Tooltip(
@@ -538,51 +542,6 @@ void SohMenu::AddMenuEnhancements() {
     AddSidebarEntry("Enhancements", path.sidebarName, 3);
     path.column = SECTION_COLUMN_1;
 
-    AddWidget(path, "Mods", WIDGET_SEPARATOR_TEXT);
-    AddWidget(path, "Disable Bomb Billboarding", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("DisableBombBillboarding"))
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Disables bombs always rotating to face the camera. To be used in conjunction with mods that want to "
-            "replace bombs with 3D objects."));
-    AddWidget(path, "Disable Grotto Fixed Rotation", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("DisableGrottoRotation"))
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip(
-            "Disables Grottos rotating with the Camera. To be used in conjuction with mods that want to "
-            "replace grottos with 3D objects."));
-    AddWidget(path, "Disable Link's Sword Trail", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("DisableLinkSwordTrail"))
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip("Disables the sword trail effect when swinging Link's sword. Useful when "
-                                           "using mods that replace Link's sword model."));
-    AddWidget(path, "Disable 2D Pre-Rendered Scenes", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("3DSceneRender"))
-        .RaceDisable(false)
-        .Options(CheckboxOptions().Tooltip("Disables 2D pre-rendered backgrounds. Enable this when using a mod that "
-                                           "implements 3D backdrops for these areas.\n"
-                                           "Requires Scene Change to alter."));
-    AddWidget(path, "Disable Fixed Camera", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("DisableFixedCamera"))
-        .RaceDisable(false)
-        .PreFunc([](WidgetInfo& info) {
-            if (CVarGetInteger(CVAR_ENHANCEMENT("3DSceneRender"), 0) == 0) {
-                CVarSetInteger(CVAR_ENHANCEMENT("DisableFixedCamera"), 0);
-                info.options->disabled = true;
-            } else {
-                info.options->disabled = false;
-            }
-            info.options->disabledTooltip = "Requires \"Disable 2D Pre-Rendered Scenes\" to be enabled.";
-        })
-        .Options(CheckboxOptions().Tooltip(
-            "Disables the fixed camera in maps that use 2D pre-rendered backgrounds. Enable this when using a mod "
-            "that implements 3D backdrops for these areas.\n"
-            "Requires Scene Change to alter."));
-    AddWidget(path, "Ingame Text Spacing: %d", WIDGET_CVAR_SLIDER_INT)
-        .CVar(CVAR_ENHANCEMENT("TextSpacing"))
-        .RaceDisable(false)
-        .Options(IntSliderOptions().Min(4).Max(6).DefaultValue(6).Tooltip(
-            "Space between text characters (useful for HD font textures)."));
     AddWidget(path, "Models & Textures", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Disable LOD", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DisableLOD"))
@@ -755,6 +714,16 @@ void SohMenu::AddMenuEnhancements() {
     AddWidget(path, "Equipment", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Equip Items on Dpad", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DpadEquips"))
+        .PreFunc([](WidgetInfo& info) {
+            s32 localMpDisabled = CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.Disable"), 0);
+            s32 localMpPlayers = CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount"), 2);
+            bool originalMpItemsEnabled = CVarGetInteger(CVAR_ENHANCEMENT("LocalMultiplayer.OriginalItemSystem"), 1) &&
+                                         !localMpDisabled && (localMpPlayers > 1);
+
+            info.options->disabled = originalMpItemsEnabled;
+            info.options->disabledTooltip =
+                "Disabled while \"Use Original Multiplayer Item System\" is active.";
+        })
         .Options(CheckboxOptions().Tooltip(
             "Equip items and equipment on the D-pad. If used with \"D-pad on Pause Screen\", you must "
             "hold C-Up to equip instead of navigate."));
@@ -1595,11 +1564,6 @@ void SohMenu::AddMenuEnhancements() {
                     " - Dungeons (MQ): Mirror the world in MQ Dungeons.\n"
                     " - Dungeons Random: Randomly decide to mirror the world in Dungeons.\n"
                     " - Dungeons Random (Seeded): Dungeons are mirrored based on the current randomizer seed/file."));
-    AddWidget(path, "Ivan the Fairy (Coop Mode)", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ENHANCEMENT("IvanCoopModeEnabled"))
-        .Options(CheckboxOptions().Tooltip(
-            "Enables Ivan the Fairy upon the next map change. Player 2 can control Ivan and press the C-Buttons to "
-            "use items and mess with Player 1!"));
     AddWidget(path, "Dogs Follow You Everywhere", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("DogFollowsEverywhere"))
         .Options(CheckboxOptions().Tooltip("Allows dogs to follow you anywhere you go, even if you leave the Market."));
@@ -1801,7 +1765,7 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_CHEAT("SpeedModifier.DoesntChangeJump"));
     AddWidget(path, "Multiplier:", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_CHEAT("SpeedModifier.Value"))
-        .Options(FloatSliderOptions().IsPercentage().Min(0.01f).Max(5.0f).DefaultValue(1.0f).ShowButtons(true).Format(
+        .Options(FloatSliderOptions().IsPercentage().Min(1.0f).Max(5.0f).DefaultValue(1.0f).ShowButtons(true).Format(
             "%.0f%%"));
     AddWidget(path, "Button Combination:", WIDGET_CVAR_BTN_SELECTOR)
         .CVar(CVAR_CHEAT("SpeedModifier.Btn"))

@@ -36,9 +36,40 @@ const ActorInit Magic_Dark_InitVars = {
 // unused
 static Color_RGBA8 D_80B88B10[] = { { 50, 100, 150, 200 }, { 255, 200, 150, 100 } };
 
+static Player* MagicDark_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Actor* actor;
+
+    if (controllerPort == 1) {
+        return GET_PLAYER(play);
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* candidate = (Player*)actor;
+
+            if (candidate->isSecondPlayer && (candidate->controllerPort == controllerPort)) {
+                return candidate;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return GET_PLAYER(play);
+}
+
+static Player* MagicDark_GetCastingPlayer(MagicDark* this, PlayState* play) {
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        return (Player*)this->actor.parent;
+    }
+
+    return MagicDark_FindPlayerByPort(play, this->actor.home.rot.z);
+}
+
 void MagicDark_Init(Actor* thisx, PlayState* play) {
     MagicDark* this = (MagicDark*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicDark_GetCastingPlayer(this, play);
 
     if (!LINK_IS_ADULT) {
         this->scale = 0.4f;
@@ -64,15 +95,17 @@ void MagicDark_Init(Actor* thisx, PlayState* play) {
 }
 
 void MagicDark_Destroy(Actor* thisx, PlayState* play) {
+    MagicDark* this = (MagicDark*)thisx;
+
     if (gSaveContext.nayrusLoveTimer == 0) {
-        Magic_Reset(play);
+        Magic_ResetForPlayer(play, MagicDark_GetCastingPlayer(this, play));
     }
 }
 
 void MagicDark_DiamondUpdate(Actor* thisx, PlayState* play) {
     MagicDark* this = (MagicDark*)thisx;
     u8 phi_a0;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicDark_GetCastingPlayer(this, play);
     s16 pad;
     s16 nayrusLoveTimer = gSaveContext.nayrusLoveTimer;
     s32 msgMode = play->msgCtx.msgMode;
@@ -169,7 +202,7 @@ void MagicDark_DimLighting(PlayState* play, f32 intensity) {
 void MagicDark_OrbUpdate(Actor* thisx, PlayState* play) {
     MagicDark* this = (MagicDark*)thisx;
     s32 pad;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicDark_GetCastingPlayer(this, play);
 
     func_8002F974(&this->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
     if (this->timer < 35) {
@@ -212,7 +245,7 @@ void MagicDark_DiamondDraw(Actor* thisx, PlayState* play) {
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
     {
-        Player* player = GET_PLAYER(play);
+        Player* player = MagicDark_GetCastingPlayer(this, play);
         f32 heightDiff;
 
         this->actor.world.pos.x = player->bodyPartsPos[0].x;
@@ -243,7 +276,7 @@ void MagicDark_DiamondDraw(Actor* thisx, PlayState* play) {
 void MagicDark_OrbDraw(Actor* thisx, PlayState* play) {
     MagicDark* this = (MagicDark*)thisx;
     Vec3f pos;
-    Player* player = GET_PLAYER(play);
+    Player* player = MagicDark_GetCastingPlayer(this, play);
     s32 pad;
     f32 sp6C = play->state.frames & 0x1F;
 

@@ -65,6 +65,8 @@
 
 #include <functions.h>
 #include "Enhancements/item-tables/ItemTableManager.h"
+#include "Enhancements/Lang/Lang.h"
+#include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/ImGuiUtils.h"
 #include "ActorDB.h"
 #include "SaveManager.h"
@@ -403,7 +405,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::vector<std::string> args;
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
-            args.push_back(argv[i]);
+            args.push_back(argv[argc]);
         }
     }
     Extractor extract;
@@ -462,7 +464,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #elif (defined(__WIIU__) || defined(__SWITCH__))
                     extractStep = ES_VERIFY;
 #else
-                    extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
+                    extractStep = ES_EXTRACT;
 #endif
                 } else {
                     std::string msg;
@@ -547,7 +549,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
                                                   "OK", "", [&]() { exit(0); });
                         } else {
                             windowsStep = WS_DONE;
-                            extractStep = args.empty() ? ES_EXTRACT : ES_EXTRACT_ARGS;
+                            if (args.size() > 0) {
+                                extractStep = ES_EXTRACT_ARGS;
+                            } else {
+                                extractStep = ES_EXTRACT;
+                            }
                         }
                         continue;
                     }
@@ -558,7 +564,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
             }
             case ES_EXTRACT_ARGS: {
 #if !defined(__SWITCH__) && !defined(__WIIU__)
-                if (args.empty()) {
+                if (args.size() == 0) {
                     SohGui::RegisterPopup(
                         "Run Ship of Harkinian", "All files have been processed. Run SoH?", "Yes", "No",
                         [&]() {
@@ -881,6 +887,8 @@ void OTRGlobals::Initialize() {
                                     "Sequence", static_cast<uint32_t>(SOH::ResourceType::SOH_AudioSequence), 0);
     loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryBackgroundV0>(), RESOURCE_FORMAT_BINARY,
                                     "Background", static_cast<uint32_t>(SOH::ResourceType::SOH_Background), 0);
+
+    Lang::LoadLangs();
 
     gSaveStateMgr = std::make_shared<SaveStateMgr>();
     gRandoContext->InitStaticData();
@@ -2162,7 +2170,7 @@ Color_RGB8 GetColorForControllerLED() {
             color = CVarGetColor24(CVAR_SETTING("LEDPort1Color"), { 255, 255, 255 });
         }
         if (gPlayState && (criticalOverride || source == LED_SOURCE_HEALTH)) {
-            if (HealthMeter_IsCritical()) {
+            if (HealthMeter_IsCritical(GET_PLAYER(gPlayState))) {
                 color = { 0xFF, 0, 0 };
             } else if (gSaveContext.healthCapacity != 0 && source == LED_SOURCE_HEALTH) {
                 if (gSaveContext.health / (float)gSaveContext.healthCapacity <= 0.4f) {

@@ -502,7 +502,7 @@ void func_80AE3454(EnRd* this, PlayState* play) {
         case 1:
             Animation_PlayLoop(&this->skelAnime, &gGibdoRedeadGrabAttackAnim);
             this->unk_304++;
-            play->damagePlayer(play, -8);
+            play->damagePlayer(play, GET_PLAYER(play), -8);
             func_800AA000(this->actor.xzDistToPlayer, 0xFF, 1, 0xC);
             this->unk_319 = 20;
         case 0:
@@ -536,7 +536,7 @@ void func_80AE3454(EnRd* this, PlayState* play) {
             this->unk_319--;
 
             if (this->unk_319 == 0) {
-                play->damagePlayer(play, -8);
+                play->damagePlayer(play, GET_PLAYER(play), -8);
                 func_800AA000(this->actor.xzDistToPlayer, 0xF0, 1, 0xC);
                 this->unk_319 = 20;
                 Player_PlaySfx(&player->actor, NA_SE_VO_LI_DAMAGE_S + player->ageProperties->unk_92);

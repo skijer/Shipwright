@@ -118,7 +118,7 @@ u32 func_809CBCEC(EnBubble* this) {
 void EnBubble_DamagePlayer(EnBubble* this, PlayState* play) {
     s32 damage = -this->colliderSphere.elements[0].info.toucher.damage;
 
-    play->damagePlayer(play, damage);
+    play->damagePlayer(play, GET_PLAYER(play), damage);
     func_8002F7A0(play, &this->actor, 6.0f, this->actor.yawTowardsPlayer, 6.0f);
 }
 

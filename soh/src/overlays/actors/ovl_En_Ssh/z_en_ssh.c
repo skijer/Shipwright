@@ -456,14 +456,20 @@ void EnSsh_CheckBodyStickHit(EnSsh* this, PlayState* play) {
 s32 EnSsh_CheckHitPlayer(EnSsh* this, PlayState* play) {
     s32 i;
     s32 hit = false;
+    Player* hitPlayer = NULL;
 
     if ((this->hitCount == 0) && (this->spinTimer == 0)) {
         return false;
     }
     for (i = 0; i < 3; i++) {
         if (this->colCylinder[i + 3].base.ocFlags2 & OC2_HIT_PLAYER) {
+            Actor* hitActor = this->colCylinder[i + 3].base.oc;
+
             this->colCylinder[i + 3].base.ocFlags2 &= ~OC2_HIT_PLAYER;
             hit = true;
+            if ((hitActor != NULL) && (hitActor->id == ACTOR_PLAYER)) {
+                hitPlayer = (Player*)hitActor;
+            }
         }
     }
     if (!hit) {
@@ -475,7 +481,11 @@ s32 EnSsh_CheckHitPlayer(EnSsh* this, PlayState* play) {
     }
     Audio_PlayActorSound2(&this->actor, NA_SE_EN_STALTU_ROLL);
     Audio_PlayActorSound2(&this->actor, NA_SE_VO_ST_ATTACK);
-    play->damagePlayer(play, -8);
+    if (hitPlayer != NULL) {
+        play->damagePlayer(play, hitPlayer, -8);
+    } else {
+        play->damagePlayer(play, GET_PLAYER(play), -8);
+    }
     func_8002F71C(play, &this->actor, 4.0f, this->actor.yawTowardsPlayer, 6.0f);
     this->hitCount--;
     return true;

@@ -863,7 +863,7 @@ void EnMb_ClubAttack(EnMb* this, PlayState* play) {
                     player->invincibilityTimer = 0;
                 } else {
                     player->invincibilityTimer = 0;
-                    play->damagePlayer(play, -8);
+                    play->damagePlayer(play, GET_PLAYER(play), -8);
                 }
             }
 
@@ -947,7 +947,7 @@ void EnMb_SpearPatrolPrepareAndCharge(EnMb* this, PlayState* play) {
                         player->invincibilityTimer = 0;
                     } else {
                         player->invincibilityTimer = 0;
-                        play->damagePlayer(play, -8);
+                        play->damagePlayer(play, GET_PLAYER(play), -8);
                     }
                 }
                 if (!(this->attackCollider.base.atFlags & AT_BOUNCED)) {
@@ -1016,7 +1016,7 @@ void EnMb_SpearPatrolImmediateCharge(EnMb* this, PlayState* play) {
                         player->invincibilityTimer = 0;
                     } else {
                         player->invincibilityTimer = 0;
-                        play->damagePlayer(play, -8);
+                        play->damagePlayer(play, GET_PLAYER(play), -8);
                     }
                 }
                 if (!(this->attackCollider.base.atFlags & AT_BOUNCED)) {
@@ -1150,7 +1150,7 @@ void EnMb_SpearGuardWalk(EnMb* this, PlayState* play) {
     s32 beforeCurFrame;
     s32 pad1;
     s32 pad2;
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     s16 relYawTowardsPlayer = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
     s16 yawTowardsHome;
     f32 playSpeedAbs;
@@ -1263,7 +1263,7 @@ void EnMb_SpearPatrolWalkTowardsWaypoint(EnMb* this, PlayState* play) {
 }
 
 void EnMb_ClubWaitPlayerNear(EnMb* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = Actor_GetClosestPlayerFromPos(play, &this->actor.home.pos);
     s32 pad;
     s16 relYawFromPlayer = this->actor.world.rot.y - this->actor.yawTowardsPlayer;
 

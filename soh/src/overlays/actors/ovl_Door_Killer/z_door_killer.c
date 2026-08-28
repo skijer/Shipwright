@@ -432,12 +432,6 @@ void DoorKiller_WaitBeforeWobble(DoorKiller* this, PlayState* play) {
 }
 
 void DoorKiller_Wait(DoorKiller* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
-    Vec3f playerPosRelToDoor;
-    s16 angleToFacingPlayer;
-
-    Actor_WorldToActorCoords(&this->actor, &playerPosRelToDoor, &player->actor.world.pos);
-
     // playerIsOpening is set by player
     if (this->playerIsOpening) {
         this->actionFunc = DoorKiller_WaitBeforeWobble;
@@ -461,18 +455,44 @@ void DoorKiller_Wait(DoorKiller* this, PlayState* play) {
         DoorKiller_SpawnRubble(&this->actor, play);
         this->actionFunc = DoorKiller_Die;
         SoundSource_PlaySfxAtFixedWorldPos(play, &this->actor.world.pos, 20, NA_SE_EN_KDOOR_BREAK);
-    } else if (!Player_InCsMode(play) && (fabsf(playerPosRelToDoor.y) < 20.0f) &&
-               (fabsf(playerPosRelToDoor.x) < 20.0f) && (playerPosRelToDoor.z < 50.0f) &&
-               (playerPosRelToDoor.z > 0.0f)) {
-        // Set player properties to make the door openable if within range
-        angleToFacingPlayer = player->actor.shape.rot.y - this->actor.shape.rot.y;
-        if (playerPosRelToDoor.z > 0.0f) {
-            angleToFacingPlayer = 0x8000 - angleToFacingPlayer;
+    } else if (!Player_InCsMode(play)) {
+        Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        Player* bestPlayer = NULL;
+        s16 bestDirection = 1;
+        f32 bestDistSq = 1000000000.0f;
+        s32 sanity = 0;
+
+        while ((actor != NULL) && (sanity < 2000)) {
+            if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+                Player* candidate = (Player*)actor;
+                Vec3f relPos;
+                s16 angleToFacingPlayer;
+
+                Actor_WorldToActorCoords(&this->actor, &relPos, &candidate->actor.world.pos);
+                if ((fabsf(relPos.y) < 20.0f) && (fabsf(relPos.x) < 20.0f) && (relPos.z < 50.0f) && (relPos.z > 0.0f)) {
+                    angleToFacingPlayer = candidate->actor.shape.rot.y - this->actor.shape.rot.y;
+                    angleToFacingPlayer = 0x8000 - angleToFacingPlayer;
+
+                    if (ABS(angleToFacingPlayer) < 0x3000) {
+                        f32 distSq = SQ(relPos.x) + SQ(relPos.z);
+
+                        if (distSq < bestDistSq) {
+                            bestDistSq = distSq;
+                            bestPlayer = candidate;
+                            bestDirection = (relPos.z >= 0.0f) ? 1 : -1;
+                        }
+                    }
+                }
+            }
+
+            actor = actor->next;
+            sanity++;
         }
-        if (ABS(angleToFacingPlayer) < 0x3000) {
-            player->doorType = PLAYER_DOORTYPE_FAKE;
-            player->doorDirection = (playerPosRelToDoor.z >= 0.0f) ? 1.0f : -1.0f;
-            player->doorActor = &this->actor;
+
+        if (bestPlayer != NULL) {
+            bestPlayer->doorType = PLAYER_DOORTYPE_FAKE;
+            bestPlayer->doorDirection = bestDirection;
+            bestPlayer->doorActor = &this->actor;
         }
     }
 

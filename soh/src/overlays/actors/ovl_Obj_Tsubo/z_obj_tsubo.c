@@ -259,16 +259,40 @@ void ObjTsubo_Idle(ObjTsubo* this, PlayState* play) {
         SoundSource_PlaySfxAtFixedWorldPos(play, &this->actor.world.pos, 20, NA_SE_EV_POT_BROKEN);
         Actor_Kill(&this->actor);
     } else {
-        if (this->actor.xzDistToPlayer < 600.0f) {
+        Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        Player* nearestPlayer = NULL;
+        f32 minDistSq = 1.0e20f;
+        s16 yawTowardsNearestPlayer = 0;
+        s32 sanity = 0;
+
+        while ((playerActor != NULL) && (sanity < 2000)) {
+            if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+                Player* player = (Player*)playerActor;
+                f32 dx = this->actor.world.pos.x - player->actor.world.pos.x;
+                f32 dz = this->actor.world.pos.z - player->actor.world.pos.z;
+                f32 distSq = SQ(dx) + SQ(dz);
+
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                    nearestPlayer = player;
+                    yawTowardsNearestPlayer = Math_Vec3f_Yaw(&this->actor.world.pos, &player->actor.world.pos);
+                }
+            }
+
+            playerActor = playerActor->next;
+            sanity++;
+        }
+
+        if (minDistSq < SQ(600.0f)) {
             Collider_UpdateCylinder(&this->actor, &this->collider);
             this->collider.base.acFlags &= ~AC_HIT;
             CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
-            if (this->actor.xzDistToPlayer < 150.0f) {
+            if (minDistSq < SQ(150.0f)) {
                 CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
             }
         }
-        if (this->actor.xzDistToPlayer < 100.0f) {
-            temp_v0 = this->actor.yawTowardsPlayer - GET_PLAYER(play)->actor.world.rot.y;
+        if ((nearestPlayer != NULL) && (minDistSq < SQ(100.0f))) {
+            temp_v0 = yawTowardsNearestPlayer - nearestPlayer->actor.world.rot.y;
             phi_v1 = ABS(temp_v0);
             if (phi_v1 >= 0x5556) {
                 // GI_NONE in this case allows the player to lift the actor

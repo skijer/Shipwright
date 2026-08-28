@@ -823,7 +823,7 @@ void EnFloormas_GrabLink(EnFloormas* this, PlayState* play) {
             } else {
                 Player_PlaySfx(&player->actor, NA_SE_VO_LI_DAMAGE_S);
             }
-            play->damagePlayer(play, -8);
+            play->damagePlayer(play, player, -8);
         }
     }
 

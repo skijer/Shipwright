@@ -26,6 +26,8 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_SECONDARY_AREA_LOAD_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SecondaryPlayersLoadAreas")
 
 void DoorShutter_Init(Actor* thisx, PlayState* play);
 void DoorShutter_Destroy(Actor* thisx, PlayState* play);
@@ -325,11 +327,10 @@ void DoorShutter_SetupType(DoorShutter* this, PlayState* play) {
     }
 }
 
-f32 func_80996840(PlayState* play, DoorShutter* this, f32 arg2, f32 arg3, f32 arg4) {
+f32 func_80996840(DoorShutter* this, Player* player, f32 arg2, f32 arg3, f32 arg4) {
     s32 pad;
     Vec3f sp28;
     Vec3f sp1C;
-    Player* player = GET_PLAYER(play);
 
     sp28.x = player->actor.world.pos.x;
     sp28.y = player->actor.world.pos.y + arg2;
@@ -342,25 +343,84 @@ f32 func_80996840(PlayState* play, DoorShutter* this, f32 arg2, f32 arg3, f32 ar
     }
 }
 
-s32 func_809968D4(DoorShutter* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+s32 func_809968D4(DoorShutter* this, PlayState* play, Player** outPlayer) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    f32 bestAbsRelZ = 1000000000.0f;
+    s32 bestDirection = 0;
+    s32 sanity = 0;
+
+    *outPlayer = NULL;
 
     if (!Player_InCsMode(play)) {
         ShutterInfo* temp_v1 = &sShutterInfo[this->unk_16C];
-        f32 temp_f2 = func_80996840(play, this, (this->unk_16C != 3) ? 0.0f : 80.0f, temp_v1->e, temp_v1->f);
 
-        if (fabsf(temp_f2) < 50.0f) {
-            s16 phi_v0 = player->actor.shape.rot.y - this->dyna.actor.shape.rot.y;
+        while ((actor != NULL) && (sanity < 2000)) {
+            if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+                Player* player = (Player*)actor;
+                f32 relZ = func_80996840(this, player, (this->unk_16C != 3) ? 0.0f : 80.0f, temp_v1->e, temp_v1->f);
 
-            if (temp_f2 > 0.0f) {
-                phi_v0 = 0x8000 - phi_v0;
+                if (fabsf(relZ) < 50.0f) {
+                    s16 rotYDiff = player->actor.shape.rot.y - this->dyna.actor.shape.rot.y;
+
+                    if (relZ > 0.0f) {
+                        rotYDiff = 0x8000 - rotYDiff;
+                    }
+                    if (ABS(rotYDiff) < 0x3000) {
+                        f32 absRelZ = fabsf(relZ);
+
+                        if (absRelZ < bestAbsRelZ) {
+                            bestAbsRelZ = absRelZ;
+                            bestDirection = (relZ >= 0.0f) ? 1 : -1;
+                            *outPlayer = player;
+                        }
+                    }
+                }
             }
-            if (ABS(phi_v0) < 0x3000) {
-                return (temp_f2 >= 0.0f) ? 1.0f : -1.0f;
-            }
+
+            actor = actor->next;
+            sanity++;
         }
     }
-    return 0.0f;
+
+    return bestDirection;
+}
+
+static s32 DoorShutter_SecondaryPlayersCanTrigger(PlayState* play) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && CVarGetInteger(LOCAL_MP_SECONDARY_AREA_LOAD_CVAR, 0);
+}
+
+static Player* DoorShutter_GetTriggerPlayer(PlayState* play, DoorShutter* this) {
+    Player* mainPlayer = GET_PLAYER(play);
+    Player* triggerPlayer = NULL;
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    s32 sanity = 0;
+
+    if (mainPlayer == NULL) {
+        return NULL;
+    }
+
+    if (!DoorShutter_SecondaryPlayersCanTrigger(play)) {
+        return mainPlayer;
+    }
+
+    while ((actor != NULL) && (sanity < 2000)) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* player = (Player*)actor;
+
+            if ((player->doorType == PLAYER_DOORTYPE_SLIDING) && (player->doorActor == &this->dyna.actor)) {
+                return player;
+            }
+        }
+
+        actor = actor->next;
+        sanity++;
+    }
+
+    if ((func_809968D4(this, play, &triggerPlayer) != 0) && (triggerPlayer != NULL)) {
+        return triggerPlayer;
+    }
+
+    return mainPlayer;
 }
 
 void func_80996A54(DoorShutter* this, PlayState* play) {
@@ -372,10 +432,12 @@ void func_80996A54(DoorShutter* this, PlayState* play) {
             OnePointCutscene_Attention(play, &GET_PLAYER(play)->actor);
             this->unk_16F = -100;
         }
-    } else if (func_809968D4(this, play) != 0) {
-        Player* player = GET_PLAYER(play);
+    } else {
+        Player* player = NULL;
 
-        player->naviTextId = -0x202;
+        if (func_809968D4(this, play, &player) != 0 && player != NULL) {
+            player->naviTextId = -0x202;
+        }
     }
 }
 
@@ -397,10 +459,10 @@ void func_80996B0C(DoorShutter* this, PlayState* play) {
             }
         }
     } else {
-        s32 doorDirection = func_809968D4(this, play);
+        Player* player = NULL;
+        s32 doorDirection = func_809968D4(this, play, &player);
 
-        if (doorDirection != 0) {
-            Player* player = GET_PLAYER(play);
+        if ((doorDirection != 0) && (player != NULL)) {
 
             if (this->unk_16E != 0) {
                 if (this->doorType == SHUTTER_BOSS) {
@@ -423,9 +485,19 @@ void func_80996B0C(DoorShutter* this, PlayState* play) {
 
 void func_80996C60(DoorShutter* this, PlayState* play) {
     if (this->dyna.actor.category == ACTORCAT_DOOR) {
-        Player* player = GET_PLAYER(play);
+        Player* mainPlayer = GET_PLAYER(play);
+        Player* player = DoorShutter_GetTriggerPlayer(play, this);
+        Actor* doorCamActor = &this->dyna.actor;
         s32 sp38 = this->unk_16C;
         s32 sp34 = 0xF;
+
+        if (player == NULL) {
+            return;
+        }
+
+        if (player != mainPlayer) {
+            doorCamActor = NULL;
+        }
 
         if (DoorShutter_SetupDoor(this, play)) {
             sp34 = 0x20;
@@ -433,7 +505,7 @@ void func_80996C60(DoorShutter* this, PlayState* play) {
         DoorShutter_SetupAction(this, func_80997004);
         this->unk_16C = sp38;
         this->unk_170 = 0.0f;
-        Camera_ChangeDoorCam(play->cameraPtrs[MAIN_CAM], &this->dyna.actor, player->cv.slidingDoorBgCamIndex, 0.0f, 12,
+        Camera_ChangeDoorCam(play->cameraPtrs[MAIN_CAM], doorCamActor, player->cv.slidingDoorBgCamIndex, 0.0f, 12,
                              sp34, 10);
     }
 }
@@ -491,10 +563,13 @@ void func_80996EE8(DoorShutter* this, PlayState* play) {
                 OnePointCutscene_Attention(play, &this->dyna.actor);
                 this->unk_16F = -100;
             }
-        } else if (func_809968D4(this, play)) {
-            Player* player = GET_PLAYER(play);
-            // Jabu navi text for switch doors is different
-            player->naviTextId = (play->sceneNum == SCENE_JABU_JABU) ? -0x20B : -0x202;
+        } else {
+            Player* player = NULL;
+
+            if (func_809968D4(this, play, &player) && (player != NULL)) {
+                // Jabu navi text for switch doors is different
+                player->naviTextId = (play->sceneNum == SCENE_JABU_JABU) ? -0x20B : -0x202;
+            }
         }
     }
 }
@@ -551,8 +626,12 @@ void func_80997150(DoorShutter* this, PlayState* play) {
 }
 
 void func_80997220(DoorShutter* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    Player* player = DoorShutter_GetTriggerPlayer(play, this);
     s8 room = this->dyna.actor.room;
+
+    if (player == NULL) {
+        return;
+    }
 
     if (this->dyna.actor.room >= 0) {
         Vec3f vec;

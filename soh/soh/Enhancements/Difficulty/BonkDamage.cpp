@@ -45,7 +45,7 @@ static void RegisterBonkDamage() {
                 break;
         }
 
-        Health_ChangeBy(gPlayState, -bonkDamage);
+        Health_ChangeBy(gPlayState, -bonkDamage, GET_PLAYER(gPlayState));
         // Set invincibility to make Link flash red as a visual damage indicator.
         Player* player = GET_PLAYER(gPlayState);
         player->invincibilityTimer = 28;

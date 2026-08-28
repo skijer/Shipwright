@@ -7,7 +7,6 @@
 #include "z_bg_spot06_objects.h"
 #include "objects/object_spot06_objects/object_spot06_objects.h"
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
-#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 #define FLAGS ACTOR_FLAG_HOOKSHOT_PULLS_ACTOR
 
@@ -267,7 +266,7 @@ void BgSpot06Objects_GateWaitForSwitch(BgSpot06Objects* this, PlayState* play) {
  * This is where the gate waits a few frames before rising after the switch is set.
  */
 void BgSpot06Objects_GateWaitToOpen(BgSpot06Objects* this, PlayState* play) {
-    if (GameInteractor_Should(VB_BG_SPOT06_OBJECTS_GATE_SKIP, this->timer != 0, this)) {
+    if (this->timer != 0) {
         this->timer--;
     }
 
@@ -605,7 +604,7 @@ void BgSpot06Objects_WaterPlaneCutsceneRise(BgSpot06Objects* this, PlayState* pl
             play->roomCtx.unk_74[0] = 0; // Apply the moving under water texture to lake hylia ground
         }
     } else {
-        Math_SmoothStepToF(&this->lakeHyliaWaterLevel, 1.0f, 0.1f, IS_RANDO ? 10.0f : 1.0f, 0.001f);
+        Math_SmoothStepToF(&this->lakeHyliaWaterLevel, 1.0f, 0.1f, 1.0f, 0.001f);
         play->colCtx.colHeader->waterBoxes[LHWB_GERUDO_VALLEY_RIVER_LOWER].ySurface = WATER_LEVEL_RIVER_LOWERED;
         play->colCtx.colHeader->waterBoxes[LHWB_MAIN_1].ySurface = this->dyna.actor.world.pos.y;
         play->colCtx.colHeader->waterBoxes[LHWB_MAIN_2].ySurface = this->dyna.actor.world.pos.y;
@@ -635,7 +634,7 @@ void BgSpot06Objects_WaterPlaneCutsceneLower(BgSpot06Objects* this, PlayState* p
         this->actionFunc = BgSpot06Objects_DoNothing;
     } else {
         // Go slightly beyond -681 so the smoothing doesn't slow down too much (matches the reverse of water rise func)
-        Math_SmoothStepToF(&this->lakeHyliaWaterLevel, -682.0f, 0.1f, 10.0f, 0.01f);
+        Math_SmoothStepToF(&this->lakeHyliaWaterLevel, -682.0f, 0.1f, 1.0f, 0.001f);
         play->colCtx.colHeader->waterBoxes[LHWB_GERUDO_VALLEY_RIVER_LOWER].ySurface = WATER_LEVEL_RIVER_LOWERED;
         play->colCtx.colHeader->waterBoxes[LHWB_GERUDO_VALLEY_RIVER_LOWER].zMin = WATER_LEVEL_RIVER_LOWER_Z - 50;
         play->colCtx.colHeader->waterBoxes[LHWB_MAIN_1].ySurface = yPos;

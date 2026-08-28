@@ -943,6 +943,16 @@ typedef struct Player {
     /* 0x0A86 */ s8 unk_A86;
     /* 0x0A87 */ u8 unk_A87;
     /* 0x0A88 */ Vec3f unk_A88; // previous body part 0 position
+    // #region Multiplayer groundwork
+    // 1-based controller assignment (1-4). Default is 1 for main player.
+    /*        */ u8 controllerPort;
+    // If false, the actor ignores controller input and behaves as if no buttons are pressed.
+    /*        */ u8 inputEnabled;
+    // Marks actors spawned as additional local players.
+    /*        */ u8 isSecondPlayer;
+    // Optional link to the main player actor for follow/sync behaviors.
+    /*        */ struct Player* linkedPlayer;
+    // #endregion
     // #region SOH [General]
     // Upstream TODO: Rename these to be more obviously SoH specific
     /*        */ PendingFlag pendingFlag;
@@ -953,6 +963,9 @@ typedef struct Player {
     /*        */ u8 boomerangQuickRecall; // Has the player pressed the boomerang button while it's in the air still?
     /*        */ u8 ivanFloating;
     /*        */ u8 ivanDamageMultiplier;
+    /*        */ u8 bootsAreActive;
+    /*        */ u8 bootsToggleRequest;
+    /*        */ u8 equippedBoots;
     // #endregion
 } Player; // size = 0xA94
 

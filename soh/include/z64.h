@@ -39,7 +39,7 @@
 #endif
 
 #define AUDIO_HEAP_SIZE  0x380000
-#define SYSTEM_HEAP_SIZE (1024 * 1024 * 4)
+#define SYSTEM_HEAP_SIZE (1024 * 1024 * 8)
 
 #ifdef __cplusplus
 namespace LUS
@@ -1454,7 +1454,7 @@ typedef struct PlayState {
     /* 0x11D4C */ s32 (*grabPlayer)(struct PlayState* play, Player* player);
     /* 0x11D50 */ s32 (*startPlayerCutscene)(struct PlayState* play, Actor* actor, s32 mode);
     /* 0x11D54 */ void (*func_11D54)(Player* player, struct PlayState* play);
-    /* 0x11D58 */ s32 (*damagePlayer)(struct PlayState* play, s32 damage);
+    /* 0x11D58 */ s32 (*damagePlayer)(struct PlayState* play, Player* player, s32 damage);
     /* 0x11D5C */ void (*talkWithPlayer)(struct PlayState* play, Actor* actor);
     /* 0x11D60 */ MtxF viewProjectionMtxF;
     /* 0x11DA0 */ MtxF billboardMtxF;

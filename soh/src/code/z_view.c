@@ -7,6 +7,14 @@
 
 #include "soh/frame_interpolation.h"
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+
+static s32 View_IsLocalMultiplayerEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) &&
+           (CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2) > 1);
+}
+
 vu32 D_8012ABF0 = true;
 
 void View_ViewportToVp(Vp* dest, Viewport* src) {
@@ -155,6 +163,10 @@ void func_800AA550(View* view) {
 
     varY = ShrinkWindow_GetCurrentVal();
 
+    if (View_IsLocalMultiplayerEnabled()) {
+        varY = 0;
+    }
+
     varX = -1; // The following is optimized to varX = 0 but affects codegen
 
     if (varX < 0) {
@@ -288,6 +300,52 @@ static float sqr(float a) {
     return a * a;
 }
 
+#define VIEW_INTERP_HISTORY_COUNT 8
+
+typedef struct {
+    s32 valid;
+    s32 hasView;
+    Viewport viewport;
+    View oldView;
+} ViewInterpolationHistory;
+
+static ViewInterpolationHistory sViewInterpolationHistory[VIEW_INTERP_HISTORY_COUNT];
+
+static s32 View_ViewportMatches(Viewport* a, Viewport* b) {
+    return (a->topY == b->topY) && (a->bottomY == b->bottomY) && (a->leftX == b->leftX) &&
+           (a->rightX == b->rightX);
+}
+
+static s32 View_GetInterpolationHistorySlot(View* view) {
+    s32 i;
+    s32 freeSlot = -1;
+
+    for (i = 0; i < VIEW_INTERP_HISTORY_COUNT; i++) {
+        if (sViewInterpolationHistory[i].valid) {
+            if (View_ViewportMatches(&sViewInterpolationHistory[i].viewport, &view->viewport)) {
+                return i;
+            }
+        } else if (freeSlot < 0) {
+            freeSlot = i;
+        }
+    }
+
+    if (freeSlot < 0) {
+        freeSlot = 0;
+    }
+
+    sViewInterpolationHistory[freeSlot].valid = true;
+    sViewInterpolationHistory[freeSlot].hasView = false;
+    sViewInterpolationHistory[freeSlot].viewport = view->viewport;
+
+    return freeSlot;
+}
+
+static s32 View_IsFullScreenViewport(Viewport* viewport) {
+    return (viewport->topY == 0) && (viewport->bottomY == SCREEN_HEIGHT) && (viewport->leftX == 0) &&
+           (viewport->rightX == SCREEN_WIDTH);
+}
+
 s32 func_800AAA9C(View* view) {
     f32 aspect;
     s32 width;
@@ -336,69 +394,96 @@ s32 func_800AAA9C(View* view) {
     guLookAtF(viewingF.mf, view->eye.x, view->eye.y, view->eye.z, view->lookAt.x, view->lookAt.y, view->lookAt.z,
               view->up.x, view->up.y, view->up.z);
 
-    // Some heuristics to identify instant camera movements and skip interpolation in that case
-
-    static View old_view;
+    // Some heuristics to identify instant camera movements and skip interpolation in that case.
+    // Split-screen draws multiple cameras per frame, so keep prior-view history per viewport.
+    s32 historySlot = View_GetInterpolationHistorySlot(view);
+    ViewInterpolationHistory* viewHistory = &sViewInterpolationHistory[historySlot];
+    View* old_view = &viewHistory->oldView;
+    s32 hasOldView = viewHistory->hasView;
 
     float dirx = view->eye.x - view->lookAt.x;
     float diry = view->eye.y - view->lookAt.y;
     float dirz = view->eye.z - view->lookAt.z;
     float dir_dist = sqrtf(sqr(dirx) + sqr(diry) + sqr(dirz));
+
+    if (dir_dist <= 0.0f) {
+        dir_dist = 1.0f;
+    }
+
     dirx /= dir_dist;
     diry /= dir_dist;
     dirz /= dir_dist;
 
-    float odirx = old_view.eye.x - old_view.lookAt.x;
-    float odiry = old_view.eye.y - old_view.lookAt.y;
-    float odirz = old_view.eye.z - old_view.lookAt.z;
-    float odir_dist = sqrtf(sqr(odirx) + sqr(odiry) + sqr(odirz));
-    odirx /= odir_dist;
-    odiry /= odir_dist;
-    odirz /= odir_dist;
-
-    float eye_dist = sqrtf(sqr(view->eye.x - old_view.eye.x) + sqr(view->eye.y - old_view.eye.y) +
-                           sqr(view->eye.z - old_view.eye.z));
-    float look_dist = sqrtf(sqr(view->lookAt.x - old_view.lookAt.x) + sqr(view->lookAt.y - old_view.lookAt.y) +
-                            sqr(view->lookAt.z - old_view.lookAt.z));
-    float up_dist =
-        sqrtf(sqr(view->up.x - old_view.up.x) + sqr(view->up.y - old_view.up.y) + sqr(view->up.z - old_view.up.z));
-    float d_dist = sqrtf(sqr(dirx - odirx) + sqr(diry - odiry) + sqr(dirz - odirz));
+    float odirx = dirx;
+    float odiry = diry;
+    float odirz = dirz;
+    float eye_dist = 0.0f;
+    float look_dist = 0.0f;
+    float up_dist = 0.0f;
+    float d_dist = 0.0f;
 
     bool dont_interpolate = false;
 
-    if (up_dist < 0.01 && d_dist < 0.01) {
-        if (eye_dist + look_dist > 300) {
-            dont_interpolate = true;
+    if (hasOldView) {
+        float odir_dist;
+
+        odirx = old_view->eye.x - old_view->lookAt.x;
+        odiry = old_view->eye.y - old_view->lookAt.y;
+        odirz = old_view->eye.z - old_view->lookAt.z;
+        odir_dist = sqrtf(sqr(odirx) + sqr(odiry) + sqr(odirz));
+
+        if (odir_dist <= 0.0f) {
+            odir_dist = 1.0f;
         }
-    } else {
-        if (eye_dist >= 400) {
-            dont_interpolate = true;
-        }
-        if (look_dist >= 100) {
-            dont_interpolate = true;
-        }
-        if (up_dist >= 1.50f) {
-            dont_interpolate = true;
-        }
-        if (d_dist >= 1.414f && look_dist >= 15) {
-            dont_interpolate = true;
-        }
-        if (d_dist >= 1.414f && up_dist >= 0.31f && look_dist >= 1 && eye_dist >= 300) {
-            dont_interpolate = true;
-        }
-        if (d_dist >= 0.5f && up_dist >= 0.31f && look_dist >= 3 && eye_dist >= 170) {
-            dont_interpolate = true;
-        }
-        if (look_dist >= 52 && eye_dist >= 52) {
-            dont_interpolate = true;
-        }
-        if (look_dist >= 30 && eye_dist >= 90) {
-            dont_interpolate = true;
+
+        odirx /= odir_dist;
+        odiry /= odir_dist;
+        odirz /= odir_dist;
+
+        eye_dist = sqrtf(sqr(view->eye.x - old_view->eye.x) + sqr(view->eye.y - old_view->eye.y) +
+                         sqr(view->eye.z - old_view->eye.z));
+        look_dist = sqrtf(sqr(view->lookAt.x - old_view->lookAt.x) + sqr(view->lookAt.y - old_view->lookAt.y) +
+                          sqr(view->lookAt.z - old_view->lookAt.z));
+        up_dist =
+            sqrtf(sqr(view->up.x - old_view->up.x) + sqr(view->up.y - old_view->up.y) + sqr(view->up.z - old_view->up.z));
+        d_dist = sqrtf(sqr(dirx - odirx) + sqr(diry - odiry) + sqr(dirz - odirz));
+
+        if (up_dist < 0.01 && d_dist < 0.01) {
+            if (eye_dist + look_dist > 300) {
+                dont_interpolate = true;
+            }
+        } else {
+            if (eye_dist >= 400) {
+                dont_interpolate = true;
+            }
+            if (look_dist >= 100) {
+                dont_interpolate = true;
+            }
+            if (up_dist >= 1.50f) {
+                dont_interpolate = true;
+            }
+            if (d_dist >= 1.414f && look_dist >= 15) {
+                dont_interpolate = true;
+            }
+            if (d_dist >= 1.414f && up_dist >= 0.31f && look_dist >= 1 && eye_dist >= 300) {
+                dont_interpolate = true;
+            }
+            if (d_dist >= 0.5f && up_dist >= 0.31f && look_dist >= 3 && eye_dist >= 170) {
+                dont_interpolate = true;
+            }
+            if (look_dist >= 52 && eye_dist >= 52) {
+                dont_interpolate = true;
+            }
+            if (look_dist >= 30 && eye_dist >= 90) {
+                dont_interpolate = true;
+            }
         }
     }
 
-    // Ignore camera heuristics when paused as the camera moves a lot in Kaleido, allowing it to be interpolate
-    if (dont_interpolate && R_PAUSE_MENU_MODE == 0) {
+    // Ignore camera heuristics when paused as the camera moves a lot in Kaleido, allowing it to be interpolate.
+    // In split-screen, avoid forcing camera epoch resets per viewport because that can desync interpolation.
+    if (dont_interpolate && (R_PAUSE_MENU_MODE == 0) &&
+        (!View_IsLocalMultiplayerEnabled() || View_IsFullScreenViewport(&view->viewport))) {
         FrameInterpolation_DontInterpolateCamera();
     }
 
@@ -460,7 +545,8 @@ s32 func_800AAA9C(View* view) {
        view->eye.z, view->lookAt.x, view->lookAt.y, view->lookAt.z, view->up.x, view->up.y, view->up.z, eye_dist,
        look_dist, up_dist, d_dist, dont_interpolate);*/
 
-    old_view = *view;
+    viewHistory->oldView = *view;
+    viewHistory->hasView = true;
 
     if (QREG(88) & 2) {
         s32 i;

@@ -32,7 +32,7 @@ static void UpdateRupeeDash() {
         uint16_t walletSize = (CUR_UPG_VALUE(UPG_WALLET) + 1) * -1;
         Rupees_ChangeBy(walletSize);
     } else {
-        Health_ChangeBy(gPlayState, -16);
+        Health_ChangeBy(gPlayState, -16, GET_PLAYER(gPlayState));
     }
 }
 

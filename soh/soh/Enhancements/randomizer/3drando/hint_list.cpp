@@ -2237,10 +2237,9 @@ void StaticData::HintTable_Init() {
                                                         /*french*/ "J'ai entendu dire que Ganondorf aurait caché les #Flèches de Lumière# dans #[[1]]#.",
                                                                    {QM_YELLOW, QM_RED}));
 
-    hintTextTable[RHT_BOSS_KEY_HINT] = HintText(CustomMessage("The #boss key# for this door is in #[[1]]#!",
+    hintTextTable[RHT_BOSS_KEY_HINT] = HintText(CustomMessage("%c@! I can hear Rauru's guidance! He's saying the %ykey for this door%c is in %w[[1]]%c!",
                                                    /*german*/ TODO_TRANSLATE,
-                                                   /*french*/ TODO_TRANSLATE,
-                                                              {QM_GREEN, QM_RED}));
+                                                   /*french*/ TODO_TRANSLATE));
 
     hintTextTable[RHT_DAMPE_DIARY] = HintText(CustomMessage("Whoever reads this, please enter #[[1]]#. I will let you have my #stretching, shrinking keepsake#.^I'm waiting for you.&--Dampé",
                                                  /*german*/ "Wer immer dies liest, der möge #[[1]]# nach meinem #langen, kurzen Schatz# suchen.^Ich warte!&Boris",
@@ -2328,12 +2327,12 @@ void StaticData::HintTable_Init() {
                                                                         {QM_RED, QM_BLUE, QM_GREEN}));
 
     hintTextTable[RHT_MALON_HINT_OBSTICLE_COURSE] = HintText(CustomMessage("How about trying the #Obstacle Course?# If you beat my time I'll let you keep my favourite #cow# Elsie and her toy #[[1]]#!^"
-                                                                           "Challenge the #Obstacle Course?#\x1B#Let's go&No thanks#",
+                                                                           "Challenge the #Obstacle Course?#&\x1B&#Let's go&No thanks#",
                                                                 /*german*/ "Warum versuchst Du Dich nicht mit Epona an dem #Hindernisparcours#?^"
                                                                            "Gelingt es Dir den Rekord zu brechen, bekommst Du meine #Lieblingskuh# Elsie^und ihr Lieblingsspielzeug, #[[1]]#!^"
-                                                                           "Wie sieht's aus?&Möchtest Du es versuchen?\x1B#Ja!&Nein!#",
+                                                                           "Wie sieht's aus?&Möchtest Du es versuchen?\x1B&#Ja!&Nein!#",
                                                                 /*french*/ "Que dirais-tu d'essayer le #Parcours d'Obstacles#? Si tu bats mon temps, je te donnerai ma vache préférée, Elsie, et son jouet #[[1]]#!^"
-                                                                           "Tenter le #Parcours d'Obstacles#?\x1B#Allons-y&Non merci#",
+                                                                           "Tenter le #Parcours d'Obstacles#?&\x1B&#Allons-y&Non merci#",
                                                                            {QM_RED, QM_BLUE, QM_GREEN, QM_RED, QM_GREEN}));
 
     hintTextTable[RHT_MALON_HINT_TURNING_EVIL] = HintText(CustomMessage("@? Is that you? ^If I ran the ranch, I'd build an #Obstacle Course#, and whoever gets the best time would win a #cow#!^"

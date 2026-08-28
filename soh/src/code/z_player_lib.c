@@ -13,6 +13,13 @@
 
 #include <stdlib.h>
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_TUNIC_COLOR_P1_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Player1TunicColor.Value")
+#define LOCAL_MP_TUNIC_COLOR_P2_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Player2TunicColor.Value")
+#define LOCAL_MP_TUNIC_COLOR_P3_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Player3TunicColor.Value")
+#define LOCAL_MP_TUNIC_COLOR_P4_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Player4TunicColor.Value")
+
 typedef struct {
     /* 0x00 */ u8 flag;
     /* 0x02 */ u16 textId;
@@ -505,7 +512,8 @@ s32 Player_InBlockingCsMode(PlayState* play, Player* this) {
     return (this->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE)) || (this->csAction != 0) ||
            (play->transitionTrigger == TRANS_TRIGGER_START) || (this->stateFlags1 & PLAYER_STATE1_LOADING) ||
            (this->stateFlags3 & PLAYER_STATE3_FLYING_WITH_HOOKSHOT) ||
-           ((gSaveContext.magicState != MAGIC_STATE_IDLE) && (Player_ActionToMagicSpell(this, this->itemAction) >= 0));
+           ((Magic_GetStateForPlayer(this) != MAGIC_STATE_IDLE) &&
+            (Player_ActionToMagicSpell(this, this->itemAction) >= 0));
 }
 
 s32 Player_InCsMode(PlayState* play) {
@@ -676,10 +684,30 @@ void func_8008EC70(Player* this) {
 }
 
 void Player_SetEquipmentData(PlayState* play, Player* this) {
+    s32 equippedBoots;
+
     if (this->csAction != 0x56) {
         this->currentShield = SHIELD_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD));
         this->currentTunic = TUNIC_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC));
-        this->currentBoots = BOOTS_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS));
+        equippedBoots = BOOTS_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS));
+
+        if (this->equippedBoots != equippedBoots) {
+            this->equippedBoots = equippedBoots;
+            this->bootsAreActive = false;
+        }
+
+        if ((equippedBoots == PLAYER_BOOTS_IRON) || (equippedBoots == PLAYER_BOOTS_HOVER)) {
+            if (this->bootsToggleRequest) {
+                this->bootsAreActive ^= 1;
+            }
+
+            this->currentBoots = this->bootsAreActive ? equippedBoots : PLAYER_BOOTS_KOKIRI;
+        } else {
+            this->bootsAreActive = false;
+            this->currentBoots = equippedBoots;
+        }
+
+        this->bootsToggleRequest = false;
         this->currentSwordItemId = B_BTN_ITEM;
         Player_SetModelGroup(this, Player_ActionToModelGroup(this, this->heldItemAction));
         Player_SetBootData(play, this);
@@ -1031,6 +1059,57 @@ Gfx* sBootDListGroups[][2] = {
     { gLinkAdultLeftHoverBootDL, gLinkAdultRightHoverBootDL }, // PLAYER_BOOTS_HOVER
 };
 
+static bool LocalMP_UsePerPlayerTunicColors(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && (CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2) > 1);
+}
+
+static const char* LocalMP_GetPlayerTunicColorCVar(s32 controllerPort) {
+    switch (controllerPort) {
+        case 1:
+            return LOCAL_MP_TUNIC_COLOR_P1_CVAR;
+        case 2:
+            return LOCAL_MP_TUNIC_COLOR_P2_CVAR;
+        case 3:
+            return LOCAL_MP_TUNIC_COLOR_P3_CVAR;
+        case 4:
+            return LOCAL_MP_TUNIC_COLOR_P4_CVAR;
+        default:
+            return NULL;
+    }
+}
+
+static Color_RGB8 LocalMP_GetDefaultPlayerTunicColor(s32 controllerPort) {
+    Color_RGB8 color;
+
+    switch (controllerPort) {
+        case 1:
+            color.r = 30;
+            color.g = 105;
+            color.b = 27;
+            break;
+        case 2:
+            color.r = 255;
+            color.g = 0;
+            color.b = 0;
+            break;
+        case 3:
+            color.r = 0;
+            color.g = 120;
+            color.b = 255;
+            break;
+        case 4:
+            color.r = 122;
+            color.g = 57;
+            color.b = 163;
+            break;
+        default:
+            color = sTunicColors[PLAYER_TUNIC_KOKIRI];
+            break;
+    }
+
+    return color;
+}
+
 void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount, s32 lod, s32 tunic, s32 boots,
                      s32 face, OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* data) {
     Color_RGB8* color;
@@ -1075,6 +1154,20 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
     } else if (tunic == PLAYER_TUNIC_ZORA && CVarGetInteger(CVAR_COSMETIC("Link.ZoraTunic.Changed"), 0)) {
         sTemp = CVarGetColor24(CVAR_COSMETIC("Link.ZoraTunic.Value"), sTunicColors[PLAYER_TUNIC_ZORA]);
         color = &sTemp;
+    }
+
+    if ((postLimbDraw != NULL) && (data != NULL) && LocalMP_UsePerPlayerTunicColors()) {
+        Player* player = (Player*)data;
+        const char* playerColorCVar;
+
+        if ((player->controllerPort >= 1) && (player->controllerPort <= 4)) {
+            playerColorCVar = LocalMP_GetPlayerTunicColorCVar(player->controllerPort);
+
+            if (playerColorCVar != NULL) {
+                sTemp = CVarGetColor24(playerColorCVar, LocalMP_GetDefaultPlayerTunicColor(player->controllerPort));
+                color = &sTemp;
+            }
+        }
     }
 
     if (GameInteractor_Should(VB_APPLY_TUNIC_COLOR, true, data, color)) {

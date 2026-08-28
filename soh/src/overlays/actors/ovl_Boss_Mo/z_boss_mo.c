@@ -821,7 +821,7 @@ void BossMo_Tentacle(BossMo* this, PlayState* play) {
                 Interface_ChangeAlpha(0xB);
             }
             if ((this->timers[0] % 8) == 0) {
-                play->damagePlayer(play, -1);
+                play->damagePlayer(play, GET_PLAYER(play), -1);
             }
             Math_ApproachF(&this->waterLevelMod, -5.0f, 0.1f, 0.4f);
             sp1B4 = this->tentRot[15].x;

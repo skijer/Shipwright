@@ -264,8 +264,17 @@ typedef struct {
     /* 0x003F */ u8 ocarinaGameRoundNum;
     /* 0x0040 */ ItemEquips childEquips;
     /* 0x004A */ ItemEquips adultEquips;
-    /* 0x0054 */ u32 unk_54; // this may be incorrect, currently used for alignment
-    /* 0x0058 */ char unk_58[0x0E];
+    /* 0x0054 */ s16 healthCapacity4; // "max_life" for P4
+    /* 0x0056 */ s16 health4; // "now_life" for P4
+    /* 0x0058 */ s16 healthCapacity2; // "max_life" for P2
+    /* 0x005A */ s16 health2; // "now_life" for P2
+    /* 0x005C */ s8 magicLevel2; // 0 for no magic/new load, 1 for magic, 2 for double magic (P2)
+    /* 0x005D */ s8 magic2; // current magic available for use (P2)
+    /* 0x005E */ u8 isMagicAcquired2;
+    /* 0x005F */ u8 isDoubleMagicAcquired2;
+    /* 0x0060 */ s16 healthCapacity3; // "max_life" for P3
+    /* 0x0062 */ s16 health3; // "now_life" for P3
+    /* 0x0064 */ char unk_64[0x02];
     /* 0x0066 */ s16 savedSceneNum; // Upstream TODO: sceneId
     /* 0x0068 */ ItemEquips equips;
     /* 0x0074 */ Inventory inventory;

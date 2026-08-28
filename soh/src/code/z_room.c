@@ -515,6 +515,7 @@ void func_80096F6C(PlayState* play, Room* room, u32 flags) {
 void func_80096FD4(PlayState* play, Room* room) {
     room->num = -1;
     room->segment = NULL;
+    OTRRoom_ResetAreaPersistence();
 }
 
 u32 func_80096FE8(PlayState* play, RoomContext* roomCtx) {

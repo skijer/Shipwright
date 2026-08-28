@@ -5,6 +5,11 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
+#define LOCAL_MP_PLAYER_COUNT_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.PlayerCount")
+#define LOCAL_MP_DISABLED_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.Disable")
+#define LOCAL_MP_SPLITSCREEN_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreen")
+#define LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR CVAR_ENHANCEMENT("LocalMultiplayer.SplitScreenVertical")
+
 s16 Top_LM_Margin = 0;
 s16 Left_LM_Margin = 0;
 s16 Right_LM_Margin = 0;
@@ -314,7 +319,7 @@ s32 func_80078E84(PlayState* play) {
         interfaceCtx->unk_226 -= 0x10;
         if (interfaceCtx->unk_226 <= 0) {
             interfaceCtx->unk_226 = 0;
-            play->damagePlayer(play, -(gSaveContext.health + 1));
+            play->damagePlayer(play, GET_PLAYER(play), -(gSaveContext.health + 1));
             return 1;
         }
     }
@@ -336,6 +341,230 @@ static void* sHeartDDTextures[] = {
     gDefenseHeartThreeQuarterTex, gDefenseHeartThreeQuarterTex, gDefenseHeartThreeQuarterTex,
     gDefenseHeartThreeQuarterTex,
 };
+
+static s16 HealthMeter_GetLocalMultiplayerPlayerCount(void) {
+    s16 playerCount;
+
+    if (CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0)) {
+        return 1;
+    }
+
+    playerCount = CVarGetInteger(LOCAL_MP_PLAYER_COUNT_CVAR, 2);
+    if (playerCount < 1) {
+        playerCount = 1;
+    } else if (playerCount > 4) {
+        playerCount = 4;
+    }
+
+    return playerCount;
+}
+
+static s32 HealthMeter_IsSplitScreenEnabled(void) {
+    return !CVarGetInteger(LOCAL_MP_DISABLED_CVAR, 0) && CVarGetInteger(LOCAL_MP_SPLITSCREEN_CVAR, 1);
+}
+
+static void HealthMeter_GetSplitViewportTopLeft(s16 playerCount, s16 playerIndex, s16* leftX, s16* topY) {
+    s16 halfWidth = SCREEN_WIDTH / 2;
+    s16 halfHeight = SCREEN_HEIGHT / 2;
+
+    *leftX = 0;
+    *topY = 0;
+
+    if (playerCount <= 1) {
+        return;
+    }
+
+    if (playerCount == 2) {
+        if (CVarGetInteger(LOCAL_MP_SPLITSCREEN_VERTICAL_CVAR, 1)) {
+            *leftX = (playerIndex == 0) ? 0 : halfWidth;
+        } else {
+            *topY = (playerIndex == 0) ? 0 : halfHeight;
+        }
+        return;
+    }
+
+    if (playerCount == 3) {
+        if (playerIndex == 0) {
+            return;
+        }
+
+        *topY = halfHeight;
+        *leftX = (playerIndex == 1) ? 0 : halfWidth;
+        return;
+    }
+
+    *topY = (playerIndex < 2) ? 0 : halfHeight;
+    *leftX = ((playerIndex % 2) == 0) ? 0 : halfWidth;
+}
+
+static void HealthMeter_GetHealthFieldsForPort(u8 controllerPort, s16** health, s16** healthCapacity) {
+    *health = &gSaveContext.health;
+    *healthCapacity = &gSaveContext.healthCapacity;
+
+    if (controllerPort == 4) {
+        *health = &gSaveContext.health4;
+        *healthCapacity = &gSaveContext.healthCapacity4;
+    } else if (controllerPort == 3) {
+        *health = &gSaveContext.health3;
+        *healthCapacity = &gSaveContext.healthCapacity3;
+    } else if (controllerPort == 2) {
+        *health = &gSaveContext.health2;
+        *healthCapacity = &gSaveContext.healthCapacity2;
+    }
+
+    if ((controllerPort >= 2) && (**healthCapacity < STARTING_HEALTH)) {
+        **healthCapacity = gSaveContext.healthCapacity;
+        if (**healthCapacity < STARTING_HEALTH) {
+            **healthCapacity = STARTING_HEALTH;
+        }
+
+        if (**health <= 0) {
+            **health = **healthCapacity;
+        }
+    }
+}
+
+static void HealthMeter_GetHealthFieldsForPlayer(Player* player, s16** health, s16** healthCapacity) {
+    u8 controllerPort = 1;
+
+    if ((player != NULL) && player->isSecondPlayer && (player->controllerPort >= 2) && (player->controllerPort <= 4)) {
+        controllerPort = player->controllerPort;
+    }
+
+    HealthMeter_GetHealthFieldsForPort(controllerPort, health, healthCapacity);
+}
+
+static void Health_DrawAdditionalMeter(PlayState* play, s16 health, s16 healthCapacity, f32 startX, f32 anchorY,
+                                       s32 growRight, s32 alignBottom) {
+    void* heartBgImg;
+    u32 curColorSet;
+    f32 offsetX;
+    f32 offsetY;
+    s32 heartIndex;
+    f32 heartCenterX;
+    f32 heartCenterY;
+    f32 heartScale;
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+    GraphicsContext* gfxCtx = play->state.gfxCtx;
+    Vtx* beatingHeartVtx = interfaceCtx->beatingHeartVtx;
+    s32 curHeartFraction = health % FULL_HEART_HEALTH;
+    s16 totalHeartCount = healthCapacity / FULL_HEART_HEALTH;
+    s16 fullHeartCount = health / FULL_HEART_HEALTH;
+    s16 totalRows = (totalHeartCount + 9) / 10;
+    f32 heartsScale = 0.68f;
+    f32 beatingHeartPulsingSize = interfaceCtx->unk_22A * 0.1f;
+    s32 curCombineModeSet = 0;
+    u8* curBgImgLoaded = NULL;
+
+    if (CVarGetInteger(CVAR_COSMETIC("HUD.HeartsCount.PosType"), 0) != ORIGINAL_LOCATION) {
+        heartsScale = CVarGetFloat(CVAR_COSMETIC("HUD.HeartsCount.Scale"), 0.7f);
+    }
+
+    if (totalHeartCount <= 0) {
+        return;
+    }
+
+    OPEN_DISPS(gfxCtx);
+
+    if (!(health % FULL_HEART_HEALTH)) {
+        fullHeartCount--;
+    }
+
+    if (!alignBottom) {
+        anchorY += 8.0f * heartsScale;
+    }
+
+    curColorSet = -1;
+    for (heartIndex = 0; heartIndex < totalHeartCount; heartIndex++) {
+        s32 row = heartIndex / 10;
+        s32 col = heartIndex % 10;
+
+        if (heartIndex < fullHeartCount) {
+            if (curColorSet != 0) {
+                curColorSet = 0;
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, interfaceCtx->heartsPrimR[0], interfaceCtx->heartsPrimG[0],
+                                interfaceCtx->heartsPrimB[0], interfaceCtx->healthAlpha);
+                gDPSetEnvColor(OVERLAY_DISP++, interfaceCtx->heartsEnvR[0], interfaceCtx->heartsEnvG[0],
+                               interfaceCtx->heartsEnvB[0], 255);
+            }
+        } else if (heartIndex == fullHeartCount) {
+            if (curColorSet != 1) {
+                curColorSet = 1;
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, interfaceCtx->beatingHeartPrim[0],
+                                interfaceCtx->beatingHeartPrim[1], interfaceCtx->beatingHeartPrim[2],
+                                interfaceCtx->healthAlpha);
+                gDPSetEnvColor(OVERLAY_DISP++, interfaceCtx->beatingHeartEnv[0], interfaceCtx->beatingHeartEnv[1],
+                               interfaceCtx->beatingHeartEnv[2], 255);
+            }
+        } else {
+            if (curColorSet != 2) {
+                curColorSet = 2;
+                gDPPipeSync(OVERLAY_DISP++);
+                gDPSetPrimColor(OVERLAY_DISP++, 0, 0, interfaceCtx->heartsPrimR[0], interfaceCtx->heartsPrimG[0],
+                                interfaceCtx->heartsPrimB[0], interfaceCtx->healthAlpha);
+                gDPSetEnvColor(OVERLAY_DISP++, interfaceCtx->heartsEnvR[0], interfaceCtx->heartsEnvG[0],
+                               interfaceCtx->heartsEnvB[0], 255);
+            }
+        }
+
+        if (heartIndex < fullHeartCount) {
+            heartBgImg = gHeartFullTex;
+        } else if (heartIndex == fullHeartCount) {
+            heartBgImg = sHeartTextures[curHeartFraction];
+        } else {
+            heartBgImg = gHeartEmptyTex;
+        }
+
+        if (curBgImgLoaded != heartBgImg) {
+            curBgImgLoaded = heartBgImg;
+            gDPLoadTextureBlock(OVERLAY_DISP++, heartBgImg, G_IM_FMT_IA, G_IM_SIZ_8b, 16, 16, 0,
+                                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                                G_TX_NOLOD, G_TX_NOLOD);
+        }
+
+        offsetX = growRight ? (10.0f * col) : (-10.0f * col);
+        offsetY = alignBottom ? (-10.0f * (totalRows - row - 1)) : (10.0f * row);
+        heartCenterY = anchorY + offsetY;
+        heartCenterX = startX + offsetX;
+
+        if (heartIndex != fullHeartCount) {
+            if (curCombineModeSet != 1) {
+                curCombineModeSet = 1;
+                Gfx_SetupDL_39Overlay(gfxCtx);
+                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE,
+                                  0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+            }
+            heartScale = heartsScale;
+        } else {
+            if (curCombineModeSet != 2) {
+                curCombineModeSet = 2;
+                Gfx_SetupDL_42Overlay(gfxCtx);
+                gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE,
+                                  0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+            }
+
+            if (CVarGetInteger(CVAR_ENHANCEMENT("NoHUDHeartAnimation"), 0)) {
+                heartScale = heartsScale;
+            } else {
+                heartScale = heartsScale + (heartsScale / 3) - ((heartsScale / 3) * beatingHeartPulsingSize);
+            }
+        }
+
+        {
+            Mtx* matrix = Graph_Alloc(gfxCtx, sizeof(Mtx));
+
+            Matrix_SetTranslateScaleMtx2(matrix, heartScale, heartScale, heartScale, -130.0f + heartCenterX,
+                                         115.0f - heartCenterY, 0.0f);
+            gSPMatrix(OVERLAY_DISP++, matrix, G_MTX_MODELVIEW | G_MTX_LOAD);
+            gSPVertex(OVERLAY_DISP++, beatingHeartVtx, 4, 0);
+            gSP1Quadrangle(OVERLAY_DISP++, 0, 2, 3, 1, 0);
+        }
+    }
+
+    CLOSE_DISPS(gfxCtx);
+}
 
 s16 getHealthMeterXOffset() {
     s16 X_Margins;
@@ -640,6 +869,68 @@ void HealthMeter_Draw(PlayState* play) {
         FrameInterpolation_RecordCloseChild();
     }
 
+    {
+        s16 playerCount = HealthMeter_GetLocalMultiplayerPlayerCount();
+        s16* secondaryHealth;
+        s16* secondaryHealthCapacity;
+        f32 heartsScale = 0.68f;
+        f32 p1TopAnchorY;
+        f32 p1TopCenterY;
+        f32 p1StartX;
+        f32 mirroredStartX;
+        f32 bottomAnchorY;
+        f32 splitViewportScaleX;
+        s32 splitScreenEnabled = HealthMeter_IsSplitScreenEnabled() && (playerCount > 1);
+
+        if (CVarGetInteger(CVAR_COSMETIC("HUD.HeartsCount.PosType"), 0) != ORIGINAL_LOCATION) {
+            heartsScale = CVarGetFloat(CVAR_COSMETIC("HUD.HeartsCount.Scale"), 0.7f);
+        }
+
+        // Keep secondary heart rows mirrored against player 1's heart baseline and scale.
+        p1TopAnchorY = getHealthMeterYOffset() + 21.0f - (8.0f * heartsScale);
+        p1TopCenterY = p1TopAnchorY + (8.0f * heartsScale);
+        p1StartX = getHealthMeterXOffset();
+        // Health meters are translated by (-130 + startX), so mirror in this space uses SCREEN_WIDTH - 60 - x.
+        mirroredStartX = SCREEN_WIDTH - 60.0f - p1StartX;
+        bottomAnchorY = SCREEN_HEIGHT - p1TopCenterY;
+        splitViewportScaleX =
+            (OTRGetDimensionFromRightEdge(SCREEN_WIDTH) - OTRGetDimensionFromLeftEdge(0.0f)) / SCREEN_WIDTH;
+
+        if (splitScreenEnabled) {
+            s16 playerIndex;
+
+            for (playerIndex = 1; playerIndex < playerCount; playerIndex++) {
+                s16 viewportLeftX;
+                s16 viewportTopY;
+                f32 viewportLeftHudSpace;
+
+                HealthMeter_GetSplitViewportTopLeft(playerCount, playerIndex, &viewportLeftX, &viewportTopY);
+                viewportLeftHudSpace = viewportLeftX * splitViewportScaleX;
+                HealthMeter_GetHealthFieldsForPort(playerIndex + 1, &secondaryHealth, &secondaryHealthCapacity);
+                Health_DrawAdditionalMeter(play, *secondaryHealth, *secondaryHealthCapacity,
+                                           p1StartX + viewportLeftHudSpace, p1TopAnchorY + viewportTopY, true, false);
+            }
+        } else {
+            if (playerCount >= 2) {
+                HealthMeter_GetHealthFieldsForPort(2, &secondaryHealth, &secondaryHealthCapacity);
+                Health_DrawAdditionalMeter(play, *secondaryHealth, *secondaryHealthCapacity, mirroredStartX,
+                                           p1TopAnchorY, false, false);
+            }
+
+            if (playerCount >= 3) {
+                HealthMeter_GetHealthFieldsForPort(3, &secondaryHealth, &secondaryHealthCapacity);
+                Health_DrawAdditionalMeter(play, *secondaryHealth, *secondaryHealthCapacity, p1StartX, bottomAnchorY,
+                                           true, true);
+            }
+
+            if (playerCount >= 4) {
+                HealthMeter_GetHealthFieldsForPort(4, &secondaryHealth, &secondaryHealthCapacity);
+                Health_DrawAdditionalMeter(play, *secondaryHealth, *secondaryHealthCapacity, mirroredStartX,
+                                           bottomAnchorY, false, true);
+            }
+        }
+    }
+
     CLOSE_DISPS(gfxCtx);
 }
 
@@ -652,7 +943,8 @@ void HealthMeter_HandleCriticalAlarm(PlayState* play) {
             interfaceCtx->unk_22A = 0;
             interfaceCtx->unk_22C = 0;
             if (CVarGetInteger(CVAR_AUDIO("LowHpAlarm"), 0) == 0 && !Player_InCsMode(play) &&
-                (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) && HealthMeter_IsCritical() &&
+                (play->pauseCtx.state == 0) && (play->pauseCtx.debugState == 0) &&
+                HealthMeter_IsCritical(GET_PLAYER(play)) &&
                 !Play_InCsMode(play)) {
                 Sfx_PlaySfxCentered(NA_SE_SY_HITPOINT_ALARM);
             }
@@ -666,20 +958,24 @@ void HealthMeter_HandleCriticalAlarm(PlayState* play) {
     }
 }
 
-u32 HealthMeter_IsCritical(void) {
+u32 HealthMeter_IsCritical(Player* player) {
+    s16* health;
+    s16* healthCapacity;
     s32 var;
 
-    if (gSaveContext.healthCapacity <= 0x50) {
+    HealthMeter_GetHealthFieldsForPlayer(player, &health, &healthCapacity);
+
+    if (*healthCapacity <= 0x50) {
         var = 0x10;
-    } else if (gSaveContext.healthCapacity <= 0xA0) {
+    } else if (*healthCapacity <= 0xA0) {
         var = 0x18;
-    } else if (gSaveContext.healthCapacity <= 0xF0) {
+    } else if (*healthCapacity <= 0xF0) {
         var = 0x20;
     } else {
         var = 0x2C;
     }
 
-    if (GameInteractor_Should(VB_HEALTH_METER_BE_CRITICAL, var >= gSaveContext.health && gSaveContext.health > 0)) {
+    if (GameInteractor_Should(VB_HEALTH_METER_BE_CRITICAL, var >= *health && *health > 0)) {
         return true;
     } else {
         return false;

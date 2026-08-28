@@ -59,6 +59,37 @@ static InitChainEntry sInitChain[] = {
     ICHAIN_F32(minVelocityY, -150, ICHAIN_STOP),
 };
 
+static Player* EnArrow_FindPlayerByPort(PlayState* play, u8 controllerPort) {
+    Actor* actor;
+
+    if (controllerPort == 1) {
+        return GET_PLAYER(play);
+    }
+
+    actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    while (actor != NULL) {
+        if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+            Player* candidate = (Player*)actor;
+
+            if (candidate->isSecondPlayer && (candidate->controllerPort == controllerPort)) {
+                return candidate;
+            }
+        }
+
+        actor = actor->next;
+    }
+
+    return GET_PLAYER(play);
+}
+
+static Player* EnArrow_GetShooter(PlayState* play, EnArrow* this) {
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        return (Player*)this->actor.parent;
+    }
+
+    return EnArrow_FindPlayerByPort(play, this->actor.home.rot.z);
+}
+
 void EnArrow_SetupAction(EnArrow* this, EnArrowActionFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
@@ -207,7 +238,13 @@ void EnArrow_Destroy(Actor* thisx, PlayState* play) {
 }
 
 void EnArrow_Shoot(EnArrow* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
+    if ((this->actor.parent != NULL) && (this->actor.parent->id == ACTOR_PLAYER) && (this->actor.parent->update != NULL)) {
+        Player* shooter = (Player*)this->actor.parent;
+
+        this->actor.home.rot.z = shooter->isSecondPlayer ? shooter->controllerPort : 1;
+    }
+
+    Player* player = EnArrow_GetShooter(play, this);
 
     if (this->actor.parent == NULL) {
         if ((this->actor.params != ARROW_NUT) && (player->unk_A73 == 0)) {
@@ -442,7 +479,7 @@ void func_809B4640(EnArrow* this, PlayState* play) {
 void EnArrow_Update(Actor* thisx, PlayState* play) {
     s32 pad;
     EnArrow* this = (EnArrow*)thisx;
-    Player* player = GET_PLAYER(play);
+    Player* player = EnArrow_GetShooter(play, this);
 
     if (this->isCsNut || ((this->actor.params >= ARROW_NORMAL_LIT) && (player->unk_A73 != 0)) ||
         !Player_InBlockingCsMode(play, player)) {

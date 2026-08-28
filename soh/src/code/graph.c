@@ -104,7 +104,7 @@ void Graph_UCodeFaultClient(Gfx* workBuf) {
 }
 
 void Graph_InitTHGA(GraphicsContext* gfxCtx) {
-    GfxPool* pool = &gGfxPools[gfxCtx->gfxPoolIdx & 1];
+    GfxPool* pool = &gGfxPools[gfxCtx->gfxPoolIdx % ARRAY_COUNT(gGfxPools)];
 
     pool->headMagic = GFXPOOL_HEAD_MAGIC;
     pool->tailMagic = GFXPOOL_TAIL_MAGIC;
@@ -346,7 +346,7 @@ void Graph_Update(GraphicsContext* gfxCtx, GameState* gameState) {
     problem = false;
 
     {
-        GfxPool* pool = &gGfxPools[gfxCtx->gfxPoolIdx & 1];
+        GfxPool* pool = &gGfxPools[gfxCtx->gfxPoolIdx % ARRAY_COUNT(gGfxPools)];
 
         if (pool->headMagic != GFXPOOL_HEAD_MAGIC) {
             //! @bug (?) : "problem = true;" may be missing

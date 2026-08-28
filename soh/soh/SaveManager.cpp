@@ -29,6 +29,54 @@
 extern "C" SaveContext gSaveContext;
 using namespace std::string_literals;
 
+static void SaveContext_ResetSecondaryPlayerStats(SaveContext& saveContext) {
+    saveContext.healthCapacity4 = 0;
+    saveContext.health4 = 0;
+    saveContext.healthCapacity2 = 0;
+    saveContext.health2 = 0;
+    saveContext.magicLevel2 = 0;
+    saveContext.magic2 = MAGIC_NORMAL_METER;
+    saveContext.isMagicAcquired2 = 0;
+    saveContext.isDoubleMagicAcquired2 = 0;
+    saveContext.healthCapacity3 = 0;
+    saveContext.health3 = 0;
+}
+
+static void SaveContext_LoadSecondaryPlayerSaveData() {
+    SaveManager::Instance->LoadData("healthCapacity4", gSaveContext.healthCapacity4, static_cast<s16>(0));
+    SaveManager::Instance->LoadData("health4", gSaveContext.health4, static_cast<s16>(0));
+    SaveManager::Instance->LoadData("healthCapacity2", gSaveContext.healthCapacity2, static_cast<s16>(0));
+    SaveManager::Instance->LoadData("health2", gSaveContext.health2, static_cast<s16>(0));
+    SaveManager::Instance->LoadData("magicLevel2", gSaveContext.magicLevel2, static_cast<s8>(0));
+    SaveManager::Instance->LoadData("magic2", gSaveContext.magic2, static_cast<s8>(MAGIC_NORMAL_METER));
+    SaveManager::Instance->LoadData("isMagicAcquired2", gSaveContext.isMagicAcquired2, static_cast<u8>(0));
+    SaveManager::Instance->LoadData("isDoubleMagicAcquired2", gSaveContext.isDoubleMagicAcquired2,
+                                    static_cast<u8>(0));
+    SaveManager::Instance->LoadData("healthCapacity3", gSaveContext.healthCapacity3, static_cast<s16>(0));
+    SaveManager::Instance->LoadData("health3", gSaveContext.health3, static_cast<s16>(0));
+
+    // Legacy versions stored a single u32 at this offset.
+    u32 legacyUnk54 = 0;
+    SaveManager::Instance->LoadData("unk_54", legacyUnk54, static_cast<u32>(0));
+}
+
+static void SaveContext_SaveSecondaryPlayerSaveData(const SaveContext* saveContext) {
+    SaveManager::Instance->SaveData("healthCapacity4", saveContext->healthCapacity4);
+    SaveManager::Instance->SaveData("health4", saveContext->health4);
+    SaveManager::Instance->SaveData("healthCapacity2", saveContext->healthCapacity2);
+    SaveManager::Instance->SaveData("health2", saveContext->health2);
+    SaveManager::Instance->SaveData("magicLevel2", saveContext->magicLevel2);
+    SaveManager::Instance->SaveData("magic2", saveContext->magic2);
+    SaveManager::Instance->SaveData("isMagicAcquired2", saveContext->isMagicAcquired2);
+    SaveManager::Instance->SaveData("isDoubleMagicAcquired2", saveContext->isDoubleMagicAcquired2);
+    SaveManager::Instance->SaveData("healthCapacity3", saveContext->healthCapacity3);
+    SaveManager::Instance->SaveData("health3", saveContext->health3);
+
+    // Keep writing the legacy key so older saves remain readable by intermediate builds.
+    const u32 legacyUnk54 = 0;
+    SaveManager::Instance->SaveData("unk_54", legacyUnk54);
+}
+
 void SaveManager::WriteSaveFile(const std::filesystem::path& savePath, const uintptr_t addr, void* dramAddr,
                                 const size_t size) {
     std::ofstream saveFile = std::ofstream(savePath, std::fstream::in | std::fstream::out | std::fstream::binary);
@@ -693,7 +741,7 @@ void SaveManager::InitFileNormal() {
         gSaveContext.adultEquips.cButtonSlots[button] = SLOT_NONE;
     }
     gSaveContext.adultEquips.equipment = 0;
-    gSaveContext.unk_54 = 0;
+    SaveContext_ResetSecondaryPlayerStats(gSaveContext);
     gSaveContext.savedSceneNum = SCENE_LINKS_HOUSE;
 
     // Equipment
@@ -868,7 +916,7 @@ void SaveManager::InitFileDebug() {
         gSaveContext.adultEquips.cButtonSlots[button] = SLOT_NONE;
     }
     gSaveContext.adultEquips.equipment = 0;
-    gSaveContext.unk_54 = 0;
+    SaveContext_ResetSecondaryPlayerStats(gSaveContext);
     gSaveContext.savedSceneNum = 0x51;
 
     // Equipment
@@ -988,7 +1036,7 @@ void SaveManager::InitFileMaxed() {
         gSaveContext.adultEquips.cButtonSlots[button] = SLOT_NONE;
     }
     gSaveContext.adultEquips.equipment = 0;
-    gSaveContext.unk_54 = 0;
+    SaveContext_ResetSecondaryPlayerStats(gSaveContext);
     gSaveContext.savedSceneNum = 0x51;
 
     // Equipment
@@ -1456,7 +1504,7 @@ void SaveManager::LoadBaseVersion1() {
             });
         SaveManager::Instance->LoadData("equipment", gSaveContext.adultEquips.equipment);
     });
-    SaveManager::Instance->LoadData("unk_54", gSaveContext.unk_54);
+    SaveContext_LoadSecondaryPlayerSaveData();
     SaveManager::Instance->LoadData("savedSceneNum", gSaveContext.savedSceneNum);
     SaveManager::Instance->LoadStruct("equips", []() {
         SaveManager::Instance->LoadArray("buttonItems", ARRAY_COUNT(gSaveContext.equips.buttonItems), [](size_t i) {
@@ -1595,7 +1643,7 @@ void SaveManager::LoadBaseVersion2() {
             });
         SaveManager::Instance->LoadData("equipment", gSaveContext.adultEquips.equipment);
     });
-    SaveManager::Instance->LoadData("unk_54", gSaveContext.unk_54);
+    SaveContext_LoadSecondaryPlayerSaveData();
     SaveManager::Instance->LoadData("savedSceneNum", gSaveContext.savedSceneNum);
     SaveManager::Instance->LoadStruct("equips", []() {
         SaveManager::Instance->LoadArray("buttonItems", ARRAY_COUNT(gSaveContext.equips.buttonItems), [](size_t i) {
@@ -1807,7 +1855,7 @@ void SaveManager::LoadBaseVersion3() {
             });
         SaveManager::Instance->LoadData("equipment", gSaveContext.adultEquips.equipment);
     });
-    SaveManager::Instance->LoadData("unk_54", gSaveContext.unk_54);
+    SaveContext_LoadSecondaryPlayerSaveData();
     SaveManager::Instance->LoadData("savedSceneNum", gSaveContext.savedSceneNum);
     SaveManager::Instance->LoadStruct("equips", []() {
         SaveManager::Instance->LoadArray("buttonItems", ARRAY_COUNT(gSaveContext.equips.buttonItems), [](size_t i) {
@@ -2023,7 +2071,7 @@ void SaveManager::LoadBaseVersion4() {
             });
         SaveManager::Instance->LoadData("equipment", gSaveContext.adultEquips.equipment);
     });
-    SaveManager::Instance->LoadData("unk_54", gSaveContext.unk_54);
+    SaveContext_LoadSecondaryPlayerSaveData();
     SaveManager::Instance->LoadData("savedSceneNum", gSaveContext.savedSceneNum);
     SaveManager::Instance->LoadStruct("equips", []() {
         SaveManager::Instance->LoadArray("buttonItems", ARRAY_COUNT(gSaveContext.equips.buttonItems), [](size_t i) {
@@ -2193,7 +2241,7 @@ void SaveManager::SaveBase(SaveContext* saveContext, int sectionID, bool fullSav
             [&](size_t i) { SaveManager::Instance->SaveData("", saveContext->adultEquips.cButtonSlots[i]); });
         SaveManager::Instance->SaveData("equipment", saveContext->adultEquips.equipment);
     });
-    SaveManager::Instance->SaveData("unk_54", saveContext->unk_54);
+    SaveContext_SaveSecondaryPlayerSaveData(saveContext);
     SaveManager::Instance->SaveData("savedSceneNum", saveContext->savedSceneNum);
     SaveManager::Instance->SaveStruct("equips", [&]() {
         SaveManager::Instance->SaveArray("buttonItems", ARRAY_COUNT(saveContext->equips.buttonItems), [&](size_t i) {
@@ -2669,7 +2717,7 @@ void CopyV0Save(SaveContext_v0& src, SaveContext& dst) {
         dst.adultEquips.cButtonSlots[i] = src.adultEquips.cButtonSlots[i];
     }
     dst.adultEquips.equipment = src.adultEquips.equipment;
-    dst.unk_54 = src.unk_54;
+    SaveContext_ResetSecondaryPlayerStats(dst);
     dst.savedSceneNum = src.savedSceneNum;
     for (size_t i = 0; i < ARRAY_COUNT(src.equips.buttonItems); i++) {
         dst.equips.buttonItems[i] = src.equips.buttonItems[i];

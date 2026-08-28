@@ -371,18 +371,39 @@ void EnIshi_Wait(EnIshi* this, PlayState* play) {
         sFragmentSpawnFuncs[type](this, play);
         sDustSpawnFuncs[type](this, play);
         Actor_Kill(&this->actor);
-    } else if (this->actor.xzDistToPlayer < 600.0f) {
-        Collider_UpdateCylinder(&this->actor, &this->collider);
-        this->collider.base.acFlags &= ~AC_HIT;
-        CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
-        if (this->actor.xzDistToPlayer < 400.0f) {
-            CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
-            if (this->actor.xzDistToPlayer < 90.0f) {
-                // GI_NONE in these cases allows the player to lift the actor
-                if (type == ROCK_LARGE) {
-                    Actor_OfferGetItem(&this->actor, play, GI_NONE, 80.0f, 20.0f);
-                } else {
-                    Actor_OfferGetItem(&this->actor, play, GI_NONE, 50.0f, 10.0f);
+    } else {
+        Actor* playerActor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+        f32 minDistSq = 1.0e20f;
+        s32 sanity = 0;
+
+        while ((playerActor != NULL) && (sanity < 2000)) {
+            if ((playerActor->id == ACTOR_PLAYER) && (playerActor->update != NULL)) {
+                f32 dx = this->actor.world.pos.x - playerActor->world.pos.x;
+                f32 dz = this->actor.world.pos.z - playerActor->world.pos.z;
+                f32 distSq = SQ(dx) + SQ(dz);
+
+                if (distSq < minDistSq) {
+                    minDistSq = distSq;
+                }
+            }
+
+            playerActor = playerActor->next;
+            sanity++;
+        }
+
+        if (minDistSq < SQ(600.0f)) {
+            Collider_UpdateCylinder(&this->actor, &this->collider);
+            this->collider.base.acFlags &= ~AC_HIT;
+            CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
+            if (minDistSq < SQ(400.0f)) {
+                CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
+                if (minDistSq < SQ(90.0f)) {
+                    // GI_NONE in these cases allows the player to lift the actor
+                    if (type == ROCK_LARGE) {
+                        Actor_OfferGetItem(&this->actor, play, GI_NONE, 80.0f, 20.0f);
+                    } else {
+                        Actor_OfferGetItem(&this->actor, play, GI_NONE, 50.0f, 10.0f);
+                    }
                 }
             }
         }

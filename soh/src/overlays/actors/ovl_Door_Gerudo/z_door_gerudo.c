@@ -16,7 +16,7 @@ void DoorGerudo_Update(Actor* thisx, PlayState* play);
 void DoorGerudo_Draw(Actor* thisx, PlayState* play);
 
 void func_8099485C(DoorGerudo* this, PlayState* play);
-s32 func_80994750(DoorGerudo* this, PlayState* play);
+s32 func_80994750(DoorGerudo* this, PlayState* play, Player** outPlayer);
 void func_8099496C(DoorGerudo* this, PlayState* play);
 void func_809949C8(DoorGerudo* this, PlayState* play);
 
@@ -61,8 +61,7 @@ void DoorGerudo_Destroy(Actor* thisx, PlayState* play) {
     DynaPoly_DeleteBgActor(play, &play->colCtx.dyna, this->dyna.bgId);
 }
 
-f32 func_809946BC(PlayState* play, DoorGerudo* this, f32 arg2, f32 arg3, f32 arg4) {
-    Player* player = GET_PLAYER(play);
+f32 func_809946BC(DoorGerudo* this, Player* player, f32 arg2, f32 arg3, f32 arg4) {
     Vec3f playerPos;
     Vec3f sp1C;
 
@@ -78,24 +77,44 @@ f32 func_809946BC(PlayState* play, DoorGerudo* this, f32 arg2, f32 arg3, f32 arg
     }
 }
 
-s32 func_80994750(DoorGerudo* this, PlayState* play) {
-    Player* player = GET_PLAYER(play);
-    f32 temp_f0;
-    s16 rotYDiff;
+s32 func_80994750(DoorGerudo* this, PlayState* play, Player** outPlayer) {
+    Actor* actor = play->actorCtx.actorLists[ACTORCAT_PLAYER].head;
+    f32 bestAbsRelZ = 1000000000.0f;
+    s32 bestDirection = 0;
+    s32 sanity = 0;
+
+    *outPlayer = NULL;
 
     if (!Player_InCsMode(play)) {
-        temp_f0 = func_809946BC(play, this, 0.0f, 20.0f, 15.0f);
-        if (fabsf(temp_f0) < 40.0f) {
-            rotYDiff = player->actor.shape.rot.y - this->dyna.actor.shape.rot.y;
-            if (temp_f0 > 0.0f) {
-                rotYDiff = 0x8000 - rotYDiff;
+        while ((actor != NULL) && (sanity < 2000)) {
+            if ((actor->id == ACTOR_PLAYER) && (actor->update != NULL)) {
+                Player* player = (Player*)actor;
+                f32 relZ = func_809946BC(this, player, 0.0f, 20.0f, 15.0f);
+
+                if (fabsf(relZ) < 40.0f) {
+                    s16 rotYDiff = player->actor.shape.rot.y - this->dyna.actor.shape.rot.y;
+
+                    if (relZ > 0.0f) {
+                        rotYDiff = 0x8000 - rotYDiff;
+                    }
+                    if (ABS(rotYDiff) < 0x2000) {
+                        f32 absRelZ = fabsf(relZ);
+
+                        if (absRelZ < bestAbsRelZ) {
+                            bestAbsRelZ = absRelZ;
+                            bestDirection = (relZ >= 0.0f) ? 1 : -1;
+                            *outPlayer = player;
+                        }
+                    }
+                }
             }
-            if (ABS(rotYDiff) < 0x2000) {
-                return (temp_f0 >= 0.0f) ? 1.0f : -1.0f;
-            }
+
+            actor = actor->next;
+            sanity++;
         }
     }
-    return 0;
+
+    return bestDirection;
 }
 
 void func_8099485C(DoorGerudo* this, PlayState* play) {
@@ -106,10 +125,10 @@ void func_8099485C(DoorGerudo* this, PlayState* play) {
         Audio_PlayActorSound2(&this->dyna.actor, NA_SE_EV_CHAIN_KEY_UNLOCK);
         GameInteractor_ExecuteOnDungeonKeyUsedHooks(gSaveContext.mapIndex);
     } else {
-        s32 direction = func_80994750(this, play);
+        Player* player = NULL;
+        s32 direction = func_80994750(this, play, &player);
 
-        if (direction != 0) {
-            Player* player = GET_PLAYER(play);
+        if ((direction != 0) && (player != NULL)) {
 
             if (gSaveContext.inventory.dungeonKeys[gSaveContext.mapIndex] <= 0) {
                 player->naviTextId = -0x203;
