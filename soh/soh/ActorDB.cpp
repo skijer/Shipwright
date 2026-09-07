@@ -482,7 +482,7 @@ ActorDB::Entry& ActorDB::AddEntry(const std::string& name, const std::string& de
         db.resize(index + 1);
     }
     Entry& newEntry = db.at(index);
-    newEntry.entry.id = index;
+    newEntry.entry.id = static_cast<s32>(index);
 
     assert(!newEntry.entry.valid);
 
@@ -552,7 +552,7 @@ int ActorDB::RetrieveId(const std::string& name) {
 }
 
 int ActorDB::GetEntryCount() {
-    return db.size();
+    return static_cast<int>(db.size());
 }
 
 ActorDB::Entry::Entry() {
@@ -612,8 +612,14 @@ static ActorDBInit EnPartnerInit = {
 };
 extern "C" s16 gEnPartnerId;
 
+// SW97 actor registration and hooks (defined in sw97_init.cpp)
+extern void Sw97_RegisterActors();
+extern void Sw97_RegisterHooks();
+
 void ActorDB::AddBuiltInCustomActors() {
     gEnPartnerId = ActorDB::Instance->AddEntry(EnPartnerInit).entry.id;
+    Sw97_RegisterActors();
+    Sw97_RegisterHooks();
 }
 
 extern "C" ActorDBEntry* ActorDB_Retrieve(const int id) {

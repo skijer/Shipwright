@@ -7,6 +7,7 @@
 #include "z_bg_jya_haheniron.h"
 #include "overlays/effects/ovl_Effect_Ss_Kakera/z_eff_ss_kakera.h"
 #include "objects/object_jya_iron/object_jya_iron.h"
+#include "mods/items/logic/weapon_upgrades.h" // Skijer's NEI: Iron Knuckle's Axe prop-smash
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -197,6 +198,13 @@ void BgJyaHaheniron_RubbleCollide(BgJyaHaheniron* this, PlayState* play) {
 void BgJyaHaheniron_Update(Actor* thisx, PlayState* play) {
     s32 pad;
     BgJyaHaheniron* this = (BgJyaHaheniron*)thisx;
+
+    // NEI: the Iron Knuckle's Axe shatters the iron chair chunk (params 0) in one hit.
+    if (this->actor.params == 0 && WeaponUpgrade_IKAxeStrike(&this->actor, play, 1, 60.0f)) {
+        BgJyaHaheniron_SpawnFragments(play, &this->actor.world.pos, D_808987A0);
+        Actor_Kill(&this->actor);
+        return;
+    }
 
     this->timer++;
     this->actionFunc(this, play);

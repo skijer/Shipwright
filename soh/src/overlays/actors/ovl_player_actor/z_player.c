@@ -11,6 +11,7 @@
 #include "overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
+#include "overlays/actors/ovl_En_M_Thunder/z_en_m_thunder.h"
 #include "overlays/actors/ovl_En_Box/z_en_box.h"
 #include "overlays/actors/ovl_En_Door/z_en_door.h"
 #include "overlays/actors/ovl_En_Elf/z_en_elf.h"
@@ -23,19 +24,64 @@
 #include <soh/Enhancements/custom-message/CustomMessageTypes.h>
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
-#include <overlays/actors/ovl_En_Partner/z_en_partner.h>
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
+
+// Declared up here because the .c files pasted in below use them before their definitions further
+// down this same translation unit.
+BAD_RETURN(s32) Player_ZeroSpeedXZ(Player* this);
+void Player_AnimPlayOnce(PlayState* play, Player* this, LinkAnimationHeader* anim);
+void Player_AnimPlayLoop(PlayState* play, Player* this, LinkAnimationHeader* anim);
+void Player_SetIntangibility(Player* this, s32 timer);
+s32 func_80837B18(PlayState* play, Player* this, s32 damage);
+s32 Player_PutAwayHeldItem(PlayState* play, Player* this);
+
+// Fork subsystems this file still calls into directly. Every entry is a coupling left to move
+// behind a hook in PlayerHooks.cpp. The .c files have no translation unit of their own — CMake
+// globs only *.cpp under mods/ and expansions/ — so they are pasted in here.
+#include "mods/items/custom_items.h"
+#include "mods/extended_player.h"
+#include "mods/extended_inventory.h"
+#include "mods/extended_player.c"
+#include "mods/items/logic/custom_items.c"
+#include "mods/extended_equipment.h"
+#include "mods/extended_equipment.c"
+#include "mods/transformation_masks/transformation_masks.h"
+#include "mods/transformation_masks/kafei_form.h"
+#include "mods/transformation_masks/custom_forms.h"
+#include "mods/transformation_masks/mm_mask_wear.h"
+#include "mods/transformation_masks/transformation_masks.c"
+#include "mods/transformation_masks/gerudo_form.h"
+#include "mods/transformation_masks/wolf_link_form.h"
+#include "mods/pak_loader/pak_loader.h"
+#include "mods/o2r_loader/o2r_loader.h"
+#include "mods/spiritual_stones/spiritual_stones.h"
+#include "expansions/ssbb/ssbb_spawn.h"
+#include "expansions/ssbb/ssbb_global.c"
+#include "expansions/ssbb/ssbb_spawn.c"
+#include "expansions/sm64/sm64_mario.h"
+#include "expansions/sm64/sm64_mario_surfaces.c"
+#include "expansions/sm64/sm64_mario_render.c"
+#include "expansions/sm64/sm64_mario.c"
+#include "expansions/sm64/sm64_mario_items.c"
+#include "expansions/sw97/sw97_router.c"
+
+static u8 gSm64MarioInitialized = 0;
+static u8 gSm64MarioInitTried = 0;
 
 // Some player animations are played at this reduced speed, for reasons yet unclear.
 // This is called "adjusted" for now.
@@ -116,7 +162,7 @@ typedef struct struct_80854190 {
 typedef struct struct_80854578 {
     /* 0x00 */ LinkAnimationHeader* anim;
     /* 0x04 */ f32 unk_04;
-    /* 0x04 */ f32 unk_08;
+    /* 0x08 */ f32 unk_08;
 } struct_80854578; // size = 0x0C
 
 typedef struct struct_80854B18 {
@@ -301,7 +347,7 @@ void Player_Action_8084B9E4(Player* this, PlayState* play);
 void Player_Action_8084BBE4(Player* this, PlayState* play);
 void Player_Action_8084BDFC(Player* this, PlayState* play);
 void Player_Action_8084BF1C(Player* this, PlayState* play);
-void Player_Action_8084C5F8(Player* this, PlayState* play);
+void Player_Action_DismountLadder(Player* this, PlayState* play);
 void Player_Action_8084C760(Player* this, PlayState* play);
 void Player_Action_8084C81C(Player* this, PlayState* play);
 void Player_Action_8084CC98(Player* this, PlayState* play);
@@ -324,7 +370,7 @@ void Player_Action_8084EED8(Player* this, PlayState* play);
 void Player_Action_8084EFC0(Player* this, PlayState* play);
 void Player_Action_ExchangeItem(Player* this, PlayState* play);
 void Player_Action_SlideOnSlope(Player* this, PlayState* play);
-void Player_Action_8084F608(Player* this, PlayState* play);
+void Player_Action_WaitForCutscene(Player* this, PlayState* play);
 void Player_Action_8084F698(Player* this, PlayState* play);
 void Player_Action_8084F710(Player* this, PlayState* play);
 void Player_Action_8084F88C(Player* this, PlayState* play);
@@ -346,8 +392,21 @@ void Player_Action_CsAction(Player* this, PlayState* play);
 #pragma region[SoH]
 u8 gWalkSpeedToggle;
 
+extern u8 gIvanPossessActive;
+
+static s32 Player_IsFloatedWithoutBoots(Player* this) {
+    return this->ivanFloating &&
+           GameInteractor_Should(VB_PLAYER_HOVERS_WITHOUT_BOOTS,
+                                 CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive,
+                                 this);
+}
+
+static s32 Player_IsHovering(Player* this) {
+    return (this->currentBoots == PLAYER_BOOTS_HOVER) || Player_IsFloatedWithoutBoots(this);
+}
+
 s32 spawn_boomerang_ivan(EnPartner* this, PlayState* play) {
-    if (!CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0)) {
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && !gIvanPossessActive && !Sm64Mario_IsReady()) {
         return 0;
     }
 
@@ -565,6 +624,31 @@ static s32 sWorldYawToTouchedWall = 0;
 static s16 sFloorShapePitch = 0;
 static s32 sUseHeldItem = false; // When true, the current held item is used. Is reset to false every frame.
 static s32 sHeldItemButtonIsHeldDown = false; // Indicates if the button for the current held item is held down.
+static s32 sSw97SpellActive = false;          // True only when the active magic spell came from a SW97 medallion item.
+static u8 sZoraBoomerangActive = 0;           // When true, BTN_B returns ITEM_BOOMERANG for Zora fin boomerang.
+static u8 sDekuBubbleActive = 0;              // When true, BTN_B returns ITEM_SLINGSHOT for Deku bubble attack.
+
+extern u8 gMogmaMittsClimbActive; // Mogma Mitts climb-any-wall flag (defined in item_mitts.c)
+
+// Boss Remains (mods/boss_remains) — worn boss-remains masks: state queries, per-frame drivers and
+// world-space effect draws. Implemented extern "C" in the boss_remains module; declared locally here
+// (like the NEI helpers above) so this file never includes the module's header. Mirrors MM 2ship.
+extern s32 BossRemains_IsOdolwaWorn(void);
+extern s32 BossRemains_IsGohtWorn(void);
+extern s32 BossRemains_IsGyorgWorn(void);
+extern f32 BossRemains_RunSpeedMul(void);
+extern s32 BossRemains_IsOdolwaRunning(void);
+extern s32 BossRemains_IsGohtCharging(void);
+extern s32 BossRemains_IsOdolwaFlying(void);
+extern LinkAnimationHeader* BossRemains_GetOdolwaIdleAnim(void);
+extern void BossRemains_TickInput(PlayState* play, Player* player);
+extern void BossRemains_GohtPostAction(PlayState* play, Player* player);
+extern void BossRemains_OdolwaFlightTick(PlayState* play, Player* player);
+extern void BossRemains_OdolwaSwordMoth(PlayState* play, Player* player);
+extern void BossRemains_DrawOdolwaTrail(Player* player, PlayState* play);
+extern void BossRemains_DrawGohtCone(Player* player, PlayState* play);
+extern void BossRemains_DrawGohtChargingThunder(Player* player, PlayState* play);
+extern void BossRemains_DrawGyorgWhirlpool(Player* player, PlayState* play);
 
 static u16 D_8085361C[] = {
     NA_SE_VO_LI_SWEAT,
@@ -1171,73 +1255,68 @@ static u8 sFidgetAnimSfxTypes[] = {
     FIDGET_ANIMSFX_NONE,              // unused, doesnt correspond to any animation
 };
 
-// Used to map item IDs to item actions
-static s8 sItemActions[] = {
-    PLAYER_IA_DEKU_STICK,          // ITEM_DEKU_STICK
-    PLAYER_IA_DEKU_NUT,            // ITEM_DEKU_NUT
-    PLAYER_IA_BOMB,                // ITEM_BOMB
-    PLAYER_IA_BOW,                 // ITEM_BOW
-    PLAYER_IA_BOW_FIRE,            // ITEM_ARROW_FIRE
-    PLAYER_IA_DINS_FIRE,           // ITEM_DINS_FIRE
-    PLAYER_IA_SLINGSHOT,           // ITEM_SLINGSHOT
-    PLAYER_IA_OCARINA_FAIRY,       // ITEM_OCARINA_FAIRY
-    PLAYER_IA_OCARINA_OF_TIME,     // ITEM_OCARINA_OF_TIME
-    PLAYER_IA_BOMBCHU,             // ITEM_BOMBCHU
-    PLAYER_IA_HOOKSHOT,            // ITEM_HOOKSHOT
-    PLAYER_IA_LONGSHOT,            // ITEM_LONGSHOT
-    PLAYER_IA_BOW_ICE,             // ITEM_ARROW_ICE
-    PLAYER_IA_FARORES_WIND,        // ITEM_FARORES_WIND
-    PLAYER_IA_BOOMERANG,           // ITEM_BOOMERANG
-    PLAYER_IA_LENS_OF_TRUTH,       // ITEM_LENS_OF_TRUTH
-    PLAYER_IA_MAGIC_BEAN,          // ITEM_MAGIC_BEAN
-    PLAYER_IA_HAMMER,              // ITEM_HAMMER
-    PLAYER_IA_BOW_LIGHT,           // ITEM_ARROW_LIGHT
-    PLAYER_IA_NAYRUS_LOVE,         // ITEM_NAYRUS_LOVE
-    PLAYER_IA_BOTTLE,              // ITEM_BOTTLE_EMPTY
-    PLAYER_IA_BOTTLE_POTION_RED,   // ITEM_BOTTLE_POTION_RED
-    PLAYER_IA_BOTTLE_POTION_GREEN, // ITEM_BOTTLE_POTION_GREEN
-    PLAYER_IA_BOTTLE_POTION_BLUE,  // ITEM_BOTTLE_POTION_BLUE
-    PLAYER_IA_BOTTLE_FAIRY,        // ITEM_BOTTLE_FAIRY
-    PLAYER_IA_BOTTLE_FISH,         // ITEM_BOTTLE_FISH
-    PLAYER_IA_BOTTLE_MILK_FULL,    // ITEM_BOTTLE_MILK_FULL
-    PLAYER_IA_BOTTLE_RUTOS_LETTER, // ITEM_BOTTLE_RUTOS_LETTER
-    PLAYER_IA_BOTTLE_FIRE,         // ITEM_BOTTLE_BLUE_FIRE
-    PLAYER_IA_BOTTLE_BUG,          // ITEM_BOTTLE_BUG
-    PLAYER_IA_BOTTLE_BIG_POE,      // ITEM_BOTTLE_BIG_POE
-    PLAYER_IA_BOTTLE_MILK_HALF,    // ITEM_BOTTLE_MILK_HALF
-    PLAYER_IA_BOTTLE_POE,          // ITEM_BOTTLE_POE
-    PLAYER_IA_WEIRD_EGG,           // ITEM_WEIRD_EGG
-    PLAYER_IA_CHICKEN,             // ITEM_CHICKEN
-    PLAYER_IA_ZELDAS_LETTER,       // ITEM_ZELDAS_LETTER
-    PLAYER_IA_MASK_KEATON,         // ITEM_MASK_KEATON
-    PLAYER_IA_MASK_SKULL,          // ITEM_MASK_SKULL
-    PLAYER_IA_MASK_SPOOKY,         // ITEM_MASK_SPOOKY
-    PLAYER_IA_MASK_BUNNY_HOOD,     // ITEM_MASK_BUNNY_HOOD
-    PLAYER_IA_MASK_GORON,          // ITEM_MASK_GORON
-    PLAYER_IA_MASK_ZORA,           // ITEM_MASK_ZORA
-    PLAYER_IA_MASK_GERUDO,         // ITEM_MASK_GERUDO
-    PLAYER_IA_MASK_TRUTH,          // ITEM_MASK_TRUTH
-    PLAYER_IA_SWORD_MASTER,        // ITEM_SOLD_OUT
-    PLAYER_IA_POCKET_EGG,          // ITEM_POCKET_EGG
-    PLAYER_IA_POCKET_CUCCO,        // ITEM_POCKET_CUCCO
-    PLAYER_IA_COJIRO,              // ITEM_COJIRO
-    PLAYER_IA_ODD_MUSHROOM,        // ITEM_ODD_MUSHROOM
-    PLAYER_IA_ODD_POTION,          // ITEM_ODD_POTION
-    PLAYER_IA_POACHERS_SAW,        // ITEM_POACHERS_SAW
-    PLAYER_IA_BROKEN_GORONS_SWORD, // ITEM_BROKEN_GORONS_SWORD
-    PLAYER_IA_PRESCRIPTION,        // ITEM_PRESCRIPTION
-    PLAYER_IA_FROG,                // ITEM_EYEBALL_FROG
-    PLAYER_IA_EYEDROPS,            // ITEM_EYE_DROPS
-    PLAYER_IA_CLAIM_CHECK,         // ITEM_CLAIM_CHECK
-    PLAYER_IA_BOW_FIRE,            // ITEM_BOW_FIRE
-    PLAYER_IA_BOW_ICE,             // ITEM_BOW_ICE
-    PLAYER_IA_BOW_LIGHT,           // ITEM_BOW_LIGHT
-    PLAYER_IA_SWORD_KOKIRI,        // ITEM_SWORD_KOKIRI
-    PLAYER_IA_SWORD_MASTER,        // ITEM_SWORD_MASTER
-    PLAYER_IA_SWORD_BIGGORON,      // ITEM_SWORD_BIGGORON
+// Used to map item IDs to item actions (vanilla items only)
+// Custom items are handled by ExtPlayer_GetItemAction() in extended_player.c
+s8 sItemActions[] = {
+    PLAYER_IA_DEKU_STICK,          // ITEM_DEKU_STICK (0)
+    PLAYER_IA_DEKU_NUT,            // ITEM_DEKU_NUT (1)
+    PLAYER_IA_BOMB,                // ITEM_BOMB (2)
+    PLAYER_IA_BOW,                 // ITEM_BOW (3)
+    PLAYER_IA_BOW_FIRE,            // ITEM_ARROW_FIRE (4)
+    PLAYER_IA_DINS_FIRE,           // ITEM_DINS_FIRE (5)
+    PLAYER_IA_SLINGSHOT,           // ITEM_SLINGSHOT (6)
+    PLAYER_IA_OCARINA_FAIRY,       // ITEM_OCARINA_FAIRY (7)
+    PLAYER_IA_OCARINA_OF_TIME,     // ITEM_OCARINA_OF_TIME (8)
+    PLAYER_IA_BOMBCHU,             // ITEM_BOMBCHU (9)
+    PLAYER_IA_HOOKSHOT,            // ITEM_HOOKSHOT (10)
+    PLAYER_IA_LONGSHOT,            // ITEM_LONGSHOT (11)
+    PLAYER_IA_BOW_ICE,             // ITEM_ARROW_ICE (12)
+    PLAYER_IA_FARORES_WIND,        // ITEM_FARORES_WIND (13)
+    PLAYER_IA_BOOMERANG,           // ITEM_BOOMERANG (14)
+    PLAYER_IA_LENS_OF_TRUTH,       // ITEM_LENS_OF_TRUTH (15)
+    PLAYER_IA_MAGIC_BEAN,          // ITEM_MAGIC_BEAN (16)
+    PLAYER_IA_HAMMER,              // ITEM_HAMMER (17)
+    PLAYER_IA_BOW_LIGHT,           // ITEM_ARROW_LIGHT (18)
+    PLAYER_IA_NAYRUS_LOVE,         // ITEM_NAYRUS_LOVE (19)
+    PLAYER_IA_BOTTLE,              // ITEM_BOTTLE_EMPTY (20)
+    PLAYER_IA_BOTTLE_POTION_RED,   // ITEM_BOTTLE_POTION_RED (21)
+    PLAYER_IA_BOTTLE_POTION_GREEN, // ITEM_BOTTLE_POTION_GREEN (22)
+    PLAYER_IA_BOTTLE_POTION_BLUE,  // ITEM_BOTTLE_POTION_BLUE (23)
+    PLAYER_IA_BOTTLE_FAIRY,        // ITEM_BOTTLE_FAIRY (24)
+    PLAYER_IA_BOTTLE_FISH,         // ITEM_BOTTLE_FISH (25)
+    PLAYER_IA_BOTTLE_MILK_FULL,    // ITEM_BOTTLE_MILK_FULL (26)
+    PLAYER_IA_BOTTLE_RUTOS_LETTER, // ITEM_BOTTLE_RUTOS_LETTER (27)
+    PLAYER_IA_BOTTLE_FIRE,         // ITEM_BOTTLE_BLUE_FIRE (28)
+    PLAYER_IA_BOTTLE_BUG,          // ITEM_BOTTLE_BUG (29)
+    PLAYER_IA_BOTTLE_BIG_POE,      // ITEM_BOTTLE_BIG_POE (30)
+    PLAYER_IA_BOTTLE_MILK_HALF,    // ITEM_BOTTLE_MILK_HALF (31)
+    PLAYER_IA_BOTTLE_POE,          // ITEM_BOTTLE_POE (32)
+    PLAYER_IA_WEIRD_EGG,           // ITEM_WEIRD_EGG (33)
+    PLAYER_IA_CHICKEN,             // ITEM_CHICKEN (34)
+    PLAYER_IA_ZELDAS_LETTER,       // ITEM_ZELDAS_LETTER (35)
+    PLAYER_IA_MASK_KEATON,         // ITEM_MASK_KEATON (36)
+    PLAYER_IA_MASK_SKULL,          // ITEM_MASK_SKULL (37)
+    PLAYER_IA_MASK_SPOOKY,         // ITEM_MASK_SPOOKY (38)
+    PLAYER_IA_MASK_BUNNY_HOOD,     // ITEM_MASK_BUNNY_HOOD (39)
+    PLAYER_IA_MASK_GORON,          // ITEM_MASK_GORON (40)
+    PLAYER_IA_MASK_ZORA,           // ITEM_MASK_ZORA (41)
+    PLAYER_IA_MASK_GERUDO,         // ITEM_MASK_GERUDO (42)
+    PLAYER_IA_MASK_TRUTH,          // ITEM_MASK_TRUTH (43)
+    PLAYER_IA_SWORD_MASTER,        // ITEM_SOLD_OUT (44)
+    PLAYER_IA_POCKET_EGG,          // ITEM_POCKET_EGG (45)
+    PLAYER_IA_POCKET_CUCCO,        // ITEM_POCKET_CUCCO (46)
+    PLAYER_IA_COJIRO,              // ITEM_COJIRO (47)
+    PLAYER_IA_ODD_MUSHROOM,        // ITEM_ODD_MUSHROOM (48)
+    PLAYER_IA_ODD_POTION,          // ITEM_ODD_POTION (49)
+    PLAYER_IA_POACHERS_SAW,        // ITEM_POACHERS_SAW (50)
+    PLAYER_IA_BROKEN_GORONS_SWORD, // ITEM_BROKEN_GORONS_SWORD (51)
+    PLAYER_IA_PRESCRIPTION,        // ITEM_PRESCRIPTION (52)
+    PLAYER_IA_FROG,                // ITEM_EYEBALL_FROG (53)
+    PLAYER_IA_EYEDROPS,            // ITEM_EYE_DROPS (54)
+    PLAYER_IA_CLAIM_CHECK,         // ITEM_CLAIM_CHECK (55)
 };
 
-static s32 (*sItemActionUpdateFuncs[])(Player* this, PlayState* play) = {
+s32 (*sItemActionUpdateFuncs[])(Player* this, PlayState* play) = {
     func_8083485C,                 // PLAYER_IA_NONE
     func_8083485C,                 // PLAYER_IA_SWORD_CS
     func_8083485C,                 // PLAYER_IA_FISHING_POLE
@@ -1304,10 +1383,10 @@ static s32 (*sItemActionUpdateFuncs[])(Player* this, PlayState* play) = {
     func_8083485C,                 // PLAYER_IA_MASK_ZORA
     func_8083485C,                 // PLAYER_IA_MASK_GERUDO
     func_8083485C,                 // PLAYER_IA_MASK_TRUTH
-    func_8083485C,                 // PLAYER_IA_LENS_OF_TRUTH
+    func_8083485C,                 // PLAYER_IA_LENS_OF_TRUTH (0x42)
 };
 
-static void (*sItemActionInitFuncs[])(PlayState* play, Player* this) = {
+void (*sItemActionInitFuncs[])(PlayState* play, Player* this) = {
     Player_InitDefaultIA,        // PLAYER_IA_NONE
     Player_InitDefaultIA,        // PLAYER_IA_SWORD_CS
     Player_InitDefaultIA,        // PLAYER_IA_FISHING_POLE
@@ -1374,7 +1453,7 @@ static void (*sItemActionInitFuncs[])(PlayState* play, Player* this) = {
     Player_InitDefaultIA,        // PLAYER_IA_MASK_ZORA
     Player_InitDefaultIA,        // PLAYER_IA_MASK_GERUDO
     Player_InitDefaultIA,        // PLAYER_IA_MASK_TRUTH
-    Player_InitDefaultIA,        // PLAYER_IA_LENS_OF_TRUTH
+    Player_InitDefaultIA,        // PLAYER_IA_LENS_OF_TRUTH (0x42)
 };
 
 typedef enum ItemChangeType {
@@ -1520,6 +1599,135 @@ static struct_80854190 D_80854190[PLAYER_MWA_MAX] = {
       &gPlayerAnim_link_anchor_Lrolling_kiru_endR, 0, 16 },
 };
 
+// =============================================================================
+// Form animation tables — read/write access for the transformation forms (NEI)
+//
+// A form that wants its own moveset does NOT need its own action functions: the
+// two tables above already decide WHICH animation every vanilla action plays.
+// D_80853914 covers idle/walk/run/strafe/backwalk/turn/roll/landing/damage, and
+// D_80854190 covers the whole sword moveset (swing, its recovery, its lock-on
+// recovery, and the hit-frame window). Swapping entries re-skins Link completely
+// while OOT keeps owning movement, physics, collision and combo logic.
+//
+// This is deliberately NOT a hook on LinkAnimation_Change. That function stores
+// the ORIGINAL pointer in skelAnime.animation, and this file compares that field
+// by identity in ~25 places (Player_CheckForIdleAnim, Player_InitItemActionWithAnim,
+// which even searches D_80853914 linearly). Swapping at the table keeps both
+// sides looking at the same slot. Locomotion would dodge such a hook anyway —
+// walk/run/side-step are manual per-frame LinkAnimation_BlendToJoint feeds that
+// never call Change at all.
+//
+// Callers own their save/restore: read the slot before writing it, keep the
+// original, and put it back when the form ends.
+// =============================================================================
+// Torso and arms from upperSkelAnime, legs from whatever skelAnime is playing —
+// vanilla's own split, the one Player_UpdateUpperBody uses so Link can hold an item
+// up while the legs walk. Exposed because sUpperBodyLimbCopyMap is a static defined
+// BELOW the unity include of mods/extended_equipment.c, so the ext-equip modules
+// cannot name it; the Trident's guard dash needs exactly this (guard pose on top, run
+// cycle underneath). Queued into the animation context, applied later in the frame,
+// same as the vanilla call. Skijer's NEI
+void ExtPlayer_CopyUpperBody(PlayState* play, Player* this) {
+    AnimationContext_SetCopyTrue(play, this->skelAnime.limbCount, this->skelAnime.jointTable,
+                                 this->upperSkelAnime.jointTable, sUpperBodyLimbCopyMap);
+}
+
+LinkAnimationHeader* ExtPlayer_GetAnimGroupAnim(s32 group, s32 animType) {
+    if ((group < 0) || (group >= PLAYER_ANIMGROUP_MAX) || (animType < 0) || (animType >= PLAYER_ANIMTYPE_MAX)) {
+        return NULL;
+    }
+    return D_80853914[group][animType];
+}
+
+void ExtPlayer_SetAnimGroupAnim(s32 group, s32 animType, LinkAnimationHeader* anim) {
+    if ((group < 0) || (group >= PLAYER_ANIMGROUP_MAX) || (animType < 0) || (animType >= PLAYER_ANIMTYPE_MAX) ||
+        (anim == NULL)) {
+        return;
+    }
+    D_80853914[group][animType] = anim;
+}
+
+void ExtPlayer_GetMeleeAnim(s32 mwa, LinkAnimationHeader** swing, LinkAnimationHeader** end,
+                            LinkAnimationHeader** endLockOn, u8* hitStart, u8* hitEnd) {
+    if ((mwa < 0) || (mwa >= PLAYER_MWA_MAX)) {
+        return;
+    }
+    if (swing != NULL) {
+        *swing = D_80854190[mwa].unk_00;
+    }
+    if (end != NULL) {
+        *end = D_80854190[mwa].unk_04;
+    }
+    if (endLockOn != NULL) {
+        *endLockOn = D_80854190[mwa].unk_08;
+    }
+    if (hitStart != NULL) {
+        *hitStart = D_80854190[mwa].unk_0C;
+    }
+    if (hitEnd != NULL) {
+        *hitEnd = D_80854190[mwa].unk_0D;
+    }
+}
+
+// NULL animation arguments leave that slot alone, so a caller can re-skin the
+// swing while keeping vanilla's recovery. A hit window of 0xFF means "keep".
+void ExtPlayer_SetMeleeAnim(s32 mwa, LinkAnimationHeader* swing, LinkAnimationHeader* end,
+                            LinkAnimationHeader* endLockOn, u8 hitStart, u8 hitEnd) {
+    if ((mwa < 0) || (mwa >= PLAYER_MWA_MAX)) {
+        return;
+    }
+    if (swing != NULL) {
+        D_80854190[mwa].unk_00 = swing;
+    }
+    if (end != NULL) {
+        D_80854190[mwa].unk_04 = end;
+    }
+    if (endLockOn != NULL) {
+        D_80854190[mwa].unk_08 = endLockOn;
+    }
+    if (hitStart != 0xFF) {
+        D_80854190[mwa].unk_0C = hitStart;
+    }
+    if (hitEnd != 0xFF) {
+        D_80854190[mwa].unk_0D = hitEnd;
+    }
+}
+
+// The four evasive jumps: 0 front, 1 side-left, 2 backflip, 3 side-right. Each row
+// is { the jump, its landing, its landing when locked on the other way }. These are
+// NOT in D_80853914 — the sidehop/backflip action reads this table directly — so a
+// form re-skinning its dodges has to reach them here.
+LinkAnimationHeader* ExtPlayer_GetJumpAnim(s32 dir, s32 slot) {
+    if ((dir < 0) || (dir >= 4) || (slot < 0) || (slot >= 3)) {
+        return NULL;
+    }
+    return D_80853D4C[dir][slot];
+}
+
+void ExtPlayer_SetJumpAnim(s32 dir, s32 slot, LinkAnimationHeader* anim) {
+    if ((dir < 0) || (dir >= 4) || (slot < 0) || (slot >= 3) || (anim == NULL)) {
+        return;
+    }
+    D_80853D4C[dir][slot] = anim;
+}
+
+// Fidget/idle-variation table, indexed by FidgetType; column 0 is the normal set
+// and column 1 the "sword drawn" one. FIDGET_CRIT_HEALTH_START / _LOOP are the
+// low-health idle, which is why a form wants at this table at all.
+LinkAnimationHeader* ExtPlayer_GetFidgetAnim(s32 fidget, s32 col) {
+    if ((fidget < 0) || (fidget > FIDGET_SWORD_SWING_TWO_HAND) || (col < 0) || (col >= 2)) {
+        return NULL;
+    }
+    return sFidgetAnimations[fidget][col];
+}
+
+void ExtPlayer_SetFidgetAnim(s32 fidget, s32 col, LinkAnimationHeader* anim) {
+    if ((fidget < 0) || (fidget > FIDGET_SWORD_SWING_TWO_HAND) || (col < 0) || (col >= 2) || (anim == NULL)) {
+        return;
+    }
+    sFidgetAnimations[fidget][col] = anim;
+}
+
 static LinkAnimationHeader* D_80854350[] = {
     &gPlayerAnim_link_fighter_power_kiru_start,
     &gPlayerAnim_link_fighter_Lpower_kiru_start,
@@ -1549,6 +1757,45 @@ static LinkAnimationHeader* D_80854378[] = {
     &gPlayerAnim_link_fighter_power_kiru_side_walk,
     &gPlayerAnim_link_fighter_Lpower_kiru_side_walk,
 };
+// The spin-attack charge is not one animation but six two-entry arrays, one per
+// phase, each indexed by [0] one-handed / [1] two-handed. They sit outside
+// D_80853914 and D_80854190, so a form that re-skins the moveset needs its own
+// door to them or the charge keeps playing Link's clips while everything around
+// it changed. Phase ids are ExtPlayer_ChargeAnimPhase.
+static LinkAnimationHeader** ExtPlayer_ChargeArray(s32 phase) {
+    switch (phase) {
+        case EXTPLAYER_CHARGE_START:
+            return D_80854350; // windup
+        case EXTPLAYER_CHARGE_START_L:
+            return D_80854358; // windup, left-foot variant
+        case EXTPLAYER_CHARGE_WAIT:
+            return D_80854360; // held, standing
+        case EXTPLAYER_CHARGE_WAIT_END:
+            return D_80854368; // release of the held pose
+        case EXTPLAYER_CHARGE_WALK:
+            return D_80854370; // held, walking
+        case EXTPLAYER_CHARGE_SIDE_WALK:
+            return D_80854378; // held, strafing
+        default:
+            return NULL;
+    }
+}
+
+LinkAnimationHeader* ExtPlayer_GetChargeAnim(s32 phase, s32 twoHanded) {
+    LinkAnimationHeader** arr = ExtPlayer_ChargeArray(phase);
+    if ((arr == NULL) || (twoHanded < 0) || (twoHanded > 1)) {
+        return NULL;
+    }
+    return arr[twoHanded];
+}
+
+void ExtPlayer_SetChargeAnim(s32 phase, s32 twoHanded, LinkAnimationHeader* anim) {
+    LinkAnimationHeader** arr = ExtPlayer_ChargeArray(phase);
+    if ((arr == NULL) || (twoHanded < 0) || (twoHanded > 1) || (anim == NULL)) {
+        return;
+    }
+    arr[twoHanded] = anim;
+}
 
 static u8 D_80854380[2] = { PLAYER_MWA_SPIN_ATTACK_1H, PLAYER_MWA_SPIN_ATTACK_2H };
 static u8 D_80854384[2] = { PLAYER_MWA_BIG_SPIN_1H, PLAYER_MWA_BIG_SPIN_2H };
@@ -1559,7 +1806,7 @@ static u8 sMagicSpellCosts[] = { 12, 24, 24, 12, 24, 12 };
 
 static u16 D_80854398[] = { NA_SE_IT_BOW_DRAW, NA_SE_IT_SLING_DRAW, NA_SE_IT_HOOKSHOT_READY };
 
-static u8 sMagicArrowCosts[] = { 4, 4, 8 };
+static u8 sMagicArrowCosts[] = { 4, 4, 8, 4, 4, 4 }; // fire, ice, light, dark, soul, wind
 
 static LinkAnimationHeader* D_808543A4[] = {
     &gPlayerAnim_link_anchor_waitR2defense,
@@ -1738,11 +1985,15 @@ void func_80832630(PlayState* play) {
 
 void Player_RequestRumble(Player* this, s32 sourceStrength, s32 duration, s32 decreaseRate, s32 distSq) {
     if (this->actor.category == ACTORCAT_PLAYER) {
-        func_800AA000(distSq, sourceStrength, duration, decreaseRate);
+        Rumble_Request(distSq, sourceStrength, duration, decreaseRate);
     }
 }
 
 void Player_PlayVoiceSfx(Player* this, u16 sfxId) {
+    if (!GameInteractor_Should(VB_PLAYER_VOICE_SFX, true, this, sfxId)) {
+        return;
+    }
+
     if (this->actor.category == ACTORCAT_PLAYER) {
         Player_PlaySfx(this, sfxId + this->ageProperties->unk_92);
     } else {
@@ -1779,13 +2030,21 @@ void Player_PlayFloorSfxByAge(Player* this, u16 sfxId) {
 void Player_PlaySteppingSfx(Player* this, f32 pitchAdjustment) {
     s32 sfxId;
 
-    if (this->currentBoots == PLAYER_BOOTS_IRON) {
-        sfxId = NA_SE_PL_WALK_HEAVYBOOTS;
+    // MM transformation masks: each transformed form has its own footstep SFX
+    // (NA_SE_PL_WALK_GROUND + floor offset + per-form offset: Deku +0xF0,
+    // Zora +0x120, Goron +0x150, FD +0x80). Play that instead of Link's walk.
+    // Returns 0 for Human/Garo/Gerudo/Pikachu so OOT's footstep still plays.
+    if (TransformMasks_TryPlayMmStepSfx(Player_ApplyFloorSfxOffset(this, NA_SE_PL_WALK_GROUND),
+                                        &this->actor.projectedPos)) {
+        // form footstep played; fall through to the stats counter below
     } else {
-        sfxId = Player_ApplyFloorAndAgeSfxOffsets(this, NA_SE_PL_WALK_GROUND);
+        if (this->currentBoots == PLAYER_BOOTS_IRON) {
+            sfxId = NA_SE_PL_WALK_HEAVYBOOTS;
+        } else {
+            sfxId = Player_ApplyFloorAndAgeSfxOffsets(this, NA_SE_PL_WALK_GROUND);
+        }
+        func_800F4010(&this->actor.projectedPos, sfxId, pitchAdjustment);
     }
-
-    func_800F4010(&this->actor.projectedPos, sfxId, pitchAdjustment);
     // Gameplay stats: Count footsteps
     // Only count while game isn't complete and don't count Link's idle animations or crawling in crawlspaces
     if (!gSaveContext.ship.stats.gameComplete && !(this->stateFlags2 & PLAYER_STATE2_IDLE_FIDGET) &&
@@ -1845,12 +2104,16 @@ void Player_ProcessAnimSfxList(Player* this, AnimSfxEntry* entry) {
 
         if (LinkAnimation_OnFrame(&this->skelAnime, fabsf(ANIMSFX_GET_FRAME(absData)))) {
             if (type == ANIMSFX_SHIFT_TYPE(ANIMSFX_TYPE_GENERAL)) {
-                Player_PlaySfx(this, entry->sfxId);
+                // Suppress OOT weapon/item SFX when in MM form (MM handles its own)
+                if (!TransformMasks_IsTransformed()) {
+                    Player_PlaySfx(this, entry->sfxId);
+                }
             } else if (type == ANIMSFX_SHIFT_TYPE(ANIMSFX_TYPE_FLOOR)) {
                 Player_PlayFloorSfx(this, entry->sfxId);
             } else if (type == ANIMSFX_SHIFT_TYPE(ANIMSFX_TYPE_FLOOR_BY_AGE)) {
                 Player_PlayFloorSfxByAge(this, entry->sfxId);
             } else if (type == ANIMSFX_SHIFT_TYPE(ANIMSFX_TYPE_VOICE)) {
+                // Player_PlayVoiceSfx already has its own TransformMasks_IsTransformed() guard
                 Player_PlayVoiceSfx(this, entry->sfxId);
             } else if (type == ANIMSFX_SHIFT_TYPE(ANIMSFX_TYPE_LANDING)) {
                 Player_PlayLandingSfx(this);
@@ -2116,6 +2379,14 @@ void func_808332F4(Player* this, PlayState* play) {
  * see `sFidgetAnimations`.
  */
 LinkAnimationHeader* Player_GetIdleAnim(Player* this) {
+    // Boss Remains (Odolwa): while his remains are worn, the idle stance is Odolwa's "ready" pose.
+    // Human (non-transformed) Link only. Mirrors the MM 2ship hook in Player_GetIdleAnim.
+    if (!TransformMasks_IsTransformed()) {
+        LinkAnimationHeader* odolwaIdle = BossRemains_GetOdolwaIdleAnim();
+        if (odolwaIdle != NULL) {
+            return odolwaIdle;
+        }
+    }
     return GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, this->modelAnimType);
 }
 
@@ -2246,13 +2517,9 @@ void Player_InitItemActionWithAnim(PlayState* play, Player* this, s8 itemAction)
 s8 Player_ItemToItemAction(s32 item) {
     if (GameInteractor_Should(VB_ITEM_ACTION_BE_NONE, item >= ITEM_NONE_FE, item)) {
         return PLAYER_IA_NONE;
-    } else if (item == ITEM_LAST_USED) {
-        return PLAYER_IA_SWORD_CS;
-    } else if (item == ITEM_FISHING_POLE) {
-        return PLAYER_IA_FISHING_POLE;
-    } else {
-        return sItemActions[item];
     }
+    // Use extended player helper for item action lookup (handles custom items)
+    return ExtPlayer_GetItemAction(item);
 }
 
 void Player_InitDefaultIA(PlayState* play, Player* this) {
@@ -2281,6 +2548,15 @@ void Player_InitExplosiveIA(PlayState* play, Player* this) {
     s32 explosiveType;
     ExplosiveInfo* explosiveInfo;
     Actor* spawnedActor;
+
+    // NEI: Power Keg shares the Bomb slot — when keg mode is on, pull out and hold the keg instead of a
+    // bomb (spawn-as-child + carry state, then throw). Returns 1 when it took over the pull. Skijer's NEI
+    {
+        extern unsigned char PowerKeg_TryPull(PlayState * play, Player * this);
+        if (PowerKeg_TryPull(play, this)) {
+            return;
+        }
+    }
 
     if (this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) {
         Player_PutAwayHeldItem(play, this);
@@ -2321,6 +2597,8 @@ void Player_InitHookshotIA(PlayState* play, Player* this) {
     this->heldActor =
         Actor_SpawnAsChild(&play->actorCtx, &this->actor, play, ACTOR_ARMS_HOOK, this->actor.world.pos.x,
                            this->actor.world.pos.y, this->actor.world.pos.z, 0, this->actor.shape.rot.y, 0, 0);
+
+    GameInteractor_Should(VB_INIT_HOOKSHOT_IA, true, this);
 }
 
 void Player_InitBoomerangIA(PlayState* play, Player* this) {
@@ -2337,7 +2615,7 @@ void Player_InitItemAction(PlayState* play, Player* this, s8 itemAction) {
 
     this->stateFlags1 &= ~(PLAYER_STATE1_ITEM_IN_HAND | PLAYER_STATE1_USING_BOOMERANG);
 
-    sItemActionInitFuncs[itemAction](play, this);
+    ExtPlayer_GetItemActionInitFunc(itemAction)(play, this);
 
     Player_SetModelGroup(this, this->modelGroup);
 }
@@ -2347,7 +2625,16 @@ void func_80833A20(Player* this, s32 newMeleeWeaponState) {
     u16 voiceSfx;
 
     if (this->meleeWeaponState == 0) {
-        if ((this->heldItemAction == PLAYER_IA_SWORD_BIGGORON) && (gSaveContext.swordHealth > 0.0f)) {
+        // Suppress OOT weapon/voice SFX when in MM form (MM handles its own SFX).
+        // Gerudo is the exception: her swings ARE OOT's, and Player_PlayVoiceSfx
+        // routes the voice to her own pack.
+        if (TransformMasks_IsTransformed() && !GerudoForm_IsActive()) {
+            this->meleeWeaponState = newMeleeWeaponState;
+            return;
+        }
+
+        if (TransformMasks_IsFDSkinMode() ||
+            ((this->heldItemAction == PLAYER_IA_SWORD_BIGGORON) && (gSaveContext.swordHealth > 0.0f))) {
             itemSfx = NA_SE_IT_HAMMER_SWING;
         } else {
             itemSfx = NA_SE_IT_SWORD_SWING;
@@ -2478,28 +2765,67 @@ s32 Player_ItemIsItemAction(s32 item1, s32 itemAction) {
     }
 }
 
+u8 MasterCycle_IsRiding(void);
+// The yaw to sit a rider at. Passes every other mount's own yaw straight through; the bike answers
+// with the direction it is TRAVELLING, which in a drift is not where its body points.
+s16 MasterCycle_RideYaw(Actor* ride);
+
+// Per-frame state this file owns, read by mods that used to be compiled inside this translation
+// unit and could reach the statics directly.
+Input* Player_GetControlInput(void) {
+    return sControlInput;
+}
+
+f32 Player_GetControlStickMagnitude(void) {
+    return sControlStickMagnitude;
+}
+
+s32 Player_GetFloorType(void) {
+    return sFloorType;
+}
+
+s32 Player_IsZoraBoomerangActive(void) {
+    return sZoraBoomerangActive;
+}
+
+s32 Player_IsDekuBubbleActive(void) {
+    return sDekuBubbleActive;
+}
+
 s32 Player_GetItemOnButton(PlayState* play, s32 index) {
+    s32 item;
+
     if (index >= ((CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) ? 8 : 4)) {
         return ITEM_NONE;
-    } else if (play->bombchuBowlingStatus != 0) {
-        return (play->bombchuBowlingStatus > 0) ? ITEM_BOMBCHU : ITEM_NONE;
-    } else if (index == 0) {
-        return B_BTN_ITEM;
-    } else if (index == 1) {
-        return C_BTN_ITEM(0);
-    } else if (index == 2) {
-        return C_BTN_ITEM(1);
-    } else if (index == 3) {
-        return C_BTN_ITEM(2);
-    } else if (index == 4) {
-        return DPAD_ITEM(0);
-    } else if (index == 5) {
-        return DPAD_ITEM(1);
-    } else if (index == 6) {
-        return DPAD_ITEM(2);
-    } else if (index == 7) {
-        return DPAD_ITEM(3);
     }
+
+    if (play->bombchuBowlingStatus != 0) {
+        item = (play->bombchuBowlingStatus > 0) ? ITEM_BOMBCHU : ITEM_NONE;
+    } else {
+        switch (index) {
+            case 0:
+                item = B_BTN_ITEM;
+                break;
+            case 1:
+            case 2:
+            case 3:
+                item = C_BTN_ITEM(index - 1);
+                break;
+            case 4:
+            case 5:
+            case 6:
+            case 7:
+                item = DPAD_ITEM(index - 4);
+                break;
+            default:
+                item = ITEM_NONE;
+                break;
+        }
+    }
+
+    GameInteractor_Should(VB_GET_ITEM_ON_BUTTON, item, index, &item, play);
+
+    return item;
 }
 
 /**
@@ -2519,18 +2845,51 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
     if (this->currentMask != PLAYER_MASK_NONE && !CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
         maskItemAction = this->currentMask - 1 + PLAYER_IA_MASK_KEATON;
 
-        bool hasOnDpad = false;
-        if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+        // Read raw equip slots, not C_BTN_ITEM/DPAD_ITEM — those return ITEM_NONE on BTN_DISABLED
+        // and would strip the mask the moment Link enters a scene that disables the button.
+        bool maskOnButton = Player_ItemIsItemAction(gSaveContext.equips.buttonItems[1], maskItemAction) ||
+                            Player_ItemIsItemAction(gSaveContext.equips.buttonItems[2], maskItemAction) ||
+                            Player_ItemIsItemAction(gSaveContext.equips.buttonItems[3], maskItemAction);
+        if (!maskOnButton && CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
             for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
-                hasOnDpad |= Player_ItemIsItemAction(DPAD_ITEM(buttonIndex), maskItemAction);
+                maskOnButton |=
+                    Player_ItemIsItemAction(gSaveContext.equips.buttonItems[5 + buttonIndex], maskItemAction);
             }
         }
-        if (!Player_ItemIsItemAction(C_BTN_ITEM(0), maskItemAction) &&
-            !Player_ItemIsItemAction(C_BTN_ITEM(1), maskItemAction) &&
-            !Player_ItemIsItemAction(C_BTN_ITEM(2), maskItemAction) && !hasOnDpad) {
+
+        // MM-counterpart masks (Bunny / Keaton / Mask of Truth) wear the OOT mask
+        // via their page-3 MM item (see Player_UseItem ITEM_MM_MASK_* branch). That
+        // item's action isn't PLAYER_IA_MASK_*, so the maskItemAction scan above
+        // misses it and would strip the mask every frame. Accept the MM item action
+        // for whichever counterpart is currently worn. Skijer's NEI
+        if (!maskOnButton) {
+            s32 mmMaskAction = (this->currentMask == PLAYER_MASK_BUNNY)    ? PLAYER_IA_MM_MASK_BUNNY
+                               : (this->currentMask == PLAYER_MASK_KEATON) ? PLAYER_IA_MM_MASK_KEATON
+                               : (this->currentMask == PLAYER_MASK_TRUTH)  ? PLAYER_IA_MM_MASK_TRUTH
+                                                                           : PLAYER_IA_NONE;
+            if (mmMaskAction != PLAYER_IA_NONE) {
+                maskOnButton = Player_ItemIsItemAction(gSaveContext.equips.buttonItems[1], mmMaskAction) ||
+                               Player_ItemIsItemAction(gSaveContext.equips.buttonItems[2], mmMaskAction) ||
+                               Player_ItemIsItemAction(gSaveContext.equips.buttonItems[3], mmMaskAction);
+                if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
+                    for (int buttonIndex = 0; buttonIndex < 4; buttonIndex++) {
+                        maskOnButton |=
+                            Player_ItemIsItemAction(gSaveContext.equips.buttonItems[5 + buttonIndex], mmMaskAction);
+                    }
+                }
+            }
+        }
+
+        if (!maskOnButton) {
             this->currentMask = PLAYER_MASK_NONE;
         }
     }
+
+    // Bremen / Kamaro sword block lives in Player_GetItemOnButton (index 0):
+    // it returns ITEM_NONE for the B slot while either mask is equipped, so
+    // OOT skips sword draw without short-circuiting this whole function —
+    // that lets C-button mask toggles still reach TransformMasks_WearToggle
+    // so the player can take the mask off.
 
     if (!(this->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE)) && !func_8008F128(this)) {
         if (this->itemAction >= PLAYER_IA_FISHING_POLE) {
@@ -2542,8 +2901,14 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
             }
             if (!Player_ItemIsInUse(this, B_BTN_ITEM) && !Player_ItemIsInUse(this, C_BTN_ITEM(0)) &&
                 !Player_ItemIsInUse(this, C_BTN_ITEM(1)) && !Player_ItemIsInUse(this, C_BTN_ITEM(2)) && !hasOnDpad) {
-                Player_UseItem(play, this, ITEM_NONE);
-                return;
+                // Zora boomerang / Deku bubble: don't put away — active via B, and
+                // B_BTN_ITEM still names whatever the player really has equipped there.
+                if (sZoraBoomerangActive || sDekuBubbleActive) {
+                    // Skip Player_UseItem(ITEM_NONE) — keep boomerang active
+                } else if (GameInteractor_Should(VB_PUTAWAY_BECAUSE_DISABLED_ITEM_BUTTONS, true)) {
+                    Player_UseItem(play, this, ITEM_NONE);
+                    return;
+                }
             }
         }
 
@@ -2554,6 +2919,7 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
         }
 
         item = Player_GetItemOnButton(play, i);
+        GameInteractor_Should(VB_OVERRIDE_BUTTON_ITEM_USED, true, &i, this, &item);
 
         if (item >= ITEM_NONE_FE) {
             for (i = 0; i < ARRAY_COUNT(sItemButtons); i++) {
@@ -2569,7 +2935,18 @@ void Player_ProcessItemButtons(Player* this, PlayState* play) {
             }
         } else if (GameInteractor_Should(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, true, item)) {
             this->heldItemButton = i;
-            Player_UseItem(play, this, item);
+
+            // Extended equipment on a C button: toggle equip on/off. On B an ext sword id is the
+            // Four Sword / Trident itself and must swing (ExtPlayer_GetItemAction aliases it).
+            if ((i != 0) && item >= ITEM_EXT_SWORD_1 && item <= ITEM_EXT_BOOTS_3) {
+                ExtEquip_ToggleFromCButton(item);
+            }
+            // Per-form item interception: if transformed, check the form's item list first.
+            // Returns 1 if the form handled or blocked the item (skip Player_UseItem).
+            // Returns 0 to fall through to normal OOT item use.
+            else if (!TransformMasks_HandleFormItemUse(play, this, item)) {
+                Player_UseItem(play, this, item);
+            }
         }
     }
 }
@@ -2604,6 +2981,28 @@ void Player_StartChangingHeldItem(Player* this, PlayState* play) {
         anim = &gPlayerAnim_link_normal_free2fighter_free;
     }
 
+    // Trident (ext sword 3): its own draw / sheathe clips, forced to play forward
+    // (the getter flips itemChangeType positive). Everything else about the change
+    // — the swap frame, the upper-body blend, waiting for the end — is vanilla's.
+    // Skijer's NEI
+    {
+        LinkAnimationHeader* tridentAnim = Trident_GetItemChangeAnim(this, heldItemAction, &itemChangeType);
+        if (tridentAnim != NULL) {
+            anim = tridentAnim;
+        }
+    }
+
+    // Gerudo Dual Blades: the same deal for her RUNNING draw. Standing, her controller
+    // owns the whole body (GerudoMhr_InterceptUseItem); running, it hands the change
+    // back here precisely because this one is upper-body — she keeps running while the
+    // blades come out. Skijer's NEI
+    {
+        LinkAnimationHeader* gerudoAnim = GerudoMhr_GetItemChangeAnim(this, heldItemAction, &itemChangeType);
+        if (gerudoAnim != NULL) {
+            anim = gerudoAnim;
+        }
+    }
+
     endFrameTemp = Animation_GetLastFrame(anim);
     endFrame = endFrameTemp;
 
@@ -2631,7 +3030,7 @@ void Player_UpdateItems(Player* this, PlayState* play) {
          !(this->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM)) &&
         ((this->heldItemAction == this->itemAction) || (this->stateFlags1 & PLAYER_STATE1_SHIELDING)) &&
         (gSaveContext.health != 0) && (play->csCtx.state == CS_STATE_IDLE) && (this->csAction == 0) &&
-        (play->shootingGalleryStatus == 0) && (play->activeCamera == MAIN_CAM) &&
+        (play->shootingGalleryStatus == 0) && (play->activeCamera == CAM_ID_MAIN) &&
         (play->transitionTrigger != TRANS_TRIGGER_START) && (gSaveContext.timerState != TIMER_STATE_STOP)) {
         Player_ProcessItemButtons(this, play);
     }
@@ -2653,10 +3052,23 @@ s32 func_80834380(PlayState* play, Player* this, s32* itemPtr, s32* typePtr) {
             *typePtr = ARROW_NORMAL_HORSE;
         } else {
             *typePtr = this->heldItemAction - 6;
+            // SW97: dedicated params so vanilla fire/ice/light arrows are unaffected. The element
+            // used to be read off whichever ITEM_SW97_ARROW_* sat on the C-button; it is a flag now
+            // (Skijer's NEI), so the button holds a plain ITEM_BOW and heldItemButton is irrelevant.
+            u8 elem = Sw97_EffectiveElement(0);
+            if ((elem >= SW97_ELEM_FIRE) && (elem <= SW97_ELEM_WIND)) {
+                *typePtr = ARROW_SW97_FIRE + (elem - SW97_ELEM_FIRE);
+            }
         }
     } else {
         *itemPtr = ITEM_SLINGSHOT;
-        *typePtr = ARROW_SEED;
+        // The slingshot carries its OWN element flag, independent of the bow's.
+        u8 elem = Sw97_EffectiveElement(1);
+        if ((elem >= SW97_ELEM_FIRE) && (elem <= SW97_ELEM_WIND)) {
+            *typePtr = ARROW_SEED_FIRE + (elem - SW97_ELEM_FIRE);
+        } else {
+            *typePtr = ARROW_SEED;
+        }
     }
 
     if (gSaveContext.minigameState == 1) {
@@ -2681,19 +3093,33 @@ s32 func_8083442C(Player* this, PlayState* play) {
         Player_SetUpperActionFunc(this, func_808351D4);
 
         this->stateFlags1 |= PLAYER_STATE1_READY_TO_FIRE;
-        this->unk_834 = 14;
+
+        if (sDekuBubbleActive) {
+            // Deku bubble: skip ALL re-entry state resets.
+            // - Don't reset unk_834 to 14 (causes camera to re-transition as fresh aim entry)
+            // - Set unk_836 = 2 (skip draw animation, aim-ready immediately)
+            this->unk_836 = 2;
+        } else {
+            this->unk_834 = 14;
+        }
 
         if (this->unk_860 >= 0) {
-            Player_PlaySfx(this, D_80854398[ABS(this->unk_860) - 1]);
+            // Deku bubble: skip draw SFX and arrow spawn (re-entering aim for rapid-fire)
+            if (!sDekuBubbleActive) {
+                Player_PlaySfx(this, D_80854398[ABS(this->unk_860) - 1]);
+            }
 
-            if (!Player_HoldsHookshot(this) && (func_80834380(play, this, &item, &arrowType) > 0)) {
+            if (!sDekuBubbleActive && !Player_HoldsHookshot(this) &&
+                (func_80834380(play, this, &item, &arrowType) > 0)) {
                 magicArrowType = arrowType - ARROW_FIRE;
 
                 if (this->unk_860 >= 0) {
-                    if ((magicArrowType >= 0) && (magicArrowType <= 2)) {
+                    if ((magicArrowType >= 0) && (magicArrowType <= 5)) {
                         if (GameInteractor_Should(VB_PLAYER_ARROW_MAGIC_CONSUMPTION, true, this, magicArrowType,
                                                   &arrowType)) {
-                            if (!Magic_RequestChange(play, sMagicArrowCosts[magicArrowType], MAGIC_CONSUME_NOW)) {
+                            // Magic Cape (Skijer): fire/ice/light arrows cost half.
+                            if (!Magic_RequestChange(play, MAGIC_REQ(sMagicArrowCosts[magicArrowType]),
+                                                     MAGIC_CONSUME_NOW)) {
                                 arrowType = ARROW_NORMAL;
                             }
                         }
@@ -2735,16 +3161,27 @@ void func_80834644(PlayState* play, Player* this) {
         Player_FinishItemChange(play, this);
     }
 
-    Player_SetUpperActionFunc(this, sItemActionUpdateFuncs[this->heldItemAction]);
+    Player_SetUpperActionFunc(this, ExtPlayer_GetItemActionUpdateFunc(this->heldItemAction));
     this->unk_834 = 0;
     this->idleType = PLAYER_IDLE_DEFAULT;
     Player_DetachHeldActor(play, this);
     this->stateFlags1 &= ~PLAYER_STATE1_START_CHANGING_HELD_ITEM;
 }
 
-LinkAnimationHeader* func_808346C4(PlayState* play, Player* this) {
+// formerly func_808346C4
+LinkAnimationHeader* Player_StartUpperBodyShield(PlayState* play, Player* this) {
     Player_SetUpperActionFunc(this, func_80834B5C);
     Player_DetachHeldActor(play, this);
+
+    // Gerudo Dual Blades: the Z-target guard holds the last frame of whatever this
+    // returns on the upper body, so hand it the guard LOOP slice — its last frame is
+    // the crossed-blades pose.
+    {
+        LinkAnimationHeader* gerudoGuard = GerudoMhr_GetGuardAnim(this, 1);
+        if (gerudoGuard != NULL) {
+            return gerudoGuard;
+        }
+    }
 
     if (this->unk_870 < 0.5f) {
         return D_808543A4[Player_HoldsTwoHandedWeapon(this) && !(CVarGetInteger(CVAR_CHEAT("ShieldTwoHanded"), 0) &&
@@ -2755,16 +3192,27 @@ LinkAnimationHeader* func_808346C4(PlayState* play, Player* this) {
     }
 }
 
-s32 func_80834758(PlayState* play, Player* this) {
+// formerly func_80834758
+s32 Player_TryRaiseUpperBodyShield(PlayState* play, Player* this) {
     LinkAnimationHeader* anim;
     f32 frame;
 
+    // FORM_GUARD and TWO_HANDED ride this path with no shield equipped: Zora's fins and the
+    // Deity's free-hands guard come out either way, so they skip the equipment arm below.
+    u8 formShieldMode = TransformMasks_GetShieldMode();
+
+    if (formShieldMode == MMFORM_SHIELD_BLOCK) {
+        return 0;
+    }
+
     if (!(this->stateFlags1 & (PLAYER_STATE1_SHIELDING | PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_CUTSCENE)) &&
         (play->shootingGalleryStatus == 0) && (this->heldItemAction == this->itemAction) &&
-        (this->currentShield != PLAYER_SHIELD_NONE) && !Player_IsChildWithHylianShield(this) &&
+        ((formShieldMode == MMFORM_SHIELD_FORM_GUARD) || (formShieldMode == MMFORM_SHIELD_TWO_HANDED) ||
+         GerudoMhr_UsesBladeGuard(this) ||
+         ((this->currentShield != PLAYER_SHIELD_NONE) && !Player_IsChildWithHylianShield(this))) &&
         Player_IsZTargeting(this) && CHECK_BTN_ALL(sControlInput->cur.button, BTN_R)) {
 
-        anim = func_808346C4(play, this);
+        anim = Player_StartUpperBodyShield(play, this);
         frame = Animation_GetLastFrame(anim);
         LinkAnimation_Change(play, &this->upperSkelAnime, anim, 1.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
         Player_PlaySfx(this, NA_SE_IT_SHIELD_POSTURE);
@@ -2776,7 +3224,7 @@ s32 func_80834758(PlayState* play, Player* this) {
 }
 
 s32 func_8083485C(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     } else {
         return false;
@@ -2823,7 +3271,7 @@ s32 func_8083499C(Player* this, PlayState* play) {
  * This upper body action allows for shielding or changing held items while a sword is in hand.
  */
 s32 Player_UpperAction_Sword(Player* this, PlayState* play) {
-    if (func_80834758(play, this) || func_8083499C(this, play)) {
+    if (Player_TryRaiseUpperBodyShield(play, this) || func_8083499C(this, play)) {
         return true;
     } else {
         return false;
@@ -2837,7 +3285,7 @@ s32 Player_UpperAction_ChangeHeldItem(Player* this, PlayState* play) {
                                                                 ((this->modelAnimType != PLAYER_ANIMTYPE_3) &&
                                                                  (play->shootingGalleryStatus == 0)),
                                                                 this))))) {
-        Player_SetUpperActionFunc(this, sItemActionUpdateFuncs[this->heldItemAction]);
+        Player_SetUpperActionFunc(this, ExtPlayer_GetItemActionUpdateFunc(this->heldItemAction));
         this->unk_834 = 0;
         this->idleType = PLAYER_IDLE_DEFAULT;
         sHeldItemButtonIsHeldDown = sUseHeldItem;
@@ -2874,7 +3322,7 @@ s32 func_80834BD4(Player* this, PlayState* play) {
     f32 frame;
 
     if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
-        anim = func_808346C4(play, this);
+        anim = Player_StartUpperBodyShield(play, this);
         frame = Animation_GetLastFrame(anim);
         LinkAnimation_Change(play, &this->upperSkelAnime, anim, 1.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
     }
@@ -2889,7 +3337,7 @@ s32 func_80834C74(Player* this, PlayState* play) {
     sUseHeldItem = sHeldItemButtonIsHeldDown;
 
     if (sUseHeldItem || LinkAnimation_Update(play, &this->upperSkelAnime)) {
-        Player_SetUpperActionFunc(this, sItemActionUpdateFuncs[this->heldItemAction]);
+        Player_SetUpperActionFunc(this, ExtPlayer_GetItemActionUpdateFunc(this->heldItemAction));
         LinkAnimation_PlayLoop(play, &this->upperSkelAnime,
                                GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, this->modelAnimType));
         this->idleType = PLAYER_IDLE_DEFAULT;
@@ -2909,21 +3357,32 @@ s32 func_80834D2C(Player* this, PlayState* play) {
             return 0;
         }
 
-        if (!Player_HoldsHookshot(this)) {
+        if (sDekuBubbleActive) {
+            // Deku bubble: skip bow-draw animation, go straight to aim loop.
+            // Without this, every re-fire plays the full "draw bow" anim before aiming.
+            this->unk_836 = 1; // Skip draw anim state machine (already "loaded")
+        } else if (!Player_HoldsHookshot(this)) {
             anim = &gPlayerAnim_link_bow_bow_ready;
         } else {
             anim = &gPlayerAnim_link_hook_shot_ready;
         }
-        LinkAnimation_PlayOnce(play, &this->upperSkelAnime, anim);
+        if (!sDekuBubbleActive) {
+            LinkAnimation_PlayOnce(play, &this->upperSkelAnime, anim);
+        }
     } else {
         Player_SetUpperActionFunc(this, func_80835884);
         this->unk_834 = 10;
+        // Entry transition: use OOT's short link_boom_throw_wait2waitR (~4 frames) so the
+        // user can release B and trigger the throw with minimal delay. The form's long
+        // cutterwaitanim is the LOOP anim played by func_80835884 once this short entry
+        // completes — it should NOT be used as the entry PlayOnce, otherwise the user has
+        // to wait for the entire ~30 frame loop before throw becomes possible.
         LinkAnimation_PlayOnce(play, &this->upperSkelAnime, &gPlayerAnim_link_boom_throw_wait2waitR);
     }
 
     if (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) {
         Player_AnimPlayLoop(play, this, &gPlayerAnim_link_uma_anim_walk);
-    } else if ((this->actor.bgCheckFlags & 1) && !Player_UpdateHostileLockOn(this)) {
+    } else if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && !Player_UpdateHostileLockOn(this)) {
         Player_AnimPlayLoop(play, this, GET_PLAYER_ANIM(PLAYER_ANIMGROUP_wait, this->modelAnimType));
     }
 
@@ -2944,6 +3403,21 @@ int func_80834E7C(PlayState* play) {
 }
 
 s32 func_80834EB8(Player* this, PlayState* play) {
+    // Skijer's NEI switchhook — free-fire in THIRD person (Ultrahand style): never enter the
+    // bow/hookshot aim camera (the "first-person" aim). Returning 1 here is the same path
+    // Z-targeting takes, so Link fires the hook straight in his facing/camera direction with
+    // no aim-mode zoom. EXCEPTION: while the C-Up MANUAL AIM is up (item_switchhook.c) fall
+    // through so the vanilla path keeps unk_6AD = 2 / the aim camera alive. Only the Switch
+    // Hook (variant 4).
+    {
+        extern u8 Nei_ArmsHookVariant(Player * player);
+        if (Nei_ArmsHookVariant(this) == 4) {
+            extern u8 SwitchHook_IsAimingManual(void);
+            if (!SwitchHook_IsAimingManual()) {
+                return 1;
+            }
+        }
+    }
     if ((this->unk_6AD == 0) || (this->unk_6AD == 2)) {
         if (Player_IsZTargeting(this) || (Camera_CheckValidMode(Play_GetCamera(play, 0), 7) == 0)) {
             return 1;
@@ -2985,8 +3459,18 @@ s32 func_8083501C(Player* this, PlayState* play) {
         this->unk_860 = -this->unk_860;
     }
 
-    if ((!Player_HoldsHookshot(this) || func_80834FBC(this)) && !func_80834758(play, this) &&
+    if ((!Player_HoldsHookshot(this) || func_80834FBC(this)) && !Player_TryRaiseUpperBodyShield(play, this) &&
         !func_80834F2C(this, play)) {
+        // Deku bubble: pipeline fully exiting — restore default state
+        if (sDekuBubbleActive) {
+            sDekuBubbleActive = 0;
+            this->stateFlags1 &= ~PLAYER_STATE1_ITEM_IN_HAND;
+            this->stateFlags1 &= ~PLAYER_STATE1_READY_TO_FIRE;
+            this->heldItemAction = PLAYER_IA_NONE;
+            this->itemAction = PLAYER_IA_NONE;
+            // Reset upper action to default idle to prevent sword swing on next frame
+            Player_SetUpperActionFunc(this, func_8083485C);
+        }
         return false;
     } else if (this->rideActor != NULL) {
         this->unk_6AD = 2; // OTRTODO: THIS IS A BAD IDEA BUT IT FIXES THE HORSE FIRST PERSON?
@@ -3022,6 +3506,19 @@ s32 func_808350A4(PlayState* play, Player* this) {
 
             Player_RequestRumble(this, 150, 10, 150, 0);
         } else {
+            // Skijer's NEI switchhook — out of charges: the launch simply never happens. Bail BEFORE
+            // any state is touched (parent/heldActor stay intact), so the player just keeps holding
+            // the hook — aborting later, from the hook actor, left heldActor NULL and softlocked.
+            {
+                extern u8 Nei_ArmsHookVariant(Player * player);
+                extern u8 SwitchHook_GetCharges(void);
+
+                if ((Nei_ArmsHookVariant(this) == 4) && (SwitchHook_GetCharges() == 0)) {
+                    Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                    return 0;
+                }
+            }
             Player_RequestRumble(this, 255, 20, 150, 0);
         }
 
@@ -3050,8 +3547,14 @@ s32 func_808351D4(Player* this, PlayState* play) {
     Math_ScaledStepToS(&this->upperLimbRot.z, 1200, 400);
     this->unk_6AE_rotFlags |= UNK6AE_ROT_UPPER_Z;
 
-    if ((this->unk_836 == 0) && (Player_CheckForIdleAnim(this) == IDLE_ANIM_NONE) &&
-        (this->skelAnime.animation == &gPlayerAnim_link_bow_side_walk)) {
+    // Deku bubble: skip entire upper body animation state machine (player hidden in first-person).
+    // Just keep unk_836 >= 1 so the fire condition at line 3239 works.
+    if (sDekuBubbleActive) {
+        if (this->unk_836 < 1) {
+            this->unk_836 = 2;
+        }
+    } else if ((this->unk_836 == 0) && (Player_CheckForIdleAnim(this) == IDLE_ANIM_NONE) &&
+               (this->skelAnime.animation == &gPlayerAnim_link_bow_side_walk)) {
         LinkAnimation_PlayOnce(play, &this->upperSkelAnime, D_808543CC[sp2C]);
         this->unk_836 = -1;
     } else if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
@@ -3070,11 +3573,20 @@ s32 func_808351D4(Player* this, PlayState* play) {
     if ((this->unk_836 > 0) && ((this->unk_860 < 0) || (!sHeldItemButtonIsHeldDown && !func_80834E7C(play)))) {
         Player_SetUpperActionFunc(this, func_808353D8);
         if (this->unk_860 >= 0) {
-            if (sp2C == 0) {
+            if (sDekuBubbleActive) {
+                // Deku bubble: fire bubble on B release (no arrow to detach, no ammo)
+                extern void MmForm_FireDekuBubble(Player * player, PlayState * play);
+                MmForm_FireDekuBubble(this, play);
+                // Reset unk_860 to negative so re-nock works in func_808353D8.
+                // Without this, unk_860 stays positive after ABS() at line 3272,
+                // making the re-nock condition (unk_860 < 0 && sHeldItemButtonIsHeldDown) always fail.
+                this->unk_860 = -2;
+            } else if (sp2C == 0) {
                 if (!func_808350A4(play, this)) {
                     Player_PlaySfx(this, D_808543DC[ABS(this->unk_860) - 1]);
                 }
-            } else if (this->actor.bgCheckFlags & 1) {
+            } else if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (gChampionSlowFactor < 1.0f)) {
+                // Champion's Tunic: allow hookshot/longshot to fire mid-air during Bullet Time
                 func_808350A4(play, this);
             }
         }
@@ -3094,14 +3606,14 @@ s32 func_808353D8(Player* this, PlayState* play) {
         return true;
     }
 
-    if (!func_80834758(play, this) &&
+    if (!Player_TryRaiseUpperBodyShield(play, this) &&
         (sUseHeldItem || ((this->unk_860 < 0) && sHeldItemButtonIsHeldDown) || func_80834E44(play))) {
         this->unk_860 = ABS(this->unk_860);
 
         if (func_8083442C(this, play)) {
             if (Player_HoldsHookshot(this)) {
                 this->unk_836 = 1;
-            } else {
+            } else if (!sDekuBubbleActive) {
                 LinkAnimation_PlayOnce(play, &this->upperSkelAnime, &gPlayerAnim_link_bow_bow_shoot_next);
             }
         }
@@ -3132,7 +3644,7 @@ s32 func_808353D8(Player* this, PlayState* play) {
 }
 
 s32 func_80835588(Player* this, PlayState* play) {
-    if (!(this->actor.bgCheckFlags & 1) || LinkAnimation_Update(play, &this->upperSkelAnime)) {
+    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || LinkAnimation_Update(play, &this->upperSkelAnime)) {
         Player_SetUpperActionFunc(this, func_8083501C);
     }
 
@@ -3142,7 +3654,7 @@ s32 func_80835588(Player* this, PlayState* play) {
 void Player_SetParallel(Player* this) {
     this->stateFlags1 |= PLAYER_STATE1_PARALLEL;
 
-    if (!(this->skelAnime.movementFlags & 0x80) && (this->actor.bgCheckFlags & 0x200) &&
+    if (!(this->skelAnime.movementFlags & 0x80) && (this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) &&
         (sShapeYawToTouchedWall < 0x2000)) {
         // snap to the wall
         this->yaw = this->actor.shape.rot.y = this->actor.wallYaw + 0x8000;
@@ -3175,7 +3687,7 @@ s32 Player_UpperAction_CarryActor(Player* this, PlayState* play) {
         func_80834644(play, this);
     }
 
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
@@ -3205,7 +3717,7 @@ void func_808357E8(Player* this, Gfx** dLists) {
 }
 
 s32 func_80835800(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
@@ -3221,7 +3733,13 @@ s32 func_80835800(Player* this, PlayState* play) {
 s32 func_80835884(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
         Player_SetUpperActionFunc(this, func_808358F0);
-        LinkAnimation_PlayLoop(play, &this->upperSkelAnime, &gPlayerAnim_link_boom_throw_waitR);
+        {
+            // Skijer's NEI: anim override (Zora boomerang throw-wait)
+            LinkAnimationHeader* anim = &gPlayerAnim_link_boom_throw_waitR;
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_WAIT, 0, &anim,
+                                  this);
+            LinkAnimation_PlayLoop(play, &this->upperSkelAnime, anim);
+        }
     }
 
     func_80834EB8(this, play);
@@ -3250,6 +3768,14 @@ s32 func_808358F0(Player* this, PlayState* play) {
         Player_SetUpperActionFunc(this, func_808359FC);
         LinkAnimation_PlayOnce(play, &this->upperSkelAnime,
                                (this->unk_870 < 0.5f) ? &gPlayerAnim_link_boom_throwR : &gPlayerAnim_link_boom_throwL);
+        // Override throw anim for Zora
+        {
+            extern LinkAnimationHeader* MmForm_GetZoraBoomerangAnim(s32 phase);
+            LinkAnimationHeader* formThrow = TransformMasks_IsTransformed() ? MmForm_GetZoraBoomerangAnim(1) : NULL;
+            if (formThrow) {
+                LinkAnimation_PlayOnce(play, &this->upperSkelAnime, formThrow);
+            }
+        }
     }
 
     return true;
@@ -3260,27 +3786,74 @@ s32 func_808359FC(Player* this, PlayState* play) {
         Player_SetUpperActionFunc(this, func_80835B60);
         this->unk_834 = 0;
     } else if (LinkAnimation_OnFrame(&this->upperSkelAnime, 6.0f)) {
-        f32 posX = (Math_SinS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.x;
-        f32 posZ = (Math_CosS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.z;
-        s32 yaw = (this->focusActor != NULL) ? this->actor.shape.rot.y + 14000 : this->actor.shape.rot.y;
-        EnBoom* boomerang =
-            (EnBoom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOOM, posX, this->actor.world.pos.y + 30.0f, posZ,
-                                 this->actor.focus.rot.x, yaw, 0, 0);
+        // Zora: spawn 2 fins from hand positions (MM z_player.c:14053-14088)
+        if (TransformMasks_IsTransformed() && MmForm_GetCurrentForm() == 2 /* ZORA */) {
+            s16 untargetedRotY;
 
-        this->boomerangActor = &boomerang->actor;
+            // Left fin: spawn from left hand body part position (MM line 14053)
+            Vec3f leftPos = this->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+            leftPos.y = this->actor.world.pos.y + 50.0f;
+            untargetedRotY = this->actor.shape.rot.y - 0x190;
 
-        if (boomerang != NULL) {
-            boomerang->moveTo = this->focusActor;
-            boomerang->returnTimer = 20;
-            this->stateFlags1 |= PLAYER_STATE1_BOOMERANG_THROWN;
+            EnBoom* leftBoom = (EnBoom*)Actor_Spawn(
+                &play->actorCtx, play, ACTOR_EN_BOOM, leftPos.x, leftPos.y, leftPos.z, this->actor.focus.rot.x,
+                (this->focusActor != NULL) ? this->actor.shape.rot.y + 0x36B0 : untargetedRotY, 0, 1);
 
-            if (!Player_CheckHostileLockOn(this)) {
-                Player_SetParallel(this);
+            if (leftBoom != NULL) {
+                leftBoom->moveTo = this->focusActor;
+                leftBoom->returnTimer = 20;
+
+                // Right fin: spawn from right hand body part position (MM line 14071)
+                Vec3f rightPos = this->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+                rightPos.y = this->actor.world.pos.y + 50.0f;
+                untargetedRotY = this->actor.shape.rot.y + 0x190;
+
+                EnBoom* rightBoom = (EnBoom*)Actor_Spawn(
+                    &play->actorCtx, play, ACTOR_EN_BOOM, rightPos.x, rightPos.y, rightPos.z, this->actor.focus.rot.x,
+                    (this->focusActor != NULL) ? this->actor.shape.rot.y - 0x36B0 : untargetedRotY, 0, 2);
+
+                if (rightBoom != NULL) {
+                    rightBoom->moveTo = this->focusActor;
+                    rightBoom->returnTimer = 20;
+                    leftBoom->actor.child = &rightBoom->actor;
+                    rightBoom->actor.parent = &leftBoom->actor;
+                }
+
+                this->boomerangActor = &leftBoom->actor;
+                this->stateFlags1 |= PLAYER_STATE1_BOOMERANG_THROWN;
+
+                if (!Player_CheckHostileLockOn(this)) {
+                    Player_SetParallel(this);
+                }
+
+                this->unk_A73 = 4;
+                Player_PlaySfx(this, NA_SE_IT_BOOMERANG_THROW);
+                Player_PlayVoiceSfx(this, NA_SE_VO_LI_SWORD_N);
             }
+        } else {
+            // Vanilla: 1 boomerang
+            f32 posX = (Math_SinS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.x;
+            f32 posZ = (Math_CosS(this->actor.shape.rot.y) * 10.0f) + this->actor.world.pos.z;
+            s32 yaw = (this->focusActor != NULL) ? this->actor.shape.rot.y + 14000 : this->actor.shape.rot.y;
+            EnBoom* boomerang =
+                (EnBoom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOOM, posX, this->actor.world.pos.y + 30.0f, posZ,
+                                     this->actor.focus.rot.x, yaw, 0, 0);
 
-            this->unk_A73 = 4;
-            Player_PlaySfx(this, NA_SE_IT_BOOMERANG_THROW);
-            Player_PlayVoiceSfx(this, NA_SE_VO_LI_SWORD_N);
+            this->boomerangActor = &boomerang->actor;
+
+            if (boomerang != NULL) {
+                boomerang->moveTo = this->focusActor;
+                boomerang->returnTimer = 20;
+                this->stateFlags1 |= PLAYER_STATE1_BOOMERANG_THROWN;
+
+                if (!Player_CheckHostileLockOn(this)) {
+                    Player_SetParallel(this);
+                }
+
+                this->unk_A73 = 4;
+                Player_PlaySfx(this, NA_SE_IT_BOOMERANG_THROW);
+                Player_PlayVoiceSfx(this, NA_SE_VO_LI_SWORD_N);
+            }
         }
     }
 
@@ -3288,13 +3861,19 @@ s32 func_808359FC(Player* this, PlayState* play) {
 }
 
 s32 func_80835B60(Player* this, PlayState* play) {
-    if (func_80834758(play, this)) {
+    if (Player_TryRaiseUpperBodyShield(play, this)) {
         return true;
     }
 
     if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
         Player_SetUpperActionFunc(this, func_80835C08);
-        LinkAnimation_PlayOnce(play, &this->upperSkelAnime, &gPlayerAnim_link_boom_catch);
+        {
+            // Skijer's NEI: anim override (Zora boomerang catch)
+            LinkAnimationHeader* anim = &gPlayerAnim_link_boom_catch;
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ZORA_BOOMERANG_CATCH, 0, &anim,
+                                  this);
+            LinkAnimation_PlayOnce(play, &this->upperSkelAnime, anim);
+        }
         func_808357E8(this, gPlayerLeftHandBoomerangDLs);
         Player_PlaySfx(this, NA_SE_PL_CATCH_BOOMERANG);
         Player_PlayVoiceSfx(this, NA_SE_VO_LI_SWORD_N);
@@ -3317,13 +3896,41 @@ s32 func_80835C08(Player* this, PlayState* play) {
     return true;
 }
 
+// Skijer's NEI: hands-free Iron Knuckle's Axe throw. Mirrors the boomerang throw upper-action
+// (func_808359FC) but WITHOUT the frame-6 spawn — the axe is spawned by the mod in the aimed
+// direction, so this only plays Link's throw animation and then hands the upper body to the
+// vanilla handsfree boomerang-out state (func_80835B60), letting Link move while the axe flies.
+static s32 Player_UpperAction_IKAxeThrow(Player* this, PlayState* play) {
+    if (LinkAnimation_Update(play, &this->upperSkelAnime)) {
+        Player_SetUpperActionFunc(this, func_80835B60);
+    }
+    return true;
+}
+
+void Player_StartIKAxeThrow(Player* this, PlayState* play) {
+    Player_SetUpperActionFunc(this, Player_UpperAction_IKAxeThrow);
+    LinkAnimation_PlayOnce(play, &this->upperSkelAnime,
+                           (this->unk_870 < 0.5f) ? &gPlayerAnim_link_boom_throwR : &gPlayerAnim_link_boom_throwL);
+}
+
+// Skijer's NEI: called when the thrown axe is caught. The boomerang catch chain
+// (func_80835B60 → func_80835C08 → func_80835800) leaves the upper-action in the RANGED-item
+// state (func_80835800), so the next C-press fires a bow draw instead of swinging the hammer.
+// Restore the melee/idle upper-action (func_8083485C) and re-assert the hammer — the same restore
+// the Deku-bubble exit (func_8083501C) uses to prevent a wrong action on the next frame.
+void Player_EndIKAxeThrow(Player* this) {
+    Player_SetUpperActionFunc(this, func_8083485C);
+    this->heldItemAction = PLAYER_IA_HAMMER;
+    this->itemAction = PLAYER_IA_HAMMER;
+}
+
 s32 Player_SetupAction(PlayState* play, Player* this, PlayerActionFunc actionFunc, s32 flags) {
     if (actionFunc == this->actionFunc) {
         return 0;
     }
 
     if (Player_Action_8084E3C4 == this->actionFunc) {
-        Audio_OcaSetInstrument(0);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         this->stateFlags2 &= ~(PLAYER_STATE2_ATTEMPT_PLAY_FOR_ACTOR | PLAYER_STATE2_PLAY_FOR_ACTOR);
     } else if (Player_Action_808507F4 == this->actionFunc) {
         func_80832340(play, this);
@@ -3398,19 +4005,19 @@ void Player_SetupActionPreserveItemAction(PlayState* play, Player* this, PlayerA
     }
 }
 
-void func_80835E44(PlayState* play, s16 camSetting) {
-    if (!func_800C0CB8(play)) {
+void Player_RequestCameraSetting(PlayState* play, s16 camSetting) {
+    if (!Play_CamIsNotFixed(play)) {
         if (camSetting == CAM_SET_SCENE_TRANSITION) {
-            Interface_ChangeAlpha(2);
+            Interface_ChangeHudVisibilityMode(HUD_VISIBILITY_NOTHING_ALT);
         }
     } else {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), camSetting);
+        Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), camSetting);
     }
 }
 
-void func_80835EA4(PlayState* play, s32 arg1) {
-    func_80835E44(play, CAM_SET_TURN_AROUND);
-    Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, arg1, 0, 0);
+void Player_SetTurnAroundCamera(PlayState* play, s32 camItemType) {
+    Player_RequestCameraSetting(play, CAM_SET_TURN_AROUND);
+    Camera_SetCameraData(Play_GetCamera(play, CAM_ID_MAIN), CAM_DATA_SET_2, NULL, NULL, camItemType, 0, 0);
 }
 
 void Player_DestroyHookshot(Player* this) {
@@ -3432,13 +4039,74 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
 
     itemAction = Player_ItemToItemAction(item);
 
+    // Rito: bombs, Deku nuts, the SW97 elemental seeds and the boomerang stay
+    // usable in the air. The throw still runs through OOT below — this only puts
+    // the MHR throw clip on the body while it happens. Skijer's NEI
+    {
+        extern unsigned char MmForm_RitoTryAirThrow(Player * player, PlayState * play, s32 itemAction);
+        MmForm_RitoTryAirThrow(this, play, itemAction);
+    }
+
+    // Gerudo Dual Blades: drawing (B in free with a sword on B) and sheathing (A while
+    // standing, which arrives here as ITEM_NONE) are whole-body clips of hers, not the
+    // upper-body item change. She hands the item over herself when the clip ends.
+    if (GerudoMhr_InterceptUseItem(play, this, item)) {
+        return;
+    }
+
+    // Skijer's NEI — using an MM trade-quest item (Moon's Tear, Title Deeds, Room Key, letters): present
+    // it in hand like an adult trade item, but pop the "time and place" gag message instead of any real
+    // effect. (The OoT trade items and the Pendant keep their own behavior.)
+    {
+        extern unsigned char TradeAdult_IsMmTradeUseItem(s32 item);
+        extern void TradeAdult_PresentAndMessage(PlayState * play, Player * player, s32 item);
+        if (TradeAdult_IsMmTradeUseItem(item)) {
+            TradeAdult_PresentAndMessage(play, this, item);
+            return;
+        }
+    }
+
+    // Boss Remains: pressing C while a boss remains is on the button is a NO-OP at use-item level —
+    // the wear toggle (mask on Link's face) is driven per-frame by BossRemains_TickInput instead,
+    // like the MM 2ship mask handling. Never let a remains reach the vanilla item machinery.
+    if ((item == ITEM_MM_REMAINS_ODOLWA) || (item == ITEM_MM_REMAINS_GOHT) || (item == ITEM_MM_REMAINS_GYORG) ||
+        (item == ITEM_MM_REMAINS_TWINMOLD)) {
+        return;
+    }
+
+    // Skijer's NEI — MM bottle-content USE behaviors (decided in mods/items/mm_bottles_behavior.cpp):
+    // a content with no OoT function presents the bottle + "time and place" gag (the bottle STAYS
+    // filled); Hot Spring Water acts as Blue Fire; NATIVE contents fall through to their own flow.
+    {
+        extern void TradeAdult_PresentAndMessage(PlayState * play, Player * player, s32 item);
+        extern int MmBottle_FromItemId(unsigned short ootItemId); // MmBottleContent
+        extern int MmBottle_GetUseBehavior(int content);          // MmBottleUseBehavior
+        int mmBottleContent = MmBottle_FromItemId((unsigned short)item);
+        if (mmBottleContent >= 0) {
+            int mmBottleBeh = MmBottle_GetUseBehavior(mmBottleContent);
+            if (mmBottleBeh == 0 /* MM_BOTTLE_USE_CANT_USE */) {
+                TradeAdult_PresentAndMessage(play, this, item);
+                return;
+            }
+            if (mmBottleBeh == 1 /* MM_BOTTLE_USE_BLUE_FIRE */) {
+                item = ITEM_BLUE_FIRE; // pour as Blue Fire (the vanilla flow empties the used slot)
+                itemAction = Player_ItemToItemAction(item);
+            }
+            // MM_BOTTLE_USE_NATIVE / CUSTOM: fall through to the vanilla dispatch below.
+        }
+    }
+
+    // Power Keg shares the Bomb slot: when its mode is selected (kaleido wheel) it is pulled out and held
+    // exactly like a bomb. That is handled downstream in Player_InitExplosiveIA (PowerKeg_TryPull), so the
+    // normal bomb flow runs here unchanged. Skijer's NEI
+
     if (((this->heldItemAction == this->itemAction) &&
          (!(this->stateFlags1 & PLAYER_STATE1_SHIELDING) || (Player_ActionToMeleeWeapon(itemAction) != 0) ||
           (itemAction == PLAYER_IA_NONE))) ||
         ((this->itemAction < 0) && ((Player_ActionToMeleeWeapon(itemAction) != 0) || (itemAction == PLAYER_IA_NONE)))) {
 
         if ((itemAction == PLAYER_IA_NONE) || !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) ||
-            ((this->actor.bgCheckFlags & 1) &&
+            ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
              ((itemAction == PLAYER_IA_HOOKSHOT) || (itemAction == PLAYER_IA_LONGSHOT)))) {
 
             if ((play->bombchuBowlingStatus == 0) &&
@@ -3452,16 +4120,27 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                 // Also prevent explosives from being used if there are 3 or more active (outside of bombchu bowling)
                 Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
             } else if (itemAction == PLAYER_IA_LENS_OF_TRUTH) {
-                // Handle Lens of Truth
-                if (Magic_RequestChange(play, 0, MAGIC_CONSUME_LENS)) {
-                    if (play->actorCtx.lensActive) {
-                        Actor_DisableLens(play);
-                    } else {
-                        play->actorCtx.lensActive = true;
-                    }
-                    Sfx_PlaySfxCentered((play->actorCtx.lensActive) ? NA_SE_SY_GLASSMODE_ON : NA_SE_SY_GLASSMODE_OFF);
+                // Pictograph Box shares the Lens slot (Gust-Jar-element style). When its mode is
+                // selected, the Lens C-button enters the photo viewfinder instead of the Lens, and
+                // the Lens itself does NOT activate. Skijer's NEI
+                extern unsigned char Picto_IsOwned(void);
+                extern unsigned char Picto_IsOnLensActive(void);
+                extern void Picto_EnterAimMode(PlayState * play);
+                if (Picto_IsOwned() && Picto_IsOnLensActive()) {
+                    Picto_EnterAimMode(play);
                 } else {
-                    Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
+                    // Handle Lens of Truth
+                    if (Magic_RequestChange(play, 0, MAGIC_CONSUME_LENS)) {
+                        if (play->actorCtx.lensActive) {
+                            Actor_DisableLens(play);
+                        } else {
+                            play->actorCtx.lensActive = true;
+                        }
+                        Sfx_PlaySfxCentered((play->actorCtx.lensActive) ? NA_SE_SY_GLASSMODE_ON
+                                                                        : NA_SE_SY_GLASSMODE_OFF);
+                    } else {
+                        Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
+                    }
                 }
             } else if (itemAction == PLAYER_IA_DEKU_NUT) {
                 // Handle Deku Nuts
@@ -3472,16 +4151,54 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                 }
             } else if ((temp = Player_ActionToMagicSpell(this, itemAction)) >= 0) {
                 // Handle magic spells
-                if (((itemAction == PLAYER_IA_FARORES_WIND) && (gSaveContext.respawn[RESPAWN_MODE_TOP].data > 0)) ||
+                s32 isMedallionSpell = SW97_MEDALLIONS_ENABLED() && Sw97_IsMedallionItem(item);
+                if (((itemAction == PLAYER_IA_FARORES_WIND) && (gSaveContext.respawn[RESPAWN_MODE_TOP].data > 0) &&
+                     !isMedallionSpell) ||
                     ((gSaveContext.magicCapacity != 0) && (gSaveContext.magicState == MAGIC_STATE_IDLE) &&
-                     (gSaveContext.magic >= sMagicSpellCosts[temp]))) {
+                     // Magic Cape (Skijer): castable with HALF the magic — matches the halved consume
+                     // in func_8083AF44 (MAGIC_REQ(sMagicSpellCosts[...])).
+                     (gSaveContext.magic >= MAGIC_REQ(sMagicSpellCosts[temp])))) {
                     this->itemAction = itemAction;
                     this->unk_6AD = 4;
+                    sSw97SpellActive = isMedallionSpell;
                 } else {
                     Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
                 }
-            } else if (itemAction >= PLAYER_IA_MASK_KEATON) {
-                // Handle wearable masks
+            } else if (item >= ITEM_MM_MASK_POSTMAN && item <= ITEM_MM_MASK_FIERCE_DEITY) {
+                if (TransformMasks_TryFormFromItem(play, this, item)) {
+                    return;
+                }
+                // MM masks with an OOT counterpart behave 1:1 with the OOT trade mask:
+                // Bunny Hood (speed + jump), Keaton Mask (gate guard) and Mask of Truth
+                // (gossip stones, Deku Theater) wear the OOT mask so all NPC interactions work.
+                if (item == ITEM_MM_MASK_BUNNY || item == ITEM_MM_MASK_KEATON || item == ITEM_MM_MASK_TRUTH) {
+                    s32 ootMask = (item == ITEM_MM_MASK_BUNNY)    ? PLAYER_MASK_BUNNY
+                                  : (item == ITEM_MM_MASK_KEATON) ? PLAYER_MASK_KEATON
+                                                                  : PLAYER_MASK_TRUTH;
+                    TransformMasks_WearClear(); // Clear any other MM worn mask
+                    if (this->currentMask != PLAYER_MASK_NONE) {
+                        this->currentMask = PLAYER_MASK_NONE;
+                    } else {
+                        this->currentMask = ootMask;
+                    }
+                    gSaveContext.ship.maskMemory = this->currentMask;
+                    func_808328EC(this, NA_SE_PL_CHANGE_ARMS);
+                } else {
+                    // Non-transformation, non-bunny MM masks: toggle wearing visually
+                    // Clear any OOT mask when putting on MM mask
+                    if (TransformMasks_WearGetCurrent() == ITEM_NONE && this->currentMask != PLAYER_MASK_NONE) {
+                        this->currentMask = PLAYER_MASK_NONE;
+                        gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
+                    }
+                    TransformMasks_WearToggle(play, this, item);
+                }
+            } else if (itemAction >= PLAYER_IA_MASK_KEATON && itemAction <= PLAYER_IA_MASK_TRUTH) {
+                if (TransformMasks_TryFormFromItem(play, this, item)) {
+                    return;
+                }
+
+                TransformMasks_WearClear();
+
                 if (this->currentMask != PLAYER_MASK_NONE) {
                     this->currentMask = PLAYER_MASK_NONE;
                 } else {
@@ -3491,12 +4208,18 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
                 gSaveContext.ship.maskMemory = this->currentMask;
 
                 func_808328EC(this, NA_SE_PL_CHANGE_ARMS);
-            } else if (((itemAction >= PLAYER_IA_OCARINA_FAIRY) && (itemAction <= PLAYER_IA_OCARINA_OF_TIME)) ||
-                       (itemAction >= PLAYER_IA_BOTTLE_FISH)) {
+            } else if (itemAction == PLAYER_IA_ROCS_FEATHER_SKIJER || itemAction == PLAYER_IA_ROCS_CAPE ||
+                       itemAction == PLAYER_IA_DEMISE_DESTRUCTION || itemAction == PLAYER_IA_HYLIAS_GRACE ||
+                       itemAction == PLAYER_IA_ZONAI_PERMAFROST || itemAction == PLAYER_IA_TIME_GATE) {
+                // CUSTOM ITEMS: Instant-activation items spell-like
+            } else if ((((itemAction >= PLAYER_IA_OCARINA_FAIRY) && (itemAction <= PLAYER_IA_OCARINA_OF_TIME)) ||
+                        (itemAction >= PLAYER_IA_BOTTLE_FISH)) &&
+                       // Exclude ALL custom items - they use held item system for equip/unequip animations
+                       itemAction < PLAYER_IA_ROCS_FEATHER_SKIJER) {
                 // Handle "cutscene items"
                 if (!Player_CheckHostileLockOn(this) ||
                     ((itemAction >= PLAYER_IA_BOTTLE_POTION_RED) && (itemAction <= PLAYER_IA_BOTTLE_FAIRY))) {
-                    func_8002D53C(play, &play->actorCtx.titleCtx);
+                    TitleCard_Clear(play, &play->actorCtx.titleCtx);
                     this->unk_6AD = 4;
                     this->itemAction = itemAction;
                 }
@@ -3548,21 +4271,26 @@ void func_80836448(PlayState* play, Player* this, LinkAnimationHeader* anim) {
     Player_PlayVoiceSfx(this, NA_SE_VO_LI_DOWN);
 
     if (this->actor.category == ACTORCAT_PLAYER) {
-        func_800F47BC();
+        Audio_SetBgmVolumeOffDuringFanfare();
 
-        if (Inventory_ConsumeFairy(play)) {
+        if (ExtEquip_IkanaDeathSave(play)) {
+            // Shield of Ikana death save: revive with darkness aura
+            play->gameOverCtx.state = GAMEOVER_REVIVE_START;
+            this->av1.actionVar1 = 1;
+        } else if (Inventory_ConsumeFairy(play)) {
             play->gameOverCtx.state = GAMEOVER_REVIVE_START;
             this->av1.actionVar1 = 1;
         } else {
             play->gameOverCtx.state = GAMEOVER_DEATH_START;
-            func_800F6AB0(0);
+            Audio_StopBgmAndFanfare(0);
             Audio_PlayFanfare(NA_BGM_GAME_OVER);
             gSaveContext.seqId = (u8)NA_BGM_DISABLED;
             gSaveContext.natureAmbienceId = NATURE_ID_DISABLED;
+            TransformMasks_OnDeath();
         }
 
-        OnePointCutscene_Init(play, 9806, cond ? 120 : 60, &this->actor, MAIN_CAM);
-        ShrinkWindow_SetVal(0x20);
+        OnePointCutscene_Init(play, 9806, cond ? 120 : 60, &this->actor, CAM_ID_MAIN);
+        Letterbox_SetSizeTarget(32);
     }
 }
 
@@ -3593,7 +4321,10 @@ int Player_CanUpdateItems(Player* this) {
  * depending on some conditions. See details below.
  */
 s32 Player_UpdateUpperBody(Player* this, PlayState* play) {
-    if (!(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (this->actor.parent != NULL) && Player_HoldsHookshot(this)) {
+    if (this->actor.parent != NULL &&
+        GameInteractor_Should(VB_PREVENT_HOOKSHOT_PARENT_SOFTLOCK,
+                              !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && Player_HoldsHookshot(this),
+                              &this->actor.parent->id)) {
         Player_SetupAction(play, this, Player_Action_80850AEC, 1);
         this->stateFlags3 |= PLAYER_STATE3_FLYING_WITH_HOOKSHOT;
         Player_AnimPlayOnce(play, this, &gPlayerAnim_link_hook_fly_start);
@@ -3778,7 +4509,13 @@ s32 func_80836AB8(Player* this, s32 arg1) {
  */
 void Player_UpdateZTargeting(Player* this, PlayState* play) {
     s32 ignoreLeash = false;
-    s32 zButtonHeld = CHECK_BTN_ALL(sControlInput->cur.button, BTN_Z);
+    // SM64 Mario: vanilla Z-targeting is driven by R (Z is Mario's crouch). Read R
+    // from the RAW input (play->state.input[0]) — the sControlInput copy (sp44) gets
+    // filtered/zeroed for transformed players, which would drop R. Everything else
+    // (lock-on to NPCs/enemies, reticle, camera) is the normal flow.
+    s32 sm64ZTarget = Sm64Mario_IsReady();
+    s32 zButtonHeld = sm64ZTarget ? CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_R)
+                                  : CHECK_BTN_ALL(sControlInput->cur.button, BTN_Z);
     Actor* nextLockOnActor;
     s32 pad;
     s32 usingHoldTargeting;
@@ -3830,7 +4567,8 @@ void Player_UpdateZTargeting(Player* this, PlayState* play) {
             if (!(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) &&
                 ((this->heldItemAction != PLAYER_IA_FISHING_POLE) || (this->unk_860 == 0)) &&
                 GameInteractor_Should(VB_TOGGLE_Z_TARGET_SWITCH_DIRECTION,
-                                      CHECK_BTN_ALL(sControlInput->press.button, BTN_Z))) {
+                                      sm64ZTarget ? CHECK_BTN_ALL(play->state.input[0].press.button, BTN_R)
+                                                  : CHECK_BTN_ALL(sControlInput->press.button, BTN_Z))) {
 
                 if (this->actor.category == ACTORCAT_PLAYER) {
                     // The next lock-on actor defaults to the actor Navi is hovering over.
@@ -3883,7 +4621,7 @@ void Player_UpdateZTargeting(Player* this, PlayState* play) {
 
             if (this->focusActor != NULL) {
                 if ((this->actor.category == ACTORCAT_PLAYER) && (this->focusActor != this->autoLockOnActor) &&
-                    func_8002F0C8(this->focusActor, this, ignoreLeash)) {
+                    Attention_ShouldReleaseLockOn(this->focusActor, this, ignoreLeash)) {
                     Player_ReleaseLockOn(this);
                     this->stateFlags1 |= PLAYER_STATE1_LOCK_ON_FORCED_TO_RELEASE;
                 } else if (this->focusActor != NULL) {
@@ -4046,6 +4784,29 @@ s32 Player_GetMovementSpeedAndYaw(Player* this, f32* outSpeedTarget, s16* outYaw
         return false;
     } else {
         *outYawTarget += Camera_GetInputDirYaw(GET_ACTIVE_CAM(play));
+
+        // Fierce Deity / Pikachu: 1.5x speed target, affecting ALL actions (walk/run/swim/midair). Skijer's NEI
+        if (TransformMasks_IsTransformedAny()) {
+            extern f32 MmForm_GetSpeedMultiplier(void);
+            *outSpeedTarget *= MmForm_GetSpeedMultiplier();
+        }
+
+        // Boss Remains (Odolwa): the run boost (hold A) applies to EVERY stick-driven direction —
+        // all locomotion actions pull their speed target from here. Returns 1.0f unless the Odolwa
+        // run is active. Mirrors the MM 2ship hook in Player_GetMovementSpeedAndYaw.
+        *outSpeedTarget *= BossRemains_RunSpeedMul();
+
+        // Gerudo's speed multiplier, same trick as Odolwa's run above: every
+        // stick-driven action reads its speed target from here, so walk, run,
+        // backwalk and sidestep all scale together and nothing else has to know
+        // about it. Neutral (1.0f) right now — R used to sprint and is the blade
+        // guard instead, and the sprint is moving to held A. The hook stays so
+        // that lands as a one-function change.
+        *outSpeedTarget *= GerudoMhr_RunSpeedMul();
+
+        // Kafei's stamina sprint rides the same chokepoint.
+        *outSpeedTarget *= KafeiForm_RunSpeedMul();
+
         return true;
     }
 }
@@ -4403,6 +5164,11 @@ s32 func_80837818(Player* this) {
 }
 
 void func_80837918(Player* this, s32 quadIndex, u32 dmgFlags) {
+    // Giant's Mask: Link's strikes land as hammer blows (MM behavior). Skijer's NEI
+    extern s32 MmMaskWear_IsGiantMaskActive(void);
+    if (MmMaskWear_IsGiantMaskActive()) {
+        dmgFlags = DMG_HAMMER_SWING;
+    }
     this->meleeWeaponQuads[quadIndex].info.toucher.dmgFlags = dmgFlags;
 
     if (dmgFlags == 2) {
@@ -4418,9 +5184,22 @@ static u32 D_80854488[][2] = {
 };
 
 void func_80837948(PlayState* play, Player* this, s32 arg2) {
+    // Riding the Master Cycle: no melee, whatever is in his hands. This is the single door every
+    // sword/stick/hammer swing goes through, so closing it here covers the B press, the combo
+    // continuations and the jump slash in one place. Skijer's NEI
+    if (MasterCycle_IsRiding()) {
+        return;
+    }
+
     s32 pad;
     u32 dmgFlags;
     s32 temp;
+
+    // Fixed chains that OOT's stick-angle picker cannot express. Mutually exclusive — Gerudo is a
+    // form, the Trident is equipment on human Link — and whichever declines passes arg2 through.
+    arg2 = GerudoMhr_NextComboMwa(this, arg2);
+    arg2 = Trident_NextComboMwa(this, arg2);
+    arg2 = ByrnaIg_NextComboMwa(this, arg2);
 
     Player_SetupAction(play, this, Player_Action_808502D0, 0);
     this->unk_844 = 8;
@@ -4433,13 +5212,23 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
     }
 
     this->unk_845++;
-    if (this->unk_845 >= 3) {
+    if (GameInteractor_Should(VB_PLAYER_ADVANCE_COMBO, this->unk_845 >= 3, this)) {
         arg2 += 2;
     }
 
     this->meleeWeaponAnimation = arg2;
 
-    Player_AnimPlayOnceAdjusted(play, this, D_80854190[arg2].unk_00);
+    LinkAnimationHeader* swingAnim = D_80854190[arg2].unk_00;
+    GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_MELEE_SWING, arg2, &swingAnim, this);
+
+    // The Trident's chained slashes morph into each other so Link travels from where one ends to
+    // where the next begins; everything else snaps.
+    if (Trident_MorphsRow(this, arg2) || ByrnaIg_MorphsRow(this, arg2)) {
+        Player_AnimChangeOnceMorphAdjusted(play, this, swingAnim);
+    } else {
+        Player_AnimPlayOnceAdjusted(play, this, swingAnim);
+    }
+
     if ((arg2 != PLAYER_MWA_FLIPSLASH_START) && (arg2 != PLAYER_MWA_JUMPSLASH_START)) {
         Player_StartAnimMovement(play, this, 0x209);
     }
@@ -4452,6 +5241,23 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
         temp = Player_GetMeleeWeaponHeld(this) - 1;
     }
 
+    // Transformation masks: Player_GetMeleeWeaponHeld returns 0 for every form (they
+    // swing their own body, not a sword), but func_8083BB20 still hands them OOT's
+    // jump/flip slash — so temp lands on -1 and the D_80854488[temp] rows below read
+    // OUT OF BOUNDS. Whatever garbage sat before the array became the attack's damage
+    // flags, which is why a form's aerial slash (Goron especially, since B is not
+    // filtered for it) *sometimes* dealt no damage at all and sometimes worked.
+    // Pin the row to Kokiri (0) so the form's slash always has defined damage flags.
+    // Vanilla swordless Link is untouched: he never reaches here without a sword
+    // except through the intentional QPA path, which still sees temp == -1 below.
+    // Gerudo in rage hits for double: one damage tier up (Kokiri→Master→BGS), which is
+    // exactly how OOT scales sword damage. Neutral outside rage / for everyone else.
+    temp = GerudoMhr_DamageTier(this, temp);
+
+    if ((temp < 0) && TransformMasks_IsTransformedAny()) {
+        temp = 0;
+    }
+
     if ((arg2 >= PLAYER_MWA_FLIPSLASH_START) && (arg2 <= PLAYER_MWA_JUMPSLASH_FINISH)) {
         if (CVarGetInteger(CVAR_GENERAL("RestoreQPA"), 1) && temp == -1) {
             dmgFlags = 0x16171617;
@@ -4462,8 +5268,103 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
         dmgFlags = D_80854488[temp][0];
     }
 
+    // NEI Gilded Sword: the Kokiri Sword + Gilded keeps Master-Sword reach/trail (set in
+    // Player_GetMeleeWeaponHeld) but hits as hard as the Biggoron's Sword — swap to the
+    // Biggoron damage-flag row (index 2). Razor (no Gilded) keeps Master damage.
+    if (this->heldItemAction == PLAYER_IA_SWORD_KOKIRI && WeaponUpgrade_HasGilded()) {
+        dmgFlags = ((arg2 >= PLAYER_MWA_FLIPSLASH_START) && (arg2 <= PLAYER_MWA_JUMPSLASH_FINISH)) ? D_80854488[2][1]
+                                                                                                   : D_80854488[2][0];
+    }
+
+    // Cane of Byrna: the glaive hits 1:1 with the Master Sword whatever sword is
+    // underneath it, so it takes that row (index 0) instead of the player's own.
+    if (ByrnaIg_OwnsComboRow(this)) {
+        dmgFlags = ((arg2 >= PLAYER_MWA_FLIPSLASH_START) && (arg2 <= PLAYER_MWA_JUMPSLASH_FINISH)) ? D_80854488[0][1]
+                                                                                                   : D_80854488[0][0];
+    }
+
     func_80837918(this, 0, dmgFlags);
     func_80837918(this, 1, dmgFlags);
+
+    // Boss Remains (Odolwa): every melee swing with magic fires a moth projectile forward, like the
+    // FD sword beam below. Self-guards on Odolwa-worn + magic. Mirrors the MM 2ship melee-setup hook.
+    BossRemains_OdolwaSwordMoth(play, this);
+
+    // FD sword beam: fire blue energy disk on B-attack while Z-targeting.
+    // From MM z_player.c func_808332A0 (line 5465): spawns EN_M_THUNDER with pitch toward target.
+    // Magic: MM uses MAGIC_CONSUME_DEITY_BEAM (direct subtraction of 1 unit, bypasses state machine).
+    // Use focusActor check (set by Player_UpdateZTargeting BEFORE action func runs).
+    if (TransformMasks_IsFDSkinMode() && gSaveContext.magic > 0) {
+        // Target: hard lock-on (focusActor) first, else the soft offering target Navi is
+        // pointing at (arrowPointedActor). Yaw is overridden in EnMThunder_Init from
+        // player->actor.shape.rot.y + 0x8000, so the spawn yaw arg is 0.
+        //
+        // NO TARGET → NO BEAM (Skijer 2026-07-28). This used to auto-acquire the nearest
+        // enemy/boss within 800 units and, failing that, still fire a straight beam on
+        // every single swing — so FD spammed beams while just clearing bushes. Now the
+        // beam is a deliberate act: aim at something, then swing, and it homes on THAT
+        // actor via EnMThunder_SwordBeamAction.
+        Actor* fdTarget = (this->focusActor != NULL) ? this->focusActor : play->actorCtx.targetCtx.arrowPointedActor;
+
+        if (fdTarget != NULL) {
+            s16 beamPitch = Math_Vec3f_Pitch(&this->bodyPartsPos[PLAYER_BODYPART_WAIST], &fdTarget->focus.pos);
+            Actor* beam =
+                Actor_Spawn(&play->actorCtx, play, ACTOR_EN_M_THUNDER, this->bodyPartsPos[PLAYER_BODYPART_WAIST].x,
+                            this->bodyPartsPos[PLAYER_BODYPART_WAIST].y, this->bodyPartsPos[PLAYER_BODYPART_WAIST].z,
+                            beamPitch, 0, 0, 0x80);
+            if (beam != NULL) {
+                // Hand the beam its target so EnMThunder_SwordBeamAction homes in on it
+                // each frame — moving enemies still get hit.
+                ((EnMThunder*)beam)->homingTarget = fdTarget;
+                // Direct magic subtraction (MM MAGIC_CONSUME_DEITY_BEAM behavior)
+                gSaveContext.magic -= 1;
+                if (gSaveContext.magic < 0) {
+                    gSaveContext.magic = 0;
+                }
+            }
+        }
+    }
+
+    // NEI Real Master Sword: at FULL health a Master Sword swing fires the same FD thunder
+    // beam (homes on the lock-on / nearest enemy). Independent of FD form; no magic cost —
+    // it's a full-health perk, mirroring the classic full-HP sword beam.
+    // ONLY the REAL Master Sword: the IA alone isn't enough — the Net aliases to the Master IA
+    // (heldItemId == ITEM_NET), and other swords can end up with this IA through NEI forcing paths —
+    // so also require the actual Master Sword on B. Skijer's NEI
+    if (this->heldItemAction == PLAYER_IA_SWORD_MASTER && (this->heldItemId != ITEM_NET) &&
+        (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER) && WeaponUpgrade_HasTrueMaster() &&
+        gSaveContext.health >= gSaveContext.healthCapacity) {
+        Actor* msTarget = (this->focusActor != NULL) ? this->focusActor : play->actorCtx.targetCtx.arrowPointedActor;
+        s16 msBeamPitch;
+        if (msTarget == NULL) {
+            s32 msCat;
+            f32 msBestDist = 800.0f;
+            for (msCat = 0; msCat < 2; msCat++) {
+                s32 msCatId = (msCat == 0) ? ACTORCAT_ENEMY : ACTORCAT_BOSS;
+                Actor* msActor = play->actorCtx.actorLists[msCatId].head;
+                while (msActor != NULL) {
+                    if (msActor->update != NULL) {
+                        f32 msDist =
+                            Math_Vec3f_DistXYZ(&this->bodyPartsPos[PLAYER_BODYPART_WAIST], &msActor->world.pos);
+                        if (msDist < msBestDist) {
+                            msBestDist = msDist;
+                            msTarget = msActor;
+                        }
+                    }
+                    msActor = msActor->next;
+                }
+            }
+        }
+        msBeamPitch =
+            (msTarget != NULL) ? Math_Vec3f_Pitch(&this->bodyPartsPos[PLAYER_BODYPART_WAIST], &msTarget->focus.pos) : 0;
+        Actor* msBeam =
+            Actor_Spawn(&play->actorCtx, play, ACTOR_EN_M_THUNDER, this->bodyPartsPos[PLAYER_BODYPART_WAIST].x,
+                        this->bodyPartsPos[PLAYER_BODYPART_WAIST].y, this->bodyPartsPos[PLAYER_BODYPART_WAIST].z,
+                        msBeamPitch, 0, 0, 0x80);
+        if (msBeam != NULL) {
+            ((EnMThunder*)msBeam)->homingTarget = msTarget;
+        }
+    }
 }
 
 /**
@@ -4510,6 +5411,27 @@ s32 func_80837B18_modified(PlayState* play, Player* this, s32 damage, u8 modifie
         modifiedDamage *= (1 << CVarGetInteger(CVAR_ENHANCEMENT("DamageMult"), 0));
     }
 
+    // MM-form "glass cannon" multiplier (e.g. Garo = 1.5x incoming). Apply only
+    // to HP loss (damage < 0); heals (damage > 0) are untouched. Layered AFTER
+    // the DamageMult CVar, so order is: damage * (1 << DamageMult) * formMult.
+    // Re-entrancy: this function is the chokepoint for every damage call, so a
+    // single AC hit gets multiplied exactly once. Multi-hit boss attacks fire
+    // this once per hit, so each hit receives the 1.5x penalty independently —
+    // that's intentional (glass cannon should suffer more per impact), not a
+    // compounding bug.
+    if (modifiedDamage < 0) {
+        f32 mult = MmForm_GetIncomingDamageMult();
+        // Giant's Mask is a worn-mask buff (not a form), so it isn't covered by
+        // MmForm_GetIncomingDamageMult — apply its 1/4 damage here (MM z_player.c:5841). Skijer's NEI
+        extern s32 MmMaskWear_IsGiantMaskActive(void);
+        if (MmMaskWear_IsGiantMaskActive()) {
+            mult *= 0.25f;
+        }
+        if (mult != 1.0f) {
+            modifiedDamage = (s32)((f32)modifiedDamage * mult - 0.5f);
+        }
+    }
+
     return Health_ChangeBy(play, modifiedDamage);
 }
 
@@ -4524,7 +5446,13 @@ void func_80837B60(Player* this) {
 
 void func_80837B9C(Player* this, PlayState* play) {
     Player_SetupAction(play, this, Player_Action_8084411C, 0);
-    Player_AnimPlayLoop(play, this, &gPlayerAnim_link_normal_landing_wait);
+    {
+        // Skijer's NEI: anim override (free fall). OOT hard-codes its fall pose
+        // at all three call sites instead of tabling it, so forms reach it here.
+        LinkAnimationHeader* fallAnim = &gPlayerAnim_link_normal_landing_wait;
+        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_FALL_WAIT, 0, &fallAnim, this);
+        Player_AnimPlayLoop(play, this, fallAnim);
+    }
     this->av2.actionVar2 = 1;
     if (this->unk_6AD != 3) {
         this->unk_6AD = 0;
@@ -4536,6 +5464,22 @@ static LinkAnimationHeader* D_808544B0[] = {
     &gPlayerAnim_link_normal_back_shitR, &gPlayerAnim_link_normal_front_hit,   &gPlayerAnim_link_anchor_front_hitR,
     &gPlayerAnim_link_normal_back_hit,   &gPlayerAnim_link_anchor_back_hitR,
 };
+
+// Hit-reaction table: 0-3 the short flinches (front/back, plain/lock-on), 4-7 the
+// big ones. Forms re-skin the light hit through here (Gerudo's "soft damage").
+LinkAnimationHeader* ExtPlayer_GetHitAnim(s32 index) {
+    if ((index < 0) || (index >= 8)) {
+        return NULL;
+    }
+    return D_808544B0[index];
+}
+
+void ExtPlayer_SetHitAnim(s32 index, LinkAnimationHeader* anim) {
+    if ((index < 0) || (index >= 8) || (anim == NULL)) {
+        return;
+    }
+    D_808544B0[index] = anim;
+}
 
 void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 speed, f32 yVelocity, s16 yRot,
                    s32 invincibilityTimer) {
@@ -4552,7 +5496,7 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
 
     if (!func_80837B18(play, this, 0 - this->actor.colChkInfo.damage)) {
         this->stateFlags2 &= ~PLAYER_STATE2_GRABBED_BY_ENEMY;
-        if (!(this->actor.bgCheckFlags & 1) && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+        if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
             func_80837B9C(this, play);
         }
         return;
@@ -4560,7 +5504,11 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
 
     Player_SetIntangibility(this, invincibilityTimer);
 
-    if (damageResponseType == PLAYER_HIT_RESPONSE_ICE_TRAP) {
+    if (!GameInteractor_Should(VB_PLAYER_SUFFER_STATUS, true, damageResponseType, this)) {
+        damageResponseType = PLAYER_HIT_RESPONSE_NONE;
+    }
+
+    if (damageResponseType == PLAYER_HIT_RESPONSE_FROZEN) {
         Player_SetupAction(play, this, Player_Action_8084FB10, 0);
 
         anim = &gPlayerAnim_link_normal_ice_down;
@@ -4570,7 +5518,7 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
 
         Player_PlaySfx(this, NA_SE_PL_FREEZE_S);
         Player_PlayVoiceSfx(this, NA_SE_VO_LI_FREEZE);
-    } else if (damageResponseType == PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK) {
+    } else if (damageResponseType == PLAYER_HIT_RESPONSE_ELECTRIFIED) {
         Player_SetupAction(play, this, Player_Action_8084FBF4, 0);
 
         Player_RequestRumble(this, 255, 80, 150, 0);
@@ -4592,7 +5540,8 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
 
             Player_PlayVoiceSfx(this, NA_SE_VO_LI_DAMAGE_S);
         } else if ((damageResponseType == PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE) ||
-                   (damageResponseType == PLAYER_HIT_RESPONSE_KNOCKBACK_SMALL) || !(this->actor.bgCheckFlags & 1) ||
+                   (damageResponseType == PLAYER_HIT_RESPONSE_KNOCKBACK_SMALL) ||
+                   !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
                    (this->stateFlags1 &
                     (PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_CLIMBING_LADDER))) {
             Player_SetupAction(play, this, Player_Action_8084377C, 0);
@@ -4630,7 +5579,7 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
             }
 
             this->hoverBootsTimer = 0;
-            this->actor.bgCheckFlags &= ~1;
+            this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
         } else {
             if ((this->linearVelocity > 4.0f) && !Player_CheckHostileLockOn(this)) {
                 this->unk_890 = 20;
@@ -4682,7 +5631,8 @@ void func_80837C0C(PlayState* play, Player* this, s32 damageResponseType, f32 sp
     }
 }
 
-s32 func_80838144(s32 arg0) {
+// formerly func_80838144
+s32 Player_GetHotFloorTimerIndex(s32 arg0) {
     s32 temp = arg0 - 2;
 
     if ((temp >= 0) && (temp < 2)) {
@@ -4696,8 +5646,9 @@ int func_8083816C(s32 arg0) {
     return (arg0 == 4) || (arg0 == 7) || (arg0 == 12);
 }
 
-void func_8083819C(Player* this, PlayState* play) {
-    if (this->currentShield == PLAYER_SHIELD_DEKU && (CVarGetInteger(CVAR_CHEAT("FireproofDekuShield"), 0) == 0)) {
+// formerly func_8083819C
+void Player_BurnDekuShield(Player* this, PlayState* play) {
+    if (GameInteractor_Should(VB_BURN_SHIELD, this->currentShield == PLAYER_SHIELD_DEKU, this)) {
         Actor_Spawn(&play->actorCtx, play, ACTOR_ITEM_SHIELD, this->actor.world.pos.x, this->actor.world.pos.y,
                     this->actor.world.pos.z, 0, 0, 0, 1);
         Inventory_DeleteEquipment(play, EQUIP_TYPE_SHIELD);
@@ -4705,8 +5656,13 @@ void func_8083819C(Player* this, PlayState* play) {
     }
 }
 
-void func_8083821C(Player* this) {
+// formerly func_8083821C
+void Player_CatchFire(Player* this) {
     s32 i;
+
+    if (!GameInteractor_Should(VB_PLAYER_CATCH_FIRE, true, this)) {
+        return;
+    }
 
     // clang-format off
     for (i = 0; i < PLAYER_BODYPART_MAX; i++) { this->bodyFlameTimers[i] = Rand_S16Offset(0, 200); }
@@ -4717,7 +5673,7 @@ void func_8083821C(Player* this) {
 
 void func_80838280(Player* this) {
     if (this->actor.colChkInfo.acHitEffect == 1) {
-        func_8083821C(this);
+        Player_CatchFire(this);
     }
     Player_PlayVoiceSfx(this, NA_SE_VO_LI_FALL_L);
 }
@@ -4726,6 +5682,21 @@ void func_808382BC(Player* this) {
     if ((this->invincibilityTimer >= 0) && (this->invincibilityTimer < 20)) {
         this->invincibilityTimer = 20;
     }
+}
+
+// Magic Tunic (Spirit, ext tunic 2): absorb a hit like a shield block. The rupee charge (and the
+// 30% coin spill) happens inside func_80837B18 -> Health_ChangeBy (Breastplate_OnHealthChangeBefore);
+// here we only grant the i-frames a real hit would give and report "handled" so the caller skips the
+// hurt voice, the damage animation and the knockback — Link plants his feet as if the attack bounced
+// off a shield. Skijer's NEI
+static s32 Player_SpiritTunicAbsorbHit(PlayState* play, Player* this) {
+    if (!ExtEquip_SpiritHasMoney()) {
+        return 0;
+    }
+    func_80837B18(play, this, 0 - this->actor.colChkInfo.damage);
+    Player_RequestRumble(this, 180, 20, 100, 0);
+    Player_SetIntangibility(this, 20);
+    return 1;
 }
 
 s32 func_808382DC(Player* this, PlayState* play) {
@@ -4742,7 +5713,7 @@ s32 func_808382DC(Player* this, PlayState* play) {
     } else {
         sp68 = ((Player_GetHeight(this) - 8.0f) < (this->unk_6C4 * this->actor.scale.y));
 
-        if (sp68 || (this->actor.bgCheckFlags & 0x100) || (sFloorType == 9) ||
+        if (sp68 || (this->actor.bgCheckFlags & BGCHECKFLAG_CRUSHED) || (sFloorType == 9) ||
             (this->stateFlags2 & PLAYER_STATE2_FORCED_VOID_OUT)) {
             Player_PlayVoiceSfx(this, NA_SE_VO_LI_DAMAGE_S);
 
@@ -4775,8 +5746,9 @@ s32 func_808382DC(Player* this, PlayState* play) {
             }
 
             Player_PlayVoiceSfx(this, NA_SE_VO_LI_TAKEN_AWAY);
-            play->unk_11DE9 = 1;
+            play->haltAllActors = true;
             Sfx_PlaySfxCentered(NA_SE_OC_ABYSS);
+        } else if (GameInteractor_Should(VB_PLAYER_PARRY_HIT, false, this, play)) {
         } else if ((this->knockbackType != PLAYER_KNOCKBACK_NONE) &&
                    ((this->knockbackType >= PLAYER_KNOCKBACK_LARGE) || (this->invincibilityTimer == 0))) {
             u8 knockbackResponse[] = {
@@ -4785,15 +5757,19 @@ s32 func_808382DC(Player* this, PlayState* play) {
                 PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE,
             };
 
-            func_80838280(this);
-
-            if (this->knockbackType == PLAYER_KNOCKBACK_LARGE_SHOCK) {
-                this->bodyShockTimer = 40;
-            }
-
+            // Magic Tunic: charge the full hit (base + knockback damage) but stay on our feet.
             this->actor.colChkInfo.damage += this->knockbackDamage;
-            func_80837C0C(play, this, knockbackResponse[this->knockbackType - 1], this->knockbackSpeed,
-                          this->knockbackYVelocity, this->knockbackRot, 20);
+            if (!Player_SpiritTunicAbsorbHit(play, this)) {
+                func_80838280(this);
+
+                if ((this->knockbackType == PLAYER_KNOCKBACK_LARGE_ELECTRIFIED) &&
+                    GameInteractor_Should(VB_PLAYER_SUFFER_STATUS, true, PLAYER_HIT_RESPONSE_ELECTRIFIED, this)) {
+                    this->bodyShockTimer = 40;
+                }
+
+                func_80837C0C(play, this, knockbackResponse[this->knockbackType - 1], this->knockbackSpeed,
+                              this->knockbackYVelocity, this->knockbackRot, 20);
+            }
         } else {
             sp64 = (this->shieldQuad.base.acFlags & AC_BOUNCED) != 0;
 
@@ -4805,6 +5781,8 @@ s32 func_808382DC(Player* this, PlayState* play) {
                          (this->cylinder.info.atHit != NULL) && (this->cylinder.info.atHit->atFlags & 0x20000000))) {
 
                 Player_RequestRumble(this, 180, 20, 100, 0);
+
+                GameInteractor_Should(VB_PLAYER_SHIELD_BLOCKED, true, this, play);
 
                 if (!Player_IsChildWithHylianShield(this)) {
                     if (this->invincibilityTimer >= 0) {
@@ -4843,8 +5821,8 @@ s32 func_808382DC(Player* this, PlayState* play) {
                     }
                 }
 
-                if (sp64 && (this->shieldQuad.info.acHitInfo->toucher.effect == 1)) {
-                    func_8083819C(this, play);
+                if (sp64 && (this->shieldQuad.info.acHitInfo->toucher.effect == HIT_SPECIAL_EFFECT_FIRE)) {
+                    Player_BurnDekuShield(this, play);
                 }
 
                 return 0;
@@ -4860,17 +5838,23 @@ s32 func_808382DC(Player* this, PlayState* play) {
                 Actor* ac = this->cylinder.base.ac;
                 s32 sp4C;
 
+                // Magic Tunic: the body hit is absorbed shield-style (no thud sfx, no hurt voice,
+                // no reaction) — same return as the shield-block branch above.
+                if (Player_SpiritTunicAbsorbHit(play, this)) {
+                    return 0;
+                }
+
                 if (ac->flags & ACTOR_FLAG_SFX_FOR_PLAYER_BODY_HIT) {
                     Player_PlaySfx(this, NA_SE_PL_BODY_HIT);
                 }
 
                 if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) {
                     sp4C = PLAYER_HIT_RESPONSE_NONE;
-                } else if (this->actor.colChkInfo.acHitEffect == 2) {
-                    sp4C = PLAYER_HIT_RESPONSE_ICE_TRAP;
-                } else if (this->actor.colChkInfo.acHitEffect == 3) {
-                    sp4C = PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK;
-                } else if (this->actor.colChkInfo.acHitEffect == 4) {
+                } else if (this->actor.colChkInfo.acHitEffect == HIT_SPECIAL_EFFECT_ICE) {
+                    sp4C = PLAYER_HIT_RESPONSE_FROZEN;
+                } else if (this->actor.colChkInfo.acHitEffect == HIT_SPECIAL_EFFECT_ELECTRIC) {
+                    sp4C = PLAYER_HIT_RESPONSE_ELECTRIFIED;
+                } else if (this->actor.colChkInfo.acHitEffect == HIT_SPECIAL_EFFECT_KNOCKBACK) {
                     sp4C = PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE;
                 } else {
                     func_80838280(this);
@@ -4882,19 +5866,27 @@ s32 func_808382DC(Player* this, PlayState* play) {
                 return 0;
             } else {
                 static u8 D_808544F4[] = { 120, 60 };
-                s32 sp48 = func_80838144(sFloorType);
+                s32 sp48 = Player_GetHotFloorTimerIndex(sFloorType);
 
+                // Desert immunity (Gerudo) and the Goron form's tunic-less heat resistance gate
+                // both floor arms outright. Arm 1 is spikes, not heat, so it stays ungated.
+                // Not Player_SuffersHeat: there the Goron Tunic is full immunity, here it only
+                // delays the lava-floor damage by D_808544F4 frames.
+                u8 gerudoDesertImmune = GerudoForm_IsActive() || TransformMasks_HasFireResistance();
                 if (((this->actor.wallPoly != NULL) &&
                      SurfaceType_IsWallDamage(&play->colCtx, this->actor.wallPoly, this->actor.wallBgId)) ||
-                    ((sp48 >= 0) &&
+                    (!gerudoDesertImmune && !ExtEquip_HasSagesResistance(SAGES_RESIST_FIRE) && (sp48 >= 0) &&
                      SurfaceType_IsWallDamage(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId) &&
                      (this->floorTypeTimer >= D_808544F4[sp48])) ||
-                    ((sp48 >= 0) &&
+                    (!gerudoDesertImmune && !ExtEquip_HasSagesResistance(SAGES_RESIST_FIRE) && (sp48 >= 0) &&
                      ((this->currentTunic != PLAYER_TUNIC_GORON && CVarGetInteger(CVAR_CHEAT("SuperTunic"), 0) == 0) ||
                       (this->floorTypeTimer >= D_808544F4[sp48])))) {
                     this->floorTypeTimer = 0;
                     this->actor.colChkInfo.damage = 4;
-                    func_80837C0C(play, this, PLAYER_HIT_RESPONSE_NONE, 4.0f, 5.0f, this->actor.shape.rot.y, 20);
+                    // Magic Tunic: spike walls / hot floors are absorbed too (rupees charged, no stagger).
+                    if (!Player_SpiritTunicAbsorbHit(play, this)) {
+                        func_80837C0C(play, this, PLAYER_HIT_RESPONSE_NONE, 4.0f, 5.0f, this->actor.shape.rot.y, 20);
+                    }
                 } else {
                     return 0;
                 }
@@ -4913,8 +5905,11 @@ void func_80838940(Player* this, LinkAnimationHeader* anim, f32 arg2, PlayState*
     }
 
     this->actor.velocity.y = arg2 * sWaterSpeedFactor;
+    // Tornado Rod: every launch off the ground goes through here — plain jump, side hops, backflip —
+    // so the wind boost is applied once, where the velocity is written. Skijer's NEI
+    WandWind_Boost(this);
     this->hoverBootsTimer = 0;
-    this->actor.bgCheckFlags &= ~1;
+    this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
 
     Player_PlayJumpingSfx(this);
     Player_PlayVoiceSfx(this, sfxId);
@@ -4935,20 +5930,25 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
     f32 wallPolyNormalZ;
     f32 sp24;
 
-    if (!(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->ledgeClimbType >= 2) &&
+    if (GameInteractor_Should(VB_PLAYER_GRAB_LEDGE, true, this) &&
+        !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->ledgeClimbType >= 2) &&
         (!(this->stateFlags1 & PLAYER_STATE1_IN_WATER) || (this->ageProperties->unk_14 > this->yDistToLedge))) {
         sp3C = 0;
 
         if (func_808332B8(this)) {
-            if (this->actor.yDistToWater < 50.0f) {
-                if ((this->ledgeClimbType < 2) || (this->yDistToLedge > this->ageProperties->unk_10)) {
+            // MM: FD can climb out from deeper water (80.0f vs 50.0f for others)
+            f32 waterClimbDepth = (TransformMasks_IsFDSkinMode()) ? 80.0f : 50.0f;
+            if (this->actor.yDistToWater < waterClimbDepth) {
+                if ((this->ledgeClimbType < PLAYER_LEDGE_CLIMB_2) ||
+                    (this->yDistToLedge > this->ageProperties->unk_10)) {
                     return 0;
                 }
-            } else if ((this->currentBoots != PLAYER_BOOTS_IRON) || (this->ledgeClimbType > 2)) {
+            } else if ((this->currentBoots != PLAYER_BOOTS_IRON) || (this->ledgeClimbType > PLAYER_LEDGE_CLIMB_2)) {
                 return 0;
             }
-        } else if (!(this->actor.bgCheckFlags & 1) || ((this->ageProperties->unk_14 <= this->yDistToLedge) &&
-                                                       (this->stateFlags1 & PLAYER_STATE1_IN_WATER))) {
+        } else if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
+                   ((this->ageProperties->unk_14 <= this->yDistToLedge) &&
+                    (this->stateFlags1 & PLAYER_STATE1_IN_WATER))) {
             return 0;
         }
 
@@ -5010,7 +6010,11 @@ s32 Player_ActionHandler_12(Player* this, PlayState* play) {
 
             return 1;
         }
-    } else if ((this->actor.bgCheckFlags & 1) && (this->ledgeClimbType == 1) && (this->ledgeClimbDelayTimer >= 3)) {
+    } else if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (this->ledgeClimbType == 1) &&
+               (this->ledgeClimbDelayTimer >= 3)) {
+        if (!GameInteractor_Should(VB_PLAYER_EDGE_REACTION, true, this)) {
+            return 0;
+        }
         temp = (this->yDistToLedge * 0.08f) + 5.5f;
         func_808389E8(this, &gPlayerAnim_link_normal_jump, temp, play);
         this->linearVelocity = 2.5f;
@@ -5035,6 +6039,11 @@ void func_80838E70(PlayState* play, Player* this, f32 arg2, s16 arg3) {
 }
 
 void func_80838F18(PlayState* play, Player* this) {
+    // Note: do NOT block this for TransformMasks_IsTransformed().
+    // This is called after water knockback (Player_Action_8084E30C) finishes.
+    // Blocking it prevents OOT's water damage recovery from completing,
+    // leaving the player stuck in the knockback action forever → softlock.
+    // Our yield system detects the transition and re-enters MM swim.
     Player_SetupAction(play, this, Player_Action_8084D610, 0);
     Player_AnimChangeLoopSlowMorph(play, this, &gPlayerAnim_link_swimer_swim_wait);
 }
@@ -5044,13 +6053,19 @@ void func_80838F5C(PlayState* play, Player* this) {
 
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_FLOOR_DISABLED;
 
-    Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_FREE0);
+    Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), CAM_SET_FREE0);
 }
 
 s32 func_80838FB8(PlayState* play, Player* this) {
     if ((play->transitionTrigger == TRANS_TRIGGER_OFF) && (this->stateFlags1 & PLAYER_STATE1_FLOOR_DISABLED)) {
         func_80838F5C(play, this);
-        Player_AnimPlayLoop(play, this, &gPlayerAnim_link_normal_landing_wait);
+        {
+            // Skijer's NEI: anim override (free fall). OOT hard-codes its fall pose
+            // at all three call sites instead of tabling it, so forms reach it here.
+            LinkAnimationHeader* fallAnim = &gPlayerAnim_link_normal_landing_wait;
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_FALL_WAIT, 0, &fallAnim, this);
+            Player_AnimPlayLoop(play, this, fallAnim);
+        }
         Player_PlayVoiceSfx(this, NA_SE_VO_LI_FALL_S);
         Sfx_PlaySfxCentered2(NA_SE_OC_SECRET_WARP_IN);
         return 1;
@@ -5123,7 +6138,7 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
         exitIndex = 0;
 
         if (!(this->stateFlags1 & PLAYER_STATE1_DEAD) && (play->transitionTrigger == TRANS_TRIGGER_OFF) &&
-            (this->csAction == 0) && !(this->stateFlags1 & PLAYER_STATE1_LOADING) &&
+            (this->csAction == PLAYER_CSACTION_NONE) && !(this->stateFlags1 & PLAYER_STATE1_LOADING) &&
             (((poly != NULL) &&
               (exitIndex = SurfaceType_GetSceneExitIndex(&play->colCtx, poly, bgId), exitIndex != 0)) ||
              (func_8083816C(sFloorType) && (this->floorProperty == 12)))) {
@@ -5131,7 +6146,7 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
             sp34 = this->unk_A84 - (s32)this->actor.world.pos.y;
 
             if (!(this->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE)) &&
-                !(this->actor.bgCheckFlags & 1) && (sp34 < 100) && (sYDistToFloor > 100.0f)) {
+                !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (sp34 < 100) && (sYDistToFloor > 100.0f)) {
                 return 0;
             }
 
@@ -5169,7 +6184,7 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
                     Scene_SetTransitionForNextEntrance(play);
                 } else {
                     if (GameInteractor_Should(VB_SET_VOIDOUT_FROM_SURFACE,
-                                              SurfaceType_GetSlope(&play->colCtx, poly, bgId) == 2,
+                                              SurfaceType_GetFloorEffect(&play->colCtx, poly, bgId) == 2,
                                               play->setupExitList[exitIndex - 1])) {
                         gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = play->nextEntranceIndex;
                         if (GameInteractor_Should(VB_TRIGGER_VOIDOUT, true, this)) {
@@ -5185,8 +6200,8 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
 
             if (!(this->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_CUTSCENE)) &&
                 !(this->stateFlags2 & PLAYER_STATE2_CRAWLING) && !func_808332B8(this) &&
-                (temp = func_80041D4C(&play->colCtx, poly, bgId), (temp != 10)) &&
-                ((sp34 < 100) || (this->actor.bgCheckFlags & 1))) {
+                (temp = SurfaceType_GetFloorType(&play->colCtx, poly, bgId), (temp != 10)) &&
+                ((sp34 < 100) || (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND))) {
 
                 if (temp == 11) {
                     Sfx_PlaySfxCentered2(NA_SE_OC_SECRET_HOLE_OUT);
@@ -5215,18 +6230,21 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
                     func_80838E70(play, this, 400.0f, yaw);
                 }
             } else {
-                if (!(this->actor.bgCheckFlags & 1)) {
+                if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
                     Player_ZeroSpeedXZ(this);
                 }
             }
 
             this->stateFlags1 |= PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_CUTSCENE;
 
-            func_80835E44(play, 0x2F);
+            Player_RequestCameraSetting(play, CAM_SET_SCENE_TRANSITION);
 
             return 1;
         } else {
-            if (play->transitionTrigger == TRANS_TRIGGER_OFF) {
+            // Trident (ext sword 3), Phantom Ganon flight: hovering within 100 units of a
+            // void-typed floor is not falling into it. The state is released the frame
+            // Link touches down, so a real landing in the pit voids as vanilla. Skijer's NEI
+            if ((play->transitionTrigger == TRANS_TRIGGER_OFF) && !Trident_IsFlying()) {
 
                 if ((this->actor.world.pos.y < -4000.0f) ||
                     (((this->floorProperty == 5) || (this->floorProperty == 12)) &&
@@ -5234,7 +6252,7 @@ s32 Player_HandleExitsAndVoids(PlayState* play, Player* this, CollisionPoly* pol
                       ((play->sceneNum != SCENE_SHADOW_TEMPLE) && (this->fallDistance > 200.0f)))) ||
                     ((play->sceneNum == SCENE_GANONS_TOWER_COLLAPSE_EXTERIOR) && (this->fallDistance > 320.0f))) {
 
-                    if (this->actor.bgCheckFlags & 1) {
+                    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
                         if (this->floorProperty == 5) {
                             Play_TriggerRespawn(play);
                         } else if (GameInteractor_Should(VB_TRIGGER_VOIDOUT, true, this)) {
@@ -5386,7 +6404,7 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
 
                 if (doorShutter->dyna.actor.category == ACTORCAT_DOOR) {
                     this->cv.slidingDoorBgCamIndex =
-                        play->transiActorCtx.list[(u16)doorShutter->dyna.actor.params >> 10]
+                        play->transiActorCtx.list[GET_TRANSITION_ACTOR_INDEX(&doorShutter->dyna.actor)]
                             .sides[(doorDirection > 0) ? 0 : 1]
                             .effects;
 
@@ -5439,7 +6457,7 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
                     doorDirection = -doorDirection;
                 }
 
-                door->playerIsOpening = 1;
+                door->playerIsOpening = true;
 
                 if (this->doorType != PLAYER_DOORTYPE_FAKE) {
                     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
@@ -5459,8 +6477,8 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
                             gSaveContext.entranceSound = NA_SE_OC_DOOR_OPEN;
                         }
                     } else {
-                        Camera_ChangeDoorCam(Play_GetCamera(play, 0), doorActor,
-                                             play->transiActorCtx.list[(u16)doorActor->params >> 10]
+                        Camera_ChangeDoorCam(Play_GetCamera(play, CAM_ID_MAIN), doorActor,
+                                             play->transiActorCtx.list[GET_TRANSITION_ACTOR_INDEX(doorActor)]
                                                  .sides[(doorDirection > 0) ? 0 : 1]
                                                  .effects,
                                              0, 38.0f * sInvWaterSpeedFactor, 26.0f * sInvWaterSpeedFactor,
@@ -5470,11 +6488,12 @@ s32 Player_ActionHandler_1(Player* this, PlayState* play) {
             }
 
             if ((this->doorType != PLAYER_DOORTYPE_FAKE) && (doorActor->category == ACTORCAT_DOOR)) {
-                frontRoom =
-                    play->transiActorCtx.list[(u16)doorActor->params >> 10].sides[(doorDirection > 0) ? 0 : 1].room;
+                frontRoom = play->transiActorCtx.list[GET_TRANSITION_ACTOR_INDEX(doorActor)]
+                                .sides[(doorDirection > 0) ? 0 : 1]
+                                .room;
 
                 if ((frontRoom >= 0) && (frontRoom != play->roomCtx.curRoom.num)) {
-                    func_8009728C(play, &play->roomCtx, frontRoom);
+                    Room_RequestNewRoom(play, &play->roomCtx, frontRoom);
                 }
             }
 
@@ -5563,7 +6582,7 @@ void func_8083A0F4(PlayState* play, Player* this) {
 
         if (interactActorId == ACTOR_BG_TOKI_SWD) {
             this->interactRangeActor->parent = &this->actor;
-            Player_SetupAction(play, this, Player_Action_8084F608, 0);
+            Player_SetupAction(play, this, Player_Action_WaitForCutscene, 0);
             this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
             if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
                 !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0)) {
@@ -5572,11 +6591,18 @@ void func_8083A0F4(PlayState* play, Player* this) {
         } else {
             LinkAnimationHeader* anim;
 
+            // Giant's Mask: max body strength, so the heavy silver-rock lift uses
+            // the light/fast one-handed carry like the small rocks instead of the
+            // slow overhead silver carry. Skijer's NEI
+            extern s32 MmMaskWear_IsGiantMaskActive(void);
+            u8 giantLightLift = MmMaskWear_IsGiantMaskActive();
+
             if (interactActorId == ACTOR_BG_HEAVY_BLOCK) {
                 Player_SetupAction(play, this, Player_Action_80846120, 0);
                 this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
                 anim = &gPlayerAnim_link_normal_heavy_carry;
-            } else if ((interactActorId == ACTOR_EN_ISHI) && ((interactRangeActor->params & 0xF) == 1)) {
+            } else if ((interactActorId == ACTOR_EN_ISHI) && (PARAMS_GET_U(interactRangeActor->params, 0, 4) == 1) &&
+                       !giantLightLift) {
                 Player_SetupAction(play, this, Player_Action_80846260, 0);
                 anim = &gPlayerAnim_link_silver_carry;
             } else if (GameInteractor_Should(VB_PREVENT_STRENGTH, ((interactActorId == ACTOR_EN_BOMBF) ||
@@ -5695,6 +6721,10 @@ void func_8083A5C4(PlayState* play, Player* this, CollisionPoly* arg2, f32 arg3,
 }
 
 s32 func_8083A6AC(Player* this, PlayState* play) {
+    if (!GameInteractor_Should(VB_PLAYER_EDGE_REACTION, true, this)) {
+        return 0;
+    }
+
     //! @bug `floorPitch` and `floorPitchAlt` are cleared to 0 before this function is called, because the player
     //! left the ground. The angles will always be zero and therefore will always pass these checks.
     //! The intention seems to be to prevent ledge hanging or vine grabbing when walking off of a steep enough slope.
@@ -5721,7 +6751,8 @@ s32 func_8083A6AC(Player* this, PlayState* play) {
 
         if (BgCheck_EntityLineTest1(&play->colCtx, &this->actor.world.pos, &sp74, &sp68, &sp84, true, false, false,
                                     true, &sp80) &&
-            ((ABS(sp84->normal.y) < 600) || (CVarGetInteger(CVAR_CHEAT("ClimbEverything"), 0) != 0))) {
+            (GameInteractor_Should(VB_SURFACE_ANGLE_IS_CLIMBABLE, ABS(sp84->normal.y) < 600) ||
+             gMogmaMittsClimbActive)) {
             f32 nx = COLPOLY_GET_NORMAL(sp84->normal.x);
             f32 ny = COLPOLY_GET_NORMAL(sp84->normal.y);
             f32 nz = COLPOLY_GET_NORMAL(sp84->normal.z);
@@ -5782,7 +6813,7 @@ void func_8083AA10(Player* this, PlayState* play) {
     this->fallDistance = this->fallStartHeight - (s32)this->actor.world.pos.y;
 
     if (!(this->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE)) &&
-        !(this->actor.bgCheckFlags & 1)) {
+        !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         if (!func_80838FB8(play, this)) {
             if (sPrevFloorProperty == 8) {
                 this->actor.world.pos.x = this->actor.prevPos.x;
@@ -5790,8 +6821,16 @@ void func_8083AA10(Player* this, PlayState* play) {
                 return;
             }
 
+            // Being airborne in any action other than the two below normally gets you
+            // yanked straight back into the fall action just below. That tore the aiming
+            // action off Link every single frame: the fall action's tail restarted the aim,
+            // this stole it again, and the aim never survived long enough to run its own
+            // rotation — so first person flickered on and refused to turn. Exempt the aim
+            // action while the midair-aim hook owns the state.
             if (!(this->stateFlags3 & PLAYER_STATE3_MIDAIR) && !(this->skelAnime.movementFlags & 0x80) &&
-                (Player_Action_8084411C != this->actionFunc) && (Player_Action_80844A44 != this->actionFunc)) {
+                (Player_Action_8084411C != this->actionFunc) && (Player_Action_80844A44 != this->actionFunc) &&
+                !((Player_Action_8084B1D8 == this->actionFunc) &&
+                  GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this))) {
 
                 if ((sPrevFloorProperty == 7) || (this->meleeWeaponState != 0)) {
                     Math_Vec3f_Copy(&this->actor.world.pos, &this->actor.prevPos);
@@ -5808,6 +6847,13 @@ void func_8083AA10(Player* this, PlayState* play) {
                     return;
                 }
 
+                // Boss Remains: Goht's bull charge launches off ledges with its banked momentum, and
+                // Odolwa's moth flight owns all movement — neither may be yanked into the fall
+                // action / auto-hop below. Mirrors the MM 2ship walk-off exemption.
+                if (BossRemains_IsGohtCharging() || BossRemains_IsOdolwaFlying()) {
+                    return;
+                }
+
                 sp5C = (s16)(this->yaw - this->actor.shape.rot.y);
 
                 Player_SetupAction(play, this, Player_Action_8084411C, 1);
@@ -5815,9 +6861,10 @@ void func_8083AA10(Player* this, PlayState* play) {
 
                 this->floorSfxOffset = this->prevFloorSfxOffset;
 
-                if ((this->actor.bgCheckFlags & 4) && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
-                    (sPrevFloorProperty != 6) && (sPrevFloorProperty != 9) && (sYDistToFloor > 20.0f) &&
-                    (this->meleeWeaponState == 0) && (ABS(sp5C) < 0x2000) && (this->linearVelocity > 3.0f)) {
+                if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND_LEAVE) &&
+                    !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) && (sPrevFloorProperty != 6) &&
+                    (sPrevFloorProperty != 9) && (sYDistToFloor > 20.0f) && (this->meleeWeaponState == 0) &&
+                    (ABS(sp5C) < 0x2000) && (this->linearVelocity > 3.0f)) {
 
                     if ((sPrevFloorProperty == 11) && !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR)) {
 
@@ -5827,6 +6874,7 @@ void func_8083AA10(Player* this, PlayState* play) {
                         if (WaterBox_GetSurface1(play, &play->colCtx, sp44.x, sp44.z, &sp3C, &sp50) &&
                             ((sp3C - sp40) > 50.0f)) {
                             func_808389E8(this, &gPlayerAnim_link_normal_run_jump_water_fall, 6.0f, play);
+                            GameInteractor_Should(VB_PLAYER_LIMIT_DIVE_XZ_SPEED, true, this);
                             Player_SetupAction(play, this, Player_Action_80844A44, 0);
                             return;
                         }
@@ -5838,7 +6886,14 @@ void func_8083AA10(Player* this, PlayState* play) {
 
                 if ((sPrevFloorProperty == 9) || (sYDistToFloor <= this->ageProperties->unk_34) ||
                     !func_8083A6AC(this, play)) {
-                    Player_AnimPlayLoop(play, this, &gPlayerAnim_link_normal_landing_wait);
+                    {
+                        // Skijer's NEI: anim override (free fall). OOT hard-codes its fall pose
+                        // at all three call sites instead of tabling it, so forms reach it here.
+                        LinkAnimationHeader* fallAnim = &gPlayerAnim_link_normal_landing_wait;
+                        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_FALL_WAIT, 0,
+                                              &fallAnim, this);
+                        Player_AnimPlayLoop(play, this, fallAnim);
+                    }
                     return;
                 }
             }
@@ -5848,33 +6903,33 @@ void func_8083AA10(Player* this, PlayState* play) {
     }
 }
 
+/**
+ * Sets camera mode for first person, depending on what weapon is held if any.
+ * (This causes the "flickering" with action swap with ranged items, as player
+ * cannot be first person with a non-ranged weapon.)
+ * @return new camera mode, `CAM_MODE_NORMAL` if failed
+ */
 s32 func_8083AD4C(PlayState* play, Player* this) {
     s32 camMode;
 
     if (this->unk_6AD == 2) {
         if (func_8002DD6C(this)) {
-            bool shouldUseBowCamera = LINK_IS_ADULT;
-
-            if (CVarGetInteger(CVAR_ENHANCEMENT("BowSlingshotAmmoFix"), 0) ||
-                CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0)) {
-                shouldUseBowCamera = this->heldItemAction != PLAYER_IA_SLINGSHOT;
-            }
-
-            camMode = shouldUseBowCamera ? CAM_MODE_BOWARROW : CAM_MODE_SLINGSHOT;
-        } else {
-            // #region SOH [Enhancement]
-            if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0)) {
-                camMode = CAM_MODE_FIRSTPERSON;
-                // #endregion
+            if (LINK_IS_ADULT) {
+                camMode = CAM_MODE_AIM_ADULT;
             } else {
-                camMode = CAM_MODE_BOOMERANG;
+                camMode = CAM_MODE_AIM_CHILD;
             }
+        } else {
+            camMode = CAM_MODE_AIM_BOOMERANG;
         }
     } else {
-        camMode = CAM_MODE_FIRSTPERSON;
+        camMode = CAM_MODE_FIRST_PERSON;
     }
 
-    return Camera_ChangeMode(Play_GetCamera(play, 0), camMode);
+    // Check if aiming camera mode should be overridden due to player settings
+    GameInteractor_Should(VB_CHANGE_AIMING_CAMERA, true, &this->heldItemAction, &camMode);
+
+    return Camera_ChangeMode(Play_GetCamera(play, CAM_ID_MAIN), camMode);
 }
 
 /**
@@ -5921,7 +6976,7 @@ void func_8083AE40(Player* this, s16 objectId) {
 void func_8083AF44(PlayState* play, Player* this, s32 magicSpell) {
     Player_SetupActionPreserveItemAction(play, this, Player_Action_808507F4, 0);
 
-    this->av1.actionVar1 = magicSpell - 3;
+    this->av1.actionVar1 = sSw97SpellActive ? magicSpell : (magicSpell - 3);
 
     //! @bug `MAGIC_CONSUME_WAIT_PREVIEW` is not guaranteed to succeed.
     //! Ideally, the return value of `Magic_RequestChange` should be checked before allowing the process of
@@ -5930,7 +6985,9 @@ void func_8083AF44(PlayState* play, Player* this, s32 magicSpell) {
     //! When `MAGIC_STATE_CONSUME_SETUP` is set in `Player_Action_808507F4`, magic will eventually be
     //! consumed to a stale target value. If that stale target value is higher than the current
     //! magic value, it will be consumed to zero.
-    Magic_RequestChange(play, sMagicSpellCosts[magicSpell], MAGIC_CONSUME_WAIT_PREVIEW);
+    // Magic Cape (Skijer): Din's/Farore's/Nayru's (+ SW97 medallions) cost half. Matches the gate at
+    // ~3941 so the spell is castable AND consumes at the halved cost.
+    Magic_RequestChange(play, MAGIC_REQ(sMagicSpellCosts[magicSpell]), MAGIC_CONSUME_WAIT_PREVIEW);
 
     u8 isFastFarores = CVarGetInteger(CVAR_ENHANCEMENT("FastFarores"), 0) && this->itemAction == PLAYER_IA_FARORES_WIND;
 
@@ -5942,9 +6999,9 @@ void func_8083AF44(PlayState* play, Player* this, s32 magicSpell) {
     }
 
     if (magicSpell == 5) {
-        this->subCamId = OnePointCutscene_Init(play, 1100, -101, NULL, MAIN_CAM);
+        this->subCamId = OnePointCutscene_Init(play, 1100, -101, NULL, CAM_ID_MAIN);
     } else {
-        func_80835EA4(play, 10);
+        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_10);
     }
 }
 
@@ -5999,20 +7056,23 @@ s32 Player_ActionHandler_13(Player* this, PlayState* play) {
     GetItemEntry giEntry;
     Actor* talkActor;
 
-    if ((this->unk_6AD != 0) &&
-        (func_808332B8(this) || (this->actor.bgCheckFlags & 1) || (this->stateFlags1 & PLAYER_STATE1_ON_HORSE))) {
+    // Vanilla only allows this while grounded, swimming or mounted. The hook exposes
+    // the airborne exception without coupling the player actor to a specific item.
+    if ((this->unk_6AD != 0) && (func_808332B8(this) || (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
+                                 GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this) ||
+                                 (this->stateFlags1 & PLAYER_STATE1_ON_HORSE))) {
 
         if (!Player_StartCsAction(play, this)) {
             if (this->unk_6AD == 4) {
                 sp2C = Player_ActionToMagicSpell(this, this->itemAction);
                 if (sp2C >= 0) {
-                    if ((sp2C != 3) || (gSaveContext.respawn[RESPAWN_MODE_TOP].data <= 0)) {
+                    if ((sp2C != 3) || (gSaveContext.respawn[RESPAWN_MODE_TOP].data <= 0) || sSw97SpellActive) {
                         func_8083AF44(play, this, sp2C);
                     } else {
                         Player_SetupAction(play, this, Player_Action_8085063C, 1);
                         this->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
                         Player_AnimPlayOnce(play, this, Player_GetIdleAnim(this));
-                        func_80835EA4(play, 4);
+                        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_4);
                     }
 
                     func_80832224(this);
@@ -6062,7 +7122,9 @@ s32 Player_ActionHandler_13(Player* this, PlayState* play) {
                                 Inventory_ChangeAmmo(ITEM_BEAN, -1);
                                 Player_SetupActionPreserveItemAction(play, this, Player_Action_8084279C, 0);
                                 this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-                                this->av2.actionVar2 = 0x50;
+                                if (GameInteractor_Should(VB_PLAY_BEAN_PLANTING_CS, true)) {
+                                    this->av2.actionVar2 = 0x50;
+                                }
                                 this->av1.actionVar1 = -1;
                             }
                             talkActor->flags |= ACTOR_FLAG_TALK;
@@ -6070,11 +7132,11 @@ s32 Player_ActionHandler_13(Player* this, PlayState* play) {
                         } else if (sp2C == EXCH_ITEM_LETTER_RUTO) {
                             this->av1.actionVar1 = 1;
                             this->actor.textId = 0x4005;
-                            func_80835EA4(play, 1);
+                            Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_1);
                         } else {
                             this->av1.actionVar1 = 2;
                             this->actor.textId = 0xCF;
-                            func_80835EA4(play, 4);
+                            Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_4);
                         }
 
                         this->actor.flags |= ACTOR_FLAG_TALK;
@@ -6097,21 +7159,21 @@ s32 Player_ActionHandler_13(Player* this, PlayState* play) {
                     if (sp2C == 0xC) {
                         Player_SetupActionPreserveItemAction(play, this, Player_Action_8084EED8, 0);
                         Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_bottle_bug_out);
-                        func_80835EA4(play, 3);
+                        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_3);
                     } else if ((sp2C > 0) && (sp2C < 4)) {
                         Player_SetupActionPreserveItemAction(play, this, Player_Action_8084EFC0, 0);
                         Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_bottle_fish_out);
-                        func_80835EA4(play, (sp2C == 1) ? 1 : 5);
+                        Player_SetTurnAroundCamera(play, (sp2C == 1) ? CAM_ITEM_TYPE_1 : CAM_ITEM_TYPE_5);
                     } else {
                         Player_SetupActionPreserveItemAction(play, this, Player_Action_8084EAC0, 0);
                         Player_AnimChangeOnceMorphAdjusted(play, this, &gPlayerAnim_link_bottle_drink_demo_start);
-                        func_80835EA4(play, 2);
+                        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_2);
                     }
                 } else {
                     Player_SetupActionPreserveItemAction(play, this, Player_Action_8084E3C4, 0);
                     Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_normal_okarina_start);
                     this->stateFlags2 |= PLAYER_STATE2_OCARINA_PLAYING;
-                    func_80835EA4(play, (this->unk_6A8 != NULL) ? 0x5B : 0x5A);
+                    Player_SetTurnAroundCamera(play, (this->unk_6A8 != NULL) ? CAM_ITEM_TYPE_91 : CAM_ITEM_TYPE_90);
                     if (this->unk_6A8 != NULL) {
                         this->stateFlags2 |= PLAYER_STATE2_PLAY_FOR_ACTOR;
                         Camera_SetParam(Play_GetCamera(play, 0), 8, this->unk_6A8);
@@ -6120,8 +7182,25 @@ s32 Player_ActionHandler_13(Player* this, PlayState* play) {
             } else if (func_8083AD4C(play, this)) {
                 if (!(this->stateFlags1 & PLAYER_STATE1_ON_HORSE)) {
                     Player_SetupAction(play, this, Player_Action_8084B1D8, 1);
-                    this->av2.actionVar2 = 13;
+                    // Vanilla delays aim-camera control for 13 updates. Bullet Time
+                    // slows those updates and makes the camera appear frozen, so a
+                    // hooked airborne aim starts responsive immediately.
+                    this->av2.actionVar2 = GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this) ? 0 : 13;
                     func_8083B010(this);
+                    // Start the airborne aim looking STRAIGHT AHEAD. focus.rot.x
+                    // ACCUMULATES and is clamped at +-14000 (~77 degrees), and the ground
+                    // aim entry is what normally zeroes it. The airborne handoff instead
+                    // inherits whatever pitch the fall/floor-look logic had already steered
+                    // it to, so the aim can begin pinned near that clamp — which reads as
+                    // the arm and upper body rotated ~90 degrees up. How much pitch was
+                    // inherited depends on how Link left the ground, which is exactly why
+                    // it only went wrong some of the time.
+                    if (GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this)) {
+                        this->actor.focus.rot.x = 0;
+                        this->actor.focus.rot.y = this->actor.shape.rot.y;
+                        this->upperLimbRot.x = 0;
+                        this->headLimbRot.x = 0;
+                    }
                 }
                 this->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
                 Sfx_PlaySfxCentered(NA_SE_SY_CAMERA_ZOOM_UP);
@@ -6181,7 +7260,7 @@ s32 Player_ActionHandler_Talk(Player* this, PlayState* play) {
                 ((this->heldActor != NULL) &&
                  (forceTalkToNavi || (talkOfferActor == this->heldActor) || (cUpTalkActor == this->heldActor) ||
                   ((talkOfferActor != NULL) && (talkOfferActor->flags & ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED))))) {
-                if ((this->actor.bgCheckFlags & 1) || (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) ||
+                if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) ||
                     (func_808332B8(this) && !(this->stateFlags2 & PLAYER_STATE2_UNDERWATER))) {
 
                     if (talkOfferActor != NULL) {
@@ -6241,7 +7320,7 @@ s32 Player_ActionHandler_Talk(Player* this, PlayState* play) {
 s32 func_8083B8F4(Player* this, PlayState* play) {
     if (!(this->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_ON_HORSE)) &&
         Camera_CheckValidMode(Play_GetCamera(play, 0), 6)) {
-        if ((this->actor.bgCheckFlags & 1) ||
+        if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
             (func_808332B8(this) && (this->actor.yDistToWater < this->ageProperties->unk_2C))) {
             this->unk_6AD = 1;
             return 1;
@@ -6279,6 +7358,9 @@ void func_8083BA90(PlayState* play, Player* this, s32 arg2, f32 xzVelocity, f32 
     this->yaw = this->actor.shape.rot.y;
     this->linearVelocity = xzVelocity;
     this->actor.velocity.y = yVelocity;
+    WandWind_Boost(this); // the jump slash is the one launch that does not go through func_80838940
+
+    GameInteractor_Should(VB_PLAYER_JUMP_SLASH_LAUNCH, true, this, arg2);
 
     this->actor.bgCheckFlags &= ~1;
     this->hoverBootsTimer = 0;
@@ -6288,10 +7370,27 @@ void func_8083BA90(PlayState* play, Player* this, s32 arg2, f32 xzVelocity, f32 
 }
 
 s32 func_8083BB20(Player* this) {
-    if (!(this->stateFlags1 & PLAYER_STATE1_SHIELDING) && (Player_GetMeleeWeaponHeld(this) != 0)) {
-        if (sUseHeldItem ||
-            ((this->actor.category != ACTORCAT_PLAYER) && CHECK_BTN_ALL(sControlInput->press.button, BTN_B))) {
-            return 1;
+    if (!(this->stateFlags1 & PLAYER_STATE1_SHIELDING)) {
+        // Transformed forms: treat as having master sword (enables jump slash/flip slash)
+        // Exceptions:
+        //   - Deku uses B for bubble attack, not sword.
+        //   - Fierce Deity is NOT a body-weapon form: it fights with a real sword through
+        //     OOT's normal pipeline (TransformMasks_IsFDSkinMode). If the player has no
+        //     sword in hand, FD must have no sword AI at all — forcing hasWeapon here gave
+        //     a swordless FD a phantom jump slash whose damage row was read out of bounds.
+        //     TransformMasks_IsTransformedAny() includes FD skin, hence the explicit skip.
+        u8 hasWeapon = (Player_GetMeleeWeaponHeld(this) != 0);
+        if (!hasWeapon && TransformMasks_IsTransformedAny() && !TransformMasks_IsFDSkinMode()) {
+
+            if (MmForm_GetCurrentForm() != 3 /* DEKU */) {
+                hasWeapon = 1;
+            }
+        }
+        if (hasWeapon) {
+            if (sUseHeldItem ||
+                ((this->actor.category != ACTORCAT_PLAYER) && CHECK_BTN_ALL(sControlInput->press.button, BTN_B))) {
+                return 1;
+            }
         }
     }
 
@@ -6308,10 +7407,26 @@ s32 func_8083BBA0(Player* this, PlayState* play) {
 }
 
 void Player_SetupRoll(Player* this, PlayState* play) {
+    if (!GameInteractor_Should(VB_PLAYER_ROLL, true, this, play)) {
+        return;
+    }
+
+    // Rito: a bird does not tuck and roll — this becomes a 1.5x Roc's Feather hop
+    // with its own clip. Skijer's NEI
+    {
+        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, int dir);
+        if (MmForm_RitoTryHop(this, play, -1)) {
+            return;
+        }
+    }
+
     Player_SetupAction(play, this, Player_Action_Roll, 0);
-    LinkAnimation_PlayOnceSetSpeed(play, &this->skelAnime,
-                                   GET_PLAYER_ANIM(PLAYER_ANIMGROUP_landing_roll, this->modelAnimType),
-                                   1.25f * sWaterSpeedFactor);
+    {
+        // Skijer's NEI: anim override (roll)
+        LinkAnimationHeader* rollAnim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_landing_roll, this->modelAnimType);
+        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_ROLL, 0, &rollAnim, this);
+        LinkAnimation_PlayOnceSetSpeed(play, &this->skelAnime, rollAnim, 1.25f * sWaterSpeedFactor);
+    }
     gSaveContext.ship.stats.count[COUNT_ROLLS]++;
 }
 
@@ -6326,8 +7441,26 @@ s32 Player_TryRoll(Player* this, PlayState* play) {
 }
 
 void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
-    func_80838940(this, D_80853D4C[controlStickDirection][0], !(controlStickDirection & 1) ? 5.8f : 3.5f, play,
-                  NA_SE_VO_LI_SWORD_N);
+    // Rito: every dodge — backflip AND both side hops — becomes a 1x Roc's Feather
+    // jump wearing the backflip clip; the side hops keep their sideways push. The
+    // table below is indexed 0 front, 1 side-left, 2 backflip, 3 side-right, and
+    // direction 0 never reaches here. Skijer's NEI
+    {
+        extern unsigned char MmForm_RitoTryHop(Player * player, PlayState * play, int dir);
+        if (MmForm_RitoTryHop(this, play, controlStickDirection)) {
+            return;
+        }
+    }
+
+    // Skijer's NEI: MHR moveset dodge-hop (moveId 0..3 = direction); main hop anim only
+    LinkAnimationHeader* hopAnim;
+    {
+        // Skijer's NEI: anim override (dodge hop)
+        hopAnim = D_80853D4C[controlStickDirection][0];
+        GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_DODGE_HOP, controlStickDirection,
+                              &hopAnim, this);
+    }
+    func_80838940(this, hopAnim, !(controlStickDirection & 1) ? 5.8f : 3.5f, play, NA_SE_VO_LI_SWORD_N);
 
     if (controlStickDirection) {}
 
@@ -6335,19 +7468,190 @@ void func_8083BCD0(Player* this, PlayState* play, s32 controlStickDirection) {
     this->av1.actionVar1 = controlStickDirection;
 
     this->yaw = this->actor.shape.rot.y + (controlStickDirection << 0xE);
-    this->linearVelocity = !(controlStickDirection & 1) ? 6.0f : 8.5f;
+    // Gerudo's rage hops cover more ground. Scaling the speed here rather than
+    // giving the hop its own action keeps OOT's arc, its wall checks and its
+    // landing exactly as they are.
+    this->linearVelocity = (!(controlStickDirection & 1) ? 6.0f : 8.5f) * GerudoMhr_HopSpeedMul();
 
     this->stateFlags2 |= PLAYER_STATE2_HOPPING;
 
     Player_PlaySfx(this, ((controlStickDirection << 0xE) == 0x8000) ? NA_SE_PL_ROLL : NA_SE_PL_SKIP);
 }
 
+// =============================================================================
+// Zora Boomerang — Uses OOT's vanilla boomerang pipeline with minimal hooks.
+// Hook 1: Entry (force heldItemAction = BOOMERANG, call func_80834D2C)
+// Hook 2: BTN_B = item button (in C-button loop, line ~2647)
+// Hook 3: Spawn 2 fins (in func_808359FC, line ~3368)
+// =============================================================================
+
+// Entry point: called from mm_player_form.cpp when B is held long enough.
+// Entry point: activates Zora boomerang mode.
+// Player_GetItemOnButton returns ITEM_BOOMERANG for BTN_B when active.
+// OOT's vanilla pipeline handles EVERYTHING (aim, camera, throw, catch).
+// Calls the EXACT same functions OOT calls when you have boomerang equipped and press C.
+void Player_StartZoraBoomerang(Player* this, PlayState* play) {
+    if (sZoraBoomerangActive) {
+        return;
+    }
+    sZoraBoomerangActive = 1;
+
+    // Make OOT think boomerang is the current held item
+    this->heldItemAction = PLAYER_IA_BOOMERANG;
+    this->itemAction = PLAYER_IA_BOOMERANG;
+
+    // CRITICAL: Set USING_BOOMERANG flag so Player_UpdateCommon line 13725
+    // calls Player_UpdateUpperBody when unk_6AD == 2 (boomerang aim camera).
+    // Without this, func_808332E4 returns false → upper body never updates.
+    this->stateFlags1 |= PLAYER_STATE1_USING_BOOMERANG;
+
+    // CRITICAL: Clear PAUSE so OOT's actionFunc runs Player_UpdateUpperBody next frame.
+    // Our trigger runs from mm_player_form (after Player_UpdateCommon). The current frame's
+    // actionFunc already ran (possibly with PAUSE from PunchEnd). Without clearing PAUSE,
+    // OOT's actionFunc won't run next frame → Player_UpdateUpperBody won't call func_80835884.
+    this->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+
+    // Call the EXACT same function chain as vanilla boomerang use
+    func_80834D2C(this, play);
+    func_80834EB8(this, play);
+
+    // Defensive: force aim camera mode if OOT's setup didn't engage it.
+    // func_80834EB8 only sets unk_6AD = 2 if Z-target inactive AND Camera_CheckValidMode
+    // returns true. When called from a post-punch context the camera might still be in
+    // a transient mode where the validity check fails, leaving unk_6AD = 0 and the aim
+    // camera unusable. Forcing it here makes entry reliable regardless of caller state.
+    if (this->unk_6AD == 0 && !Player_IsZTargeting(this)) {
+        this->unk_6AD = 2;
+    }
+
+    // Signal that the item button is being held (B = item button for Zora boomerang)
+    sUseHeldItem = sHeldItemButtonIsHeldDown = true;
+}
+
+/**
+ * The item action to fall back to when the Zora's fin boomerang releases the B button.
+ *
+ * Was hardcoded to PLAYER_IA_SWORD_MASTER in both cleanup paths, which is wrong twice
+ * over: it silently rewrites the player's held item to the Master Sword even if Kokiri or
+ * Biggoron is what's equipped, and it leaves heldItemAction >= PLAYER_IA_SWORD_MASTER so
+ * the next A press hits the put-away branch in Player_ActionHandler_Roll and unequips the
+ * sword for real.
+ *
+ * MM sidesteps all of this: the Zora holds PLAYER_IA_ZORA_BOOMERANG permanently and has no
+ * sword at all (2Ship z_player.c:3191). We can't copy that outright — OoT's
+ * PLAYER_IA_BOOMERANG is not a melee weapon the way MM's is — so instead derive the resting
+ * action from whatever is ACTUALLY on B. Note this reads gSaveContext directly rather than
+ * Player_GetItemOnButton, which lies and reports ITEM_BOOMERANG while the fins are active.
+ */
+static s8 Player_ZoraBoomerangRestingItemAction(void) {
+    s32 bItem = B_BTN_ITEM;
+
+    if (bItem == ITEM_NONE || bItem >= ITEM_NONE_FE) {
+        return PLAYER_IA_NONE;
+    }
+    return Player_ItemToItemAction(bItem);
+}
+
+// IK Axe tomahawk: same boomerang hijack as Zora
+// Called each frame from mm_player_form.cpp — deactivates when boomerang action ends.
+void Player_ZoraBoomerangCleanup(Player* this) {
+    if (!sZoraBoomerangActive)
+        return;
+
+    // Phase 1: While fins are in flight, free the player to act normally.
+    // Clear all boomerang-related state flags + restore sword item action.
+    // Keep sZoraBoomerangActive=1 and BOOMERANG_THROWN so Phase 2 + catch anim work.
+    if (this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN) {
+        this->unk_6AD = 0;
+        // Keep PARALLEL so z-target jump slash works (A + forward → jump slash via Handler_10)
+        this->stateFlags1 &=
+            ~(PLAYER_STATE1_USING_BOOMERANG | PLAYER_STATE1_ITEM_IN_HAND | PLAYER_STATE1_READY_TO_FIRE);
+        this->heldItemAction = this->itemAction = Player_ZoraBoomerangRestingItemAction();
+        // Reset upper action from boomerang chain to default idle
+        if (this->upperActionFunc == func_80835800 || this->upperActionFunc == func_80835B60 ||
+            this->upperActionFunc == func_80835C08 || this->upperActionFunc == func_808358F0 ||
+            this->upperActionFunc == func_80835884 || this->upperActionFunc == func_808359FC) {
+            Player_SetUpperActionFunc(this, func_8083485C);
+        }
+        // Transition actionFunc to the appropriate z-target action if currently in Player_Action_Idle.
+        // Player_Action_Idle uses sActionHandlerListIdle which lacks Handler_10 (jump slash).
+        // Player_Action_808407CC (z-target walk) uses sActionHandlerList2 which INCLUDES Handler_10.
+        // ONLY transition once from Idle — let OOT handle further transitions (walk/run) naturally.
+        if (this->actionFunc == Player_Action_Idle) {
+            Player_SetupAction(gPlayState, this, Player_Action_808407CC, 1);
+        }
+    }
+
+    // Failsafe: if damaged, in cutscene, or OOT left boomerang IA for any reason,
+    // force cleanup to prevent softlock (B never throws → stuck in boomerang mode)
+    if ((this->stateFlags1 & PLAYER_STATE1_DAMAGED) || (this->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) ||
+        (this->stateFlags1 & PLAYER_STATE1_DEAD) ||
+        (this->heldItemAction != PLAYER_IA_BOOMERANG && !(this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN))) {
+        goto cleanup;
+    }
+
+    return;
+
+cleanup:
+    sZoraBoomerangActive = 0;
+    this->unk_6AD = 0;
+    this->stateFlags1 &= ~(PLAYER_STATE1_USING_BOOMERANG | PLAYER_STATE1_BOOMERANG_THROWN | PLAYER_STATE1_ITEM_IN_HAND |
+                           PLAYER_STATE1_READY_TO_FIRE);
+    this->heldItemAction = this->itemAction = Player_ZoraBoomerangRestingItemAction();
+    // Reset upper action to default idle — without this, upperActionFunc stays as func_80835800
+    // (boomerang idle) which blocks punch combo and other B-button attacks.
+    Player_SetUpperActionFunc(this, func_8083485C);
+}
+
+// Deku bubble: enter OOT's slingshot pipeline for first-person aim.
+void Player_StartDekuBubble(Player* this, PlayState* play) {
+    if (sDekuBubbleActive)
+        return;
+    sDekuBubbleActive = 1;
+
+    this->heldItemAction = PLAYER_IA_SLINGSHOT;
+    this->itemAction = PLAYER_IA_SLINGSHOT;
+    this->stateFlags1 |= PLAYER_STATE1_ITEM_IN_HAND;
+    this->unk_860 = -2; // slingshot
+    this->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+
+    // Cancel any sword/melee action OOT may have started this frame from the same B press.
+    // OOT's z-target action handlers run BEFORE our form code, so they can see B press
+    // and initiate a sword swing. We override by clearing the melee weapon state.
+    this->meleeWeaponState = 0;
+    this->meleeWeaponAnimation = -1;
+
+    func_80834D2C(this, play);
+    func_80834EB8(this, play);
+    sUseHeldItem = sHeldItemButtonIsHeldDown = true;
+}
+
+// Called each frame from mm_player_form.cpp — failsafe on damage/cutscene/dead.
+void Player_DekuBubbleCleanup(Player* this) {
+    if (!sDekuBubbleActive)
+        return;
+
+    if ((this->stateFlags1 & PLAYER_STATE1_DAMAGED) || (this->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) ||
+        (this->stateFlags1 & PLAYER_STATE1_DEAD) || (this->heldItemAction != PLAYER_IA_SLINGSHOT)) {
+        sDekuBubbleActive = 0;
+        this->stateFlags1 &= ~PLAYER_STATE1_ITEM_IN_HAND;
+        this->stateFlags1 &= ~PLAYER_STATE1_READY_TO_FIRE;
+        this->heldItemAction = PLAYER_IA_NONE;
+        this->itemAction = PLAYER_IA_NONE;
+        Player_SetUpperActionFunc(this, func_8083485C);
+    }
+}
+
 s32 Player_ActionHandler_10(Player* this, PlayState* play) {
     s32 controlStickDirection;
 
+    // Transformation masks: ALL forms can use Handler_10 (jump/sidehop/backflip).
+    // Only the ROLL handler (Handler_Roll) is blocked for Goron/Deku.
+
     if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
         (play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2) && (sFloorType != 7) &&
-        (SurfaceType_GetSlope(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId) != 1)) {
+        (ClimbBoots_HasGrip() || // gripped slopes count as flat ground, so A can jump off them
+         SurfaceType_GetFloorEffect(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId) != 1)) {
         controlStickDirection = this->controlStickDirections[this->controlStickDataIndex];
 
         if (controlStickDirection <= PLAYER_STICK_DIR_FORWARD) {
@@ -6359,8 +7663,26 @@ s32 Player_ActionHandler_10(Player* this, PlayState* play) {
                         Player_SetupRoll(this, play);
                     }
                 } else {
-                    if ((Player_GetMeleeWeaponHeld(this) != 0) && Player_CanUpdateItems(this)) {
+                    if (KafeiForm_ReplacesJumpslash()) {
+                        // Kafei never jump-slashes off the ground: A under Z-target is a
+                        // plain jump. Same call the non-player branch above uses, so it is
+                        // vanilla's own jump animation and launch.
+                        func_808389E8(this, &gPlayerAnim_link_normal_jump, REG(69) / 100.0f, play);
+                    } else if ((Player_GetMeleeWeaponHeld(this) != 0) && Player_CanUpdateItems(this)) {
                         func_8083BA90(play, this, PLAYER_MWA_JUMPSLASH_START, 5.0f, 5.0f);
+                    } else if (TransformMasks_IsTransformed()) {
+
+                        s32 form = MmForm_GetCurrentForm();
+                        // Wolf Link shares Pikachu's slot but owns its own aerial lunge, so OOT must
+                        // not jump-slash for it. Gerudo never reaches here: with the blades stowed
+                        // Player_GetMeleeWeaponHeld already returned 0 above and she rolls instead.
+                        if (form == MM_PLAYER_FORM_ZORA || form == MM_PLAYER_FORM_FIERCE_DEITY ||
+                            (form == MM_PLAYER_FORM_PIKACHU && !WolfLinkForm_IsSelected())) {
+                            func_8083BA90(play, this, PLAYER_MWA_JUMPSLASH_START, 5.0f, 5.0f);
+                        } else {
+                            // Goron → curl, Deku → spin (via Player_SetupRoll redirects)
+                            Player_SetupRoll(this, play);
+                        }
                     } else {
                         Player_SetupRoll(this, play);
                     }
@@ -6454,13 +7776,27 @@ void func_8083C148(Player* this, PlayState* play) {
  * even if they occur.
  */
 s32 Player_ActionHandler_Roll(Player* this, PlayState* play) {
+    // Transformation masks: Goron/Deku handle their own A-button (curl/spin).
+    // Zora/FD use OOT's vanilla roll.
+    if (TransformMasks_IsTransformed()) {
+
+        s32 form = MmForm_GetCurrentForm();
+        // Goron = curl, Deku = spin — handled by form code, block OOT roll
+        if (form == 1 /* GORON */ || form == 3 /* DEKU */) {
+            return 0;
+        }
+        // Zora (2), FD (0), Pikachu (5) — use OOT's vanilla roll
+    }
+
     if (!Player_UpdateHostileLockOn(this) && !sUpperBodyIsBusy && !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) &&
         CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
         if (Player_TryRoll(this, play)) {
             return true;
-        } else if ((this->putAwayCooldownTimer == 0) && (this->heldItemAction >= PLAYER_IA_SWORD_MASTER)) {
+        } else if (GameInteractor_Should(
+                       VB_PLAYER_PUTAWAY_HELD_ITEM,
+                       (this->putAwayCooldownTimer == 0) && (this->heldItemAction >= PLAYER_IA_SWORD_MASTER), this)) {
             Player_UseItem(play, this, ITEM_NONE);
-        } else {
+        } else if (GameInteractor_Should(VB_PLAYER_TOGGLE_NAVI, true, this)) {
             this->stateFlags2 ^= PLAYER_STATE2_NAVI_ACTIVE;
         }
     }
@@ -6472,10 +7808,24 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
     LinkAnimationHeader* anim;
     f32 frame;
 
-    if ((play->shootingGalleryStatus == 0) && (this->currentShield != PLAYER_SHIELD_NONE) &&
+    u8 formShieldMode = TransformMasks_GetShieldMode();
+
+    // FORM_GUARD rides OOT's shield the same way TWO_HANDED does, so it passes here too.
+    // Only BLOCK, where the form owns R outright, still refuses the standing raise.
+    if (formShieldMode == MMFORM_SHIELD_BLOCK) {
+        return 0;
+    }
+
+    u8 guardsWithBlades = GerudoMhr_UsesBladeGuard(this);
+    u8 childBigShield = Player_IsChildWithHylianShield(this);
+
+    // FORM_GUARD belongs here for the same reason it does in the Z-target raise above: the
+    // form carries its own shield and has no equipment to pass the currentShield arm.
+    if ((play->shootingGalleryStatus == 0) &&
+        ((formShieldMode == MMFORM_SHIELD_TWO_HANDED) || (formShieldMode == MMFORM_SHIELD_FORM_GUARD) ||
+         (this->currentShield != PLAYER_SHIELD_NONE) || guardsWithBlades) &&
         CHECK_BTN_ALL(sControlInput->cur.button, BTN_R) &&
-        (Player_IsChildWithHylianShield(this) ||
-         (!Player_FriendlyLockOnOrParallel(this) && (this->focusActor == NULL)))) {
+        (childBigShield || (!Player_FriendlyLockOnOrParallel(this) && (this->focusActor == NULL)))) {
 
         func_80832318(this);
         Player_DetachHeldActor(play, this);
@@ -6485,12 +7835,21 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
 
             this->stateFlags1 |= PLAYER_STATE1_SHIELDING;
 
-            if (!Player_IsChildWithHylianShield(this)) {
+            // modelAnimType is only recomputed when the held item changes, so blades raised with
+            // empty hands would still read column 0. Must run before the anim is fetched.
+            if (guardsWithBlades) {
+                Player_SetModelGroup(this, Player_ActionToModelGroup(this, this->heldItemAction));
+            }
+
+            if (!childBigShield) {
                 Player_SetModelsForHoldingShield(this);
                 anim = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense, this->modelAnimType);
             } else {
                 anim = &gPlayerAnim_clink_normal_defense_ALL;
             }
+
+            // Skijer's NEI: anim override (shield raise)
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_RAISE, 0, &anim, this);
 
             if (anim != this->skelAnime.animation) {
                 if (Player_CheckHostileLockOn(this)) {
@@ -6503,9 +7862,14 @@ s32 Player_ActionHandler_11(Player* this, PlayState* play) {
             }
 
             frame = Animation_GetLastFrame(anim);
-            LinkAnimation_Change(play, &this->skelAnime, anim, 1.0f, frame, frame, ANIMMODE_ONCE, 0.0f);
+            // Vanilla lands on a pose so it starts on the last frame and snaps; the blade guard is
+            // a motion, so it plays from the start and blends in.
+            f32 shieldStartFrame = guardsWithBlades ? 0.0f : frame;
+            f32 shieldMorph = guardsWithBlades ? -3.0f : 0.0f;
+            LinkAnimation_Change(play, &this->skelAnime, anim, 1.0f, shieldStartFrame, frame, ANIMMODE_ONCE,
+                                 shieldMorph);
 
-            if (Player_IsChildWithHylianShield(this)) {
+            if (childBigShield) {
                 Player_StartAnimMovement(play, this, 4);
             }
 
@@ -6556,8 +7920,8 @@ s32 Player_ActionHandler_8(Player* this, PlayState* play) {
 }
 
 s32 func_8083C61C(PlayState* play, Player* this) {
-    if ((play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2) && (this->actor.bgCheckFlags & 1) &&
-        (AMMO(ITEM_NUT) != 0)) {
+    if ((play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2) &&
+        (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (AMMO(ITEM_NUT) != 0)) {
         Player_SetupAction(play, this, Player_Action_8084E604, 0);
         Player_AnimPlayOnce(play, this, &gPlayerAnim_link_normal_light_bom);
         this->unk_6AD = 0;
@@ -6602,7 +7966,7 @@ s32 func_8083C6B8(PlayState* play, Player* this) {
 
             if (CVarGetInteger(CVAR_ENHANCEMENT("HoverFishing"), 0)
                     ? 0
-                    : !(this->actor.bgCheckFlags & 1) || (this->actor.world.pos.z > 1300.0f) ||
+                    : !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (this->actor.world.pos.z > 1300.0f) ||
                           BgCheck_SphVsFirstPoly(&play->colCtx, &rodCheckPos, 20.0f)) {
                 Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
                 return 0;
@@ -6642,32 +8006,41 @@ void func_8083C8DC(Player* this, PlayState* play, s16 arg2) {
     func_8083C858(this, play);
 }
 
-s32 func_8083C910(PlayState* play, Player* this, f32 arg2) {
-    WaterBox* sp2C;
-    f32 sp28;
+/**
+ * @return false if player starting movement is swimming, otherwise true
+ */
+s32 Player_SetStartingMovement(PlayState* play, Player* this, f32 arg2) {
+    WaterBox* waterbox;
+    f32 ySurface;
 
-    sp28 = this->actor.world.pos.y;
-    if (WaterBox_GetSurface1(play, &play->colCtx, this->actor.world.pos.x, this->actor.world.pos.z, &sp28, &sp2C) !=
-        0) {
-        sp28 -= this->actor.world.pos.y;
-        if (this->ageProperties->unk_24 <= sp28) {
+    // Upstream renamed sp28/sp2C to ySurface/waterbox (the declarations above already use the new
+    // names) and moved the depth test behind VB_PLAYER_SPAWN_SWIMMING.
+    ySurface = this->actor.world.pos.y;
+    if (WaterBox_GetSurface1(play, &play->colCtx, this->actor.world.pos.x, this->actor.world.pos.z, &ySurface,
+                             &waterbox)) {
+        ySurface -= this->actor.world.pos.y;
+        if (GameInteractor_Should(VB_PLAYER_SPAWN_SWIMMING, this->ageProperties->unk_24 <= ySurface, this)) {
+            if (TransformMasks_GetWaterMode() == MMFORM_WATER_SINK) {
+                this->stateFlags1 |= PLAYER_STATE1_IN_WATER;
+                return 0;
+            }
             Player_SetupAction(play, this, Player_Action_8084D7C4, 0);
             Player_AnimChangeLoopSlowMorph(play, this, &gPlayerAnim_link_swimer_swim);
             this->stateFlags1 |= PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE;
             this->av2.actionVar2 = 20;
             this->linearVelocity = 2.0f;
             Player_SetBootData(play, this);
-            return 0;
+            return false;
         }
     }
 
     func_80838E70(play, this, arg2, this->actor.shape.rot.y);
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-    return 1;
+    return true;
 }
 
 void Player_StartMode_Idle(PlayState* play, Player* this) {
-    if (func_8083C910(play, this, 180.0f)) {
+    if (Player_SetStartingMovement(play, this, 180.0f)) {
         this->av2.actionVar2 = -20;
     }
 }
@@ -6675,7 +8048,7 @@ void Player_StartMode_Idle(PlayState* play, Player* this) {
 void Player_StartMode_MoveForwardSlow(PlayState* play, Player* this) {
     this->linearVelocity = 2.0f;
     gSaveContext.entranceSpeed = 2.0f;
-    if (func_8083C910(play, this, 120.0f)) {
+    if (Player_SetStartingMovement(play, this, 120.0f)) {
         this->av2.actionVar2 = -15;
     }
 }
@@ -6687,7 +8060,7 @@ void Player_StartMode_MoveForward(PlayState* play, Player* this) {
 
     this->linearVelocity = gSaveContext.entranceSpeed;
 
-    if (func_8083C910(play, this, 800.0f)) {
+    if (Player_SetStartingMovement(play, this, 800.0f)) {
         this->av2.actionVar2 = -80 / this->linearVelocity;
         if (this->av2.actionVar2 < -20) {
             this->av2.actionVar2 = -20;
@@ -6812,6 +8185,10 @@ void func_8083D0A8(PlayState* play, Player* this, f32 arg2) {
 }
 
 s32 func_8083D12C(PlayState* play, Player* this, Input* arg2) {
+    // Sinking forms never dive, and a Zora swim owns A for the fast swim.
+    if (TransformMasks_GetWaterMode() != MMFORM_WATER_VANILLA) {
+        return 0;
+    }
     if (!(this->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) && !(this->stateFlags2 & PLAYER_STATE2_UNDERWATER)) {
         if ((arg2 == NULL) || (CHECK_BTN_ALL(arg2->press.button, BTN_A) && (ABS(this->unk_6C2) < 12000) &&
                                (this->currentBoots != PLAYER_BOOTS_IRON))) {
@@ -6883,7 +8260,17 @@ void func_8083D330(PlayState* play, Player* this) {
 }
 
 void func_8083D36C(PlayState* play, Player* this) {
-    if ((this->currentBoots != PLAYER_BOOTS_IRON) || !(this->actor.bgCheckFlags & 1)) {
+    // Transformation masks: Goron/Deku can't swim.
+    // When entering deep water, start curl → void out instead of swimming.
+    if (TransformMasks_IsTransformed() && TransformMasks_OnWaterSwimAttempt(play, this)) {
+        // Swimming was blocked. Set IN_WATER flag to match OOT expectations,
+        // clear jumping flags (we're in water now, not airborne).
+        this->stateFlags1 |= PLAYER_STATE1_IN_WATER;
+        this->stateFlags1 &= ~(PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL);
+        return;
+    }
+
+    if ((this->currentBoots != PLAYER_BOOTS_IRON) || !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         func_80832564(play, this);
 
         if ((this->currentBoots != PLAYER_BOOTS_IRON) && (this->stateFlags2 & PLAYER_STATE2_UNDERWATER)) {
@@ -6896,8 +8283,9 @@ void func_8083D36C(PlayState* play, Player* this) {
         } else {
             Player_SetupAction(play, this, Player_Action_8084D610, 1);
             Player_AnimChangeOnceMorph(play, this,
-                                       (this->actor.bgCheckFlags & 1) ? &gPlayerAnim_link_swimer_wait2swim_wait
-                                                                      : &gPlayerAnim_link_swimer_land2swim_wait);
+                                       (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)
+                                           ? &gPlayerAnim_link_swimer_wait2swim_wait
+                                           : &gPlayerAnim_link_swimer_land2swim_wait);
         }
     }
 
@@ -6931,9 +8319,25 @@ void func_8083D53C(PlayState* play, Player* this) {
     }
 
     if ((Player_Action_80845668 != this->actionFunc) && (Player_Action_8084BDFC != this->actionFunc)) {
+        // Keyed off the form, not the tunic — Zora transforms wearing the Kokiri Tunic.
+        if (TransformMasks_HasWaterBreathing()) {
+            this->underwaterTimer = 0;
+        }
+
+        // A sinking form only tracks the flag; it never enters OOT's swim transitions.
+        if (TransformMasks_GetWaterMode() == MMFORM_WATER_SINK) {
+            if (this->ageProperties->unk_2C < this->actor.yDistToWater) {
+                this->stateFlags1 |= PLAYER_STATE1_IN_WATER;
+            } else if ((this->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
+                       (this->actor.yDistToWater < this->ageProperties->unk_24)) {
+                this->stateFlags1 &= ~PLAYER_STATE1_IN_WATER;
+            }
+            return;
+        }
+
         if (this->ageProperties->unk_2C < this->actor.yDistToWater) {
             if (!(this->stateFlags1 & PLAYER_STATE1_IN_WATER) ||
-                (!((this->currentBoots == PLAYER_BOOTS_IRON) && (this->actor.bgCheckFlags & 1)) &&
+                (!((this->currentBoots == PLAYER_BOOTS_IRON) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) &&
                  (Player_Action_8084E30C != this->actionFunc) && (Player_Action_8084E368 != this->actionFunc) &&
                  (Player_Action_8084D610 != this->actionFunc) && (Player_Action_8084D84C != this->actionFunc) &&
                  (Player_Action_8084DAB4 != this->actionFunc) && (Player_Action_8084DC48 != this->actionFunc) &&
@@ -7001,7 +8405,8 @@ void func_8083D6EC(PlayState* play, Player* this) {
         this->unk_6C4 = 0.0f;
     }
 
-    if (this->actor.bgCheckFlags & 0x20) {
+    // Frozen water spawns neither ripples nor splashes — both hang off this branch.
+    if ((this->actor.bgCheckFlags & 0x20) && !RocBoots_OnFrozenWater()) {
         if (this->actor.yDistToWater < 50.0f) {
             temp4 = fabsf(this->bodyPartsPos[PLAYER_BODYPART_WAIST].x - this->unk_A88.x) +
                     fabsf(this->bodyPartsPos[PLAYER_BODYPART_WAIST].y - this->unk_A88.y) +
@@ -7032,7 +8437,7 @@ void func_8083D6EC(PlayState* play, Player* this) {
             s32 numBubbles = 0;
             s32 i;
 
-            if ((this->actor.velocity.y > -1.0f) || (this->actor.bgCheckFlags & 1)) {
+            if ((this->actor.velocity.y > -1.0f) || (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
                 if (Rand_ZeroOne() < 0.2f) {
                     numBubbles = 1;
                 }
@@ -7075,11 +8480,20 @@ void func_8083DC54(Player* this, PlayState* play) {
     f32 temp1;
     Vec3f sp34;
 
+    // Airborne aim (Champion's Tunic) owns focus rot and arm placement — see the aim
+    // control and func_80836AB8/func_80832754. This floor/fall-look upkeep would fight it
+    // on all three counts every frame it runs: it overwrites focus.rot.x with a look-down
+    // pitch (or a huge one on floor type 11), snaps focus.rot.y back to the body yaw, and
+    // re-places the arm using the ORIGINAL weapon test rather than the hook-aware one.
+    if ((this->unk_6AD == 2) && GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this)) {
+        return;
+    }
+
     if (this->focusActor != NULL) {
         if (func_8002DD78(this) || func_808334B4(this)) {
-            func_8083DB98(this, true);
+            func_8083DB98(this, 1);
         } else {
-            func_8083DB98(this, false);
+            func_8083DB98(this, 0);
         }
         return;
     }
@@ -7132,29 +8546,21 @@ void func_8083DFE0(Player* this, f32* arg1, s16* arg2) {
     s16 yawDiff = this->yaw - *arg2;
 
     if (this->meleeWeaponState == 0) {
-        float maxSpeed = R_RUN_SPEED_LIMIT / 100.0f;
+        // The SpeedModifier cheat and the bunny-hood jump boost now live behind
+        // VB_PLAYER_LIMIT_JUMP_SPEED (Enhancements/SpeedModifiers.cpp), which simply lets the clamp
+        // be skipped; the inline copy of that cheat is gone. Only the transformation-mask
+        // multiplier is ours, so it scales the clamp we still apply.
+        if (GameInteractor_Should(VB_PLAYER_LIMIT_JUMP_SPEED, true, this)) {
+            f32 maxSpeed = R_RUN_SPEED_LIMIT / 100.0f;
 
-        if (CVarGetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), BUNNY_HOOD_VANILLA) == BUNNY_HOOD_FAST_AND_JUMP &&
-            this->currentMask == PLAYER_MASK_BUNNY) {
-            maxSpeed *= 1.5f;
-        }
-
-        if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
-            !CVarGetInteger(CVAR_CHEAT("SpeedModifier.DoesntChangeJump"), 0)) {
-            if (CVarGetInteger(CVAR_CHEAT("SpeedModifier.SpeedToggle"), 0)) {
-                if (gWalkSpeedToggle) {
-                    maxSpeed *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
-                }
-            } else {
-                const s32 mod1Mask = CVarGetInteger(CVAR_CHEAT("SpeedModifier.Btn"), BTN_CUSTOM_MODIFIER1);
-
-                if (mod1Mask != 0 && CHECK_BTN_ALL(sControlInput->cur.button, mod1Mask)) {
-                    maxSpeed *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
-                }
+            // Fierce Deity / Pikachu: 1.5x jump velocity. Skijer's NEI
+            if (TransformMasks_IsTransformedAny()) {
+                extern f32 MmForm_GetSpeedMultiplier(void);
+                maxSpeed *= MmForm_GetSpeedMultiplier();
             }
-        }
 
-        this->linearVelocity = CLAMP(this->linearVelocity, -maxSpeed, maxSpeed);
+            this->linearVelocity = CLAMP(this->linearVelocity, -maxSpeed, maxSpeed);
+        }
     }
 
     if (ABS(yawDiff) > 0x6000) {
@@ -7203,7 +8609,7 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
             rideActor->actor.world.pos.z + rideActor->riderPos.z + ((unk_08 * sp38) - (unk_04 * sp34));
 
         this->unk_878 = rideActor->actor.world.pos.y - this->actor.world.pos.y;
-        this->yaw = this->actor.shape.rot.y = rideActor->actor.shape.rot.y;
+        this->yaw = this->actor.shape.rot.y = MasterCycle_RideYaw(&rideActor->actor);
 
         Actor_MountHorse(play, this, &rideActor->actor);
         Player_AnimPlayOnce(play, this, D_80854578[temp].anim);
@@ -7238,8 +8644,11 @@ s32 Player_HandleSlopes(PlayState* play, Player* this, CollisionPoly* floorPoly)
     f32 slopeSlowdownSpeedStep;
     s16 velYawToDownwardSlope;
 
+    // Climb Boots: full traction — steep slopes neither force the slide nor slow the climb.
+    // Roc's Boots on the water surface: the lake bottom's slope is not the floor Link stands on.
     if (!Player_InBlockingCsMode(play, this) && (Player_Action_SlideOnSlope != this->actionFunc) &&
-        (SurfaceType_GetSlope(&play->colCtx, floorPoly, this->actor.floorBgId) == 1)) {
+        !ClimbBoots_HasGrip() && !RocBoots_OnWater() &&
+        (SurfaceType_GetFloorEffect(&play->colCtx, floorPoly, this->actor.floorBgId) == 1)) {
         // Get direction of movement relative to the downward direction of the slope
         playerVelYaw = Math_Atan2S(this->actor.velocity.z, this->actor.velocity.x);
         Player_GetSlopeDirection(floorPoly, &slopeNormal, &downwardSlopeYaw);
@@ -7306,7 +8715,7 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
     }
 
     if (iREG(67) ||
-        (((interactedActor = this->interactRangeActor) != NULL) && func_8002D53C(play, &play->actorCtx.titleCtx))) {
+        (((interactedActor = this->interactRangeActor) != NULL) && TitleCard_Clear(play, &play->actorCtx.titleCtx))) {
         if (iREG(67) || (this->getItemId > GI_NONE)) {
             if (iREG(67)) {
                 this->getItemId = iREG(68);
@@ -7338,8 +8747,9 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                 // getting bombchus need to show the cutscene) and whenever the player doesn't have the item yet. In
                 // rando, we're overruling this because we need to keep showing the cutscene because those items can be
                 // randomized and thus it's important to keep showing the cutscene.
-                uint8_t showItemCutscene = play->sceneNum == SCENE_BOMBCHU_BOWLING_ALLEY ||
-                                           Item_CheckObtainability(giEntry.itemId) == ITEM_NONE || IS_RANDO;
+                uint8_t showItemCutscene = play->sceneNum == SCENE_BOMBCHU_BOWLING_ALLEY || IS_RANDO ||
+                                           giEntry.modIndex == MOD_RANDOMIZER ||
+                                           Item_CheckObtainability(giEntry.itemId) == ITEM_NONE;
 
                 // Only skip cutscenes for drops when they're items/consumables from bushes/rocks/enemies.
                 uint8_t isDropToSkip =
@@ -7358,8 +8768,8 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                 // the player already has because those items could be a randomized item coming from scrubs,
                 // freestanding PoH's and keys. So we need to once again overrule this specifically for items coming
                 // from bushes/rocks/enemies when the player has already picked that item up.
-                uint8_t skipItemCutsceneRando =
-                    IS_RANDO && Item_CheckObtainability(giEntry.itemId) != ITEM_NONE && isDropToSkip;
+                uint8_t skipItemCutsceneRando = IS_RANDO && giEntry.modIndex == MOD_NONE &&
+                                                Item_CheckObtainability(giEntry.itemId) != ITEM_NONE && isDropToSkip;
 
                 // Show cutscene when picking up a item.
                 if (showItemCutscene && !skipItemCutscene && !skipItemCutsceneRando) {
@@ -7370,7 +8780,7 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                     if (!(this->stateFlags2 & PLAYER_STATE2_UNDERWATER) || (this->currentBoots == PLAYER_BOOTS_IRON)) {
                         Player_SetupWaitForPutAway(play, this, func_8083A434);
                         Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_demo_get_itemB);
-                        func_80835EA4(play, 9);
+                        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_9);
                     }
 
                     this->stateFlags1 |=
@@ -7386,9 +8796,9 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
             }
         } else if (CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
                    !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) &&
-                   !(this->stateFlags2 & PLAYER_STATE2_UNDERWATER)) {
+                   (!(this->stateFlags2 & PLAYER_STATE2_UNDERWATER) || (this->currentBoots == PLAYER_BOOTS_IRON))) {
             if (this->getItemId != GI_NONE) {
-                if (GameInteractor_Should(VB_OPEN_CHEST, true)) {
+                if (GameInteractor_Should(VB_OPEN_CHEST, true, interactedActor)) {
                     GetItemEntry giEntry;
                     if (this->getItemEntry.objectId == OBJECT_INVALID) {
                         giEntry = ItemTable_Retrieve(-this->getItemId);
@@ -7425,7 +8835,7 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                         Player_AnimPlayOnceAdjusted(play, this, this->ageProperties->unk_98);
                         Player_StartAnimMovement(play, this, 0x28F);
                         chest->unk_1F4 = 1;
-                        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_SLOW_CHEST_CS);
+                        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_SLOW_CHEST_CS);
                     } else {
                         Player_AnimPlayOnce(play, this, &gPlayerAnim_link_normal_box_kick);
                         chest->unk_1F4 = -1;
@@ -7583,7 +8993,7 @@ s32 func_8083EC18(Player* this, PlayState* play, u32 wallFlags) {
 
                     if ((sp8C != 0) || (wallFlags & 2)) {
                         if ((this->av1.actionVar1 = sp8C) != 0) {
-                            if (this->actor.bgCheckFlags & 1) {
+                            if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
                                 anim = &gPlayerAnim_link_normal_Fclimb_startA;
                             } else {
                                 anim = &gPlayerAnim_link_normal_Fclimb_hold2upL;
@@ -7618,8 +9028,8 @@ s32 func_8083EC18(Player* this, PlayState* play, u32 wallFlags) {
     return false;
 }
 
-void func_8083F070(Player* this, LinkAnimationHeader* anim, PlayState* play) {
-    Player_SetupActionPreserveAnimMovement(play, this, Player_Action_8084C5F8, 0);
+void Player_SetupDismountLadder(Player* this, LinkAnimationHeader* anim, PlayState* play) {
+    Player_SetupActionPreserveAnimMovement(play, this, Player_Action_DismountLadder, 0);
     LinkAnimation_PlayOnceSetSpeed(play, &this->skelAnime, anim, (4.0f / 3.0f));
 }
 
@@ -7635,7 +9045,9 @@ s32 Player_TryEnteringCrawlspace(Player* this, PlayState* play, u32 interactWall
     f32 zVertex2;
     s32 i;
 
-    if (!LINK_IS_ADULT && !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) && (interactWallFlags & 0x30)) {
+    // Minish tiny mode walks straight through crawlspaces — never enter the crawl state
+    if (!LINK_IS_ADULT && !TransformMasks_IsTransformed() && !MinishTiny_IsActive() &&
+        !(this->stateFlags1 & PLAYER_STATE1_IN_WATER) && (interactWallFlags & 0x30)) {
         if (!GameInteractor_Should(VB_CRAWL, true)) {
             return false;
         }
@@ -7762,7 +9174,7 @@ s32 func_8083F524(PlayState* play, Player* this) {
 s32 Player_TryLeavingCrawlspace(Player* this, PlayState* play) {
     s16 yawToWall;
 
-    if ((this->linearVelocity != 0.0f) && (this->actor.bgCheckFlags & 8) && (sTouchedWallFlags & 0x30)) {
+    if ((this->linearVelocity != 0.0f) && (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) && (sTouchedWallFlags & 0x30)) {
 
         // The exit wallYaws will always point inward on the crawlline
         // Interacting with the exit wall in front will have a yaw diff of 0x8000
@@ -7781,7 +9193,7 @@ s32 Player_TryLeavingCrawlspace(Player* this, PlayState* play) {
                     this->actor.shape.rot.y = this->actor.wallYaw + 0x8000;
                     Player_AnimPlayOnce(play, this, &gPlayerAnim_link_child_tunnel_end);
                     Player_StartAnimMovement(play, this, 0x9D);
-                    OnePointCutscene_Init(play, 9601, 999, NULL, MAIN_CAM);
+                    OnePointCutscene_Init(play, 9601, 999, NULL, CAM_ID_MAIN);
                 } else {
                     // Leaving a crawlspace backwards
                     this->actor.shape.rot.y = this->actor.wallYaw;
@@ -7789,7 +9201,7 @@ s32 Player_TryLeavingCrawlspace(Player* this, PlayState* play) {
                                          Animation_GetLastFrame(&gPlayerAnim_link_child_tunnel_start), 0.0f,
                                          ANIMMODE_ONCE, 0.0f);
                     Player_StartAnimMovement(play, this, 0x9D);
-                    OnePointCutscene_Init(play, 9602, 999, NULL, MAIN_CAM);
+                    OnePointCutscene_Init(play, 9602, 999, NULL, CAM_ID_MAIN);
                 }
             }
 
@@ -7817,8 +9229,8 @@ void func_8083F72C(Player* this, LinkAnimationHeader* anim, PlayState* play) {
 s32 Player_ActionHandler_5(Player* this, PlayState* play) {
     DynaPolyActor* wallPolyActor;
 
-    if (!(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->actor.bgCheckFlags & 0x200) &&
-        (sShapeYawToTouchedWall < 0x3000)) {
+    if (!(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) &&
+        (this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) && (sShapeYawToTouchedWall < 0x3000)) {
 
         if (((this->linearVelocity > 0.0f) && func_8083EC18(this, play, sTouchedWallFlags)) ||
             Player_TryEnteringCrawlspace(this, play, sTouchedWallFlags)) {
@@ -7827,7 +9239,8 @@ s32 Player_ActionHandler_5(Player* this, PlayState* play) {
 
         if (!func_808332B8(this) &&
             ((this->linearVelocity == 0.0f) || !(this->stateFlags2 & PLAYER_STATE2_DO_ACTION_CLIMB)) &&
-            (sTouchedWallFlags & 0x40) && (this->actor.bgCheckFlags & 1) && (this->yDistToLedge >= 39.0f)) {
+            (sTouchedWallFlags & 0x40) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+            (this->yDistToLedge >= 39.0f)) {
 
             this->stateFlags2 |= PLAYER_STATE2_DO_ACTION_GRAB;
 
@@ -7868,7 +9281,7 @@ s32 Player_ActionHandler_5(Player* this, PlayState* play) {
 }
 
 s32 func_8083F9D0(PlayState* play, Player* this) {
-    if ((this->actor.bgCheckFlags & 0x200) &&
+    if ((this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) &&
         ((this->stateFlags2 & PLAYER_STATE2_MOVING_DYNAPOLY) || CHECK_BTN_ALL(sControlInput->cur.button, BTN_A))) {
         DynaPolyActor* wallPolyActor = NULL;
 
@@ -7910,7 +9323,8 @@ void func_8083FB7C(Player* this, PlayState* play) {
 }
 
 s32 func_8083FBC0(Player* this, PlayState* play) {
-    if (!CHECK_BTN_ALL(sControlInput->press.button, BTN_A) && (this->actor.bgCheckFlags & 0x200) &&
+    if (!CHECK_BTN_ALL(sControlInput->press.button, BTN_A) &&
+        (this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) &&
         ((sTouchedWallFlags & 8) || (sTouchedWallFlags & 2) ||
          func_80041E4C(&play->colCtx, this->actor.wallPoly, this->actor.wallBgId))) {
         return false;
@@ -8082,18 +9496,24 @@ void func_8084029C(Player* this, f32 arg1) {
     f32 updateScale = R_UPDATE_RATE * 0.5f;
 
     arg1 *= updateScale;
+    // Gerudo's sprint keeps the run cycle at its normal cadence (1.0f for everyone else).
+    arg1 *= GerudoMhr_RunAnimRateMul();
+    arg1 *= KafeiForm_RunAnimRateMul();
     if (arg1 < -7.25) {
         arg1 = -7.25;
     } else if (arg1 > 7.25f) {
         arg1 = 7.25f;
     }
+    // AFTER the clamp on purpose. unk_868 is what actually moves the legs in every
+    // locomotion action — the joint table is LOADED from it, so skelAnime.playSpeed
+    // never gets a say — and its rate saturates at 7.25 long before a dash reaches
+    // full speed. A multiplier applied before the clamp could not lift it. 1.0f for
+    // everyone who is not dashing. Skijer's NEI
+    arg1 *= ExtEquip_LegCycleRateMul();
 
-    if ((this->currentBoots == PLAYER_BOOTS_HOVER ||
-         (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && this->ivanFloating)) &&
-        !(this->actor.bgCheckFlags & 1) &&
-        (this->hoverBootsTimer != 0 ||
-         (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && this->ivanFloating))) {
-        func_8002F8F0(&this->actor, NA_SE_PL_HOBBERBOOTS_LV - SFX_FLAG);
+    if (Player_IsHovering(this) && !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+        ((this->hoverBootsTimer != 0) || Player_IsFloatedWithoutBoots(this))) {
+        Actor_PlaySfx_Flagged2(&this->actor, NA_SE_PL_HOBBERBOOTS_LV - SFX_FLAG);
     } else if (func_8084021C(this->unk_868, arg1, 29.0f, 10.0f) || func_8084021C(this->unk_868, arg1, 29.0f, 24.0f)) {
         Player_PlaySteppingSfx(this, this->linearVelocity);
         if (this->linearVelocity > 4.0f) {
@@ -8864,8 +10284,8 @@ void func_80841EE4(Player* this, PlayState* play) {
 }
 
 void Player_Action_80842180(Player* this, PlayState* play) {
-    f32 sp2C;
-    s16 sp2A;
+    f32 speedTarget;
+    s16 yawTarget;
 
     this->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
     func_80841EE4(this, play);
@@ -8876,33 +10296,38 @@ void Player_Action_80842180(Player* this, PlayState* play) {
             return;
         }
 
-        Player_GetMovementSpeedAndYaw(this, &sp2C, &sp2A, SPEED_MODE_CURVED, play);
+        Player_GetMovementSpeedAndYaw(this, &speedTarget, &yawTarget, SPEED_MODE_CURVED, play);
 
-        if (!func_8083C484(this, &sp2C, &sp2A)) {
+        if (!func_8083C484(this, &speedTarget, &yawTarget)) {
+            GameInteractor_Should(VB_PLAYER_MODIFY_RUN_SPEED, true, this, &speedTarget);
 
             if (CVarGetInteger(CVAR_ENHANCEMENT("MMBunnyHood"), BUNNY_HOOD_VANILLA) != BUNNY_HOOD_VANILLA &&
                 this->currentMask == PLAYER_MASK_BUNNY) {
-                sp2C *= 1.5f;
+                speedTarget *= 1.5f;
             }
 
             if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f) {
                 if (CVarGetInteger(CVAR_CHEAT("SpeedModifier.SpeedToggle"), 0)) {
                     if (gWalkSpeedToggle) {
-                        sp2C *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
+                        speedTarget *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
                     }
                 } else {
                     const s32 mod1Mask = CVarGetInteger(CVAR_CHEAT("SpeedModifier.Btn"), BTN_CUSTOM_MODIFIER1);
 
                     if (mod1Mask != 0 && CHECK_BTN_ALL(sControlInput->cur.button, mod1Mask)) {
-                        sp2C *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
+                        speedTarget *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
                     }
                 }
             }
 
-            func_8083DF68(this, sp2C, sp2A);
+            if (SpiritualStone_KokiriWalkActive()) {
+                speedTarget *= 1.5f;
+            }
+
+            func_8083DF68(this, speedTarget, yawTarget);
             func_8083DDC8(this, play);
 
-            if ((this->linearVelocity == 0.0f) && (sp2C == 0.0f)) {
+            if ((this->linearVelocity == 0.0f) && (speedTarget == 0.0f)) {
                 func_8083C0B8(this, play);
             }
         }
@@ -9052,7 +10477,18 @@ s32 func_808428D8(Player* this, PlayState* play) {
         return 0;
     }
 
-    Player_AnimPlayOnce(play, this, &gPlayerAnim_link_normal_defense_kiru);
+    {
+        // Trident (ext sword 3): R+B is this very crouch-stab, with the gunlance
+        // "slash 1" clip on it (or the post-parry approach). Only the clip changes:
+        // the arm-at-frame-2, the STAB_1H damage row and the return to the guard
+        // hold are all vanilla's. Skijer's NEI
+        LinkAnimationHeader* stabAnim = &gPlayerAnim_link_normal_defense_kiru;
+        LinkAnimationHeader* tridentStab = Trident_GetGuardStabAnim(this);
+        if (tridentStab != NULL) {
+            stabAnim = tridentStab;
+        }
+        Player_AnimPlayOnce(play, this, stabAnim);
+    }
     this->av1.actionVar1 = 1;
     this->meleeWeaponAnimation = PLAYER_MWA_STAB_1H;
     this->yaw = this->actor.shape.rot.y + this->upperLimbRot.y;
@@ -9200,7 +10636,7 @@ s32 func_80842DF4(PlayState* play, Player* this) {
                     if (BgCheck_EntityLineTest1(&play->colCtx, &sp68, &this->meleeWeaponInfo[0].tip, &sp5C, &sp78, true,
                                                 false, false, true, &sp74) &&
                         !SurfaceType_IsIgnoredByEntities(&play->colCtx, sp78, sp74) &&
-                        (func_80041D4C(&play->colCtx, sp78, sp74) != 6) &&
+                        (SurfaceType_GetFloorType(&play->colCtx, sp78, sp74) != 6) &&
                         (func_8002F9EC(play, &this->actor, sp78, sp74, &sp5C) == 0)) {
 
                         if (this->heldItemAction == PLAYER_IA_HAMMER) {
@@ -9240,6 +10676,9 @@ s32 func_80842DF4(PlayState* play, Player* this) {
         temp1 = (this->meleeWeaponQuads[0].base.atFlags & AT_HIT) || (this->meleeWeaponQuads[1].base.atFlags & AT_HIT);
 
         if (temp1) {
+            // EXTENDED EQUIPMENT: Notify melee hit (Cane of Byrna MP recovery, etc.)
+            ExtEquip_OnMeleeHit(this, play);
+
             if (this->meleeWeaponAnimation < PLAYER_MWA_SPIN_ATTACK_1H) {
                 Actor* at = this->meleeWeaponQuads[temp1 ? 1 : 0].base.at;
 
@@ -9253,8 +10692,11 @@ s32 func_80842DF4(PlayState* play, Player* this) {
 
                 if (this->actor.colChkInfo.atHitEffect == 1) {
                     this->actor.colChkInfo.damage = 8;
-                    func_80837C0C(play, this, PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK, 0.0f, 0.0f, this->actor.shape.rot.y,
-                                  20);
+                    // Magic Tunic: the shock from striking an electrified enemy is absorbed too.
+                    if (!Player_SpiritTunicAbsorbHit(play, this)) {
+                        func_80837C0C(play, this, PLAYER_HIT_RESPONSE_ELECTRIFIED, 0.0f, 0.0f, this->actor.shape.rot.y,
+                                      20);
+                    }
                     return 1;
                 }
             }
@@ -9267,7 +10709,10 @@ s32 func_80842DF4(PlayState* play, Player* this) {
 void Player_Action_80843188(Player* this, PlayState* play) {
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (!Player_IsChildWithHylianShield(this)) {
-            Player_AnimPlayLoop(play, this, GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_wait, this->modelAnimType));
+            // Skijer's NEI: anim override (shield hold loop)
+            LinkAnimationHeader* shieldLoop = GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_wait, this->modelAnimType);
+            GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_SHIELD_LOOP, 0, &shieldLoop, this);
+            Player_AnimPlayLoop(play, this, shieldLoop);
         }
         this->av2.actionVar2 = 1;
         this->av1.actionVar1 = 0;
@@ -9347,7 +10792,17 @@ void Player_Action_80843188(Player* this, PlayState* play) {
                     if (this->itemAction < 0) {
                         func_8008EC70(this);
                     }
-                    func_8083A098(this, GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_end, this->modelAnimType), play);
+                    {
+                        LinkAnimationHeader* endAnim =
+                            GET_PLAYER_ANIM(PLAYER_ANIMGROUP_defense_end, this->modelAnimType);
+                        // The Trident used to override this too; its guard is vanilla's
+                        // shield stance now, so only Gerudo answers here.
+                        LinkAnimationHeader* gerudoEnd = GerudoMhr_GetGuardAnim(this, 2);
+                        if (gerudoEnd != NULL) {
+                            endAnim = gerudoEnd;
+                        }
+                        func_8083A098(this, endAnim, play);
+                    }
                 }
 
                 Player_PlaySfx(this, NA_SE_IT_SHIELD_REMOVE);
@@ -9423,7 +10878,7 @@ void Player_Action_8084377C(Player* this, PlayState* play) {
         }
     }
 
-    if (LinkAnimation_Update(play, &this->skelAnime) && (this->actor.bgCheckFlags & 1)) {
+    if (LinkAnimation_Update(play, &this->skelAnime) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         if (this->av2.actionVar2 != 0) {
             this->av2.actionVar2--;
             if (this->av2.actionVar2 == 0) {
@@ -9445,7 +10900,7 @@ void Player_Action_8084377C(Player* this, PlayState* play) {
         }
     }
 
-    if (this->actor.bgCheckFlags & 2) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND_TOUCH) {
         Player_PlayFloorSfx(this, NA_SE_PL_BOUND);
     }
 }
@@ -9477,7 +10932,7 @@ static AnimSfxEntry D_808545DC[] = {
 };
 
 void Player_Action_80843A38(Player* this, PlayState* play) {
-    s32 sp24;
+    s32 interruptResult;
 
     this->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
     func_808382BC(this);
@@ -9485,8 +10940,8 @@ void Player_Action_80843A38(Player* this, PlayState* play) {
     if (this->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE) {
         LinkAnimation_Update(play, &this->skelAnime);
     } else {
-        sp24 = Player_TryActionInterrupt(play, this, &this->skelAnime, 16.0f);
-        if ((sp24 != 0) && (LinkAnimation_Update(play, &this->skelAnime) || (sp24 > 0))) {
+        interruptResult = Player_TryActionInterrupt(play, this, &this->skelAnime, 16.0f);
+        if ((interruptResult != 0) && (LinkAnimation_Update(play, &this->skelAnime) || (interruptResult > 0))) {
             func_80839F90(this, play);
         }
     }
@@ -9521,13 +10976,13 @@ void func_80843AE8(PlayState* play, Player* this) {
             }
             this->unk_A87 = 20;
             Player_SetInvulnerability(this, -20);
-            func_800F47FC();
+            Audio_SetBgmVolumeOnDuringFanfare();
         }
     } else if (this->av1.actionVar1 != 0) {
         this->av2.actionVar2 = 60;
         Player_SpawnFairy(play, this, &this->actor.world.pos, &D_808545E4, FAIRY_REVIVE_DEATH);
         Player_PlaySfx(this, NA_SE_EV_FIATY_HEAL - SFX_FLAG);
-        OnePointCutscene_Init(play, 9908, 125, &this->actor, MAIN_CAM);
+        OnePointCutscene_Init(play, 9908, 125, &this->actor, CAM_ID_MAIN);
     } else if (play->gameOverCtx.state == GAMEOVER_DEATH_WAIT_GROUND) {
         play->gameOverCtx.state = GAMEOVER_DEATH_DELAY_MENU;
         if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
@@ -9544,11 +10999,11 @@ static AnimSfxEntry D_808545F0[] = {
 };
 
 void Player_Action_80843CEC(Player* this, PlayState* play) {
-    if (this->currentTunic != PLAYER_TUNIC_GORON && CVarGetInteger(CVAR_CHEAT("SuperTunic"), 0) == 0) {
+    if (Player_SuffersHeat(this)) {
         if ((play->roomCtx.curRoom.behaviorType2 == ROOM_BEHAVIOR_TYPE2_3) || (sFloorType == 9) ||
-            ((func_80838144(sFloorType) >= 0) &&
+            ((Player_GetHotFloorTimerIndex(sFloorType) >= 0) &&
              !SurfaceType_IsWallDamage(&play->colCtx, this->actor.floorPoly, this->actor.floorBgId))) {
-            func_8083821C(this);
+            Player_CatchFire(this);
         }
     }
 
@@ -9584,23 +11039,31 @@ static FallImpactInfo D_80854600[] = {
 };
 
 s32 func_80843E64(PlayState* play, Player* this) {
-    s32 sp34;
+    s32 fallDistance;
 
     if (!GameInteractor_Should(VB_RECIEVE_FALL_DAMAGE, true, this)) {
         return 0;
     }
 
+    // KITE SHIELD: landing on the board is the whole point — no fall damage while surfing. The
+    // distance is zeroed too so the landing anim/rumble picked further up does not read as a slam.
+    // Skijer's NEI
+    if (KiteSurf_IsActive()) {
+        this->fallDistance = 0;
+        return 0;
+    }
+
     if ((sFloorType == 6) || (sFloorType == 9)) {
-        sp34 = 0;
+        fallDistance = 0;
     } else {
-        sp34 = this->fallDistance;
+        fallDistance = this->fallDistance;
     }
 
     Math_StepToF(&this->linearVelocity, 0.0f, 1.0f);
 
     this->stateFlags1 &= ~(PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL);
 
-    if (sp34 >= 400) {
+    if (fallDistance >= 400) {
         s32 impactIndex;
         FallImpactInfo* impactInfo;
 
@@ -9627,14 +11090,14 @@ s32 func_80843E64(PlayState* play, Player* this) {
         return impactIndex + 1;
     }
 
-    if (sp34 > 200) {
-        sp34 *= 2;
+    if (fallDistance > 200) {
+        fallDistance *= 2;
 
-        if (sp34 > 255) {
-            sp34 = 255;
+        if (fallDistance > 255) {
+            fallDistance = 255;
         }
 
-        Player_RequestRumble(this, (u8)sp34, (u8)(sp34 * 0.1f), (u8)sp34, 0);
+        Player_RequestRumble(this, (u8)fallDistance, (u8)(fallDistance * 0.1f), (u8)fallDistance, 0);
 
         if (sFloorType == 6) {
             Player_PlayVoiceSfx(this, NA_SE_VO_LI_CLIMB_END);
@@ -9671,7 +11134,7 @@ void Player_Action_8084411C(Player* this, PlayState* play) {
 
     Player_GetMovementSpeedAndYaw(this, &sp4C, &sp4A, SPEED_MODE_LINEAR, play);
 
-    if (!(this->actor.bgCheckFlags & 1)) {
+    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         if (this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) {
             Actor* heldActor = this->heldActor;
 
@@ -9697,7 +11160,8 @@ void Player_Action_8084411C(Player* this, PlayState* play) {
             !func_8083BBA0(this, play)) {
             if (this->actor.velocity.y < 0.0f) {
                 if (this->av2.actionVar2 >= 0) {
-                    if ((this->actor.bgCheckFlags & 8) || (this->av2.actionVar2 == 0) || (this->fallDistance > 0)) {
+                    if ((this->actor.bgCheckFlags & BGCHECKFLAG_WALL) || (this->av2.actionVar2 == 0) ||
+                        (this->fallDistance > 0)) {
                         if ((sYDistToFloor > 800.0f) || (this->stateFlags1 & PLAYER_STATE1_HOOKSHOT_FALLING)) {
                             func_80843E14(this, NA_SE_VO_LI_FALL_S);
                             this->stateFlags1 &= ~PLAYER_STATE1_HOOKSHOT_FALLING;
@@ -9713,9 +11177,23 @@ void Player_Action_8084411C(Player* this, PlayState* play) {
                         func_80843E14(this, NA_SE_VO_LI_FALL_L);
                     }
 
-                    if (!GameInteractor_GetDisableLedgeGrabsActive() && (this->actor.bgCheckFlags & 0x200) &&
+                    // Transformation masks: Goron cannot grab ledges (MM z_player.c:6209)
+                    // Other forms (Zora, Deku, FD) CAN grab ledges; Deku limited by unk_14=49
+                    // Zora form: allow ledge grab from water surface despite IN_WATER flag.
+                    // Buoyancy keeps Zora at yDistToWater~44.8 (equilibrium), which is above
+                    // unk_24=36 threshold that would naturally clear IN_WATER. Without this
+                    // bypass, Zora can never grab ledges to climb out of water — vanilla Link
+                    // doesn't have this issue because his swim equilibrium is also 44.8 but he
+                    // exits via shallow-water walk. MM's Zora exits via this jump-grab path.
+                    s32 inWaterBlocksGrab = (this->stateFlags1 & PLAYER_STATE1_IN_WATER) ? 1 : 0;
+                    if (inWaterBlocksGrab && TransformMasks_IsTransformed() &&
+                        MmForm_GetCurrentForm() == 2 /* MM_PLAYER_FORM_ZORA */ && this->actor.yDistToWater < 50.0f) {
+                        inWaterBlocksGrab = 0;
+                    }
+                    if (GameInteractor_Should(VB_PLAYER_GRAB_LEDGE, true, this) &&
+                        (this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) &&
                         !(this->stateFlags2 & PLAYER_STATE2_HOPPING) &&
-                        !(this->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_WATER)) &&
+                        !(this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && !inWaterBlocksGrab &&
                         (this->linearVelocity > 0.0f)) {
                         if ((this->yDistToLedge >= 150.0f) &&
                             (this->controlStickDirections[this->controlStickDataIndex] == 0)) {
@@ -9776,6 +11254,13 @@ void Player_Action_8084411C(Player* this, PlayState* play) {
             func_8083A098(this, anim, play);
         }
     }
+
+    // Run this after upper-body/item upkeep. Starting it before that update makes
+    // ranged items enter and leave the aiming state in the same frame.
+    if ((this->actionFunc == Player_Action_8084411C) && !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+        GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this)) {
+        Player_ActionHandler_13(this, play);
+    }
 }
 
 static AnimSfxEntry sRollAnimSfxList[] = {
@@ -9816,7 +11301,9 @@ void Player_Action_Roll(Player* this, PlayState* play) {
             // Must have a speed of 7 or above to be able to bonk into something
             if (this->linearVelocity >= 7.0f) {
                 bool randomBonk = GameInteractor_GetRandomBonksActive() && (Rand_ZeroOne() <= .05);
-                if (randomBonk || ((this->actor.bgCheckFlags & 0x200) && (sWorldYawToTouchedWall < 0x2000)) ||
+                if (randomBonk ||
+                    ((this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) &&
+                     (sWorldYawToTouchedWall < 0x2000)) ||
                     ((this->cylinder.base.ocFlags1 & OC1_HIT) &&
                      (ocCollidedActor = this->cylinder.base.oc,
                       ((ocCollidedActor->id == ACTOR_EN_WOOD02) &&
@@ -9851,7 +11338,12 @@ void Player_Action_Roll(Player* this, PlayState* play) {
                 }
             }
 
-            if ((this->skelAnime.curFrame < 15.0f) || !Player_ActionHandler_7(this, play)) {
+            if (GameInteractor_Should(VB_PLAYER_ROLL_CHAIN, false, this, play, sControlInput, sFloorType)) {
+                return;
+            }
+
+            if ((this->skelAnime.curFrame < 15.0f) || GerudoMhr_RollCommits(this) ||
+                !Player_ActionHandler_7(this, play)) {
                 if (this->skelAnime.curFrame >= 20.0f) {
                     func_8083A060(this, play);
 
@@ -9861,18 +11353,26 @@ void Player_Action_Roll(Player* this, PlayState* play) {
                 Player_GetMovementSpeedAndYaw(this, &speedTarget, &yawTarget, SPEED_MODE_CURVED, play);
 
                 // `speedTarget` at this point is the speed that would be used for regular walking.
-                // Rolling speed is 1.5 times faster than what the walking speed would be for the current control stick
-                // input.
+                // Rolling speed is 1.5 times faster than walking speed would be for the current control stick input.
                 speedTarget *= 1.5f;
 
                 if ((speedTarget < 3.0f) || (this->controlStickDirections[this->controlStickDataIndex] != 0)) {
                     speedTarget = 3.0f;
                 }
 
+                // Gerudo's dual-blades tumble covers twice the ground. Applied as
+                // a multiplier on OOT's own roll target — after the 3.0 floor, so
+                // even a standing roll gains the distance — instead of driving the
+                // actor from the form, which is what used to break the physics.
+                if (GerudoMhr_WantsLongRoll()) {
+                    speedTarget *= 2.0f;
+                }
+
+                GameInteractor_Should(VB_PLAYER_ROLL_STEER, false, this, play, yawTarget);
                 func_8083DF68(this, speedTarget, this->actor.shape.rot.y);
 
                 if (func_8084269C(play, this)) {
-                    func_8002F8F0(&this->actor, NA_SE_PL_ROLL_DUST - SFX_FLAG);
+                    Actor_PlaySfx_Flagged2(&this->actor, NA_SE_PL_ROLL_DUST - SFX_FLAG);
                 }
 
                 Player_ProcessAnimSfxList(this, sRollAnimSfxList);
@@ -9890,7 +11390,7 @@ void Player_Action_80844A44(Player* this, PlayState* play) {
 
     Math_StepToF(&this->linearVelocity, 0.0f, 0.05f);
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         this->actor.colChkInfo.damage = 0x10;
         func_80837C0C(play, this, PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE, 4.0f, 5.0f, this->actor.shape.rot.y, 20);
     }
@@ -9908,9 +11408,13 @@ void Player_Action_80844AF4(Player* this, PlayState* play) {
     if (!func_80842DF4(play, this)) {
         func_8084285C(this, 6.0f, 7.0f, 99.0f);
 
-        if (!(this->actor.bgCheckFlags & 1)) {
+        if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
             Player_GetMovementSpeedAndYaw(this, &speedTarget, &yawTarget, SPEED_MODE_LINEAR, play);
             func_8083DFE0(this, &speedTarget, &this->yaw);
+            // Gerudo Dual Blades: rise, hang at the apex, then drill down onto the lock-on.
+            // Last thing in the frame on purpose — the gravity stamped at the top of this
+            // function and the air control just above would both undo it otherwise.
+            GerudoMhr_TickJumpSlash(this, play);
             return;
         }
 
@@ -9974,7 +11478,10 @@ void func_80844DC8(Player* this, PlayState* play) {
 }
 
 void func_80844E3C(Player* this) {
-    Math_StepToF(&this->unk_858, 1.0f, 0.02f);
+    // Gerudo Dual Blades: her charge fills in a third of the time (0.02 -> 0.06 per
+    // frame). Everything downstream reads unk_858 as a 0..1 fraction, so the rate is
+    // the only thing that has to change. Skijer's NEI
+    Math_StepToF(&this->unk_858, 1.0f, 0.02f * GerudoMhr_ChargeRateMul(this));
 }
 
 void Player_Action_80844E68(Player* this, PlayState* play) {
@@ -10403,7 +11910,7 @@ void Player_Action_80845EF8(Player* this, PlayState* play) {
         } else {
             func_8083C0E8(this, play);
             if (play->roomCtx.prevRoom.num >= 0) {
-                func_80097534(play, &play->roomCtx);
+                Room_FinishRoomChange(play, &play->roomCtx);
             }
             func_8005B1A4(Play_GetCamera(play, 0));
             Play_SetupRespawnPoint(play, 0, 0xDFF);
@@ -10659,7 +12166,7 @@ void Player_StartMode_Nothing(PlayState* play, Player* this) {
 
 void Player_StartMode_BlueWarp(PlayState* play, Player* this) {
     Player_SetupAction(play, this, Player_Action_8084F710, 0);
-    if ((play->sceneNum == SCENE_LAKE_HYLIA) && (gSaveContext.sceneSetupIndex >= 4)) {
+    if ((play->sceneNum == SCENE_LAKE_HYLIA) && (gSaveContext.sceneLayer >= 4)) {
         this->av1.actionVar1 = 1;
     }
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
@@ -10672,7 +12179,7 @@ static u8 D_808546F0[] = { ITEM_SWORD_MASTER, ITEM_SWORD_KOKIRI };
 
 void func_80846720(PlayState* play, Player* this, s32 arg2) {
     s32 item = D_808546F0[(void)0, gSaveContext.linkAge];
-    s32 itemAction = sItemActions[item];
+    s32 itemAction = ExtPlayer_GetItemAction(item);
 
     Player_DestroyHookshot(this);
     Player_DetachHeldActor(play, this);
@@ -10710,11 +12217,15 @@ void Player_StartMode_Door(PlayState* play, Player* this) {
 }
 
 void Player_StartMode_Grotto(PlayState* play, Player* this) {
+    // If can respawn from water to grotto, need to set normal speed factor for the jump
+    if (IS_RANDO) {
+        sWaterSpeedFactor = 1.0f;
+    }
     func_808389E8(this, &gPlayerAnim_link_normal_jump, 12.0f, play);
     Player_SetupAction(play, this, Player_Action_8084F9C0, 0);
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
     this->fallStartHeight = this->actor.world.pos.y;
-    OnePointCutscene_Init(play, 5110, 40, &this->actor, MAIN_CAM);
+    OnePointCutscene_Init(play, 5110, 40, &this->actor, CAM_ID_MAIN);
 }
 
 void Player_StartMode_KnockedOver(PlayState* play, Player* this) {
@@ -10729,6 +12240,19 @@ void Player_StartMode_WarpSong(PlayState* play, Player* this) {
 
 Actor* Player_SpawnMagicSpell(PlayState* play, Player* this, s32 spell) {
     static s16 sMagicSpellActorIds[] = { ACTOR_MAGIC_WIND, ACTOR_MAGIC_DARK, ACTOR_MAGIC_FIRE };
+
+    // SW97: Route to SW97 spell actors only when the active spell is from a medallion item
+    if (sSw97SpellActive) {
+        Actor* sw97Actor = Sw97_TrySpawnMagicSpell(play, this, spell);
+        if (sw97Actor != NULL) {
+            return sw97Actor;
+        }
+    }
+
+    // Vanilla only has 3 spells (indices 0-2); indices 3-5 are SW97-only
+    if (spell < 0 || spell >= ARRAY_COUNT(sMagicSpellActorIds)) {
+        return NULL;
+    }
 
     return Actor_Spawn(&play->actorCtx, play, sMagicSpellActorIds[spell], this->actor.world.pos.x,
                        this->actor.world.pos.y, this->actor.world.pos.z, 0, 0, 0, 0);
@@ -10828,6 +12352,31 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     this->itemAction = this->heldItemAction = -1;
     this->heldItemId = ITEM_NONE;
 
+    // EXTENDED EQUIPMENT: Init from CVars
+    ExtEquip_Init();
+
+    // SW97 LAYOUT MIGRATION (Skijer's NEI). One-shot per save: the six ITEM_SW97_ARROW_* ids and
+    // ITEM_BOMB_ARROWS used to live on C-buttons and in page-2 slot 27. Those ids are gone; the
+    // element is a flag. Without this sweep a pre-refactor save reloads with a dead id sitting on a
+    // button. Runs here because Player_Init is guaranteed to fire once per file load.
+    Sw97_MigrateLayout(play);
+
+    // TRANSFORMATION MASKS: Init BEFORE Player_UseItem so IsTransformed() returns false.
+    // Reset transformation state before Player_UseItem to avoid stale state from old scene
+    TransformMasks_Init(play, this);
+
+    // SM64 MARIO: same pattern — drop stale Mario on every Player respawn so
+    // loading zones / warps reliably trigger a recreate in the new scene.
+    Sm64Mario_OnPlayerInit(play, this);
+    // Re-bind the Master-Sword punch collider to the new Player actor.
+    Sm64Mario_InitAttackCollider(play, this);
+    // Force Sm64Mario_Init to run fresh on the next Player_Update. Without this,
+    // scene-change recreation uses the "Update scene-change branch" path instead
+    // of the Init path — which empirically leaves actor-interaction in a degraded
+    // state ("tienes que hacer toggle on/off"). Mimicking the CVAR-toggle flow
+    // (Reset → Init) gives actors the same clean-state they have after a toggle.
+    gSm64MarioInitialized = 0;
+
     Player_UseItem(play, this, ITEM_NONE);
     Player_SetEquipmentData(play, this);
     this->prevBoots = this->currentBoots;
@@ -10874,8 +12423,8 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     if ((respawnFlag == 0) || (respawnFlag < -1)) {
         titleFileSize = scene->titleFile.vromEnd - scene->titleFile.vromStart;
         if (GameInteractor_Should(VB_SHOW_TITLE_CARD, gSaveContext.showTitleCard)) {
-            if ((gSaveContext.sceneSetupIndex < 4) &&
-                (gEntranceTable[((void)0, gSaveContext.entranceIndex) + ((void)0, gSaveContext.sceneSetupIndex)].field &
+            if ((gSaveContext.sceneLayer < 4) &&
+                (gEntranceTable[((void)0, gSaveContext.entranceIndex) + ((void)0, gSaveContext.sceneLayer)].field &
                  ENTRANCE_INFO_DISPLAY_TITLE_CARD_FLAG) &&
                 ((play->sceneNum != SCENE_DODONGOS_CAVERN) ||
                  (Flags_GetEventChkInf(EVENTCHKINF_ENTERED_DODONGOS_CAVERN))) &&
@@ -11059,7 +12608,7 @@ void Player_UpdateInterface(PlayState* play, Player* this) {
                     doAction = DO_ACTION_ENTER;
                 } else if ((this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->getItemId == GI_NONE) &&
                            (heldActor != NULL)) {
-                    if ((this->actor.bgCheckFlags & 1) || (heldActor->id == ACTOR_EN_NIW)) {
+                    if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (heldActor->id == ACTOR_EN_NIW)) {
                         if (func_8083EAF0(this, heldActor) == 0) {
                             doAction = DO_ACTION_DROP;
                         } else {
@@ -11091,7 +12640,10 @@ void Player_UpdateInterface(PlayState* play, Player* this) {
                     } else if ((play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2) &&
                                Player_IsZTargeting(this) && (controlStickDirection >= PLAYER_STICK_DIR_LEFT)) {
                         doAction = DO_ACTION_JUMP;
-                    } else if ((this->heldItemAction >= PLAYER_IA_SWORD_MASTER) ||
+                        // Fierce Deity can't sheathe his sword (no scabbard, it would just
+                        // disappear) — the putaway is blocked in Player_ActionHandler_Roll,
+                        // so don't advertise it on the A button either.
+                    } else if (((this->heldItemAction >= PLAYER_IA_SWORD_MASTER) && !Player_IsFDHoldingSword(this)) ||
                                ((this->stateFlags2 & PLAYER_STATE2_NAVI_ACTIVE) &&
                                 (play->actorCtx.targetCtx.arrowPointedActor == NULL))) {
                         doAction = DO_ACTION_PUTAWAY;
@@ -11141,24 +12693,21 @@ void Player_UpdateInterface(PlayState* play, Player* this) {
 s32 Player_UpdateHoverBoots(Player* this) {
     s32 canHoverOnGround;
 
-    if ((this->currentBoots == PLAYER_BOOTS_HOVER ||
-         (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && this->ivanFloating)) &&
-        (this->hoverBootsTimer != 0)) {
+    if (Player_IsHovering(this) && (this->hoverBootsTimer != 0)) {
         this->hoverBootsTimer--;
     } else {
         this->hoverBootsTimer = 0;
     }
 
     canHoverOnGround =
-        (this->currentBoots == PLAYER_BOOTS_HOVER ||
-         (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && this->ivanFloating)) &&
-        ((this->actor.yDistToWater >= 0.0f) || (func_80838144(sFloorType) >= 0) || func_8083816C(sFloorType));
+        Player_IsHovering(this) && ((this->actor.yDistToWater >= 0.0f) ||
+                                    (Player_GetHotFloorTimerIndex(sFloorType) >= 0) || func_8083816C(sFloorType));
 
-    if (canHoverOnGround && (this->actor.bgCheckFlags & 1) && (this->hoverBootsTimer != 0)) {
+    if (canHoverOnGround && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (this->hoverBootsTimer != 0)) {
         this->actor.bgCheckFlags &= ~1;
     }
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         if (!canHoverOnGround) {
             this->hoverBootsTimer = 19;
         }
@@ -11240,8 +12789,37 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         this->stateFlags3 |= PLAYER_STATE3_CHECK_FLOOR_WATER_COLLISION;
     }
 
+    // Minish tiny mode: while walking into a crawlspace hole, drop the wall check
+    // (bit 1) AND the ceiling check (bit 2) for a window so Link strolls straight
+    // through the opening instead of being stopped by the hole poly or pinned by
+    // the low tunnel ceiling (he never enters the vanilla crawl state —
+    // Player_TryEnteringCrawlspace is gated off while tiny).
+    if (MinishTiny_CrawlspacePassthrough(this, play)) {
+        flags &= ~(1 | 2);
+    }
+
     Math_Vec3f_Copy(&unusedWorldPos, &this->actor.world.pos);
     Actor_UpdateBgCheckInfo(play, &this->actor, vWallCheckHeight, vWallCheckRadius, ceilingCheckHeight, flags);
+
+    // Clawshot Hang — when active AND the raycast above DID find a floor (our
+    // invisible Obj_Hsblock platform), force the ground flag back on. The
+    // raycast itself may set bgCheckFlags &= ~1 even with a valid floorPoly
+    // if Link's pinned Y sits exactly at the platform surface (no penetration
+    // = engine considers him airborne by a hair). Forcing the flag with a
+    // valid floorPoly is safe; without one the downstream code at line ~12457
+    // dereferences floorPoly->normal.x and crashes — that's why we gate on
+    // floorPoly != NULL. If there's no platform (scene didn't have
+    // OBJECT_D_HSBLOCK loaded), aim will still glitch but the game won't
+    // crash.
+    {
+        extern u8 ClawshotBT_IsActive(void);
+        if (ClawshotBT_IsActive() && this->actor.floorPoly != NULL) {
+            this->actor.bgCheckFlags |= 1;     // on floor
+            this->actor.bgCheckFlags &= ~0x10; // not bonking ceiling
+            this->actor.floorHeight = this->actor.world.pos.y - 5.0f;
+            this->actor.velocity.y = 0.0f;
+        }
+    }
 
     if (this->actor.bgCheckFlags & 0x10) {
         this->actor.velocity.y = 0.0f;
@@ -11255,7 +12833,8 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         this->floorProperty = func_80041EA4(&play->colCtx, floorPoly, this->actor.floorBgId);
         this->prevFloorSfxOffset = this->floorSfxOffset;
 
-        if (this->actor.bgCheckFlags & 0x20) {
+        // Frozen water keeps the scene's own floor sound: standing on ice is not paddling.
+        if ((this->actor.bgCheckFlags & 0x20) && !RocBoots_OnFrozenWater()) {
             if (this->actor.yDistToWater < 20.0f) {
                 this->floorSfxOffset = 4;
             } else {
@@ -11284,7 +12863,7 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
             sIsFloorConveyor = SurfaceType_IsConveyor(&play->colCtx, floorPoly, this->actor.floorBgId);
             if (((sIsFloorConveyor == 0) && (this->actor.yDistToWater > 20.0f) &&
                  (this->currentBoots != PLAYER_BOOTS_IRON)) ||
-                ((sIsFloorConveyor != 0) && (this->actor.bgCheckFlags & 1))) {
+                ((sIsFloorConveyor != 0) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND))) {
                 sConveyorYaw = SurfaceType_GetConveyorDirection(&play->colCtx, floorPoly, this->actor.floorBgId) << 10;
             } else {
                 sConveyorSpeed = 0;
@@ -11296,7 +12875,7 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
 
     this->actor.bgCheckFlags &= ~0x200;
 
-    if (this->actor.bgCheckFlags & 8) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) {
         CollisionPoly* wallPoly;
         s32 wallBgId;
         s16 yawDiff;
@@ -11320,55 +12899,21 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
 
         sTouchedWallFlags = func_80041DB8(&play->colCtx, this->actor.wallPoly, this->actor.wallBgId);
 
-        // conflicts arise from these two being enabled at once, and with ClimbEverything on, FixVineFall is redundant
-        // anyway
-        if (CVarGetInteger(CVAR_ENHANCEMENT("FixVineFall"), 0) && !CVarGetInteger(CVAR_CHEAT("ClimbEverything"), 0)) {
-            /* This fixes the "started climbing a wall and then immediately fell off" bug.
-             * The main idea is if a climbing wall is detected, double-check that it will
-             * still be valid once climbing begins by doing a second raycast with a small
-             * margin to make sure it still hits a climbable poly. Then update the flags
-             * in sTouchedWallFlags again and proceed as normal.
-             */
-            if (sTouchedWallFlags & 8) {
-                Vec3f checkPosA;
-                Vec3f checkPosB;
-                f32 yawCos;
-                f32 yawSin;
-                s32 hitWall;
+        // Minish tiny mode: arm the crawlspace pass-through using the SAME flags
+        // vanilla reads for "Enter on A" (0x30 = crawlspace). The interact-wall
+        // probe here sees the hole poly; the movement wall check only sees the
+        // solid rock around it. MinishTiny_CrawlspacePassthrough (called just
+        // before Actor_UpdateBgCheckInfo) then drops the wall check so tiny Link
+        // strolls straight through instead of bonking it as a solid wall.
+        if ((sTouchedWallFlags & 0x30) && MinishTiny_IsActive()) {
+            MinishTiny_ArmCrawlspace();
+        }
 
-                /* Angle the raycast slightly out towards the side based on the angle of
-                 * attack the player takes coming at the climb wall. This is necessary because
-                 * the player's XZ position actually wobbles very slightly while climbing
-                 * due to small rounding errors in the sin/cos lookup tables. This wobble
-                 * can cause wall checks while climbing to be slightly left or right of
-                 * the wall check to start the climb. By adding this buffer it accounts for
-                 * any possible wobble. The end result is the player has to be further than
-                 * some epsilon distance from the edge of the climbing poly to actually
-                 * start the climb. I divide it by 2 to make that epsilon slightly smaller,
-                 * mainly for visuals. Using the full yawDiff leaves a noticeable gap on
-                 * the edges that can't be climbed. But with the half distance it looks like
-                 * the player is climbing right on the edge, and still works.
-                 */
-                yawCos = Math_CosS(this->actor.wallYaw - (yawDiff / 2) + 0x8000);
-                yawSin = Math_SinS(this->actor.wallYaw - (yawDiff / 2) + 0x8000);
-                checkPosA.x = this->actor.world.pos.x + (-20.0f * yawSin);
-                checkPosA.z = this->actor.world.pos.z + (-20.0f * yawCos);
-                checkPosB.x = this->actor.world.pos.x + (50.0f * yawSin);
-                checkPosB.z = this->actor.world.pos.z + (50.0f * yawCos);
-                checkPosB.y = checkPosA.y = this->actor.world.pos.y + 26.0f;
-
-                hitWall = BgCheck_EntityLineTest1(&play->colCtx, &checkPosA, &checkPosB, &sInteractWallCheckResult,
-                                                  &wallPoly, true, false, false, true, &wallBgId);
-
-                if (hitWall) {
-                    this->actor.wallPoly = wallPoly;
-                    this->actor.wallBgId = wallBgId;
-                    this->actor.wallYaw = Math_Atan2S(wallPoly->normal.z, wallPoly->normal.x);
-                    yawDiff = this->actor.shape.rot.y - (s16)(this->actor.wallYaw + 0x8000);
-
-                    sTouchedWallFlags = func_80041DB8(&play->colCtx, this->actor.wallPoly, this->actor.wallBgId);
-                }
-            }
+        // Upstream moved this whole revalidation into Enhancements/Fixes/FixVineFall.cpp behind
+        // VB_REVALIDATE_CLIMBED_WALL, with the same FixVineFall/ClimbEverything condition we had
+        // inline. The Mogma Mitts exclusion has no handler of its own, so it stays here.
+        if (!gMogmaMittsClimbActive) {
+            GameInteractor_Should(VB_REVALIDATE_CLIMBED_WALL, true, play, this, &sTouchedWallFlags, &yawDiff);
         }
 
         sShapeYawToTouchedWall = ABS(yawDiff);
@@ -11381,7 +12926,7 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
 
         vSpeedScale = sWorldYawToTouchedWall * 0.00008f;
 
-        if (!(this->actor.bgCheckFlags & 1) || vSpeedScale >= 1.0f) {
+        if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || vSpeedScale >= 1.0f) {
             this->unk_880 = R_RUN_SPEED_LIMIT / 100.0f;
         } else {
             vSpeedLimit = (R_RUN_SPEED_LIMIT / 100.0f * vSpeedScale);
@@ -11392,10 +12937,11 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
             }
         }
 
-        if ((this->actor.bgCheckFlags & 0x200) && (sShapeYawToTouchedWall < 0x3000)) {
+        if ((this->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) && (sShapeYawToTouchedWall < 0x3000)) {
             CollisionPoly* wallPoly = this->actor.wallPoly;
 
-            if (ABS(wallPoly->normal.y) < 600 || (CVarGetInteger(CVAR_CHEAT("ClimbEverything"), 0) != 0)) {
+            if (GameInteractor_Should(VB_SURFACE_ANGLE_IS_CLIMBABLE, ABS(wallPoly->normal.y) < 600) ||
+                gMogmaMittsClimbActive) {
                 f32 wallPolyNormalX = COLPOLY_GET_NORMAL(wallPoly->normal.x);
                 f32 wallPolyNormalY = COLPOLY_GET_NORMAL(wallPoly->normal.y);
                 f32 wallPolyNormalZ = COLPOLY_GET_NORMAL(wallPoly->normal.z);
@@ -11460,6 +13006,15 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         this->yDistToLedge = 0.0f;
     }
 
+    // Minish tiny mode: the interact-wall probe uses a fixed 18-unit height, huge
+    // next to tiny Link's ~0.06-unit body, so he registers "near a wall" almost
+    // everywhere and the block above caps unk_880 (the speed cap) down toward 0.1.
+    // That pins linearVelocity near zero — the run anim plays but he doesn't move.
+    // Force the full run-speed cap while tiny so locomotion is never throttled.
+    if (MinishTiny_IsActive()) {
+        this->unk_880 = R_RUN_SPEED_LIMIT / 100.0f;
+    }
+
     if (nextLedgeClimbType == this->ledgeClimbType) {
         if ((this->linearVelocity != 0.0f) && (this->ledgeClimbDelayTimer < 100)) {
             this->ledgeClimbDelayTimer++;
@@ -11469,9 +13024,20 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         this->ledgeClimbDelayTimer = 0;
     }
 
-    if (this->actor.bgCheckFlags & 1) {
+    // Guard floorPoly != NULL: the engine (or a hookshot/clawshot hang on an
+    // Obj_Hsblock platform that gets invalidated a frame later) can leave the
+    // "on floor" flag (bit 1) set while floorPoly is already NULL. The floor-
+    // pitch math below dereferences floorPoly->normal.x and crashes (0xc0000005)
+    // on that null. Vanilla assumes flag-set => valid floorPoly; we enforce it.
+    if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (floorPoly != NULL)) {
         if (GameInteractor_Should(VB_SET_STATIC_FLOOR_TYPE, true, this)) {
-            sFloorType = func_80041D4C(&play->colCtx, floorPoly, this->actor.floorBgId);
+            sFloorType = SurfaceType_GetFloorType(&play->colCtx, floorPoly, this->actor.floorBgId);
+
+            // Roc's Boots: WALK ON LAVA — the sink/burn/void-out floors (4/7/12) and the timed
+            // hot floors (2/3) read as plain floor, the same family the Hover Boots float over.
+            if (RocBoots_IsWorn() && (func_8083816C(sFloorType) || (Player_GetHotFloorTimerIndex(sFloorType) >= 0))) {
+                sFloorType = 0;
+            }
         }
 
         if (!Player_UpdateHoverBoots(this)) {
@@ -11511,12 +13077,46 @@ void Player_ProcessSceneCollision(PlayState* play, Player* this) {
         Player_UpdateHoverBoots(this);
     }
 
+    // Roc's Boots: WALK ON WATER — feet at/below the surface while not swimming → pin Link to the
+    // surface and call it flat floor. Winter pins him for a different reason: the surface is frozen,
+    // so it reads as the slippery floor type instead and stops counting as water at all.
+    {
+        u8 onWater = RocBoots_WalksOnWater(this);
+
+        if (onWater != 0) {
+            u8 frozen = Seasons_WalksOnWater();
+
+            if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+                this->actor.bgCheckFlags |= BGCHECKFLAG_GROUND;
+                if (onWater == 2) {
+                    this->actor.bgCheckFlags |= BGCHECKFLAG_GROUND_TOUCH;
+                }
+            }
+            this->actor.world.pos.y += this->actor.yDistToWater;
+            this->actor.yDistToWater = 0.0f;
+            this->actor.floorHeight = this->actor.world.pos.y;
+            sYDistToFloor = 0.0f;
+            if (this->actor.velocity.y < 0.0f) {
+                this->actor.velocity.y = 0.0f;
+            }
+            // Type 5 is the Ice Cavern's slide, and the slip logic further down keys off it.
+            sFloorType = frozen ? 5 : 0;
+            if (frozen) {
+                // Ice, not a puddle: the ripple and splash effects both hang off this flag.
+                this->actor.bgCheckFlags &= ~BGCHECKFLAG_WATER;
+            }
+            this->floorPitch = this->floorPitchAlt = sFloorShapePitch = 0;
+        }
+    }
+
     if (this->prevFloorType == sFloorType) {
         this->floorTypeTimer++;
     } else {
         this->prevFloorType = sFloorType;
         this->floorTypeTimer = 0;
     }
+
+    GameInteractor_Should(VB_AFTER_PROCESS_SCENE_COLLISION, true);
 }
 
 void Player_UpdateCamAndSeqModes(PlayState* play, Player* this) {
@@ -11558,7 +13158,7 @@ void Player_UpdateCamAndSeqModes(PlayState* play, Player* this) {
                 if (CVarGetInteger(CVAR_ENHANCEMENT("BoomerangFirstPerson"), 0)) {
                     // Avoid camera jumps by switching  to normal cam to exit the first person camera,
                     // before following the boomerang
-                    if (Play_GetCamera(play, 0)->mode == CAM_MODE_FIRSTPERSON) {
+                    if (Play_GetCamera(play, 0)->mode == CAM_MODE_FIRST_PERSON) {
                         camMode = CAM_MODE_NORMAL;
                     } else {
                         camMode = CAM_MODE_FOLLOWBOOMERANG;
@@ -11674,7 +13274,7 @@ void Player_UpdateBodyShock(PlayState* play, Player* this) {
         shockPos.z = (Rand_CenteredFloat(5.0f) + randBodyPart->z) - this->actor.world.pos.z;
 
         EffectSsFhgFlash_SpawnShock(play, &this->actor, &shockPos, shockScale, FHGFLASH_SHOCK_PLAYER);
-        func_8002F8F0(&this->actor, NA_SE_PL_SPARK - SFX_FLAG);
+        Actor_PlaySfx_Flagged2(&this->actor, NA_SE_PL_SPARK - SFX_FLAG);
     }
 }
 
@@ -11689,7 +13289,7 @@ void Player_UpdateBodyBurn(PlayState* play, Player* this) {
     s32 sp58;
     s32 sp54;
 
-    if (this->currentTunic == PLAYER_TUNIC_GORON || CVarGetInteger(CVAR_CHEAT("SuperTunic"), 0) != 0) {
+    if (!Player_SuffersHeat(this)) {
         sp54 = 20;
     } else {
         sp54 = (s32)(this->linearVelocity * 0.4f) + 1;
@@ -11704,7 +13304,7 @@ void Player_UpdateBodyBurn(PlayState* play, Player* this) {
     spawnedFlame = false;
     timerPtr = this->bodyFlameTimers;
 
-    func_8083819C(this, play);
+    Player_BurnDekuShield(this, play);
 
     for (i = 0; i < PLAYER_BODYPART_MAX; i++, timerPtr++) {
         timerStep = sp58 + sp54;
@@ -11911,9 +13511,9 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     }
 
     if (this->stateFlags2 & PLAYER_STATE2_PAUSE_MOST_UPDATING) {
-        if (!(this->actor.bgCheckFlags & 1)) {
+        if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
             Player_ZeroSpeedXZ(this);
-            Actor_MoveXZGravity(&this->actor);
+            RocBoots_MoveWithGravity(this, Actor_MoveXZGravity); // half gravity while worn
         }
 
         Player_ProcessSceneCollision(play, this);
@@ -11931,7 +13531,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
                 }
             } else {
                 if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) {
-                    if ((this->prevBoots == PLAYER_BOOTS_IRON) || (this->actor.bgCheckFlags & 1)) {
+                    if ((this->prevBoots == PLAYER_BOOTS_IRON) || (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
                         func_8083D36C(play, this);
                         this->stateFlags2 &= ~PLAYER_STATE2_UNDERWATER;
                     }
@@ -11950,6 +13550,14 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
             this->av2.actionVar2 = 99;
         }
 
+        // Gerudo Dual Blades: keep the hold-B charge reachable after her long swings
+        // (see GerudoMhr_HoldsChargeWindow).
+        // Trident (ext sword 3): same fix for the same reason — its swings are 14-26
+        // frames and vanilla's window only survives 7. Skijer's NEI
+        if (GerudoMhr_HoldsChargeWindow(this) || Trident_HoldsChargeWindow(this)) {
+            this->unk_844 = 3;
+        }
+
         if (this->unk_844 == 0) {
             this->unk_845 = 0;
         } else if (this->unk_844 < 0) {
@@ -11959,7 +13567,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         }
 
         Math_ScaledStepToS(&this->unk_6C2, 0, 400);
-        func_80032CB4(this->unk_3A8, 20, 80, 6);
+        FaceChange_UpdateBlinking(this->unk_3A8, 20, 80, 6);
 
         this->actor.shape.face = this->unk_3A8[0] + ((play->gameplayFrames & 32) ? 0 : 3);
 
@@ -11972,7 +13580,8 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         }
 
         if (!(this->skelAnime.movementFlags & 0x80)) {
-            if (((this->actor.bgCheckFlags & 1) && (sFloorType == 5) && (this->currentBoots != PLAYER_BOOTS_IRON)) ||
+            if (((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && (sFloorType == 5) &&
+                 (this->currentBoots != PLAYER_BOOTS_IRON) && !ClimbBoots_HasGrip()) ||
                 ((this->currentBoots == PLAYER_BOOTS_HOVER || GameInteractor_GetSlipperyFloorActive()) &&
                  !(this->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_IN_CUTSCENE)))) {
                 f32 sp70 = this->linearVelocity;
@@ -12006,7 +13615,7 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
                 this->actor.world.rot.y = this->yaw;
             }
 
-            Actor_UpdateVelocityXZGravity(&this->actor);
+            RocBoots_MoveWithGravity(this, Actor_UpdateVelocityXZGravity); // half gravity while worn
 
             if ((this->pushedSpeed != 0.0f) && !Player_InCsMode(play) &&
                 !(this->stateFlags1 &
@@ -12081,7 +13690,8 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
                     (PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_CLIMBING_LADDER)) {
                     func_80832440(play, this);
                     func_80837B9C(this, play);
-                } else if ((this->actor.bgCheckFlags & 1) || (this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+                } else if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) ||
+                           (this->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
                     func_80836448(play, this,
                                   func_808332B8(this)           ? &gPlayerAnim_link_swimer_swim_down
                                   : (this->bodyShockTimer != 0) ? &gPlayerAnim_link_normal_electric_shock_end
@@ -12152,6 +13762,45 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         sInvWaterSpeedFactor = 1.0f / sWaterSpeedFactor;
         sUseHeldItem = sHeldItemButtonIsHeldDown = 0;
         sSavedCurrentMask = this->currentMask;
+
+        // Transformation masks: ledge grab while a custom action holds PAUSE, plus the
+        // underwater item pickup the Zora swim states could not reach. Lives in
+        // mm_player_form.cpp; must be called from HERE because interactRangeActor is
+        // cleared below (:13592) long before TransformMasks_Update runs (:13907).
+        {
+            extern void MmForm_HandleFormInteractions(Player * player, PlayState * play);
+            MmForm_HandleFormInteractions(this, play);
+        }
+
+        // SM64 Mario: same yield pattern. When paused and the player can
+        // interact with something (door, NPC, grabbable actor, ledge),
+        // unpause so the vanilla action handler runs the animation. Adds a
+        // temporary strength boost so Mario can lift bronze-gauntlet-level
+        // objects ("como si tuviera strength 1"). Strength is restored in the
+        // same frame so the save file isn't polluted — mirror of the
+        // gFormState.savedStrength pattern in mm_player_form.cpp:2363-2381.
+        if ((this->stateFlags3 & PLAYER_STATE3_PAUSE_ACTION_FUNC) && Sm64Mario_IsReady()) {
+            s16 sm64SavedStrength = CUR_UPG_VALUE(UPG_STRENGTH);
+            if (sm64SavedStrength < 1) {
+                Inventory_ChangeUpgrade(UPG_STRENGTH, 1);
+            }
+            // Handler call order matters — doors first (can pre-empt talk on
+            // NPC-doors like Mido), then talk, grab, ledge. NOTE: we do NOT
+            // inject B→A here anymore. A is Mario's jump; grabbing bombs /
+            // bomb flowers / liftable rocks happens via the B-proximity path
+            // in sm64_mario.c (Sm64Mario_TryGrabOrThrow), which manages
+            // heldActor directly without going through these handlers.
+            s32 sm64Handled = Player_ActionHandler_1(this, play) ||    // doors (knob + sliding)
+                              Player_ActionHandler_Talk(this, play) || // NPC textbox
+                              Player_ActionHandler_2(this, play) ||    // A-triggered pickup / offer grab
+                              Player_ActionHandler_12(this, play);     // ledge climb
+            if (sm64SavedStrength < 1) {
+                Inventory_ChangeUpgrade(UPG_STRENGTH, sm64SavedStrength);
+            }
+            if (sm64Handled) {
+                this->stateFlags3 &= ~PLAYER_STATE3_PAUSE_ACTION_FUNC;
+            }
+        }
 
         if (GameInteractor_Should(VB_EXECUTE_PLAYER_ACTION_FUNC, !(this->stateFlags3 & PLAYER_STATE3_PAUSE_ACTION_FUNC),
                                   this, input)) {
@@ -12251,12 +13900,25 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
 
     Collider_ResetCylinderAC(play, &this->cylinder.base);
 
+    // Gerudo Dual Blades: read this frame's blade hits BEFORE the reset below wipes
+    // AT_HIT. Her controller runs after this function (TransformMasks_Update), so
+    // this is the only place the flags are still live for it.
+    GerudoMhr_ScanBladeHits(this);
+    KeatonForm_ScanBlock(this);
+
     Collider_ResetQuadAT(play, &this->meleeWeaponQuads[0].base);
     Collider_ResetQuadAT(play, &this->meleeWeaponQuads[1].base);
 
     Collider_ResetQuadAC(play, &this->shieldQuad.base);
     Collider_ResetQuadAT(play, &this->shieldQuad.base);
 }
+
+// KITE SHIELD — shield surfing engine. Included HERE and not with the rest of the ext-equipment
+// unity build at the top of the file: it drives the player through Player_GetSlopeDirection,
+// Player_GetRelativePosition, Player_GetMovementSpeedAndYaw, Player_ProcessItemButtons,
+// func_80837948 and the GET_PLAYER_ANIM tables, none of which exist yet up there. The state it
+// works on lives in mods/equipment/behaviors/equip_kite_shield.c. Skijer's NEI
+#include "mods/equipment/kite_surf.c"
 
 static Vec3f D_80854838 = { 0.0f, 0.0f, -30.0f };
 
@@ -12269,6 +13931,13 @@ void Player_Update(Actor* thisx, PlayState* play) {
     s32 pad;
     Input sp44;
     Actor* dog;
+
+    // Skijer's NEI "Pause Play": after the MM quest page closes itself for a song, this pulls out
+    // the ocarina and instant-plays it in-world (machine in z_kaleido_collect.c; idle no-op).
+    {
+        extern void NeiPausePlay_Update(PlayState * play, Player * player);
+        NeiPausePlay_Update(play, this);
+    }
 
     if (Player_UpdateNoclip(this, play)) {
         if (gSaveContext.dogParams < 0) {
@@ -12299,14 +13968,54 @@ void Player_Update(Actor* thisx, PlayState* play) {
         }
 
         if (this->stateFlags1 & (PLAYER_STATE1_INPUT_DISABLED | PLAYER_STATE1_IN_CUTSCENE)) {
-            memset(&sp44, 0, sizeof(sp44));
+            // Transformed forms: allow input during IN_CUTSCENE (scene transition fade-in)
+            // so Zora can swim after loading an underwater zone. The form's yield system
+            // already handles real cutscenes (NPC dialogue, story) by deferring to OOT.
+            // Only block input when INPUT_DISABLED is set (transformation cutscene, events).
+            if (TransformMasks_IsTransformed() && !(this->stateFlags1 & PLAYER_STATE1_INPUT_DISABLED)) {
+                sp44 = play->state.input[0];
+            } else {
+                memset(&sp44, 0, sizeof(sp44));
+            }
         } else {
             sp44 = play->state.input[0];
             if (this->textboxBtnCooldownTimer != 0) {
                 sp44.cur.button &= ~(BTN_A | BTN_B | BTN_CUP);
                 sp44.press.button &= ~(BTN_A | BTN_B | BTN_CUP);
             }
+
+            // Strip BTN_B for systems that reserve it (Blast/Great Fairy masks,
+            // Garo attack kit). All routing lives in transformation_masks.c.
+            TransformMasks_FilterB(&sp44);
+
+            // Kamaro dance: strip all input EXCEPT B. In MM, Kamaro is bound
+            // to the B button (DO_ACTION_DANCE), so releasing B must stop the
+            // dance — keeping B live in sp44 lets the mm_mask_wear.cpp dance
+            // loop see the release. All other buttons stripped so sword/items
+            // can't softlock against the dance animation.
+            if (MmMaskWear_IsKamaroDancing()) {
+                sp44.cur.button &= BTN_B;
+                sp44.press.button &= BTN_B;
+                sp44.rel.button &= BTN_B;
+                sp44.cur.stick_x = 0;
+                sp44.cur.stick_y = 0;
+            }
+
+            // Bremen march: DO NOT block input. Per MM z_player.c:14705,
+            // Player_Action_11 reads sPlayerControlInput (raw stick + buttons)
+            // for stick-driven yaw and target-speed. Zeroing here breaks
+            // direction control. Item-use (sword draw, item swap, etc.) is
+            // blocked separately via the MmMaskWear_IsBremenMarching() gate
+            // in Player_ProcessItemButtons, mirroring MM's stateFlags3
+            // PLAYER_STATE3_20000000 early-return at z_player.c:3804-3806.
         }
+
+        // Gust jar: strip L/R from sp44 BEFORE Player_UpdateCommon so the
+        // vanilla shield handler never sees BTN_R while the player is aiming
+        // / sucking / holding a stored blow. Handle_GustJar's own L/R cycle
+        // logic reads play->state.input[0] (untouched) so cycling still works.
+        // Mirrors the TransformMasks_FilterB pattern above.
+        GustJar_FilterPlayerInput(&sp44);
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
             CVarGetInteger(CVAR_CHEAT("SpeedModifier.SpeedToggle"), 0)) {
@@ -12318,7 +14027,142 @@ void Player_Update(Actor* thisx, PlayState* play) {
             }
         }
 
+        // Skijer's NEI: SM64 pieces 1-2 (TickTransitionSuspend + mask force/toggle),
+        // moved to customequipment.cpp. Positioned BEFORE any IsActive/IsReady check.
+        GameInteractor_Should(VB_SM64_PLAYER_PRE_ACTION, true, play, this, &sp44);
+
+        // SM64: Block OOT actionFunc only when Mario is actually driving Link
+        // (IsReady = CVAR on AND sSm64MarioId >= 0). Yield (don't pause) when
+        // vanilla is in the middle of a context-sensitive interaction so its
+        // action func keeps running normally:
+        //  - TALKING: textbox dialog — Mario freezes idle while vanilla runs.
+        //  - CARRYING_ACTOR: Mario grabbed something via the OOT pickup path
+        //    (e.g. an NPC handover); vanilla handles carry/throw. Note: the
+        //    Mario-side B-grab system is independent and never sets this flag.
+        //  - GETTING_ITEM / IN_ITEM_CS: post-pickup item-show sequence.
+        //  - CLIMBING_LEDGE / HANGING_OFF_LEDGE: ledge transitions.
+        // Same pattern as mm_player_form.cpp yielding to OOT.
+        //
+        // C-button presses are NO LONGER yielded. Items now run through
+        // Sm64Mario_HandleItems (sm64_mario_items.c) which spawns projectiles
+        // at Mario's position in Mario's facing — Ivan-the-Fairy-style. Mario
+        // never enters Link's first-person aim mode, so FIRST_PERSON / unk_6AD
+        // are not in the yield list.
+        // Yield (don't pause OOT's action func) whenever OOT is scripting the
+        // player — Sm64Mario_OotIsScriptingPlayer (sm64_mario.c) covers:
+        //  - Player_InBlockingCsMode: cutscene/csAction/transition-start/loading/
+        //    magic/hookshot-fly;
+        //  - talk / item-get / ledge climb (the old narrow list);
+        //  - the multi-frame DOOR + entrance/exit WALK-THROUGH, detected by
+        //    action-func identity (Player_Action_80845EF8/80845CA4). doorType is
+        //    nulled at 13089 before the walk, so only the action func persists.
+        // #6 Mario first-person free-look: on a C-Up press (grounded, not already
+        // first-person / scripted), drop straight into OOT's native first-person
+        // LOOK action (Player_Action_8084B1D8, the no-item C-Up look). Because
+        // Sm64Mario_OotIsScriptingPlayer reports FIRST_PERSON as OOT-owned, the
+        // pause below is skipped (OOT runs the look + camera) while libsm64 parks
+        // Mario in place — he isn't visible from his own eyes anyway. The look
+        // action exits on its own (C-Up release / B), clearing the flag, and Mario
+        // resumes. Mario doesn't have aimable items, so this is pure free-look.
+        if (Sm64Mario_IsReady() && Sm64Mario_IsGrounded() && !(this->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
+            !Sm64Mario_OotIsScriptingPlayer(play, this) && CHECK_BTN_ALL(play->state.input[0].press.button, BTN_CUP)) {
+            // unk_6AD = 1 is the no-item LOOK state. Player_Action_8084B1D8 exits
+            // instantly if unk_6AD == 0, and it calls func_8083AD4C itself to put
+            // the camera in CAM_MODE_FIRSTPERSON — so we just hand it the right
+            // state. Consume the entering C-Up press from sp44 (the action's input)
+            // so its own "C-Up exits" check doesn't fire on the same frame and bail
+            // immediately. The player exits by pressing C-Up again / A / B / etc.
+            this->unk_6AD = 1;
+            func_8083B010(this);
+            Player_SetupAction(play, this, Player_Action_8084B1D8, 1);
+            this->av2.actionVar2 = 13;
+            this->stateFlags1 |= PLAYER_STATE1_FIRST_PERSON;
+            Player_ZeroSpeedXZ(this);
+            Sfx_PlaySfxCentered(NA_SE_SY_CAMERA_ZOOM_UP);
+            sp44.press.button &= ~BTN_CUP;
+        }
+
+        // The SAME predicate is what Sm64Mario_Update parks on, so the pause gate
+        // and the libsm64 park never disagree. Letting the action func run is what
+        // makes doors/void/cutscene/exit COMPLETE instead of freezing (softlock).
+        // CARRYING_ACTOR is intentionally NOT yielded: Mario keeps libsm64 control
+        // while carrying (Sm64Mario_TryGrabOrThrow pins/throws the held item).
+        if (Sm64Mario_IsReady() && !Sm64Mario_OotIsScriptingPlayer(play, this)) {
+            this->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+        }
+
+        // Skijer's NEI: SM64 pieces 5-7 (InterceptDamage + Pikachu status read +
+        // A<->B swap on sp44), moved to customequipment.cpp. Positioned on the exact
+        // sp44 passed into Player_UpdateCommon, which consumes the result this frame.
+        GameInteractor_Should(VB_SM64_PLAYER_PRE_UPDATE_COMMON, true, play, this, &sp44);
+
         Player_UpdateCommon(this, play, &sp44);
+
+        // SM64 MARIO: Generate animation/mesh at Link's position (visual only).
+        if (Sm64Mario_IsActive()) {
+            if (!gSm64MarioInitialized) {
+                gSm64MarioInitialized = Sm64Mario_Init(play, this);
+            }
+            if (gSm64MarioInitialized) {
+                Sm64Mario_Update(play, this);
+            }
+        } else if (gSm64MarioInitialized) {
+            Sm64Mario_Reset();
+            // Restore Player struct fields that UseSpell mutated. The plain
+            // ItemsReset variant inside Sm64Mario_Reset doesn't have a
+            // Player*, so the WithPlayer variant runs here from the z_player
+            // hook where `this` is the live Player.
+            Sm64Mario_ItemsResetWithPlayer(this);
+            gSm64MarioInitialized = 0;
+        }
+
+        // SM64: Position the Master-Sword punch collider on Mario's fist/foot
+        // during attack frames (reads sSm64OutState written by Update above).
+        Sm64Mario_UpdateAttackCollider(play, this);
+        // SM64: Mop up any damage state that slipped through Intercept
+        // (e.g. scripted direct-damage paths bypassing AC_HIT).
+        Sm64Mario_ScrubDamageState(play, this);
+
+        // CUSTOM ITEMS: Update standalone system (completely separate from vanilla)
+        CustomItems_Update(this, play);
+
+        // BOSS REMAINS: per-frame input driver — a press on a C button holding a remains toggles
+        // wearing it as a mask + drives its summons. Mirrors the MM 2ship hook. Skijer's NEI
+        BossRemains_TickInput(play, this);
+
+        // BOSS REMAINS (Goht): per-frame driver AFTER the action func so its speed/anim overrides
+        // win — bull charge, quake-pound landing, HESS slide. Mirrors the MM 2ship hook.
+        BossRemains_GohtPostAction(play, this);
+
+        // BOSS REMAINS (Odolwa): moth-cloud flight driver (takeoff -> free 3D float). Mirrors MM 2ship.
+        BossRemains_OdolwaFlightTick(play, this);
+
+        // PICTOGRAPH BOX: the state machine used to tick here, but the shutter now freezes the world
+        // with play->haltAllActors like MM does — and that gates Actor_UpdateAll, so the player (and
+        // this hook with it) stops updating. Picto_Update is driven from z_play.c instead, which keeps
+        // running while everything is halted. Skijer's NEI
+
+        // POWER KEG: tick the dropped keg's fuse; explode when it runs out. Skijer's NEI
+        PowerKeg_Update(play);
+
+        // MM TRADE ITEMS: hold the "present" pose + release when the gag textbox closes. Skijer's NEI
+        TradeAdult_PresentUpdate(play);
+
+        // EXTENDED EQUIPMENT: Update cooldown timer + behavior dispatch
+        ExtEquip_Update();
+        ExtEquip_UpdateBehavior(this, play);
+
+        // TRANSFORMATION MASKS: Update system (routes to MmForm + Garo attack kit).
+        TransformMasks_Update(play, this);
+
+        // MM MASK WEARING: Per-mask effects update
+        TransformMasks_WearUpdate(play, this);
+
+        // OLD PIKACHU: Disabled, replaced by SSBB transformation system
+        // PikachuBehavior_Update(play, this);
+
+        // SSBB: Update Brawl characters
+        SSBBSpawn_Update(play, this);
     }
 
     MREG(52) = this->actor.world.pos.x;
@@ -12328,8 +14172,19 @@ void Player_Update(Actor* thisx, PlayState* play) {
 
     // Make Link normal size when going through doors and crawlspaces and when climbing ladders.
     // Otherwise Link can glitch out, being in unloaded rooms or falling OoB.
-    if (this->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER || this->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE ||
-        this->stateFlags2 & PLAYER_STATE2_CRAWLING) {
+    // SKIP this reset when a TransformMasks form OR Fierce Deity skin mode is active: those own
+    // their actor.scale (FD skin uses 0.015f, the MM forms 0.01f) and re-apply it every frame in
+    // their own update loop. This unconditional reset to 0.01f during cutscenes/ladders/doors/
+    // crawlspaces was visibly shrinking FD back to Link size whenever one of those states fired.
+    // FD skin returns false from TransformMasks_IsTransformed() (OOT handles its gameplay), so it
+    // needs its own explicit exemption here. (Both decls come from transformation_masks.h.)
+    // Minish tiny mode also owns actor.scale (0.001, re-applied every frame in
+    // MinishTiny_Update). Without this exemption, brushing a crawlspace / a brief
+    // cutscene flag fires the reset → tiny Link snaps back to 0.01 ("giant") and
+    // no longer fits through the hole.
+    if ((this->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER || this->stateFlags1 & PLAYER_STATE1_IN_CUTSCENE ||
+         this->stateFlags2 & PLAYER_STATE2_CRAWLING) &&
+        !TransformMasks_IsTransformed() && !TransformMasks_IsFDSkinMode() && !MinishTiny_IsActive()) {
         this->actor.scale.x = 0.01f;
         this->actor.scale.y = 0.01f;
         this->actor.scale.z = 0.01f;
@@ -12386,10 +14241,63 @@ void Player_Update(Actor* thisx, PlayState* play) {
         Player* player = GET_PLAYER(play);
         player->pushedSpeed = 3.0f;
         // Play fan sound (too annoying)
-        // func_8002F974(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
+        // Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
     }
 
     GameInteractor_ExecuteOnPlayerUpdate();
+
+    // SW97 Shadow Medallion heart→magic exchange — must run before the spell
+    // cast pipeline aborts on zero magic, so it lives outside that gate.
+    Sw97_TickShadowExchange(play, this);
+
+    // SW97 Shadow blindness — decrement per-actor stealth timers tagged by
+    // the Shadow Arrow and Shadow-element gustjar BLOW.
+    Sw97_TickBlindness();
+
+    // SW97 Cucco Mode — Soul Arrow + Cucco hit triggered transformation;
+    // 30-second timer counts down, then auto-exits.
+    Sw97_TickCuccoMode(play, this);
+
+    // Spiritual stones: C-button hold tracker (summon/warp) + warp-prompt poll.
+    SpiritualStone_TickHold(play, this);
+
+    // Sheikah Slate: C casts the active rune, hold L opens the rune row. Skijer's NEI
+    {
+        extern void Slate_TickInput(PlayState * play, Player * player);
+
+        Slate_TickInput(play, this);
+    }
+
+    // Phantom Hourglass: C raises it, C recalls the painted target, C lets go. Skijer's NEI
+    {
+        extern void Hourglass_TickInput(PlayState * play, Player * player);
+
+        Hourglass_TickInput(play, this);
+    }
+
+    // Rod of Seasons: pushes the owned season's weather into envCtx, and holds its own C button to
+    // open the season wheel. Skijer's NEI
+    {
+        extern void Seasons_TickInput(PlayState * play, Player * player);
+
+        Seasons_TickInput(play, this);
+    }
+
+    // Shadow Crystal is a u16 extended item, so it needs the same effective-button
+    // bridge as the Slate instead of the vanilla u8 item-action pipeline.
+    {
+        extern void ShadowCrystal_TickInput(PlayState * play, Player * player);
+
+        ShadowCrystal_TickInput(play, this);
+    }
+
+    // Elemental Wand: C casts the active rod. Its item id is above the range CustomItems_Update
+    // scans, so like the Slate it reads the button here. Skijer's NEI
+    {
+        extern void Wand_TickInput(PlayState * play, Player * player);
+
+        Wand_TickInput(play, this);
+    }
 }
 
 typedef struct BunnyEarKinematics {
@@ -12414,11 +14322,58 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
     gSPSegment(POLY_OPA_DISP++, 0x0C, cullDList);
     gSPSegment(POLY_XLU_DISP++, 0x0C, cullDList);
 
-    Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, lod,
-                    this->currentTunic, this->currentBoots, this->actor.shape.face, overrideLimbDraw,
-                    Player_PostLimbDrawGameplay, this);
+    // Garo form replaces Player_DrawImpl with a null-body pass — its skel is
+    // a custom non-Link-compatible 19-bone rig, so Link's draw logic can't
+    // walk it. Instead we run SkelAnime_DrawFlexLod with mesh suppressed so
+    // the side-effect updates (bodyPartsPos, leftHandPos, focus.pos at HEAD,
+    // feetPos, shieldMf) still fire. Garo's body renders later via
+    // GaroForm_TryDrawSmoothSkin.
+    //
+    // Every other custom form (Gerudo, Kafei, Keaton, Rito…) is a Link-rigged
+    // skin packed under `objects/forms/<model>/` (NOT alt-asset, so Link's
+    // vanilla resources are never permanently hijacked). Their draw wraps the
+    // limb-draw override with CustomForms_OverrideLimbDraw: the vanilla
+    // override still decides what Link should be showing, and the wrapper
+    // redirects each resource to the form's own copy WHEN THE FORM SHIPS ONE.
+    // Anything it doesn't ship keeps drawing vanilla, so equipment still works.
+    {
+        u8 garoActive = 0;
+        u8 formSwapActive = 0;
+        if (O2rLoader_HasActiveModel()) {
+            const char* mn = O2rLoader_GetForcedName();
+            if (mn != NULL) {
+                if (strcmp(mn, "garo") == 0) {
+                    garoActive = 1;
+                } else {
+                    formSwapActive = CustomForms_WantsPathSwap();
+                }
+            }
+        }
+        if (garoActive) {
+            extern void GaroForm_DrawNullBody(PlayState * play, Player * player, s32 lod);
+            this->actor.shape.shadowScale = 1.0f;
+            GaroForm_DrawNullBody(play, this, lod);
+            if ((this->heldItemAction == PLAYER_IA_HOOKSHOT) || (this->heldItemAction == PLAYER_IA_LONGSHOT)) {
+                this->unk_3C8.x = this->actor.world.pos.x;
+                this->unk_3C8.y = this->actor.world.pos.y + 40.0f;
+                this->unk_3C8.z = this->actor.world.pos.z;
+            }
+        } else if (formSwapActive) {
+            // Chain to the vanilla override, then redirect to the form's copies.
+            CustomForms_SetChainedOverride((void*)overrideLimbDraw);
+            Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, lod,
+                            this->currentTunic, this->currentBoots, this->actor.shape.face,
+                            CustomForms_OverrideLimbDraw, Player_PostLimbDrawGameplay, this);
+        } else {
+            Player_DrawImpl(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount, lod,
+                            this->currentTunic, this->currentBoots, this->actor.shape.face, overrideLimbDraw,
+                            Player_PostLimbDrawGameplay, this);
+        }
+    }
 
-    if ((overrideLimbDraw == Player_OverrideLimbDrawGameplayDefault) && (this->currentMask != PLAYER_MASK_NONE)) {
+    // FIX: Validate mask range to prevent crashes with custom items (masks are 1-8)
+    if ((overrideLimbDraw == Player_OverrideLimbDrawGameplayDefault) &&
+        (this->currentMask >= PLAYER_MASK_KEATON && this->currentMask <= PLAYER_MASK_TRUTH)) {
         // Fixes a bug in vanilla where ice traps are rendered extremely large while wearing a bunny hood
         if (CVarGetInteger(CVAR_GENERAL("FixIceTrapWithBunnyHood"), 1))
             Matrix_Push();
@@ -12447,18 +14402,29 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
             MATRIX_TOMTX(bunnyEarMtx);
         }
 
-        if (this->currentMask != PLAYER_MASK_BUNNY || !CVarGetInteger(CVAR_ENHANCEMENT("HideBunnyHood"), 0)) {
-            gSPDisplayList(POLY_OPA_DISP++, sMaskDlists[this->currentMask - 1]);
+        // Skip the Gerudo Mask DL when the Gerudo Form is active — the
+        // player IS the gerudo, drawing the mask on her face would look
+        // wrong (mask floating in front of an already-gerudo face).
+        u8 hideMask = 0;
+        if (this->currentMask == PLAYER_MASK_BUNNY && CVarGetInteger(CVAR_ENHANCEMENT("HideBunnyHood"), 0)) {
+            hideMask = 1;
+        } else if (this->currentMask == PLAYER_MASK_GERUDO && GerudoForm_IsActive()) {
+            hideMask = 1;
+        }
+        // upstream: VB_DRAW_PLAYER_MASK lets mods (e.g. Adult Mask DL) override the mask draw
+        if (!GameInteractor_InvisibleLinkActive() &&
+            GameInteractor_Should(VB_DRAW_PLAYER_MASK, true, this->currentMask, play)) {
+            if (!hideMask) {
+                gSPDisplayList(POLY_OPA_DISP++, sMaskDlists[this->currentMask - 1]);
+            }
         }
 
         if (CVarGetInteger(CVAR_GENERAL("FixIceTrapWithBunnyHood"), 1))
             Matrix_Pop();
     }
 
-    if ((this->currentBoots == PLAYER_BOOTS_HOVER ||
-         (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) && this->ivanFloating)) &&
-        !(this->actor.bgCheckFlags & 1) && !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) &&
-        (this->hoverBootsTimer != 0)) {
+    if (Player_IsHovering(this) && !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+        !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (this->hoverBootsTimer != 0)) {
         s32 sp5C;
         s32 hoverBootsTimer = this->hoverBootsTimer;
 
@@ -12503,6 +14469,30 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
     Vec3f pos;
     Vec3s rot;
     f32 scale;
+
+    // Skijer's NEI: custom-model draw fork (RegisterPlayerDrawForkNEI). false = custom
+    // model drawn / Link hidden, skip vanilla draw. Pak/O2r skeleton swap stays inline below.
+    if (!GameInteractor_Should(VB_PLAYER_DRAW_BEGIN, true, play, this)) {
+        return;
+    }
+
+    // Skijer's NEI: pak skeleton swap (local + remote dummies); transform exclusion is local-only.
+    u8 isLocalPlayer = (thisx == &GET_PLAYER(play2)->actor);
+    u8 transformBlocks = isLocalPlayer && (TransformMasks_IsTransformed() || TransformMasks_IsFDSkinMode());
+    u8 pakActive = 0;
+    if (PakLoader_HasActiveModel() && !transformBlocks) {
+        PakLoader_SwapSkeleton(this);
+        pakActive = 1;
+    }
+
+    // Skijer's NEI: O2r skeleton swap (pak takes priority when both forced).
+    u8 o2rActive = 0;
+    if (!pakActive && O2rLoader_HasActiveModel() && !transformBlocks) {
+        O2rLoader_SwapSkeleton(this);
+        o2rActive = 1;
+    }
+
+    // Skijer's NEI: Gerudo form rides the O2r path (no separate swap).
 
     if (LINK_AGE_IN_YEARS == YEARS_CHILD) {
         pos.x = 2.0f;
@@ -12554,11 +14544,19 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
         func_8002ED80(&this->actor, play, 0);
 
         if (this->unk_6AD != 0) {
-            Vec3f projectedHeadPos;
-
-            SkinMatrix_Vec3fMtxFMultXYZ(&play->viewProjectionMtxF, &this->actor.focus.pos, &projectedHeadPos);
-            if (projectedHeadPos.z < -4.0f) {
+            if (TransformMasks_IsTransformed()) {
+                // Transformed: ALWAYS use first-person override (hide Link's body).
+                // Normal code checks camera position (projectedHeadPos.z < -4.0f) which
+                // fails on the first frame → full Link body flashes for one frame.
+                // Skeleton is still traversed for body part positions (hookshot chain, etc).
                 overrideLimbDraw = Player_OverrideLimbDrawGameplayFirstPerson;
+            } else {
+                Vec3f projectedHeadPos;
+
+                SkinMatrix_Vec3fMtxFMultXYZ(&play->viewProjectionMtxF, &this->actor.focus.pos, &projectedHeadPos);
+                if (projectedHeadPos.z < -4.0f) {
+                    overrideLimbDraw = Player_OverrideLimbDrawGameplayFirstPerson;
+                }
             }
         } else if (this->stateFlags2 & PLAYER_STATE2_CRAWLING) {
             if (this->actor.projectedPos.z < 0.0f) {
@@ -12613,6 +14611,52 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
         if (this->unk_862 > 0) {
             Player_DrawGetItem(play, this);
         }
+
+        // CUSTOM ITEMS: Draw all
+        CustomItems_OverrideDraw(this, play);
+
+        // BOSS REMAINS: world-space effect draws — each self-guards, no-op unless its state is
+        // active. Mirrors the MM 2ship Player_Draw hooks.
+        BossRemains_DrawOdolwaTrail(this, play);         // Odolwa's red running afterimage trail
+        BossRemains_DrawGohtCone(this, play);            // Goht's bull-charge cone around Link
+        BossRemains_DrawGohtChargingThunder(this, play); // Goht's charging-thunder orb + bolts
+        BossRemains_DrawGyorgWhirlpool(this, play);      // Gyorg's spinning whirlpool funnel
+
+        // MM TRADE ITEMS: draw the presented item's MM 3D model in Link's hand. Skijer's NEI
+        TradeAdult_PresentDraw(play);
+
+        // EXTENDED EQUIPMENT: Draw barriers, auras, etc.
+        ExtEquip_DrawBehavior(this, play);
+
+        // SSBB: Draw Brawl characters
+        SSBBSpawn_Draw(play, this);
+    }
+
+    // PAK Loader: Restore original skeleton after draw
+    if (pakActive) {
+        PakLoader_RestoreSkeleton(this);
+    }
+    if (o2rActive) {
+        // Garo needs a separate body draw because Player_DrawImpl above runs
+        // a NULL-body pass for it (its skel isn't Link-compatible). Gerudo
+        // doesn't need this — its body already drew via Player_DrawImpl.
+        {
+            extern s32 GaroForm_TryDrawSmoothSkin(PlayState * play, Player * player);
+            GaroForm_TryDrawSmoothSkin(play, this);
+        }
+        O2rLoader_RestoreSkeleton(this);
+    }
+
+    // PICTOGRAPH BOX: capture the framebuffer + draw the viewfinder/photo, BOTH on OVERLAY. OVERLAY is
+    // processed AFTER all of POLY_OPA/XLU, so the captured frame includes EVERY actor — enemies/NPCs are
+    // drawn after the player in the category order, so capturing on POLY_OPA here would miss them (only
+    // the scene showed up). The readback is emitted before we draw the viewfinder/photo, so those aren't
+    // in the photo. No-op when idle. Skijer's NEI
+    {
+        Gfx* pictoOvl = OVERLAY_DISP;
+        Picto_EmitCapture(play, &pictoOvl);
+        Picto_DrawPhoto(play, &pictoOvl);
+        OVERLAY_DISP = pictoOvl;
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -12638,6 +14682,14 @@ void Player_Destroy(Actor* thisx, PlayState* play) {
 
 // first person manipulate player actor
 s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
+    // Airborne aim (Champion's Tunic). Vanilla decides "is this a WEAPON aim" with
+    // func_8002DD78 == (PLAYER_STATE1_ITEM_IN_HAND && unk_834). unk_834 is a timer that only
+    // the GROUND aim entry seeds and only the bow's upper action keeps alive, and four other
+    // paths zero it — several of them inside Player_UpdateUpperBody, which runs between any
+    // attempt to seed it and the moment it is read here. Seeding it therefore worked or not
+    // depending on which upper action happened to be live: the arm would sometimes track the
+    // reticle and sometimes snap to the casual head-look pose. Decide it outright instead.
+    s32 midairWeaponAim = (this->unk_6AD == 2) && GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this);
     s32 temp1 = 0;
     s16 temp2 = 0;
     s16 temp3 = 0;
@@ -12653,7 +14705,8 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
 
     GameInteractor_ExecuteOnPlayerFirstPersonControl(this);
 
-    if (!func_8002DD78(this) && !func_808334B4(this) && (arg2 == 0)) { // First person without weapon
+    if (!func_8002DD78(this) && !func_808334B4(this) && !midairWeaponAim &&
+        (arg2 == 0)) { // First person without weapon
         // Y Axis
         if (!(CVarGetInteger(CVAR_SETTING("MoveInFirstPerson"), 0) &&
               CVarGetInteger(CVAR_SETTING("Controls.RightStickAim"), 0))) {
@@ -12760,66 +14813,40 @@ s16 func_8084ABD8(PlayState* play, Player* this, s32 arg2, s16 arg3) {
     }
 
     this->unk_6AE_rotFlags |= UNK6AE_ROT_FOCUS_Y;
-    return func_80836AB8(this, (play->shootingGalleryStatus != 0) || func_8002DD78(this) || func_808334B4(this)) - arg3;
+    return func_80836AB8(this, (play->shootingGalleryStatus != 0) || func_8002DD78(this) || func_808334B4(this) ||
+                                   midairWeaponAim) -
+           arg3;
 }
 
 void func_8084AEEC(Player* this, f32* arg1, f32 arg2, s16 arg3) {
     f32 temp1;
     f32 temp2;
 
-    // #region SOH [Enhancement]
-    f32 swimMod = 1.0f;
+    temp1 = this->skelAnime.curFrame - 10.0f;
 
-    if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f) {
-        if (CVarGetInteger(CVAR_CHEAT("SpeedModifier.SpeedToggle"), 0) == 1) {
-            if (gWalkSpeedToggle) {
-                swimMod *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
-            }
-            // sControlInput is NULL to prevent inputs while surfacing after obtaining an underwater item so we want to
-            // ignore it for that case
-        } else if (sControlInput != NULL) {
-            const s32 mod1Mask = CVarGetInteger(CVAR_CHEAT("SpeedModifier.Btn"), BTN_CUSTOM_MODIFIER1);
-
-            if (mod1Mask != 0 && CHECK_BTN_ALL(sControlInput->cur.button, mod1Mask)) {
-                swimMod *= CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f);
-            }
-        }
-        temp1 = this->skelAnime.curFrame - 10.0f;
-
-        temp2 = (R_RUN_SPEED_LIMIT / 100.0f) * 0.8f * swimMod;
-        if (*arg1 > temp2) {
-            *arg1 = temp2;
-        }
-
-        if ((0.0f < temp1) && (temp1 < 10.0f)) {
-            temp1 *= 6.0f;
-        } else {
-            temp1 = 0.0f;
-            arg2 = 0.0f;
-        }
-
-        Math_AsymStepToF(arg1, arg2 * 0.8f * swimMod, temp1, (fabsf(*arg1) * 0.02f) + 0.05f);
-        Math_ScaledStepToS(&this->yaw, arg3, 1600);
-        // #endregion
-    } else {
-
-        temp1 = this->skelAnime.curFrame - 10.0f;
-
-        temp2 = (R_RUN_SPEED_LIMIT / 100.0f) * 0.8f;
-        if (*arg1 > temp2) {
-            *arg1 = temp2;
-        }
-
-        if ((0.0f < temp1) && (temp1 < 10.0f)) {
-            temp1 *= 6.0f;
-        } else {
-            temp1 = 0.0f;
-            arg2 = 0.0f;
-        }
-
-        Math_AsymStepToF(arg1, arg2 * 0.8f, temp1, (fabsf(*arg1) * 0.02f) + 0.05f);
-        Math_ScaledStepToS(&this->yaw, arg3, 1600);
+    temp2 = (R_RUN_SPEED_LIMIT / 100.0f) * 0.8f;
+    GameInteractor_Should(VB_PLAYER_MODIFY_SWIM_SPEED, true, this, &temp2, sControlInput != NULL);
+    // Upstream's SpeedModifiers.cpp now owns the SpeedModifier cheat through that hook, so the
+    // inline copy of it is gone. Zora's Sapphire swim boost is ours and has no handler, and it has
+    // to scale the step target as well as the cap — the old inline block multiplied both.
+    if (SpiritualStone_ZoraSwimActive()) {
+        temp2 *= 2.0f;
+        arg2 *= 2.0f;
     }
+    if (*arg1 > temp2) {
+        *arg1 = temp2;
+    }
+
+    if ((0.0f < temp1) && (temp1 < 10.0f)) {
+        temp1 *= 6.0f;
+    } else {
+        temp1 = 0.0f;
+        arg2 = 0.0f;
+    }
+
+    GameInteractor_Should(VB_PLAYER_MODIFY_SWIM_SPEED, true, this, &arg2, sControlInput != NULL);
+    Math_AsymStepToF(arg1, arg2 * 0.8f, temp1, (fabsf(*arg1) * 0.02f) + 0.05f);
+    Math_ScaledStepToS(&this->yaw, arg3, 1600);
 }
 
 // #region SOH [Enhancement]
@@ -12917,11 +14944,21 @@ void func_8084B158(PlayState* play, Player* this, Input* input, f32 arg3) {
 }
 
 void Player_Action_8084B1D8(Player* this, PlayState* play) {
+    u8 allowMidairAim = GameInteractor_Should(VB_PLAYER_ALLOW_MIDAIR_AIM, false, this);
+
     if (this->stateFlags1 & PLAYER_STATE1_IN_WATER) {
         func_8084B000(this);
         func_8084AEEC(this, &this->linearVelocity, 0, this->actor.shape.rot.y);
     } else {
         Player_DecelerateToZero(this);
+    }
+
+    // The airborne item handoff can transiently clear the vanilla aim subtype
+    // before this action gets its first update. Repair it while the equipment
+    // hook owns the state; otherwise Player_UpdateUpperBody is skipped and the
+    // action immediately zooms back out with unk_6AD == 0.
+    if (allowMidairAim && (this->unk_6AD == 0)) {
+        this->unk_6AD = 2;
     }
 
     if ((this->unk_6AD == 2) && (func_8002DD6C(this) || func_808332E4(this))) {
@@ -12932,11 +14969,23 @@ void Player_Action_8084B1D8(Player* this, PlayState* play) {
     if (CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0) {
         buttonsToCheck |= BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT;
     }
-    if ((this->csAction != 0) || (this->unk_6AD == 0) || (this->unk_6AD >= 4) || Player_UpdateHostileLockOn(this) ||
-        (this->focusActor != NULL) || !func_8083AD4C(play, this) ||
-        (((this->unk_6AD == 2) &&
-          (CHECK_BTN_ANY(sControlInput->press.button, BTN_A | BTN_B | BTN_R) || Player_FriendlyLockOnOrParallel(this) ||
-           (!func_8002DD78(this) && !func_808334B4(this)))) ||
+    // Do not combine the hook with bgCheckFlags here. GROUND_TOUCH and GROUND_LEAVE
+    // can remain set during the action handoff even though Link is already airborne.
+    s32 hostileLockOn = Player_UpdateHostileLockOn(this);
+    // Call the camera-mode setter for its SIDE EFFECT every frame and only ignore its
+    // verdict while the hook owns the state. It sits on the right of an || here, so with
+    // allowMidairAim true it was never evaluated at all — and it is what keeps the aim
+    // camera alive frame to frame. Skipping it left Link in first person with a camera
+    // nobody was maintaining, which is why the aim could not be turned.
+    s32 cameraModeOk = func_8083AD4C(play, this);
+    s32 aimingCameraReady = allowMidairAim || cameraModeOk;
+
+    if ((this->csAction != 0) || (this->unk_6AD == 0) || (this->unk_6AD >= 4) ||
+        (!allowMidairAim && (hostileLockOn || (this->focusActor != NULL))) || !aimingCameraReady ||
+        (((this->unk_6AD == 2) && ((!sZoraBoomerangActive && !sDekuBubbleActive) || Player_IsZTargeting(this)) &&
+          (CHECK_BTN_ANY(sControlInput->press.button, BTN_A | BTN_B | BTN_R) ||
+           (!allowMidairAim &&
+            (Player_FriendlyLockOnOrParallel(this) || (!func_8002DD78(this) && !func_808334B4(this)))))) ||
          ((this->unk_6AD == 1) && CHECK_BTN_ANY(sControlInput->press.button, buttonsToCheck)))) {
         func_8083C148(this, play);
         Sfx_PlaySfxCentered(NA_SE_SY_CAMERA_ZOOM_UP);
@@ -13044,7 +15093,7 @@ void Player_Action_Talk(Player* this, PlayState* play) {
     }
 
     if (this->focusActor != NULL) {
-        this->yaw = this->actor.shape.rot.y = func_8083DB98(this, false);
+        this->yaw = this->actor.shape.rot.y = func_8083DB98(this, 0);
     }
 }
 
@@ -13117,8 +15166,11 @@ void Player_Action_8084B898(Player* this, PlayState* play) {
     }
 
     if (this->stateFlags2 & PLAYER_STATE2_MOVING_DYNAPOLY) {
-        func_8084B840(play, this, 2.0f);
-        this->linearVelocity = 2.0f;
+        // Giant's Mask pushes blocks at double speed. Skijer's NEI
+        extern s32 MmMaskWear_IsGiantMaskActive(void);
+        f32 pushSpeed = MmMaskWear_IsGiantMaskActive() ? 4.0f : 2.0f;
+        func_8084B840(play, this, pushSpeed);
+        this->linearVelocity = pushSpeed;
     }
 }
 
@@ -13178,7 +15230,9 @@ void Player_Action_8084B9E4(Player* this, PlayState* play) {
             sp44.z = this->actor.world.pos.z;
             sp44.y = sp5C.y;
             if (!BgCheck_EntityLineTest1(&play->colCtx, &sp44, &sp5C, &sp38, &sp54, true, false, false, true, &sp50)) {
-                func_8084B840(play, this, -2.0f);
+                // Giant's Mask pulls blocks at double speed. Skijer's NEI
+                extern s32 MmMaskWear_IsGiantMaskActive(void);
+                func_8084B840(play, this, MmMaskWear_IsGiantMaskActive() ? -4.0f : -2.0f);
                 return;
             }
         }
@@ -13307,7 +15361,8 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
         phi_f2 = -1.0f;
     }
 
-    this->skelAnime.playSpeed = phi_f2 * phi_f0 + phi_f2 * CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0);
+    this->skelAnime.playSpeed = phi_f2 * phi_f0 + phi_f2 * CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0) +
+                                phi_f2 * (SpiritualStone_GoronClimbActive() ? 2 : 0);
 
     if (this->av2.actionVar2 >= 0) {
         if ((this->actor.wallPoly != NULL) && (this->actor.wallBgId != BGCHECK_SCENE)) {
@@ -13347,7 +15402,7 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
                             func_8083A9B8(this, &gPlayerAnim_link_normal_jump_climb_up_free, play);
                             this->stateFlags1 |= PLAYER_STATE1_CLIMBING_LEDGE;
                         } else {
-                            func_8083F070(this, this->ageProperties->unk_CC[this->av2.actionVar2], play);
+                            Player_SetupDismountLadder(this, this->ageProperties->unk_CC[this->av2.actionVar2], play);
                         }
                     } else {
                         this->skelAnime.prevTransl = this->ageProperties->unk_4A[sp68];
@@ -13361,7 +15416,7 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
                             if (this->av2.actionVar2 != 0) {
                                 this->skelAnime.prevTransl = this->ageProperties->unk_44;
                             }
-                            func_8083F070(this, this->ageProperties->unk_C4[this->av2.actionVar2], play);
+                            Player_SetupDismountLadder(this, this->ageProperties->unk_C4[this->av2.actionVar2], play);
                             this->av2.actionVar2 = 1;
                         }
                     } else {
@@ -13410,50 +15465,56 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
     }
 }
 
-static f32 D_80854898[] = { 10.0f, 20.0f };
-static f32 D_808548A0[] = { 40.0f, 50.0f };
+static f32 sUpDismountLadderFrames[] = { 10.0f, 20.0f };
+static f32 sDownDismountLadderFrames[] = { 40.0f, 50.0f };
 
-static AnimSfxEntry D_808548A8[] = {
+static AnimSfxEntry sDownDismountLadderAnimSfx[] = {
     { NA_SE_PL_WALK_LADDER, ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 10) },
     { NA_SE_PL_WALK_LADDER, ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 20) },
     { NA_SE_PL_WALK_LADDER, -ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 30) },
 };
 
-void Player_Action_8084C5F8(Player* this, PlayState* play) {
-    s32 temp;
-    f32* sp38;
-    CollisionPoly* sp34;
-    s32 sp30;
-    Vec3f sp24;
+/**
+ * Dismounting ladders, both upwards and downwards.
+ * `actionVar2` true if dismounting down
+ */
+void Player_Action_DismountLadder(Player* this, PlayState* play) {
+    s32 interruptResult;
+    f32* frame;
+    CollisionPoly* groundPoly;
+    s32 bgId;
+    Vec3f raycastPos;
 
     this->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
 
-    temp = Player_TryActionInterrupt(play, this, &this->skelAnime, 4.0f);
+    interruptResult = Player_TryActionInterrupt(play, this, &this->skelAnime, 4.0f);
 
-    if (temp == 0) {
+    // SoH: Prevent ladder cutscene softlock
+    if (GameInteractor_Should(VB_INTERRUPT_LADDER_DISMOUNT, interruptResult == PLAYER_INTERRUPT_NEW_ACTION,
+                              &this->unk_6AD)) {
         this->stateFlags1 &= ~PLAYER_STATE1_CLIMBING_LADDER;
         return;
     }
 
-    if ((temp > 0) || LinkAnimation_Update(play, &this->skelAnime)) {
+    if ((interruptResult > PLAYER_INTERRUPT_NEW_ACTION) || LinkAnimation_Update(play, &this->skelAnime)) {
         func_8083C0E8(this, play);
         this->stateFlags1 &= ~PLAYER_STATE1_CLIMBING_LADDER;
         return;
     }
 
-    sp38 = D_80854898;
+    frame = sUpDismountLadderFrames;
 
-    if (this->av2.actionVar2 != 0) {
-        Player_ProcessAnimSfxList(this, D_808548A8);
-        sp38 = D_808548A0;
+    if (this->av2.actionVar2 != false) {
+        Player_ProcessAnimSfxList(this, sDownDismountLadderAnimSfx);
+        frame = sDownDismountLadderFrames;
     }
 
-    if (LinkAnimation_OnFrame(&this->skelAnime, sp38[0]) || LinkAnimation_OnFrame(&this->skelAnime, sp38[1])) {
-        sp24.x = this->actor.world.pos.x;
-        sp24.y = this->actor.world.pos.y + 20.0f;
-        sp24.z = this->actor.world.pos.z;
-        if (BgCheck_EntityRaycastFloor3(&play->colCtx, &sp34, &sp30, &sp24) != 0.0f) {
-            this->floorSfxOffset = func_80041F10(&play->colCtx, sp34, sp30);
+    if (LinkAnimation_OnFrame(&this->skelAnime, frame[0]) || LinkAnimation_OnFrame(&this->skelAnime, frame[1])) {
+        raycastPos.x = this->actor.world.pos.x;
+        raycastPos.y = this->actor.world.pos.y + 20.0f;
+        raycastPos.z = this->actor.world.pos.z;
+        if (BgCheck_EntityRaycastFloor3(&play->colCtx, &groundPoly, &bgId, &raycastPos) != 0.0f) {
+            this->floorSfxOffset = func_80041F10(&play->colCtx, groundPoly, bgId);
             Player_PlayLandingSfx(this);
         }
     }
@@ -13673,7 +15734,7 @@ void Player_Action_8084CC98(Player* this, PlayState* play) {
         }
 
         if (LinkAnimation_OnFrame(&this->skelAnime, arr[1])) {
-            func_8002DE74(play, this);
+            Actor_RequestHorseCameraSetting(play, this);
             Player_PlaySfx(this, NA_SE_PL_SIT_ON_HORSE);
             return;
         }
@@ -13681,7 +15742,7 @@ void Player_Action_8084CC98(Player* this, PlayState* play) {
         return;
     }
 
-    func_8002DE74(play, this);
+    Actor_RequestHorseCameraSetting(play, this);
     this->skelAnime.prevTransl = D_8085499C;
 
     if ((rideActor->animationIdx != this->av2.actionVar2) &&
@@ -13741,7 +15802,7 @@ void Player_Action_8084CC98(Player* this, PlayState* play) {
     this->actor.world.pos.y = (rideActor->actor.world.pos.y + rideActor->riderPos.y) - 27.0f;
     this->actor.world.pos.z = rideActor->actor.world.pos.z + rideActor->riderPos.z;
 
-    this->yaw = this->actor.shape.rot.y = rideActor->actor.shape.rot.y;
+    this->yaw = this->actor.shape.rot.y = MasterCycle_RideYaw(&rideActor->actor);
 
     if ((this->csAction != 0) ||
         (!Player_IsTalking(play) && ((rideActor->actor.speedXZ != 0.0f) || !Player_ActionHandler_Talk(this, play)) &&
@@ -13848,7 +15909,7 @@ void Player_Action_8084D3E4(Player* this, PlayState* play) {
             gSaveContext.horseData.angle = rideActor->actor.shape.rot.y;
         }
     } else {
-        Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_NORMAL0);
+        Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_NORMAL0);
 
         if (this->mountSide < 0) {
             D_808549C4[0].data = ANIMSFX_DATA(ANIMSFX_TYPE_LANDING, 40);
@@ -13896,7 +15957,7 @@ void Player_Action_8084D610(Player* this, PlayState* play) {
             sp34 = 0.0f;
             sp32 = this->actor.shape.rot.y;
 
-            if (this->actor.bgCheckFlags & 1) {
+            if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
                 func_8083A098(this, GET_PLAYER_ANIM(PLAYER_ANIMGROUP_short_landing, this->modelAnimType), play);
                 Player_PlayLandingSfx(this);
             }
@@ -14027,14 +16088,11 @@ void func_8084DBC4(PlayState* play, Player* this, f32 arg2) {
 
     Player_GetMovementSpeedAndYaw(this, &sp2C, &sp2A, SPEED_MODE_LINEAR, play);
     func_8084AEEC(this, &this->linearVelocity, sp2C * 0.5f, sp2A);
-    // Original implementation of func_8084AEEC (SurfaceWithoutSwimMod) to prevent velocity increases via swim mod which
-    // push Link into the air #region SOH [Enhancement]
-    if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f) {
-        SurfaceWithoutSwimMod(this, &this->actor.velocity.y, arg2, this->yaw);
-        // #endregion
-    } else {
-        func_8084AEEC(this, &this->actor.velocity.y, arg2, this->yaw);
-    }
+    // #region SOH [Enhancement]
+    // Use swim-mod-free variant for y (surfacing) velocity so an active swim speed modifier can't push Link into air.
+    // This is identical to func_8084AEEC when no modifier active (swimMod == 1.0f), thus safe to always use.
+    SurfaceWithoutSwimMod(this, &this->actor.velocity.y, arg2, this->yaw);
+    // #endregion
 }
 
 void Player_Action_8084DC48(Player* this, PlayState* play) {
@@ -14067,7 +16125,8 @@ void Player_Action_8084DC48(Player* this, PlayState* play) {
             this->unk_6C2 = 16000;
 
             if (CHECK_BTN_ALL(sControlInput->cur.button, BTN_A) && !Player_ActionHandler_2(this, play) &&
-                !(this->actor.bgCheckFlags & 1) && (this->actor.yDistToWater < D_80854784[CUR_UPG_VALUE(UPG_SCALE)])) {
+                !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
+                (this->actor.yDistToWater < D_80854784[CUR_UPG_VALUE(UPG_SCALE)])) {
                 func_8084DBC4(play, this, -2.0f);
             } else {
                 this->av1.actionVar1++;
@@ -14147,7 +16206,10 @@ s32 func_8084DFF4(PlayState* play, Player* this) {
                     gSaveContext.bgsFlag = true;
                     gSaveContext.swordHealth = 8;
                 }
-                Item_Give(play, giEntry.itemId);
+
+                // Prevent OOB Items from crashing game.
+                if (giEntry.itemId != ITEM_NONE)
+                    Item_Give(play, giEntry.itemId);
             } else {
                 Randomizer_Item_Give(play, giEntry);
             }
@@ -14212,13 +16274,15 @@ s32 func_8084DFF4(PlayState* play, Player* this) {
         play->msgCtx.msgMode = MSGMODE_TEXT_DONE;
     } else {
         if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
-            if (GameInteractor_Should(VB_PLAY_NABOORU_CAPTURED_CS, this->getItemId == GI_GAUNTLETS_SILVER)) {
-                play->nextEntranceIndex = ENTR_DESERT_COLOSSUS_EAST_EXIT;
-                play->transitionTrigger = TRANS_TRIGGER_START;
-                gSaveContext.nextCutsceneIndex = 0xFFF1;
-                play->transitionType = TRANS_TYPE_SANDSTORM_END;
-                this->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
-                Player_TryCsAction(play, NULL, 8);
+            if (this->getItemId == GI_GAUNTLETS_SILVER) {
+                if (GameInteractor_Should(VB_PLAY_NABOORU_CAPTURED_CS, true)) {
+                    play->nextEntranceIndex = ENTR_DESERT_COLOSSUS_EAST_EXIT;
+                    play->transitionTrigger = TRANS_TRIGGER_START;
+                    gSaveContext.nextCutsceneIndex = 0xFFF1;
+                    play->transitionType = TRANS_TYPE_SANDSTORM_END;
+                    this->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
+                    Player_TryCsAction(play, NULL, 8);
+                }
             }
 
             // Set unk_862 to 0 early to not have the game draw non-custom colored models for a split second.
@@ -14257,7 +16321,7 @@ void Player_Action_8084E1EC(Player* this, PlayState* play) {
         if ((this->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) && LinkAnimation_OnFrame(&this->skelAnime, 10.0f)) {
             func_808332F4(this, play);
             func_80832340(play, this);
-            func_80835EA4(play, 8);
+            Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_8);
         } else if (LinkAnimation_OnFrame(&this->skelAnime, 5.0f)) {
             Player_PlayVoiceSfx(this, NA_SE_VO_LI_BREATH_DRINK);
         }
@@ -14400,6 +16464,7 @@ void Player_Action_8084E6D4(Player* this, PlayState* play) {
             }
         } else {
             Player_FinishAnimMovement(this);
+
             if ((this->getItemId == GI_ICE_TRAP && !IS_RANDO) ||
                 (IS_RANDO && (this->getItemId == RG_ICE_TRAP || this->getItemEntry.getItemId == RG_ICE_TRAP))) {
                 this->stateFlags1 &= ~(PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_CARRYING_ACTOR);
@@ -14415,7 +16480,7 @@ void Player_Action_8084E6D4(Player* this, PlayState* play) {
                     func_8083C0E8(this, play);
                 } else {
                     this->actor.colChkInfo.damage = 0;
-                    func_80837C0C(play, this, PLAYER_HIT_RESPONSE_ICE_TRAP, 0.0f, 0.0f, 0, 20);
+                    func_80837C0C(play, this, PLAYER_HIT_RESPONSE_FROZEN, 0.0f, 0.0f, 0, 20);
                 }
                 return;
             }
@@ -14427,7 +16492,7 @@ void Player_Action_8084E6D4(Player* this, PlayState* play) {
             }
 
             this->av2.actionVar2 = 2;
-            func_80835EA4(play, 9);
+            Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_9);
         }
     } else {
         if (this->av2.actionVar2 == 0) {
@@ -14625,7 +16690,7 @@ void Player_Action_SwingBottle(Player* this, PlayState* play) {
                     Player_UpdateBottleHeld(play, this, catchInfo->itemId, ABS(catchInfo->itemAction));
                     if (!CVarGetInteger(CVAR_ENHANCEMENT("FastBottles"), 0)) {
                         Player_AnimPlayOnceAdjusted(play, this, swingEntry->catchAnimation);
-                        func_80835EA4(play, 4);
+                        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_4);
                     }
                 }
             }
@@ -14638,6 +16703,67 @@ void Player_Action_SwingBottle(Player* this, PlayState* play) {
     if (this->skelAnime.curFrame <= 7.0f) {
         this->stateFlags1 |= PLAYER_STATE1_SWINGING_BOTTLE;
     }
+}
+
+// ── Lantern Swing Action (1:1 with Player_Action_SwingBottle) ────────────────
+// Called via Player_StartLanternSwing from item_lantern.c.
+// Uses av1.actionVar1 as catch state (0=none, 1=caught), av2.actionVar2 as textbox started flag.
+
+// Lantern functions are visible via unity build (custom_items.c → item_lantern.c)
+
+void Player_Action_SwingLantern(Player* this, PlayState* play) {
+    Player_DecelerateToZero(this);
+
+    if (LinkAnimation_Update(play, &this->skelAnime)) {
+        // Animation finished
+        if (this->av1.actionVar1 != 0) {
+            // Caught fire — show message (exactly like bottle catch textbox flow)
+            if (!this->av2.actionVar2) {
+                gLanternCatchPending = Lantern_GetFireType();
+                Message_StartTextbox(play, 0x00F9, &this->actor);
+                Audio_PlayFanfare(NA_BGM_ITEM_GET | 0x900);
+                this->av2.actionVar2 = 1;
+            } else if (Message_GetState(&play->msgCtx) == TEXT_STATE_CLOSING) {
+                this->av1.actionVar1 = 0;
+                gLanternCatchPending = 0;
+                func_8005B1A4(Play_GetCamera(play, 0));
+                func_8083C0E8(this, play); // Return to idle (like bottle)
+            }
+        } else {
+            // No catch — return to idle (like bottle)
+            func_8083C0E8(this, play);
+        }
+    } else if (this->av1.actionVar1 == 0) {
+        // During swing — check active catch frames (firstActiveFrame=2, numActiveFrames=3)
+        s32 activeFrame = (s32)this->skelAnime.curFrame - 2;
+
+        if (activeFrame >= 0 && activeFrame <= 3) {
+            if (Lantern_GetFireType() == 0) {
+                // Unlit: try to catch fire
+                if (Lantern_TryCatch(this, play)) {
+                    this->av1.actionVar1 = 1; // caught!
+                    this->av2.actionVar2 = 0; // textbox not started yet
+                    this->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
+                    Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_bottle_bug_in);
+                    Player_SetTurnAroundCamera(play, 4); // Camera zoom (like bottle)
+                }
+            } else if (activeFrame == 0) {
+                // Lit: apply fire effects ONCE
+                Lantern_ApplyFireEffects(this, play);
+            }
+        }
+    }
+
+    if (this->skelAnime.curFrame <= 7.0f) {
+        this->stateFlags1 |= PLAYER_STATE1_SWINGING_BOTTLE;
+    }
+}
+
+void Player_StartLanternSwing(Player* this, PlayState* play) {
+    Player_SetupAction(play, this, Player_Action_SwingLantern, 0);
+    Player_AnimPlayOnceAdjusted(play, this, &gPlayerAnim_link_bottle_bug_miss);
+    Player_PlaySfx(this, NA_SE_IT_SWORD_SWING);
+    gCustomItemState.lanternEquipped = 1; // Show lantern in hand during swing
 }
 
 static Vec3f D_80854A1C = { 0.0f, 0.0f, 5.0f };
@@ -14808,7 +16934,8 @@ void Player_Action_SlideOnSlope(Player* this, PlayState* play) {
         xzSpeedIncrStep = SQ(xzSpeedTarget) * 0.015f;
         xzSpeedDecrStep = slopeNormal.y * 0.01f;
 
-        if (SurfaceType_GetSlope(&play->colCtx, floorPoly, this->actor.floorBgId) != 1) {
+        // Climb Boots grip ends an in-progress slide the same way leaving the slope does.
+        if (ClimbBoots_HasGrip() || SurfaceType_GetFloorEffect(&play->colCtx, floorPoly, this->actor.floorBgId) != 1) {
             xzSpeedTarget = 0;
             xzSpeedDecrStep = slopeNormal.y * 10.0f;
         }
@@ -14834,7 +16961,7 @@ void Player_Action_SlideOnSlope(Player* this, PlayState* play) {
     }
 }
 
-void Player_Action_8084F608(Player* this, PlayState* play) {
+void Player_Action_WaitForCutscene(Player* this, PlayState* play) {
     if ((DECR(this->av2.actionVar2) == 0) && Player_StartCsAction(play, this)) {
         func_80852280(play, this, NULL);
         Player_SetupAction(play, this, Player_Action_CsAction, 0);
@@ -14843,7 +16970,7 @@ void Player_Action_8084F608(Player* this, PlayState* play) {
 }
 
 void Player_Action_8084F698(Player* this, PlayState* play) {
-    Player_SetupAction(play, this, Player_Action_8084F608, 0);
+    Player_SetupAction(play, this, Player_Action_WaitForCutscene, 0);
     this->av2.actionVar2 = 40;
     Actor_Spawn(&play->actorCtx, play, ACTOR_DEMO_KANKYO, 0.0f, 0.0f, 0.0f, 0, 0, 0, 0x10);
 }
@@ -14857,7 +16984,7 @@ void Player_Action_8084F710(Player* this, PlayState* play) {
     } else if (sYDistToFloor < 150.0f) {
         if (LinkAnimation_Update(play, &this->skelAnime)) {
             if (this->av2.actionVar2 == 0) {
-                if (this->actor.bgCheckFlags & 1) {
+                if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
                     this->skelAnime.endFrame = this->skelAnime.animLength - 1.0f;
                     Player_PlayLandingSfx(this);
                     this->av2.actionVar2 = 1;
@@ -14985,7 +17112,7 @@ void Player_Action_8084FBF4(Player* this, PlayState* play) {
     }
 
     this->bodyShockTimer = 40;
-    func_8002F8F0(&this->actor, NA_SE_VO_LI_TAKEN_AWAY - SFX_FLAG + this->ageProperties->unk_92);
+    Actor_PlaySfx_Flagged2(&this->actor, NA_SE_VO_LI_TAKEN_AWAY - SFX_FLAG + this->ageProperties->unk_92);
 }
 
 /**
@@ -15137,8 +17264,43 @@ void Player_UpdateBunnyEars(Player* this) {
 }
 
 s32 Player_ActionHandler_7(Player* this, PlayState* play) {
+    // Transformation masks: form code owns the B-button (Zora combo, Goron punch, etc.).
+    // Bail before OOT's ground-slash path can fire — it calls func_80837948 which reads
+    // D_80854488[Player_GetMeleeWeaponHeld - 1]. For form-no-weapon that index is -1, an
+    // OOB read whose garbage value can include DMG_HAMMER_SWING (0x40), so a form punch
+    // would break hammer rocks (Obj_Hamishi). Also, firing OOT's slash actionFunc on top
+    // of the form's punch combo races the form's collider override and creates softlocks
+    // in the boomerang upper-action chain after a mash-chained combo. FD skin mode keeps
+    // a real sword (Player_GetMeleeWeaponHeld returns BGS index 3), so let it through.
+    //
+    // Gerudo is the other exception, and the whole one: her dual-blade moveset IS
+    // OOT's sword pipeline wearing other clips (see gerudo_mhr_combat.inc.c), so B
+    // must reach it. Player_GetMeleeWeaponHeld returns her real sword index, and
+    // func_8083BB20 already refuses when she has nothing in hand.
+    if (TransformMasks_IsTransformed() && !TransformMasks_IsFDSkinMode() && !GerudoForm_IsActive()) {
+        return 0;
+    }
+
+    // Skijer's NEI: while the thrown Iron Knuckle's Axe is in the air, lock out the hammer swing —
+    // you can't use it until it returns, exactly like the boomerang can't be re-thrown mid-flight.
+    // func_80834F2C gates the C-button item path on BOOMERANG_THROWN; this melee path doesn't, so
+    // gate it here. Scoped to hammer + BOOMERANG_THROWN (only the axe throw), so the child's sword
+    // swing while a real boomerang is out is unaffected.
+    if (WeaponUpgrade_HasHammerAxe() && (this->heldItemAction == PLAYER_IA_HAMMER) &&
+        (this->stateFlags1 & PLAYER_STATE1_BOOMERANG_THROWN)) {
+        return 0;
+    }
+
     if (func_8083C6B8(play, this) == 0) {
         if (func_8083BB20(this) != 0) {
+            // Kafei swings without breaking stride: the SW97 clip drives his sword arm from
+            // KafeiForm_Tick while the caller keeps walking him. The vanilla attack takes the whole
+            // body and brakes to a stop, so it is refused here rather than undone afterwards.
+            // func_8083BB20 is what confirms the B press, hence the check sitting behind it.
+            if (KafeiForm_StartMovingSlash(this)) {
+                return 0;
+            }
+
             s32 sp24 = func_80837818(this);
 
             func_80837948(play, this, sp24);
@@ -15198,6 +17360,10 @@ void Player_Action_808502D0(Player* this, PlayState* play) {
                     sp3C = &gPlayerAnim_link_fighter_power_jump_kiru_end;
                 }
 
+                // Skijer's NEI: anim override (jump-slash recovery)
+                GameInteractor_Should(VB_PLAYER_ANIM_OVERRIDE, true, VB_PLAYER_ANIM_SITE_JUMPSLASH_RECOVERY, 0, &sp3C,
+                                      this);
+
                 func_8083A098(this, sp3C, play);
 
                 this->skelAnime.movementFlags = sp43;
@@ -15214,7 +17380,7 @@ void Player_Action_808502D0(Player* this, PlayState* play) {
                 sp2C = this->actor.world.pos.y - shockwavePos.y;
 
                 Math_ScaledStepToS(&this->actor.focus.rot.x, Math_Atan2S(45.0f, sp2C), 800);
-                func_80836AB8(this, true);
+                func_80836AB8(this, 0);
 
                 if ((((this->meleeWeaponAnimation == PLAYER_MWA_HAMMER_FORWARD) &&
                       LinkAnimation_OnFrame(&this->skelAnime, 7.0f)) ||
@@ -15290,24 +17456,33 @@ void Player_Action_8085076C(Player* this, PlayState* play) {
 }
 
 static LinkAnimationHeader* D_80854A58[] = {
-    &gPlayerAnim_link_magic_kaze1,
-    &gPlayerAnim_link_magic_honoo1,
-    &gPlayerAnim_link_magic_tamashii1,
+    &gPlayerAnim_link_magic_kaze1,     // 0 = Farore's Wind / SW97: Forest(Wind)
+    &gPlayerAnim_link_magic_honoo1,    // 1 = Din's Fire    / SW97: Spirit(Soul)
+    &gPlayerAnim_link_magic_tamashii1, // 2 = Nayru's Love  / SW97: Shadow(Dark)
+    &gPlayerAnim_link_magic_kaze1,     // 3 = SW97: Water(Ice)
+    &gPlayerAnim_link_magic_tamashii1, // 4 = SW97: Light
+    &gPlayerAnim_link_magic_honoo1,    // 5 = SW97: Fire
 };
 
 static LinkAnimationHeader* D_80854A64[] = {
-    &gPlayerAnim_link_magic_kaze2,
-    &gPlayerAnim_link_magic_honoo2,
-    &gPlayerAnim_link_magic_tamashii2,
+    &gPlayerAnim_link_magic_kaze2,     // 0
+    &gPlayerAnim_link_magic_honoo2,    // 1
+    &gPlayerAnim_link_magic_tamashii2, // 2
+    &gPlayerAnim_link_magic_kaze2,     // 3
+    &gPlayerAnim_link_magic_tamashii2, // 4
+    &gPlayerAnim_link_magic_honoo2,    // 5
 };
 
 static LinkAnimationHeader* D_80854A70[] = {
-    &gPlayerAnim_link_magic_kaze3,
-    &gPlayerAnim_link_magic_honoo3,
-    &gPlayerAnim_link_magic_tamashii3,
+    &gPlayerAnim_link_magic_kaze3,     // 0
+    &gPlayerAnim_link_magic_honoo3,    // 1
+    &gPlayerAnim_link_magic_tamashii3, // 2
+    &gPlayerAnim_link_magic_kaze3,     // 3
+    &gPlayerAnim_link_magic_tamashii3, // 4
+    &gPlayerAnim_link_magic_honoo3,    // 5
 };
 
-static u8 D_80854A7C[] = { 70, 10, 10 };
+static u8 D_80854A7C[] = { 70, 10, 10, 70, 10, 10 };
 
 static AnimSfxEntry D_80854A80[] = {
     { NA_SE_PL_SKIP, ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 20) },
@@ -15317,16 +17492,34 @@ static AnimSfxEntry D_80854A80[] = {
 
 static AnimSfxEntry D_80854A8C[][2] = {
     {
+        // 0 = Farore's Wind / SW97: Forest(Wind)
         { 0, ANIMSFX_DATA(ANIMSFX_TYPE_WALKING, 20) },
         { NA_SE_VO_LI_MAGIC_FROL, -ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 30) },
     },
     {
+        // 1 = Din's Fire / SW97: Spirit(Soul)
         { 0, ANIMSFX_DATA(ANIMSFX_TYPE_WALKING, 20) },
         { NA_SE_VO_LI_MAGIC_NALE, -ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 44) },
     },
     {
+        // 2 = Nayru's Love / SW97: Shadow(Dark)
         { NA_SE_VO_LI_MAGIC_ATTACK, ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 20) },
         { NA_SE_IT_SWORD_SWING_HARD, -ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 20) },
+    },
+    {
+        // 3 = SW97: Water(Ice)
+        { 0, ANIMSFX_DATA(ANIMSFX_TYPE_WALKING, 20) },
+        { NA_SE_VO_LI_MAGIC_FROL, -ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 30) },
+    },
+    {
+        // 4 = SW97: Light
+        { NA_SE_VO_LI_MAGIC_ATTACK, ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 20) },
+        { NA_SE_IT_SWORD_SWING_HARD, -ANIMSFX_DATA(ANIMSFX_TYPE_GENERAL, 20) },
+    },
+    {
+        // 5 = SW97: Fire
+        { 0, ANIMSFX_DATA(ANIMSFX_TYPE_WALKING, 20) },
+        { NA_SE_VO_LI_MAGIC_NALE, -ANIMSFX_DATA(ANIMSFX_TYPE_VOICE, 44) },
     },
 };
 
@@ -15334,8 +17527,9 @@ void Player_Action_808507F4(Player* this, PlayState* play) {
     u8 isFastFarores = CVarGetInteger(CVAR_ENHANCEMENT("FastFarores"), 0) && this->itemAction == PLAYER_IA_FARORES_WIND;
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (this->av1.actionVar1 < 0) {
-            if ((this->itemAction == PLAYER_IA_NAYRUS_LOVE) || isFastFarores ||
+            if ((this->itemAction == PLAYER_IA_NAYRUS_LOVE) || isFastFarores || sSw97SpellActive ||
                 (gSaveContext.magicState == MAGIC_STATE_IDLE)) {
+                sSw97SpellActive = false;
                 func_80839FFC(this, play);
                 func_8005B1A4(Play_GetCamera(play, 0));
             }
@@ -15346,17 +17540,23 @@ void Player_Action_808507F4(Player* this, PlayState* play) {
 
                 if (Player_SpawnMagicSpell(play, this, this->av1.actionVar1) != NULL) {
                     this->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
-                    if ((this->av1.actionVar1 != 0) || (gSaveContext.respawn[RESPAWN_MODE_TOP].data <= 0)) {
+                    // Vanilla: actionVar1==0 is Farore's Wind, skip magic consume if warp exists
+                    // SW97: actionVar1==0 is Forest spell, always consume magic
+                    if (sSw97SpellActive || (this->av1.actionVar1 != 0) ||
+                        (gSaveContext.respawn[RESPAWN_MODE_TOP].data <= 0)) {
                         gSaveContext.magicState = MAGIC_STATE_CONSUME_SETUP;
                     }
                 } else {
+                    sSw97SpellActive = false;
                     Magic_Reset(play);
                 }
             } else {
                 LinkAnimation_PlayLoopSetSpeed(play, &this->skelAnime, D_80854A64[this->av1.actionVar1],
                                                0.83f * (isFastFarores ? 2 : 1));
 
-                if (this->av1.actionVar1 == 0) {
+                // Vanilla: actionVar1==0 is Farore's Wind warp point save
+                // SW97: actionVar1==0 is Forest spell, skip warp logic
+                if (this->av1.actionVar1 == 0 && !sSw97SpellActive) {
                     this->av2.actionVar2 = -10;
                 }
             }
@@ -15387,7 +17587,10 @@ void Player_Action_808507F4(Player* this, PlayState* play) {
                 Player_ProcessAnimSfxList(this, D_80854A80);
             } else if (this->av2.actionVar2 == 1) {
                 Player_ProcessAnimSfxList(this, D_80854A8C[this->av1.actionVar1]);
-                if ((this->av1.actionVar1 == 2) && LinkAnimation_OnFrame(&this->skelAnime, 30.0f)) {
+                // Vanilla: only Nayru's Love (index 2) clears cutscene flags early
+                // SW97: all spells are fire-and-forget, clear flags for all
+                if (((this->av1.actionVar1 == 2) || sSw97SpellActive) &&
+                    LinkAnimation_OnFrame(&this->skelAnime, 30.0f)) {
                     this->stateFlags1 &= ~(PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE);
                 }
             } else if ((isFastFarores ? 10 : D_80854A7C[this->av1.actionVar1]) < this->av2.actionVar2++) {
@@ -16090,7 +18293,8 @@ void func_80851BE8(PlayState* play, Player* this, CsCmdActorCue* cue) {
 }
 
 void func_80851CA4(PlayState* play, Player* this, CsCmdActorCue* cue) {
-    if (LinkAnimation_Update(play, &this->skelAnime) && (this->av2.actionVar2 == 0) && (this->actor.bgCheckFlags & 1)) {
+    if (LinkAnimation_Update(play, &this->skelAnime) && (this->av2.actionVar2 == 0) &&
+        (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         Player_AnimPlayOnce(play, this, &gPlayerAnim_link_normal_back_downB);
         this->av2.actionVar2 = 1;
     }
@@ -16617,7 +18821,7 @@ void func_80853080(Player* this, PlayState* play) {
 }
 
 s32 Player_InflictDamage(PlayState* play, s32 damage) {
-    return Player_InflictDamageModified(play, damage, true);
+    return Player_InflictDamageModified(play, damage, false);
 }
 
 s32 Player_InflictDamageModified(PlayState* play, s32 damage, u8 modified) {
@@ -16703,6 +18907,33 @@ void Player_StartTalking(PlayState* play, Actor* actor) {
 
     if ((this->naviActor == this->talkActor) && ((this->talkActor->textId & 0xFF00) != 0x200)) {
         this->naviActor->flags |= ACTOR_FLAG_TALK;
-        func_80835EA4(play, 0xB);
+        Player_SetTurnAroundCamera(play, CAM_ITEM_TYPE_11);
     }
 }
+
+#define PLAYER_SHIP_SAVESTATE_FIELDS(F) \
+    F(D_80858AA0)                       \
+    F(sSavedCurrentMask)                \
+    F(sInteractWallCheckResult)         \
+    F(sControlInput)                    \
+    F(sNoclipEnabled)                   \
+    F(sControlStickMagnitude)           \
+    F(sControlStickAngle)               \
+    F(sControlStickWorldYaw)            \
+    F(sUpperBodyIsBusy)                 \
+    F(sFloorType)                       \
+    F(sWaterSpeedFactor)                \
+    F(sInvWaterSpeedFactor)             \
+    F(sTouchedWallFlags)                \
+    F(sConveyorSpeed)                   \
+    F(sIsFloorConveyor)                 \
+    F(sConveyorYaw)                     \
+    F(sYDistToFloor)                    \
+    F(sPrevFloorProperty)               \
+    F(sShapeYawToTouchedWall)           \
+    F(sWorldYawToTouchedWall)           \
+    F(sFloorShapePitch)                 \
+    F(sUseHeldItem)                     \
+    F(sHeldItemButtonIsHeldDown)
+
+SHIP_SAVESTATE_DEFINE(Player, PLAYER_SHIP_SAVESTATE_FIELDS)

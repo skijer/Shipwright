@@ -1,7 +1,10 @@
 #include "Menu.h"
+#include "BackendTypes.h"
 #include "UIWidgets.hpp"
 #include "soh/OTRGlobals.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include <ship/window/gui/GuiMenuBar.h>
+#include <ship/config/Config.h>
 #include <ship/window/gui/GuiElement.h>
 #include "SohModals.h"
 #include <variant>
@@ -66,7 +69,7 @@ bool operator>(Color_RGBA8 const& l, Color_RGBA8 const& r) noexcept {
 }
 
 uint32_t GetVectorIndexOf(std::vector<std::string>& vector, std::string value) {
-    return std::distance(vector.begin(), std::find(vector.begin(), vector.end(), value));
+    return static_cast<u32>(std::distance(vector.begin(), std::find(vector.begin(), vector.end(), value)));
 }
 
 static bool raceDisableActive = false;
@@ -93,23 +96,36 @@ void Menu::RemoveSidebarSearch() {
     if (curIndex > searchSidebarIndex) {
         curIndex--;
     } else if (curIndex >= menuEntries["Settings"].sidebarOrder.size()) {
-        curIndex = menuEntries["Settings"].sidebarOrder.size() - 1;
+        curIndex = static_cast<u32>(menuEntries["Settings"].sidebarOrder.size() - 1);
     }
     CVarSetString(menuEntries["Settings"].sidebarCvar, menuEntries["Settings"].sidebarOrder.at(curIndex).c_str());
 }
 
+void Menu::UpdateAudioBackendObjects() {
+    availableAudioBackends = Ship::Context::GetRawInstance()->GetAudio()->GetAvailableAudioBackends();
+    for (auto& backend : *availableAudioBackends) {
+        if (auto it = audioBackendsMap.find(backend); it != audioBackendsMap.end()) {
+            availableAudioBackendsMap[backend] = it->second;
+        }
+    }
+}
+
 void Menu::UpdateWindowBackendObjects() {
-    Ship::WindowBackend runningWindowBackend = Ship::Context::GetInstance()->GetWindow()->GetWindowBackend();
-    int32_t configWindowBackendId = Ship::Context::GetInstance()->GetConfig()->GetInt("Window.Backend.Id", -1);
-    if (Ship::Context::GetInstance()->GetWindow()->IsAvailableWindowBackend(configWindowBackendId)) {
-        configWindowBackend = static_cast<Ship::WindowBackend>(configWindowBackendId);
+    Fast::WindowBackend runningWindowBackend =
+        (Fast::WindowBackend)Ship::Context::GetRawInstance()->GetWindow()->GetWindowBackend();
+    int32_t configWindowBackendId = Ship::Context::GetRawInstance()->GetConfig()->GetInt("Window.Backend.Id", -1);
+    if (Ship::Context::GetRawInstance()->GetWindow()->IsAvailableWindowBackend(configWindowBackendId)) {
+        configWindowBackend = static_cast<Fast::WindowBackend>(configWindowBackendId);
     } else {
         configWindowBackend = runningWindowBackend;
     }
 
-    availableWindowBackends = Ship::Context::GetInstance()->GetWindow()->GetAvailableWindowBackends();
+    availableWindowBackends = Ship::Context::GetRawInstance()->GetWindow()->GetAvailableWindowBackends();
     for (auto& backend : *availableWindowBackends) {
-        availableWindowBackendsMap[backend] = windowBackendsMap.at(backend);
+        auto windowBackend = (Fast::WindowBackend)backend;
+        if (auto it = windowBackendsMap.find(windowBackend); it != windowBackendsMap.end()) {
+            availableWindowBackendsMap[windowBackend] = it->second;
+        }
     }
 }
 
@@ -128,10 +144,10 @@ Menu::Menu(const std::string& cVar, const std::string& name, uint8_t searchSideb
 
 void Menu::InitElement() {
     popped = CVarGetInteger(CVAR_SETTING("Menu.Popout"), 0);
-    poppedSize.x = CVarGetInteger(CVAR_SETTING("Menu.PoppedWidth"), 1280);
-    poppedSize.y = CVarGetInteger(CVAR_SETTING("Menu.PoppedHeight"), 800);
-    poppedPos.x = CVarGetInteger(CVAR_SETTING("Menu.PoppedPos.x"), 0);
-    poppedPos.y = CVarGetInteger(CVAR_SETTING("Menu.PoppedPos.y"), 0);
+    poppedSize.x = static_cast<f32>(CVarGetInteger(CVAR_SETTING("Menu.PoppedWidth"), 1280));
+    poppedSize.y = static_cast<f32>(CVarGetInteger(CVAR_SETTING("Menu.PoppedHeight"), 800));
+    poppedPos.x = static_cast<f32>(CVarGetInteger(CVAR_SETTING("Menu.PoppedPos.x"), 0));
+    poppedPos.y = static_cast<f32>(CVarGetInteger(CVAR_SETTING("Menu.PoppedPos.y"), 0));
     menuThemeIndex = static_cast<UIWidgets::Colors>(CVarGetInteger(CVAR_SETTING("Menu.Theme"), defaultThemeIndex));
 
     UpdateWindowBackendObjects();
@@ -336,14 +352,14 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 };
             } break;
             case WIDGET_AUDIO_BACKEND: {
-                auto currentAudioBackend = Ship::Context::GetInstance()->GetAudio()->GetCurrentAudioBackend();
+                auto currentAudioBackend = Ship::Context::GetRawInstance()->GetAudio()->GetCurrentAudioBackend();
                 UIWidgets::ComboboxOptions options = {};
                 options.color = menuThemeIndex;
                 options.tooltip = "Sets the audio API used by the game. Requires a relaunch to take effect.";
-                options.disabled = Ship::Context::GetInstance()->GetAudio()->GetAvailableAudioBackends()->size() <= 1;
+                options.disabled = availableAudioBackends->size() <= 1;
                 options.disabledTooltip = "Only one audio API is available on this platform.";
-                if (UIWidgets::Combobox("Audio API", &currentAudioBackend, audioBackendsMap, options)) {
-                    Ship::Context::GetInstance()->GetAudio()->SetCurrentAudioBackend(currentAudioBackend);
+                if (UIWidgets::Combobox("Audio API", &currentAudioBackend, availableAudioBackendsMap, options)) {
+                    Ship::Context::GetRawInstance()->GetAudio()->SetCurrentAudioBackend(currentAudioBackend);
                 }
             } break;
             case WIDGET_VIDEO_BACKEND: {
@@ -354,11 +370,11 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                 options.disabledTooltip = "Only one renderer API is available on this platform.";
                 if (UIWidgets::Combobox("Renderer API (Needs reload)", &configWindowBackend, availableWindowBackendsMap,
                                         options)) {
-                    Ship::Context::GetInstance()->GetConfig()->SetInt("Window.Backend.Id",
-                                                                      (int32_t)(configWindowBackend));
-                    Ship::Context::GetInstance()->GetConfig()->SetString("Window.Backend.Name",
-                                                                         windowBackendsMap.at(configWindowBackend));
-                    Ship::Context::GetInstance()->GetConfig()->Save();
+                    Ship::Context::GetRawInstance()->GetConfig()->SetInt("Window.Backend.Id",
+                                                                         (int32_t)(configWindowBackend));
+                    Ship::Context::GetRawInstance()->GetConfig()->SetString("Window.Backend.Name",
+                                                                            windowBackendsMap.at(configWindowBackend));
+                    Ship::Context::GetRawInstance()->GetConfig()->Save();
                     UpdateWindowBackendObjects();
                 }
             } break;
@@ -489,7 +505,7 @@ void Menu::MenuDrawItem(WidgetInfo& widget, uint32_t width, UIWidgets::Colors me
                     SPDLOG_ERROR(msg.c_str());
                     break;
                 }
-                auto window = Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow(widget.windowName);
+                auto window = Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow(widget.windowName);
                 if (!window) {
                     std::string msg =
                         fmt::format("Error drawing window contents: windowName {} does not exist", widget.windowName);
@@ -566,6 +582,119 @@ void Menu::Draw() {
 }
 
 static bool freshOpen = true;
+// Fleet Ship Combo unified game-switch tab row — IDENTICAL helper in both apps' menus (Ship's
+// SohGui and 2ship's BenGui), so the two render the same. Full-width 3-up strip
+// [ Shared | Ship of Harkinian | 2 Ship 2 Harkinian ] styled like the existing header tabs
+// (selected = theme fill, others transparent). The tab whose game's GUI is currently in front
+// (FleetShipCombo uiFocus) is highlighted; clicking a game tab flips uiFocus so that game's
+// window/menu comes forward for config. "Shared" toggles the Fleet Shared window (oracle tests +
+// MM rando options editor, FleetSharedWindow.cpp) and highlights while it is visible. Drawn only
+// when the combo is running (GetUiFocus() >= 0), so standalone menus look exactly as before.
+//
+// The "Shared" tab is a MODE, not a separate menu entry: when active, the header bar shows only
+// the shared headers (registered with a "##FleetShared" marker in their label — see
+// FleetSharedWindow.cpp), each option editing BOTH games; when inactive, only the normal headers
+// show. gFleetCombo.MenuMode: 0 = Ship/normal headers, 1 = Shared headers.
+static bool FleetMenu_IsSharedHeader(const std::string& label) {
+    return label.find("##FleetShared") != std::string::npos;
+}
+static bool FleetMenu_IsSharedMode() {
+    return FleetShipCombo_GetUiFocus() >= 0 && CVarGetInteger("gFleetCombo.MenuMode", 0) == 1;
+}
+// A header is shown in the bar iff its shared-ness matches the current mode.
+static bool FleetMenu_HeaderVisible(const std::string& label) {
+    return FleetMenu_IsSharedHeader(label) == FleetMenu_IsSharedMode();
+}
+
+static float DrawFleetShipComboTabs(float rowWidth) {
+    const int focus = FleetShipCombo_GetUiFocus();
+    if (focus < 0) {
+        return 0.0f; // combo not running -> draw nothing (standalone menu unchanged)
+    }
+    ImGuiStyle& style = ImGui::GetStyle();
+    const bool sharedMode = CVarGetInteger("gFleetCombo.MenuMode", 0) == 1;
+    const auto themeIndex =
+        static_cast<UIWidgets::Colors>(CVarGetInteger("gSettings.Menu.Theme", UIWidgets::Colors::LightBlue));
+    const float segW = (rowWidth - style.ItemSpacing.x * 2.0f) / 3.0f;
+
+    struct Tab {
+        const char* label;
+        int mode; // 0 = Shared mode; 1 = Ship (focus 0); 2 = 2ship (focus 1)
+    };
+    const Tab tabs[3] = {
+        { "Shared##fsctab", 0 },
+        { "Ship of Harkinian##fsctab", 1 },
+        { "2 Ship 2 Harkinian##fsctab", 2 },
+    };
+
+    for (int i = 0; i < 3; i++) {
+        if (i != 0) {
+            ImGui::SameLine();
+        }
+        bool selected = false;
+        if (tabs[i].mode == 0) {
+            selected = sharedMode; // Shared tab lit while shared header mode is on
+        } else if (tabs[i].mode == 1) {
+            selected = !sharedMode && focus == 0; // Ship
+        } else {
+            selected = focus == 1; // 2ship
+        }
+
+        UIWidgets::PushStyleButton(themeIndex);
+        if (!selected) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0)); // unselected = transparent fill
+        }
+        if (ImGui::Button(tabs[i].label, ImVec2(segW, 0.0f))) {
+            if (tabs[i].mode == 0) {
+                CVarSetInteger("gFleetCombo.MenuMode", 1); // flip the header bar to shared headers
+                FleetShipCombo_SetUiFocus(0);              // keep Ship's window in front
+            } else if (tabs[i].mode == 1) {
+                CVarSetInteger("gFleetCombo.MenuMode", 0);
+                FleetShipCombo_SetUiFocus(0);
+            } else {
+                CVarSetInteger("gFleetCombo.MenuMode", 0);
+                FleetShipCombo_SetUiFocus(1);
+            }
+        }
+        if (!selected) {
+            ImGui::PopStyleColor();
+        }
+        UIWidgets::PopStyleButton();
+    }
+    return ImGui::GetFrameHeight() + style.ItemSpacing.y; // vertical space the row consumed
+}
+
+// Fleet Ship Combo: quick ACTIVE-game switch drawn next to the search bar (combo only).
+// Unlike the tab row above (which only flips whose GUI is in FRONT for config), this flips
+// which game is actually RUNNING (the other one freezes) — same behavior as NEI's
+// "Switch Active Game" button. Identical helper in 2ship's BenGui Menu.cpp.
+static const char* FleetMenu_SwitchGameLabel() {
+    return FleetShipCombo_GetActiveGame() == 1 ? ICON_FA_EXCHANGE " Play OoT##fscswitch"
+                                               : ICON_FA_EXCHANGE " Play MM##fscswitch";
+}
+static void FleetMenu_DrawSwitchGameButton(UIWidgets::Colors themeIndex) {
+#ifdef COMBO_BUILD
+    return; // comboui owns game switching; SetActiveGame is a no-op there, so the button would lie
+#endif
+    const int32_t cur = FleetShipCombo_GetActiveGame();
+    if (cur < 0) {
+        return; // combo not running
+    }
+    UIWidgets::PushStyleButton(themeIndex);
+    if (ImGui::Button(FleetMenu_SwitchGameLabel())) {
+        const int32_t next = cur ? 0 : 1; // 1 = MM (2ship), 0 = OoT (Ship)
+        CVarSetInteger("isPlayerIn2Ship", next);
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        FleetShipCombo_SetActiveGame(next);
+        FleetShipCombo_SetUiFocus(next); // front window follows the newly-active game
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Switch the ACTIVE game (the one actually running).\n"
+                          "Both games stay loaded; the inactive one pauses.");
+    }
+    UIWidgets::PopStyleButton();
+}
+
 void Menu::DrawElement() {
     if (OTRGlobals::Instance->fontStandardLargest == nullptr) {
         return;
@@ -655,6 +784,17 @@ void Menu::DrawElement() {
     ImGui::PushFont(OTRGlobals::Instance->fontStandardLargest);
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
     std::string headerIndex = CVarGetString(headerCvar, "Settings");
+    // Fleet Ship Combo: if the active header doesn't belong to the current bar mode (shared vs
+    // normal), jump to the first header that does — so flipping the Shared tab lands on content.
+    if (!FleetMenu_HeaderVisible(headerIndex)) {
+        for (auto& label : menuOrder) {
+            if (FleetMenu_HeaderVisible(label)) {
+                headerIndex = label;
+                CVarSetString(headerCvar, label.c_str());
+                break;
+            }
+        }
+    }
     ImVec2 pos = window->DC.CursorPos;
     float centerX = pos.x + windowWidth / 2 - (style.ItemSpacing.x * (menuEntries.size() + 1));
     std::vector<ImVec2> headerSizes;
@@ -663,7 +803,15 @@ void Menu::DrawElement() {
     if (headerSearch) {
         headerWidth += 200.0f;
     }
+    // Fleet Ship Combo: reserve room for the active-game switch button next to the search bar.
+    if (FleetShipCombo_GetUiFocus() >= 0) {
+        headerWidth += ImGui::CalcTextSize(FleetMenu_SwitchGameLabel(), nullptr, true).x + style.FramePadding.x * 2 +
+                       style.ItemSpacing.x;
+    }
     for (auto& label : menuOrder) {
+        if (!FleetMenu_HeaderVisible(label)) {
+            continue; // hidden in the current bar mode (shared vs normal)
+        }
         ImVec2 size = ImGui::CalcTextSize(label.c_str());
         headerSizes.push_back(size);
         headerWidth += size.x + style.FramePadding.x * 2 + style.ItemSpacing.x;
@@ -686,7 +834,13 @@ void Menu::DrawElement() {
                       ImGuiChildFlags_AutoResizeX | ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_AlwaysAutoResize,
                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar);
 
-    std::unordered_map<std::string, SidebarEntry>* sidebar;
+    // Fleet Ship Combo: game-switch tab row at the very top of the menu (only when the combo is
+    // running). Replaces the old NEI "View" buttons; identical row in 2ship's BenGui. Returns the
+    // height it consumed so the manual `pos`-based layout below reserves space for it (this menu
+    // positions the separator/sidebar/content absolutely, so without this they'd overlap the row).
+    float fscTabRowH = DrawFleetShipComboTabs(menuSize.x);
+
+    std::unordered_map<std::string, SidebarEntry>* sidebar = nullptr;
     float headerHeight = headerSizes.at(0).y + style.FramePadding.y * 2;
     ImVec2 buttonSize = ImGui::CalcTextSize(ICON_FA_TIMES_CIRCLE) + style.FramePadding * 2;
     bool scrollbar = false;
@@ -705,6 +859,9 @@ void Menu::DrawElement() {
                       ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_HorizontalScrollbar);
     uint8_t curIndex = 0;
     for (auto& label : menuOrder) {
+        if (!FleetMenu_HeaderVisible(label)) {
+            continue; // hidden in the current bar mode (shared vs normal)
+        }
         if (curIndex != 0) {
             ImGui::SameLine();
         }
@@ -734,6 +891,11 @@ void Menu::DrawElement() {
         }
         curIndex++;
     }
+    // Fleet Ship Combo: quick active-game switch, right before/next to the search bar.
+    if (FleetShipCombo_GetUiFocus() >= 0) {
+        ImGui::SameLine();
+        FleetMenu_DrawSwitchGameButton(menuThemeIndex);
+    }
     std::string menuSearchText = "";
     if (headerSearch) {
         ImGui::SameLine();
@@ -754,6 +916,9 @@ void Menu::DrawElement() {
         ImGui::PopStyleVar();
         ImGui::PopStyleColor();
     }
+
+    // Fleet Ship Combo: the "View" game switcher moved to the top tab row (DrawFleetShipComboTabs).
+
     ImGui::EndChild();
     ImGui::SameLine(menuSize.x - (buttonSize.x * 3) - (style.ItemSpacing.x * 2));
     UIWidgets::ButtonOptions options3 = {};
@@ -765,11 +930,11 @@ void Menu::DrawElement() {
             "Quit SoH", "Are you sure you want to quit SoH?", "Quit", "Cancel",
             []() {
                 std::shared_ptr<Menu> menu =
-                    static_pointer_cast<Menu>(Ship::Context::GetInstance()->GetWindow()->GetGui()->GetMenu());
+                    static_pointer_cast<Menu>(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetMenu());
                 if (!menu->IsMenuPopped()) {
                     menu->ToggleVisibility();
                 }
-                Ship::Context::GetInstance()->GetWindow()->Close();
+                Ship::Context::GetRawInstance()->GetWindow()->Close();
             },
             nullptr);
     }
@@ -789,7 +954,7 @@ void Menu::DrawElement() {
         ;
     if (UIWidgets::Button(ICON_FA_UNDO, options2)) {
         std::reinterpret_pointer_cast<Ship::ConsoleWindow>(
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow("Console"))
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Console"))
             ->Dispatch("reset");
     }
     ImGui::SameLine();
@@ -802,27 +967,41 @@ void Menu::DrawElement() {
         // Update gamepad navigation after close based on if other menus are still visible
         auto mImGuiIo = &ImGui::GetIO();
         if (CVarGetInteger(CVAR_IMGUI_CONTROLLER_NAV, 0) &&
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->GetMenuOrMenubarVisible()) {
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetMenuOrMenubarVisible()) {
             mImGuiIo->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         } else {
             mImGuiIo->ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
         }
     }
 
-    pos.y += headerHeight + style.ItemSpacing.y;
+    pos.y += headerHeight + style.ItemSpacing.y + fscTabRowH; // + the game-switch tab row height
     pos.x = centerX - menuSize.x / 2 + (style.ItemSpacing.x * (menuEntries.size() + 1));
     window->DrawList->AddRectFilled(pos, pos + ImVec2{ menuSize.x, 4 }, ImGui::GetColorU32({ 255, 255, 255, 255 }),
-                                    true, style.WindowRounding);
+                                    style.WindowRounding);
     pos.y += style.ItemSpacing.y;
-    float sectionHeight = menuSize.y - headerHeight - 4 - style.ItemSpacing.y * 2;
+    float sectionHeight = menuSize.y - headerHeight - 4 - style.ItemSpacing.y * 2 - fscTabRowH;
     float columnHeight = sectionHeight - style.ItemSpacing.y * 4;
     ImGui::SetNextWindowPos(pos + style.ItemSpacing * 2);
 
-    // Increase sidebar width on larger screens to accomodate people scaling their menus.
+    // Increase sidebar width on larger screens to accommodate people scaling their menus.
     float sidebarWidth = 200 - style.ItemSpacing.x;
     if (menuSize.x > 1600) {
         sidebarWidth = menuSize.x * 0.15f;
     }
+
+    // The Shared-mode flip happens in DrawFleetShipComboTabs (above, same frame), so headerIndex /
+    // sidebar may still point at a header that is now hidden — which left `sidebar` unset in the
+    // header loop. Re-validate here and set sidebar unconditionally so it is never a stale pointer.
+    if (!FleetMenu_HeaderVisible(headerIndex)) {
+        for (auto& label : menuOrder) {
+            if (FleetMenu_HeaderVisible(label)) {
+                headerIndex = label;
+                CVarSetString(headerCvar, label.c_str());
+                break;
+            }
+        }
+    }
+    sidebar = &menuEntries.at(headerIndex).sidebars;
 
     const char* sidebarCvar = menuEntries.at(headerIndex).sidebarCvar;
 
@@ -862,7 +1041,7 @@ void Menu::DrawElement() {
 
     pos = ImVec2{ sectionCenterX + (sidebarWidth / 2), topY } + style.ItemSpacing * 2;
     window->DrawList->AddRectFilled(pos, pos + ImVec2{ 4, sectionHeight - style.FramePadding.y * 2 },
-                                    ImGui::GetColorU32({ 255, 255, 255, 255 }), true, style.WindowRounding);
+                                    ImGui::GetColorU32({ 255, 255, 255, 255 }), style.WindowRounding);
     pos.x += 4 + style.ItemSpacing.x;
     ImGui::SetNextWindowPos(pos + style.ItemSpacing);
     float sectionWidth = menuSize.x - sidebarWidth - 4 - style.ItemSpacing.x * 4;

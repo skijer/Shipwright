@@ -11,6 +11,9 @@
 #include "vt.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
+// Captain's Hat (MM worn mask) doubles as Skull Mask at the Deku Theater. Skijer's NEI
+extern s32 MmMaskWear_GetCurrent(void);
+
 #define FLAGS 0
 
 typedef enum {
@@ -113,6 +116,14 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
     u8 ignore;
     s32 i;
 
+    // Captain's Hat is an MM worn mask (player->currentMask stays NONE), so map
+    // it onto PLAYER_MASK_SKULL here — same celebrate reaction, prize, flag and
+    // rando check as showing the Skull Mask. Skijer's NEI
+    s16 effMask = Player_GetMask(play);
+    if (effMask == PLAYER_MASK_NONE && MmMaskWear_GetCurrent() == ITEM_MM_MASK_CAPTAIN) {
+        effMask = PLAYER_MASK_SKULL;
+    }
+
     if (this->leaderSignal != DNT_SIGNAL_NONE) {
         for (i = 0; i < 9; i++) {
             this->scrubs[i]->stageSignal = this->leaderSignal;
@@ -124,7 +135,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
         }
         this->leaderSignal = DNT_SIGNAL_NONE;
         this->actionFunc = EnDntDemo_Results;
-    } else if ((this->actor.xzDistToPlayer > 30.0f) || (Player_GetMask(play) == 0)) {
+    } else if ((this->actor.xzDistToPlayer > 30.0f) || (effMask == 0)) {
         this->debugArrowTimer++;
         if (this->subCamera != SUBCAM_FREE) {
             this->subCamera = SUBCAM_FREE;
@@ -136,8 +147,9 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
             this->judgeTimer = 0;
         }
     } else {
-        if ((Player_GetMask(play) != 0) && (this->subCamera == SUBCAM_FREE)) {
-            this->subCamera = OnePointCutscene_Init(play, 2220, -99, &this->scrubs[3]->actor, MAIN_CAM);
+        if ((effMask != 0) && (this->subCamera == SUBCAM_FREE)) {
+            this->subCamera =
+                OnePointCutscene_Init(play, 2220, -99, &this->scrubs[3]->actor, CAM_ID_MAIN); // was MAIN_CAM
         }
         this->debugArrowTimer = 0;
         if (this->judgeTimer == 40) {
@@ -156,7 +168,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
             ignore = false;
             reaction = DNT_SIGNAL_NONE;
             delay = 0;
-            switch (Player_GetMask(play)) {
+            switch (effMask) {
                 case PLAYER_MASK_SKULL:
                     if (!Flags_GetItemGetInf(ITEMGETINF_OBTAINED_STICK_UPGRADE_FROM_STAGE)) {
                         reaction = DNT_SIGNAL_CELEBRATE;
@@ -167,7 +179,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                 case PLAYER_MASK_TRUTH:
                     if (GameInteractor_Should(VB_DEKU_SCRUBS_REACT_TO_MASK_OF_TRUTH,
                                               !Flags_GetItemGetInf(ITEMGETINF_OBTAINED_NUT_UPGRADE_FROM_STAGE) &&
-                                                  (Player_GetMask(play) != PLAYER_MASK_SKULL))) {
+                                                  (effMask != PLAYER_MASK_SKULL))) {
                         Audio_PlaySoundGeneral(NA_SE_SY_TRE_BOX_APPEAR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                         this->prize = DNT_PRIZE_NUTS;
@@ -176,7 +188,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                         if (this->subCamera != SUBCAM_FREE) {
                             this->subCamera = SUBCAM_FREE;
                             reaction = DNT_SIGNAL_LOOK;
-                            OnePointCutscene_Init(play, 2340, -99, &this->leader->actor, MAIN_CAM);
+                            OnePointCutscene_Init(play, 2340, -99, &this->leader->actor, CAM_ID_MAIN);
                         }
                         break;
                     }
@@ -187,7 +199,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                 case PLAYER_MASK_ZORA:
                 case PLAYER_MASK_GERUDO:
                     rand9 = Rand_ZeroFloat(8.99f);
-                    maskIdx = Player_GetMask(play);
+                    maskIdx = effMask;
                     maskIdx--;
                     if (rand9 == 8) {
                         ignore = true;
@@ -215,7 +227,7 @@ void EnDntDemo_Judge(EnDntDemo* this, PlayState* play) {
                             case DNT_ACTION_ATTACK:
                                 if (this->subCamera != SUBCAM_FREE) {
                                     this->subCamera = SUBCAM_FREE;
-                                    OnePointCutscene_Init(play, 2350, -99, &this->scrubs[3]->actor, MAIN_CAM);
+                                    OnePointCutscene_Init(play, 2350, -99, &this->scrubs[3]->actor, CAM_ID_MAIN);
                                 }
                                 Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | NA_BGM_ENEMY | 0x800);
                                 break;

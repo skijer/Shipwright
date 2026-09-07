@@ -1,4 +1,5 @@
 #include "z64.h"
+#include "soh/NEI/nei_exports.h" // PakLoader_GetDLOverride (centralized NEI C-linkage export)
 
 // OTRTODO - this is awful
 
@@ -68,10 +69,13 @@ extern "C" void gSPDisplayList(Gfx* pkt, Gfx* dl) {
     char* imgData = (char*)dl;
 
     if (ResourceMgr_OTRSigCheck(imgData) == 1) {
-
-        // ResourceMgr_PushCurrentDirectory(imgData);
-        // gsSPPushCD(pkt++, imgData);
-        dl = ResourceMgr_LoadGfxByName(imgData);
+        // PAK Loader: Check if this OTR DL should be replaced with a custom .pak DL
+        Gfx* pakDL = PakLoader_GetDLOverride(imgData);
+        if (pakDL) {
+            dl = pakDL;
+        } else {
+            dl = ResourceMgr_LoadGfxByName(imgData);
+        }
     }
 
     __gSPDisplayList(pkt, dl);
@@ -89,6 +93,11 @@ extern "C" void gDPSetTileSizeInterp(Gfx* pkt, int t, float uls, float ult, floa
     pkt->words.w0 = *(u32*)&lrs;
     pkt->words.w1 = *(u32*)&lrt;
     pkt++;
+}
+
+extern "C" void gDPSetTileSizeLerp(Gfx* pkt, int t, float uls0, float ult0, float lrs0, float lrt0, float uls1,
+                                   float ult1, float lrs1, float lrt1) {
+    __gDPSetTileSizeLerp(pkt, t, uls0, ult0, lrs0, lrt0, uls1, ult1, lrs1, lrt1);
 }
 
 extern "C" void gSPDisplayListOffset(Gfx* pkt, Gfx* dl, int offset) {
@@ -114,7 +123,16 @@ extern "C" void gSPInvalidateTexCache(Gfx* pkt, uintptr_t texAddr) {
     if (texAddr != 0 && ResourceMgr_OTRSigCheck(imgData)) {
         // Temporary solution to the mq/nonmq issue, this will be
         // handled better with LUS 1.0
-        texAddr = (uintptr_t)ResourceMgr_LoadTexOrDListByName(imgData);
+        // Defensive: ResourceMgr_LoadTexOrDListByName returns nullptr when
+        // pak_loader hot-swaps a resource mid-draw and the OTR lookup races
+        // (see ResourceManagerHelpers.cpp). Keep the original texAddr in that
+        // case so InvalidateTexCache invalidates the prior frame's address
+        // rather than a NULL pointer — the kaleido draw can then settle on
+        // the new resource next frame instead of crashing this one.
+        char* loaded = ResourceMgr_LoadTexOrDListByName(imgData);
+        if (loaded != nullptr) {
+            texAddr = (uintptr_t)loaded;
+        }
     }
 
     __gSPInvalidateTexCache(pkt, texAddr);

@@ -9,6 +9,11 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "soh/ResourceManagerHelpers.h"
 
+// MM mask ownership check (mods/extended_inventory.c) — Bunny Hood with an MM
+// counterpart is permanent: selling it grants the reward without losing the mask.
+extern int32_t ExtInv_HasMmMask(uint16_t itemId);
+extern void ExtInv_KeepMmMaskOrSell(PlayState* play, uint16_t maskItem);
+
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
 typedef enum {
@@ -239,8 +244,9 @@ s32 func_80AADAA0(EnMm* this, PlayState* play) {
             break;
         case TEXT_STATE_EVENT:
             if (Message_ShouldAdvance(play)) {
-                Player_UnsetMask(play);
-                Item_Give(play, ITEM_SOLD_OUT);
+                // MM Bunny Hood owners keep the mask: the Running Man pays for it but the
+                // permanent MM mask is not taken away.
+                ExtInv_KeepMmMaskOrSell(play, ITEM_MM_MASK_BUNNY);
                 Flags_SetItemGetInf(ITEMGETINF_3B);
                 Rupees_ChangeBy(500);
                 player->actor.textId = 0x202E;
@@ -306,7 +312,7 @@ void func_80AADCD0(EnMm* this, PlayState* play) {
             yawDiff = ABS((s16)(this->actor.yawTowardsPlayer - this->actor.shape.rot.y));
 
             if ((sp26 >= 0) && (sp26 <= 0x140) && (sp24 >= 0) && (sp24 <= 0xF0) && (yawDiff <= 17152.0f) &&
-                (this->unk_1E0 != 3) && func_8002F2CC(&this->actor, play, 100.0f)) {
+                (this->unk_1E0 != 3) && Actor_OfferTalk(&this->actor, play, 100.0f)) {
                 this->actor.textId = EnMm_GetTextId(this, play);
             }
         }
@@ -468,7 +474,7 @@ void func_80AAE294(EnMm* this, PlayState* play) {
             }
 
             if (this->collider.base.ocFlags2 & OC2_HIT_PLAYER) {
-                func_8002F71C(play, &this->actor, 3.0f, this->actor.yawTowardsPlayer, 4.0f);
+                Actor_SetPlayerKnockbackLargeNoDamage(play, &this->actor, 3.0f, this->actor.yawTowardsPlayer, 4.0f);
             }
         }
     }
@@ -492,7 +498,7 @@ void func_80AAE50C(EnMm* this, PlayState* play) {
 }
 
 void func_80AAE598(EnMm* this, PlayState* play) {
-    func_80038290(play, &this->actor, &this->unk_248, &this->unk_24E, this->actor.focus.pos);
+    Actor_TrackPlayer(play, &this->actor, &this->unk_248, &this->unk_24E, this->actor.focus.pos);
     SkelAnime_Update(&this->skelAnime);
 
     if ((func_80AADA70() != 0) && (this->unk_1E0 == 0)) {

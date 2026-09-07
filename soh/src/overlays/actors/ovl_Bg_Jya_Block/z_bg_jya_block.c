@@ -6,6 +6,7 @@
 
 #include "z_bg_jya_block.h"
 #include "objects/gameplay_dangeon_keep/gameplay_dangeon_keep.h"
+#include "mods/items/logic/weapon_upgrades.h" // Skijer's NEI: Iron Knuckle's Axe prop-smash
 
 #define FLAGS 0
 
@@ -58,6 +59,14 @@ void BgJyaBlock_Destroy(Actor* thisx, PlayState* play) {
 void BgJyaBlock_Update(Actor* thisx, PlayState* play) {
     BgJyaBlock* this = (BgJyaBlock*)thisx;
     Player* player = GET_PLAYER(play);
+
+    // NEI: the Iron Knuckle's Axe smashes this heavy silver block after 5 hits, dropping a reward.
+    if (WeaponUpgrade_IKAxeStrike(thisx, play, 5, 130.0f)) {
+        Item_DropCollectibleRandom(play, thisx, &thisx->world.pos, 0);
+        Audio_PlayActorSound2(thisx, NA_SE_EV_ROCK_BROKEN);
+        Actor_Kill(thisx);
+        return;
+    }
 
     player->stateFlags2 &= ~PLAYER_STATE2_MOVING_DYNAPOLY;
     this->dyna.unk_150 = 0.0f;

@@ -1,0 +1,291 @@
+/**
+ * pak_loader.h - ModLoader64 .pak Player Model Loader
+ *
+ * Loads zzplayas .pak files containing custom player models (N64 .zobj format).
+ * Models use the same 21-limb skeleton as OOT Link, so OOT animations work unmodified.
+ *
+ * Usage:
+ *   1. Place .pak files in <soh_dir>/mods/ folder
+ *   2. Call PakLoader_Init() on game startup
+ *   3. Select model from Settings menu
+ *   4. PakLoader_DrawPlayer() is called from Player_Draw() hook
+ */
+
+#ifndef PAK_LOADER_H
+#define PAK_LOADER_H
+
+#include "z64.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// ============================================================================
+// Public API
+// ============================================================================
+
+/**
+ * Initialize the PAK loader system.
+ * Scans mods/ directory for .pak files, parses manifests.
+ * Call once during game initialization.
+ */
+void PakLoader_Init(void);
+
+/**
+ * Check if a custom model is active and ready to draw.
+ * @return 1 if custom model should replace Link, 0 otherwise
+ */
+u8 PakLoader_HasActiveModel(void);
+
+/**
+ * Swap player's skeleton with custom .pak model before vanilla draw.
+ * Replaces skelAnime.skeleton (limb table) and dListCount.
+ * Called BEFORE vanilla Player_DrawGameplay runs.
+ */
+void PakLoader_SwapSkeleton(Player* player);
+
+/**
+ * Restore original skeleton after vanilla draw completes.
+ * Called AFTER vanilla Player_DrawGameplay finishes.
+ */
+void PakLoader_RestoreSkeleton(Player* player);
+
+/**
+ * Check if a gSPDisplayList OTR path should be replaced with a pak custom DL.
+ * Called from gSPDisplayList in GbiWrap.cpp.
+ * @param otrPath The OTR path string being drawn
+ * @return Custom Gfx* to use instead, or NULL to use vanilla
+ */
+Gfx* PakLoader_GetDLOverride(const char* otrPath);
+
+/**
+ * Get the custom equipment DL for the given limb based on current hand/sheath type.
+ * Uses the Z64O alias table from the active .pak model.
+ * @param player The player actor (for hand type info)
+ * @param limbIndex The limb being drawn
+ * @return Custom Gfx*, PAK_DL_STUB to hide, or NULL to use default
+ */
+#define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
+Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex);
+
+/**
+ * Check if the pak model used a combined DL for the given hand (includes weapon geometry).
+ * PostLimbDraw should skip drawing sword/shield separately when this returns true.
+ * @param isLeftHand 1 for left hand, 0 for right hand
+ * @return 1 if combined DL was used this frame
+ */
+u8 PakLoader_UsedCombinedDL(u8 isLeftHand);
+
+/**
+ * Get eye/mouth texture from the active pak model's zobj.
+ * Returns pointer to CI8 texture data, or NULL if no custom texture.
+ */
+void* PakLoader_GetEyeTexture(s32 eyeIndex);
+void* PakLoader_GetMouthTexture(s32 mouthIndex);
+
+/**
+ * Get the number of detected .pak models.
+ * @return Number of available models
+ */
+s32 PakLoader_GetModelCount(void);
+
+/**
+ * Get the display name of a model by index.
+ * @param index Model index (0 to count-1)
+ * @return Display name string, or NULL if invalid index
+ */
+const char* PakLoader_GetModelName(s32 index);
+
+/**
+ * Get the display LABEL of a model (display name prefixed with a category tag
+ * so a user can distinguish between same-named .pak / .zobj / .o2r entries).
+ * Prefixes: "[PAK] ", "[ZOBJ] ", "[O2R] ".
+ *
+ * Returns a pointer into a small internal rotating buffer — safe to use in a
+ * printf-style call that interleaves two model labels, but NOT thread-safe and
+ * NOT persistent across many calls. Copy if you need to keep it.
+ */
+const char* PakLoader_GetModelLabel(s32 index);
+
+/**
+ * Check if a model has an adult or child zobj.
+ * @param index Model index
+ * @return 1 if the model has that age's zobj ready
+ */
+u8 PakLoader_ModelHasAdult(s32 index);
+u8 PakLoader_ModelHasChild(s32 index);
+
+/**
+ * Select models per age. -1 to deselect (use default Link).
+ * Allows different models for adult and child Link.
+ */
+void PakLoader_SelectAdultModel(s32 index);
+void PakLoader_SelectChildModel(s32 index);
+
+/**
+ * Get currently selected model indices per age.
+ * @return Selected index, or -1 if none
+ */
+s32 PakLoader_GetSelectedAdultIndex(void);
+s32 PakLoader_GetSelectedChildIndex(void);
+
+/**
+ * Legacy: Select a model by index for both ages. -1 to deselect.
+ */
+void PakLoader_SelectModel(s32 index);
+
+/**
+ * Legacy: Get currently selected model index (adult).
+ */
+s32 PakLoader_GetSelectedIndex(void);
+
+/**
+ * Select equipment pak by index. -1 to deselect.
+ * Equipment pak DLs override body pak equipment DLs.
+ */
+void PakLoader_SelectEquipment(s32 index);
+s32 PakLoader_GetSelectedEquipIndex(void);
+
+/**
+ * Check if a model is an equipment-only pak (zzequipment).
+ */
+u8 PakLoader_ModelIsEquipmentOnly(s32 index);
+
+/**
+ * True iff a pak has at least one entry in its adultEquipDLs or childEquipDLs
+ * map — i.e. it can supply something to the Equipment Pack dropdown.
+ * Lets the menu list Combined paks (body + equipment) alongside dedicated
+ * zzequipment paks instead of hiding them.
+ */
+u8 PakLoader_ModelHasAnyEquipment(s32 index);
+
+// ============================================================================
+// Per-slot Equipment Mix
+// ============================================================================
+//
+// Lets the user override individual equipment pieces (Master Sword, Hylian
+// Shield, Hookshot, ...) from different paks while leaving everything else
+// inheriting from the global Equipment Pack selection or vanilla.
+//
+// Each "slot" groups the Z64O alias offsets that must travel together so
+// sheathed / unsheathed / combined renderings stay visually consistent — a
+// sword's sheath, hilt and blade always come from the same pak.
+
+/** Number of slots exposed (Kokiri/Master/Biggoron Sword, 3 shields, ranged,
+ *  tools, ocarinas, boots, gauntlets, child masks, etc.). */
+s32 PakLoader_GetSlotCount(void);
+
+/** Stable identifier for a slot ("Sword1", "Hookshot", "MaskKeaton", ...).
+ *  Used as the CVar suffix `gMods.PakLoader.SlotMix.<key>`. */
+const char* PakLoader_GetSlotKey(s32 slotIdx);
+
+/** Human-readable label for menu display ("Master Sword", ...). */
+const char* PakLoader_GetSlotLabel(s32 slotIdx);
+
+/** Returns 1 iff `pakIdx`'s adultEquipDLs or childEquipDLs contains at least
+ *  one alias from `slotIdx`'s group. Lets the menu only list paks that
+ *  actually have something for the slot. */
+u8 PakLoader_PakProvidesSlot(s32 pakIdx, s32 slotIdx);
+
+/** Bind a slot to a specific pak. -1 = inherit from the Equipment Pack
+ *  dropdown / body pak / vanilla cascade. */
+void PakLoader_SetSlotMix(s32 slotIdx, s32 pakIdx);
+
+/** Current binding for a slot (-1 if inheriting). */
+s32 PakLoader_GetSlotMix(s32 slotIdx);
+
+/**
+ * Force a specific .pak body model by file path (lazy-loaded).
+ * Used by custom items (e.g., Kafei Mask, Champion's Tunic).
+ * Has priority over user-selected models from the menu.
+ * @param pakPath Path to the .pak file (relative to exe dir)
+ */
+void PakLoader_ForceModel(const char* pakPath);
+
+/**
+ * Clear the forced body model, returning to user-selected or vanilla Link.
+ */
+void PakLoader_ClearForcedModel(void);
+
+/**
+ * Check if a forced body model is currently active.
+ * @return 1 if a forced model override is active
+ */
+u8 PakLoader_HasForcedModel(void);
+
+/**
+ * Get the displayName of the currently forced body model (for network sync).
+ * Returns NULL when no forced model is active. Used by Harpoon to broadcast
+ * Kafei/Champion's Tunic/etc. force-overrides to remote clients.
+ */
+const char* PakLoader_GetForcedModelName(void);
+
+/**
+ * Force a specific equipment .pak by file path (lazy-loaded).
+ * Used by custom items (e.g., Four Sword).
+ * Has priority over user-selected equipment from the menu.
+ * @param pakPath Path to the equipment .pak file (relative to exe dir)
+ */
+void PakLoader_ForceEquipment(const char* pakPath);
+
+/**
+ * Clear the forced equipment, returning to user-selected or vanilla.
+ */
+void PakLoader_ClearForcedEquipment(void);
+
+/**
+ * Called once per frame at the start of Player_Draw.
+ * Frees GbiWrap combined DLs from the previous frame.
+ */
+void PakLoader_FrameBegin(void);
+
+/**
+ * Cleanup and free all loaded model data.
+ */
+void PakLoader_Shutdown(void);
+
+// ============================================================================
+// Harpoon Sync — .pak only
+// ============================================================================
+// Sync-only .pak files dropped into harpoon/skins/ are loaded into the
+// same sModels vector as local mods/ paks but carry isSyncOnly=1 so they are
+// hidden from the local selection menu. They are surfaced exclusively through
+// BeginRemoteRender / EndRemoteRender, which the Harpoon dummy-draw path uses
+// to render a remote player with the appropriate .pak skeleton.
+//
+// .o2r handling for Harpoon — both the global mod list broadcast and per-actor
+// override application — lives entirely in the Harpoon skin-sync subsystem
+// (soh/Network/Harpoon/HarpoonSkinSync*). pak_loader is .pak only.
+
+/**
+ * Look up a LOCAL (mods/) pak by display name (package.json "name").
+ * Skips any isSyncOnly entries.
+ * @return index into sModels, or -1 if not found.
+ */
+s32 PakLoader_FindLocalIndexByName(const char* name);
+
+/**
+ * Look up a SYNC (harpoon/skins/) .pak by display name.
+ * @return index into sModels pointing at an isSyncOnly entry, or -1 if not found.
+ */
+s32 PakLoader_FindSyncIndexByName(const char* name);
+
+/**
+ * Begin rendering a remote dummy player with the given SYNC .pak index. Routes
+ * the pak_loader pipeline through that .pak's skeleton + equipment for the
+ * duration of one Player_Draw. Pass -1 to render the dummy with vanilla Link.
+ * MUST be paired with PakLoader_EndRemoteRender.
+ */
+void PakLoader_BeginRemoteRender(s32 syncIdx);
+
+/**
+ * End a remote-render block, restoring whatever forced/selected state was
+ * active before.
+ */
+void PakLoader_EndRemoteRender(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // PAK_LOADER_H

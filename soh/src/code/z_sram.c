@@ -8,6 +8,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 
 #define NUM_DUNGEONS 8
 #define NUM_COWS 10
@@ -159,9 +160,9 @@ void Sram_OpenSave() {
         osSyncPrintf(VT_FGCOL(BLUE));
         osSyncPrintf("\n====================================================================\n");
 
-        memcpy(gScarecrowCustomSongPtr, gSaveContext.scarecrowLongSong, sizeof(gSaveContext.scarecrowLongSong));
+        memcpy(gScarecrowLongSongPtr, gSaveContext.scarecrowLongSong, sizeof(gSaveContext.scarecrowLongSong));
 
-        ptr = (u8*)gScarecrowCustomSongPtr;
+        ptr = (u8*)gScarecrowLongSongPtr;
         for (i = 0; i < ARRAY_COUNT(gSaveContext.scarecrowLongSong); i++, ptr++) {
             osSyncPrintf("%d, ", *ptr);
         }
@@ -265,6 +266,14 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
         gSaveContext.ship.quest.id = QUEST_RANDOMIZER;
 
         Randomizer_InitSaveFile();
+    } else if (currentQuest == QUEST_OOTXMM && (Randomizer_IsSeedGenerated() || Randomizer_IsSpoilerLoaded())) {
+        // Fleet Ship Combo: a COMBO save is a randomizer save (IS_RANDO is true for QUEST_OOTXMM) that
+        // carries the combo seed (freshly GENERATED, or LOADED from a .fleet -> IsSpoilerLoaded),
+        // PAIRED with a MM slot. Init the rando save as usual, then tell MM to delete + recreate its
+        // own slot with the prepared seed and bake the start-in flag.
+        gSaveContext.ship.quest.id = QUEST_OOTXMM;
+        Randomizer_InitSaveFile();
+        FleetComboFS_OnCreateSave(fileChooseCtx->buttonIndex);
     } else {
         gSaveContext.ship.quest.id = currentQuest;
     }
@@ -276,5 +285,5 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
 void Sram_InitSram(GameState* gameState) {
     Save_Init();
 
-    func_800F6700(gSaveContext.audioSetting);
+    Audio_SetSoundOutputMode(gSaveContext.audioSetting);
 }

@@ -2,9 +2,8 @@
 
 #ifdef __cplusplus
 
-#include <libultraship/libultraship.h>
-
 #include <any>
+#include <cassert>
 #include <limits>
 #include <stdint.h>
 #include <unordered_map>
@@ -61,7 +60,7 @@ class ObjectExtension {
     }
 
     // Sets the data of type T for an object. Data will be copied.
-    template <typename T> void Set(const void* object, const T&& data) {
+    template <typename T> void Set(const void* object, const T& data) {
         assert(ObjectExtension::Register<T>::Id != InvalidId);
         if (object != nullptr) {
             Data[std::make_pair(object, ObjectExtension::Register<T>::Id)] = data;

@@ -1,0 +1,13 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_rito_shield/mat_gRitoShieldFrontTex"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldFront_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldFront_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldRim_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldRim_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldRim_tri_2"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldRim_tri_3"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/mat_gRitoShieldBackTex"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldBack_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_rito_shield/gRitoShieldBack_tri_1"/>
+	<EndDisplayList/>
+</DisplayList>

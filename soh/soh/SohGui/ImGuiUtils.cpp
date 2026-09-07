@@ -5,6 +5,15 @@
 #include "soh/Enhancements/randomizer/rando_hash.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
+#include <libultraship/libultraship.h>
+#include <fast/Fast3dGui.h>
+#include <fast/Fast3dGui.h>
+
+extern "C" {
+#include "textures/icon_item_static/icon_item_static.h"
+#include "textures/parameter_static/parameter_static.h"
+}
+
 std::map<uint32_t, ItemMapEntry> itemMapping = {
     ITEM_MAP_ENTRY(ITEM_STICK),
     ITEM_MAP_ENTRY(ITEM_NUT),
@@ -130,6 +139,91 @@ std::map<uint32_t, ItemMapEntry> itemMapping = {
     ITEM_MAP_ENTRY(ITEM_MAGIC_LARGE),
 };
 
+// Custom items mapping (second inventory page)
+std::map<uint32_t, ItemMapEntry> customItemMapping = {
+    { ITEM_ROCS_FEATHER_SKIJER,
+      { ITEM_ROCS_FEATHER_SKIJER, "ITEM_ROCS_FEATHER_SKIJER", "ITEM_ROCS_FEATHER_SKIJER_Faded",
+        (char*)gItemIconRocsFeatherTex } },
+    { ITEM_ROCS_CAPE, { ITEM_ROCS_CAPE, "ITEM_ROCS_CAPE", "ITEM_ROCS_CAPE_Faded", (char*)gItemIconRocsCapeTex } },
+    { ITEM_DESIRE_SENSOR,
+      { ITEM_DESIRE_SENSOR, "ITEM_DESIRE_SENSOR", "ITEM_DESIRE_SENSOR_Faded", (char*)gItemIconDesireSensorTex } },
+    { ITEM_HYLIAS_GRACE,
+      { ITEM_HYLIAS_GRACE, "ITEM_HYLIAS_GRACE", "ITEM_HYLIAS_GRACE_Faded", (char*)gItemIconHyliaGraceTex } },
+    { ITEM_ZONAI_PERMAFROST,
+      { ITEM_ZONAI_PERMAFROST, "ITEM_ZONAI_PERMAFROST", "ITEM_ZONAI_PERMAFROST_Faded",
+        (char*)gItemIconZonaiPermafrostTex } },
+    { ITEM_DEMISE_DESTRUCTION,
+      { ITEM_DEMISE_DESTRUCTION, "ITEM_DEMISE_DESTRUCTION", "ITEM_DEMISE_DESTRUCTION_Faded",
+        (char*)gItemIconDemiseDestructionTex } },
+    { ITEM_DEKU_LEAF, { ITEM_DEKU_LEAF, "ITEM_DEKU_LEAF", "ITEM_DEKU_LEAF_Faded", (char*)gItemIconDekuLeafTex } },
+    { ITEM_SWITCH_HOOK,
+      { ITEM_SWITCH_HOOK, "ITEM_SWITCH_HOOK", "ITEM_SWITCH_HOOK_Faded", (char*)gItemIconSwitchHookTex } },
+    { ITEM_MOGMA_MITTS,
+      { ITEM_MOGMA_MITTS, "ITEM_MOGMA_MITTS", "ITEM_MOGMA_MITTS_Faded", (char*)gItemIconMogmaMittsTex } },
+    { ITEM_GUST_JAR, { ITEM_GUST_JAR, "ITEM_GUST_JAR", "ITEM_GUST_JAR_Faded", (char*)gItemIconGustJarTex } },
+    { ITEM_BALL_AND_CHAIN,
+      { ITEM_BALL_AND_CHAIN, "ITEM_BALL_AND_CHAIN", "ITEM_BALL_AND_CHAIN_Faded", (char*)gItemIconBallAndChainTex } },
+    { ITEM_WHIP, { ITEM_WHIP, "ITEM_WHIP", "ITEM_WHIP_Faded", (char*)gItemIconWhipTex } },
+    { ITEM_SPINNER, { ITEM_SPINNER, "ITEM_SPINNER", "ITEM_SPINNER_Faded", (char*)gItemIconSpinnerTex } },
+    { ITEM_CANE_OF_SOMARIA,
+      { ITEM_CANE_OF_SOMARIA, "ITEM_CANE_OF_SOMARIA", "ITEM_CANE_OF_SOMARIA_Faded",
+        (char*)gItemIconCaneOfSomariaTex } },
+    { ITEM_DOMINION_ROD,
+      { ITEM_DOMINION_ROD, "ITEM_DOMINION_ROD", "ITEM_DOMINION_ROD_Faded", (char*)gItemIconDominionRodTex } },
+    { ITEM_TIME_GATE, { ITEM_TIME_GATE, "ITEM_TIME_GATE", "ITEM_TIME_GATE_Faded", (char*)gItemIconTimeGateTex } },
+    { ITEM_BOMB_ARROWS,
+      { ITEM_BOMB_ARROWS, "ITEM_BOMB_ARROWS", "ITEM_BOMB_ARROWS_Faded", (char*)gItemIconBombArrowsTex } },
+    { ITEM_ROD_FIRE, { ITEM_ROD_FIRE, "ITEM_ROD_FIRE", "ITEM_ROD_FIRE_Faded", (char*)gItemIconFireRodTex } },
+    { ITEM_ROD_ICE, { ITEM_ROD_ICE, "ITEM_ROD_ICE", "ITEM_ROD_ICE_Faded", (char*)gItemIconIceRodTex } },
+    { ITEM_ROD_LIGHT, { ITEM_ROD_LIGHT, "ITEM_ROD_LIGHT", "ITEM_ROD_LIGHT_Faded", (char*)gItemIconLightRodTex } },
+    { ITEM_BEETLE, { ITEM_BEETLE, "ITEM_BEETLE", "ITEM_BEETLE_Faded", (char*)gItemIconBeetleTex } },
+    { ITEM_SHOVEL, { ITEM_SHOVEL, "ITEM_SHOVEL", "ITEM_SHOVEL_Faded", (char*)gItemIconShovelTex } },
+    { ITEM_MINISH_CAP, { ITEM_MINISH_CAP, "ITEM_MINISH_CAP", "ITEM_MINISH_CAP_Faded", (char*)gItemIconMinishCapTex } },
+    { ITEM_LANTERN, { ITEM_LANTERN, "ITEM_LANTERN", "ITEM_LANTERN_Faded", (char*)gItemIconPending2Tex } },
+    { ITEM_CHATEAU_ROMANI,
+      { ITEM_CHATEAU_ROMANI, "ITEM_CHATEAU_ROMANI", "ITEM_CHATEAU_ROMANI_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconChateauRomaniTex" } }, // Skijer's NEI — use mm.o2r icon
+    { ITEM_POKEBALL, { ITEM_POKEBALL, "ITEM_POKEBALL", "ITEM_POKEBALL_Faded", (char*)gItemIconPokeballTex } },
+    // Rito Mask (Skijer's NEI): not a page-2 item — it shares the Farore's Wind cell,
+    // so it turns up in the PAGE-1 grid of the save editor. Without a row here that
+    // cell would find no texture and draw no button at all (dead cell).
+    { ITEM_RITO_MASK, { ITEM_RITO_MASK, "ITEM_RITO_MASK", "ITEM_RITO_MASK_Faded", (char*)gItemIconRitoMaskTex } },
+    // Bottle Randomizer custom items (Skijer's NEI). MM bottle contents use their REAL mm.o2r icons
+    // (icon_item_static_yar). Net + Bottomless are new items with pending placeholders (TODO: real
+    // textures in icon_item_custom).
+    { ITEM_GOLD_DUST,
+      { ITEM_GOLD_DUST, "ITEM_GOLD_DUST", "ITEM_GOLD_DUST_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledGoldDustTex" } },
+    { ITEM_HOT_SPRING_WATER,
+      { ITEM_HOT_SPRING_WATER, "ITEM_HOT_SPRING_WATER", "ITEM_HOT_SPRING_WATER_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconHotSpringWaterTex" } },
+    { ITEM_DEKU_PRINCESS,
+      { ITEM_DEKU_PRINCESS, "ITEM_DEKU_PRINCESS", "ITEM_DEKU_PRINCESS_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledDekuPrincessTex" } },
+    { ITEM_SEAHORSE,
+      { ITEM_SEAHORSE, "ITEM_SEAHORSE", "ITEM_SEAHORSE_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledSeahorseTex" } },
+    { ITEM_SPRING_WATER,
+      { ITEM_SPRING_WATER, "ITEM_SPRING_WATER", "ITEM_SPRING_WATER_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconSpringWaterTex" } },
+    { ITEM_ZORA_EGG,
+      { ITEM_ZORA_EGG, "ITEM_ZORA_EGG", "ITEM_ZORA_EGG_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledZoraEggTex" } },
+    { ITEM_HYLIAN_LOACH,
+      { ITEM_HYLIAN_LOACH, "ITEM_HYLIAN_LOACH", "ITEM_HYLIAN_LOACH_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledHylianLoachTex" } },
+    { ITEM_OBABA_DRINK,
+      { ITEM_OBABA_DRINK, "ITEM_OBABA_DRINK", "ITEM_OBABA_DRINK_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconEmptyBottle2Tex" } },
+    { ITEM_MAGIC_MUSHROOM,
+      { ITEM_MAGIC_MUSHROOM, "ITEM_MAGIC_MUSHROOM", "ITEM_MAGIC_MUSHROOM_Faded",
+        (char*)"__OTR__icon_item_static_yar/gItemIconBottledMushroomTex" } },
+    { ITEM_NET, { ITEM_NET, "ITEM_NET", "ITEM_NET_Faded", (char*)gItemIconNetTex } },
+    { ITEM_BOTTOMLESS_BOTTLE,
+      { ITEM_BOTTOMLESS_BOTTLE, "ITEM_BOTTOMLESS_BOTTLE", "ITEM_BOTTOMLESS_BOTTLE_Faded",
+        (char*)gItemIconBottomlessBottleTex } },
+};
+
 std::map<uint32_t, ItemMapEntry> gregMapping = {
     { ITEM_RUPEE_GREEN, { ITEM_RUPEE_GREEN, "ITEM_RUPEE_GREEN", "ITEM_RUPEE_GREEN_Faded", gRupeeCounterIconTex } }
 };
@@ -148,13 +242,13 @@ std::map<uint32_t, ItemMapEntry> customItemsMapping = {
     { RG_BONGO_BONGO_SOUL, { RG_BONGO_BONGO_SOUL, "RG_BONGO_BONGO_SOUL", "RG_BONGO_BONGO_SOUL_Faded", gBossSoulTex } },
     { RG_TWINROVA_SOUL, { RG_TWINROVA_SOUL, "RG_TWINROVA_SOUL", "RG_TWINROVA_SOUL_Faded", gBossSoulTex } },
     { RG_GANON_SOUL, { RG_GANON_SOUL, "RG_GANON_SOUL", "RG_GANON_SOUL_Faded", gBossSoulTex } },
-    { RG_OPEN_CHEST, { RG_OPEN_CHEST, "RG_OPEN_CHEST", "RG_OPEN_CHEST_Faded", gMapChestIconTex } }
-};
-
-std::map<uint32_t, ItemMapEntry> actionShuffleMapping = {
-    { RG_CRAWL, { RG_CRAWL, "RG_CRAWL", "RG_CRAWL_Faded", gButtonBackgroundTex } },
-    { RG_CLIMB, { RG_CLIMB, "RG_CLIMB", "RG_CLIMB_Faded", gButtonBackgroundTex } },
-    { RG_POWER_BRACELET, { RG_POWER_BRACELET, "RG_POWER_BRACELET", "RG_POWER_BRACELET_Faded", gButtonBackgroundTex } },
+    { RG_OPEN_CHEST, { RG_OPEN_CHEST, "RG_OPEN_CHEST", "RG_OPEN_CHEST_Faded", gOpenChestsTex } },
+    { RG_CRAWL, { RG_CRAWL, "RG_CRAWL", "RG_CRAWL_Faded", gCrawlTex } },
+    { RG_CLIMB, { RG_CLIMB, "RG_CLIMB", "RG_CLIMB_Faded", gClimbTex } },
+    {
+        RG_POWER_BRACELET,
+        { RG_POWER_BRACELET, "RG_POWER_BRACELET", "RG_POWER_BRACELET_Faded", gGrabTex },
+    },
 };
 
 std::map<uint32_t, ItemMapEntry> jabbernutMapping = {
@@ -215,68 +309,74 @@ const char* GetTextureForItemId(uint32_t itemId) {
 
 void RegisterImGuiItemIcons() {
     for (const auto& entry : itemMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            ImVec4(1, 1, 1, 1));
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(
-            entry.second.nameFaded, entry.second.texturePath, ImVec4(1, 1, 1, 0.3f));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", ImVec4(1, 1, 1, 1));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", ImVec4(1, 1, 1, 0.3f));
+    }
+
+    for (const auto& entry : customItemMapping) {
+        // Custom item icons are in soh.o2r — skip if resource not found (OTR not regenerated yet)
+        auto res = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(entry.second.texturePath, true);
+        if (res) {
+            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", ImVec4(1, 1, 1, 1));
+            std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+                ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", ImVec4(1, 1, 1, 0.3f));
+        }
     }
 
     for (const auto& entry : gregMapping) {
         ImVec4 gregGreen = ImVec4(42.0f / 255.0f, 169.0f / 255.0f, 40.0f / 255.0f, 1.0f);
         ImVec4 gregFadedGreen = gregGreen;
         gregFadedGreen.w = 0.3f;
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            gregGreen);
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.nameFaded,
-                                                                            entry.second.texturePath, gregFadedGreen);
-    }
-
-    for (const auto& entry : actionShuffleMapping) {
-        ImVec4 aButtonBlue = ImVec4(90.f / 255.f, 90.f / 250.f, 255.f / 255.f, 255.f / 255.f);
-        ImVec4 aButtonBlueFaded = aButtonBlue;
-        aButtonBlueFaded.w = 0.3f;
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            aButtonBlue);
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.nameFaded,
-                                                                            entry.second.texturePath, aButtonBlueFaded);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", gregGreen);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", gregFadedGreen);
     }
 
     for (const auto& entry : customItemsMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            ImVec4(1, 1, 1, 1));
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(
-            entry.second.nameFaded, entry.second.texturePath, ImVec4(1, 1, 1, 0.3f));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", ImVec4(1, 1, 1, 1));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", ImVec4(1, 1, 1, 0.3f));
     }
 
     for (const auto& entry : jabbernutMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            ImVec4(1, 1, 1, 1));
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(
-            entry.second.nameFaded, entry.second.texturePath, ImVec4(1, 1, 1, 0.3f));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", ImVec4(1, 1, 1, 1));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", ImVec4(1, 1, 1, 0.3f));
     }
 
     for (const auto& entry : questMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.second.name, entry.second.texturePath,
-                                                                            ImVec4(1, 1, 1, 1));
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(
-            entry.second.nameFaded, entry.second.texturePath, ImVec4(1, 1, 1, 0.3f));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.name, entry.second.texturePath, "", ImVec4(1, 1, 1, 1));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.second.nameFaded, entry.second.texturePath, "", ImVec4(1, 1, 1, 0.3f));
     }
 
     for (const auto& [quest, entry] : songMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.name, gSongNoteTex, entry.color);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.name, gSongNoteTex, "", entry.color);
         ImVec4 fadedCol = entry.color;
         fadedCol.w = 0.3f;
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.nameFaded, gSongNoteTex, fadedCol);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.nameFaded, gSongNoteTex, "", fadedCol);
     }
 
     for (const auto& entry : vanillaSongMapping) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.name, gSongNoteTex, entry.color);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.name, gSongNoteTex, "", entry.color);
         ImVec4 fadedCol = entry.color;
         fadedCol.w = 0.3f;
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.nameFaded, gSongNoteTex, fadedCol);
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.nameFaded, gSongNoteTex, "", fadedCol);
     }
 
     for (const auto& entry : gSeedTextures) {
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->LoadGuiTexture(entry.tex, entry.tex, ImVec4(1, 1, 1, 1));
+        std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui())
+            ->LoadGuiTexture(entry.tex, entry.tex, "", ImVec4(1, 1, 1, 1));
     }
 }

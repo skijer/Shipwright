@@ -120,7 +120,7 @@ void SohMenu::AddMenuDevTools() {
                      .ComboMap(logLevels)
                      .DefaultIndex(defaultLogLevel))
         .Callback([](WidgetInfo& info) {
-            Ship::Context::GetInstance()->GetLogger()->set_level(
+            Ship::Context::GetRawInstance()->GetLogger()->set_level(
                 (spdlog::level::level_enum)CVarGetInteger(CVAR_DEVELOPER_TOOLS("LogLevel"), defaultLogLevel));
         });
 
@@ -192,6 +192,16 @@ void SohMenu::AddMenuDevTools() {
         .WindowName("Actor Viewer")
         .HideInSearch(true)
         .Options(WindowButtonOptions().Tooltip("Enables the separate Actor Viewer Window."));
+
+    // Animation Viewer
+    path.sidebarName = "Anim Viewer";
+    AddSidebarEntry("Dev Tools", path.sidebarName, 1);
+    AddWidget(path, "Popout Animation Viewer", WIDGET_WINDOW_BUTTON)
+        .CVar(CVAR_WINDOW("AnimationViewer"))
+        .WindowName("Animation Viewer")
+        .HideInSearch(true)
+        .Options(WindowButtonOptions().Tooltip("Enables the separate Animation Viewer Window. "
+                                               "Preview any of Link's animations on the live player."));
 
     // Display List Viewer
     path.sidebarName = "DList Viewer";

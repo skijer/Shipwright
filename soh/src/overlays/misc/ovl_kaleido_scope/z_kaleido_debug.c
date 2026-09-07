@@ -1,5 +1,6 @@
 #include "z_kaleido_scope.h"
 #include "textures/parameter_static/parameter_static.h"
+#include "mods/items/custom_bottles.h" // Net/Bottomless ownership (Skijer's NEI)
 
 // Positions of each input section in the editor
 static u16 sSectionPositions[][2] = {
@@ -501,7 +502,27 @@ void KaleidoScope_DrawDebugEditor(PlayState* play) {
                             gSaveContext.inventory.items[i]--;
                         }
                     }
-                } else if ((i >= SLOT_BOTTLE_1) && (i <= SLOT_BOTTLE_4)) {
+                } else if ((i == SLOT_BOTTLE_3) || (i == SLOT_BOTTLE_4)) {
+                    // Bottle Randomizer (Skijer's NEI): these slots belong to the Net / Bottomless
+                    // Bottle — no vanilla bottles can be assigned here anymore (the runtime residue
+                    // killer would migrate them anyway). Toggle ownership instead.
+                    if (CHECK_BTN_ALL(input->press.button, BTN_CUP)) {
+                        if (i == SLOT_BOTTLE_3) {
+                            Bottle_SetNetOwned(0);
+                            gSaveContext.inventory.items[i] = ITEM_NONE;
+                        } else {
+                            Bottle_SetBottomlessOwned(0);
+                            gSaveContext.inventory.items[i] = ITEM_NONE;
+                        }
+                    } else if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT) ||
+                               CHECK_BTN_ALL(input->press.button, BTN_CRIGHT)) {
+                        if (i == SLOT_BOTTLE_3) {
+                            Bottle_SetNetOwned(1); // enforcer projects ITEM_NET
+                        } else {
+                            Bottle_SetBottomlessOwned(1); // enforcer projects the bottomless
+                        }
+                    }
+                } else if ((i >= SLOT_BOTTLE_1) && (i <= SLOT_BOTTLE_2)) {
                     if (CHECK_BTN_ALL(input->press.button, BTN_CUP)) {
                         Inventory_DeleteItem(ITEM_BOTTLE + i - SLOT_BOTTLE_1, SLOT(ITEM_BOTTLE) + i - SLOT_BOTTLE_1);
                     } else if (CHECK_BTN_ALL(input->press.button, BTN_CLEFT)) {

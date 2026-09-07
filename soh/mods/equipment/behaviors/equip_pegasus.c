@@ -1,0 +1,543 @@
+/**
+ * equip_pegasus.c - Pegasus Anklet (Extended Boots Slot 1)
+ *
+ * Behavior: B-hold dash with sword extended, wind barrier, wall bonk.
+ * - Intercepts spin attack charge: when B is held after a swing, Link dashes forward
+ * - Sword extended via limb rotation
+ * - Wind barrier (greenish) in front costs 1 MP per 15 frames
+ * - Without magic: still runs and deals damage, no barrier
+ * - Wall collision = bonk → return to idle
+ *
+ * Included by ext_equip_behavior.c (unity build).
+ */
+
+// No extra includes — unity-built from ext_equip_behavior.c
+// which inherits all includes from extended_equipment.c
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+#define PEGASUS_WINDUP_FRAMES 10
+#define PEGASUS_DASH_SPEED 18.0f
+#define PEGASUS_LEG_PLAYSPEED 3.0f // how fast the run cycle itself plays during the dash
+#define PEGASUS_BONK_FRAMES 20
+#define PEGASUS_BONK_RECOIL -6.0f
+#define PEGASUS_MAGIC_INTERVAL 15 // Drain 1 MP every N frames
+#define PEGASUS_COL_RADIUS 50
+#define PEGASUS_COL_HEIGHT 80
+#define PEGASUS_COL_FORWARD 40.0f // Collider offset in front of Link
+
+// Stab pose: hardcoded upper body joint rotations matching BGS forward thrust.
+// Values in s16 (0x4000 = 90 degrees). Only upper body is overridden;
+// lower body keeps the running animation.
+
+// ---------------------------------------------------------------------------
+// State helpers
+// ---------------------------------------------------------------------------
+// Back-to-idle action reset (z_player.c, non-static): Player_Action_Idle + idle
+// anim + yaw resync. Same helper the NEI mailbox/mushroom actors use.
+extern void func_80853080(Player* this, PlayState* play);
+
+static u8 sPegasusCrateBonk = 0;  // AT collider smashed a crate this frame → force bonk
+static u8 sPegasusNeedsReset = 0; // dash ended while airborne → reset action on landing
+
+// ---------------------------------------------------------------------------
+// Collider
+// ---------------------------------------------------------------------------
+static ColliderCylinder sPegasusCol;
+
+static ColliderCylinderInit sPegasusColInit = { { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE,
+                                                  COLSHAPE_CYLINDER },
+                                                { ELEMTYPE_UNK2,
+                                                  { 0x00000100, 0x00, 0x04 }, // DMG_SLASH, 4 damage
+                                                  { 0, 0, 0 },
+                                                  TOUCH_ON | TOUCH_SFX_NORMAL,
+                                                  BUMP_NONE,
+                                                  OCELEM_NONE },
+                                                { PEGASUS_COL_RADIUS, PEGASUS_COL_HEIGHT, 0, { 0, 0, 0 } } };
+
+// How much faster the leg cycle turns over than the speed alone would give.
+//
+// Asked for by func_8084029C, in z_player.c, AFTER it clamps the phase rate — that
+// clamp (7.25 a frame) is what the dash saturates, and it is why raising
+// skelAnime.playSpeed changed nothing: the locomotion actions LOAD the joint table
+// from unk_868 and never consult playSpeed at all. 1.0f whenever nobody is dashing.
+// Skijer's NEI
+f32 ExtEquip_LegCycleRateMul(void) {
+    return (gExtEquipBehavior.pegasusState == PEGASUS_RUNNING) ? PEGASUS_LEG_PLAYSPEED : 1.0f;
+}
+
+static void Pegasus_InitCollider(PlayState* play, Player* p) {
+    if (gExtEquipBehavior.pegasusColInit)
+        return;
+    Collider_InitCylinder(play, &sPegasusCol);
+    Collider_SetCylinder(play, &sPegasusCol, &p->actor, &sPegasusColInit);
+    gExtEquipBehavior.pegasusColInit = 1;
+}
+
+static void Pegasus_UpdateCollider(PlayState* play, Player* p) {
+    f32 sinY = Math_SinS(p->actor.shape.rot.y);
+    f32 cosY = Math_CosS(p->actor.shape.rot.y);
+
+    sPegasusCol.dim.pos.x = (s16)(p->actor.world.pos.x + sinY * PEGASUS_COL_FORWARD);
+    sPegasusCol.dim.pos.y = (s16)(p->actor.world.pos.y);
+    sPegasusCol.dim.pos.z = (s16)(p->actor.world.pos.z + cosY * PEGASUS_COL_FORWARD);
+
+    sPegasusCol.base.atFlags |= AT_ON | AT_TYPE_PLAYER;
+    CollisionCheck_SetAT(play, &play->colChkCtx, &sPegasusCol.base);
+
+    // Check and clear hit
+    if (sPegasusCol.base.atFlags & AT_HIT) {
+        // Smashing a crate ends the dash with a bonk, same as ramming it as a wall.
+        // Without this, the AT collider breaks the crate before the wall touch
+        // registers and the dash blows through it only sometimes (inconsistent).
+        Actor* hitActor = sPegasusCol.base.at;
+        if (hitActor != NULL && (hitActor->id == ACTOR_OBJ_KIBAKO || hitActor->id == ACTOR_OBJ_KIBAKO2)) {
+            sPegasusCrateBonk = 1;
+        }
+        Audio_PlaySoundGeneral(NA_SE_IT_SWORD_STRIKE, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        sPegasusCol.base.atFlags &= ~AT_HIT;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Stop / Cleanup
+// ---------------------------------------------------------------------------
+// Return the player to a clean vanilla action after a dash. The dash runs on top
+// of the spin-charge action (Player_Action_80845000 charge-walk); leaving that
+// action active after the dash ends is what caused inverted controls — charge-walk
+// moves the stick relative to the locked facing instead of the camera.
+static void Pegasus_ResetPlayer(Player* p, PlayState* play) {
+    p->linearVelocity = 0.0f;
+    p->actor.speedXZ = 0.0f;
+    p->unk_858 = 0.0f; // spin charge amount
+    p->actor.world.rot.y = p->actor.shape.rot.y;
+    p->yaw = p->actor.shape.rot.y;
+    func_80853080(p, play); // Player_Action_Idle + idle anim + yaw resync
+    sPegasusNeedsReset = 0;
+}
+
+// resetAction: when stopping an actual dash (RUNNING/BONK), kick the player back
+// to the idle action so the hijacked spin-charge action doesn't linger. Pass 0
+// from the windup cancel (charge action still owns the player and exits itself)
+// and from the cutscene/death path (the cutscene owns the player).
+static void Pegasus_Stop(Player* p, PlayState* play, s32 resetAction) {
+    s32 wasDashing =
+        (gExtEquipBehavior.pegasusState == PEGASUS_RUNNING) || (gExtEquipBehavior.pegasusState == PEGASUS_BONK);
+
+    gExtEquipBehavior.pegasusState = PEGASUS_IDLE;
+    gExtEquipBehavior.pegasusTimer = 0;
+    gExtEquipBehavior.pegasusMagicTick = 0;
+    sPegasusCrateBonk = 0;
+    // (stab pose is per-frame, no state to reset)
+    p->stateFlags1 &= ~PLAYER_STATE1_CHARGING_SPIN_ATTACK;
+    p->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
+    p->actor.gravity = -1.2f;
+    sPegasusCol.base.atFlags &= ~AT_ON;
+
+    if (resetAction && wasDashing) {
+        if (p->actor.bgCheckFlags & 0x0001) {
+            Pegasus_ResetPlayer(p, play);
+        } else {
+            // Airborne (dash off a ledge): finish the reset on landing —
+            // this is the "controls invert after landing" case.
+            sPegasusNeedsReset = 1;
+        }
+    }
+}
+
+// Full cleanup when Pegasus boots are unequipped (disables collider completely)
+static void Pegasus_Cleanup(void) {
+    // A dash in progress must be released here or the hijacked charge-walk action, its player
+    // flags and gravity survive the unequip — the documented "inverted controls" state, for good.
+    if ((gPlayState != NULL) && (gExtEquipBehavior.pegasusState != PEGASUS_IDLE)) {
+        Pegasus_Stop(GET_PLAYER(gPlayState), gPlayState, 1);
+    }
+    if (gExtEquipBehavior.pegasusColInit) {
+        sPegasusCol.base.atFlags &= ~(AT_ON | AT_TYPE_PLAYER);
+        sPegasusCol.base.acFlags = AC_NONE;
+        sPegasusCol.base.ocFlags1 = OC1_NONE;
+    }
+    gExtEquipBehavior.pegasusState = PEGASUS_IDLE;
+    gExtEquipBehavior.pegasusTimer = 0;
+    gExtEquipBehavior.pegasusMagicTick = 0;
+    sPegasusCrateBonk = 0;
+    sPegasusNeedsReset = 0;
+}
+
+// ---------------------------------------------------------------------------
+// Apply sword-forward limb pose
+// ---------------------------------------------------------------------------
+static void Pegasus_ApplyPose(Player* p, PlayState* play) {
+    // Load BGS stab frame 2 into upperJointTable (async — ready next frame)
+    AnimationContext_SetLoadFrame(play, &gPlayerAnim_link_fighter_Lpierce_kiru, 2, p->skelAnime.limbCount,
+                                  p->upperJointTable);
+
+    // Copy upper body joints from upperJointTable (loaded previous frame) into jointTable
+    // Lower body (ROOT=1, WAIST=2, LOWER=3, thighs=4/7, shins=5/8, feet=6/9) keeps run_free
+    for (s32 i = PLAYER_LIMB_UPPER; i < PLAYER_LIMB_MAX; i++) {
+        p->skelAnime.jointTable[i] = p->upperJointTable[i];
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State: Idle - monitor for B-hold to start dash
+// ---------------------------------------------------------------------------
+static void Pegasus_StateIdle(Player* p, PlayState* play) {
+    // Detect: B button held + on ground + has a sword (kokiri, master, etc.)
+    u8 bHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B);
+
+    if (!bHeld)
+        return;
+
+    // Only activate when the charge attack is about to start (unk_858 building up)
+    // or the player just finished a swing and is holding B
+    if (!(p->actor.bgCheckFlags & 0x0001)) // Must be on ground
+        return;
+    if (p->stateFlags1 & PLAYER_STATE1_IN_WATER) // Not in water
+        return;
+
+    if (p->heldItemAction < PLAYER_IA_SWORD_MASTER || p->heldItemAction > PLAYER_IA_SWORD_BIGGORON) {
+        // Check for Byrna (Kokiri IA) too
+        if (p->heldItemAction != PLAYER_IA_SWORD_KOKIRI)
+            return;
+    }
+
+    // Check if the charge is building (vanilla spin attack charge)
+    if (p->unk_858 >= 0.1f || (p->stateFlags1 & PLAYER_STATE1_CHARGING_SPIN_ATTACK)) {
+        // Intercept! Reset spin attack charge and enter windup
+        p->unk_858 = 0.0f;
+        gExtEquipBehavior.pegasusState = PEGASUS_WINDUP;
+        gExtEquipBehavior.pegasusTimer = PEGASUS_WINDUP_FRAMES;
+        p->stateFlags1 |= PLAYER_STATE1_CHARGING_SPIN_ATTACK;
+        p->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
+
+        // Stab pose applied per-frame in Pegasus_StateRunning
+
+        Audio_PlaySoundGeneral(NA_SE_PL_WALK_GROUND, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State: Windup - brief charge-up before dash
+// ---------------------------------------------------------------------------
+static void Pegasus_StateWindup(Player* p, PlayState* play) {
+    u8 bHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B);
+
+    // Cancel if B released (no action reset: the charge action exits on its own)
+    if (!bHeld) {
+        Pegasus_Stop(p, play, 0);
+        return;
+    }
+
+    // Keep spin attack charge suppressed
+    p->unk_858 = 0.0f;
+    p->actor.speedXZ = 0.0f;
+    p->linearVelocity = 0.0f;
+
+    gExtEquipBehavior.pegasusTimer--;
+    if (gExtEquipBehavior.pegasusTimer <= 0) {
+        gExtEquipBehavior.pegasusState = PEGASUS_RUNNING;
+        gExtEquipBehavior.pegasusMagicTick = 0;
+
+        Pegasus_InitCollider(play, p);
+
+        Audio_PlaySoundGeneral(NA_SE_IT_SWORD_SWING_HARD, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State: Running - full speed dash with sword forward
+// ---------------------------------------------------------------------------
+static void Pegasus_StateRunning(Player* p, PlayState* play) {
+    u8 bHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B);
+
+    // Stop if B released or in water
+    if (!bHeld || (p->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+        Pegasus_Stop(p, play, 1);
+        return;
+    }
+
+    // Keep spin attack suppressed
+    p->unk_858 = 0.0f;
+    p->stateFlags1 |= PLAYER_STATE1_CHARGING_SPIN_ATTACK;
+
+    // Steering: use stick X for turning (negate: stick right = positive = turn right)
+    f32 stickX = play->state.input[0].rel.stick_x;
+    if (fabsf(stickX) > 10.0f) {
+        p->actor.shape.rot.y -= (s16)(stickX * 5.0f);
+    }
+    p->actor.world.rot.y = p->actor.shape.rot.y;
+    p->yaw = p->actor.shape.rot.y;
+
+    // Use engine velocity so wall collision detection works (bgCheckFlags 0x200)
+    p->linearVelocity = PEGASUS_DASH_SPEED;
+    p->actor.speedXZ = PEGASUS_DASH_SPEED;
+
+    // Force running animation on lower body (legs keep moving)
+    // The skeleton plays this animation for ALL limbs, then ApplyPose
+    // overrides only the upper body limbs — legs stay running
+    // ⚠️ playSpeed NO mueve estas piernas, y por eso subirlo no hacía nada.
+    //
+    // Mientras corres, Link está en la acción de carga EN MOVIMIENTO, y ésa no
+    // reproduce el clip: CARGA la tabla de joints desde unk_868
+    // (LinkAnimation_BlendToJoint / LoadToJoint). skelAnime.playSpeed no se consulta
+    // en ningún momento de ese camino. La cadencia real es el ritmo de unk_868, que
+    // además satura en 7.25 por frame mucho antes de que el dash llegue a su
+    // velocidad. Quien la sube de verdad es ExtEquip_LegCycleRateMul, un multiplicador
+    // que func_8084029C aplica DESPUÉS del clamp.
+    //
+    // El Change se queda porque es el que deja el clip puesto para los frames en que
+    // Link sí está en la acción de carga QUIETA (esa sí llama LinkAnimation_Update).
+    if (p->skelAnime.animation != &gPlayerAnim_link_normal_run_free) {
+        LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_normal_run_free, PEGASUS_LEG_PLAYSPEED, 0.0f,
+                             Animation_GetLastFrame(&gPlayerAnim_link_normal_run_free), ANIMMODE_LOOP, -6.0f);
+    } else {
+        p->skelAnime.playSpeed = PEGASUS_LEG_PLAYSPEED;
+    }
+
+    // Apply stab pose on upper body (lower body keeps running anim)
+    Pegasus_ApplyPose(p, play);
+
+    // Collider + magic drain: only when has magic
+    if (gSaveContext.magic > 0) {
+        Pegasus_UpdateCollider(play, p);
+
+        gExtEquipBehavior.pegasusMagicTick++;
+        if (gExtEquipBehavior.pegasusMagicTick >= PEGASUS_MAGIC_INTERVAL) {
+            gExtEquipBehavior.pegasusMagicTick = 0;
+            gSaveContext.magic--;
+            if (gSaveContext.magic < 0)
+                gSaveContext.magic = 0;
+        }
+    } else {
+        // No magic: disable collider
+        sPegasusCol.base.atFlags &= ~AT_ON;
+        gExtEquipBehavior.pegasusMagicTick = 0;
+    }
+
+    // Loop running sound
+    Actor_PlaySfx_Flagged(&p->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
+
+    // Wall bonk check — replicate roll bonk behavior from z_player.c:10059
+    // Check bgCheckFlags 0x200 (PLAYER_WALL_INTERACT) which the engine sets
+    // when linearVelocity-based movement hits a wall
+    {
+        Actor* ocCollidedActor = NULL;
+        u8 doBonk = 0;
+
+        // Crate smashed by the AT collider this frame → always bonk, consistent
+        // with hitting it as a wall (vanilla roll also bonks when breaking crates)
+        if (sPegasusCrateBonk) {
+            sPegasusCrateBonk = 0;
+            doBonk = 1;
+        }
+
+        // Wall collision (same flag roll uses)
+        if (p->actor.bgCheckFlags & 0x200) {
+            // Check angle to wall — must be roughly facing it
+            s16 yawDiff = p->yaw - (s16)(p->actor.wallYaw + 0x8000);
+            if (ABS(yawDiff) < 0x2000) {
+                doBonk = 1;
+
+                // Signal breakable crates (OBJ_KIBAKO2)
+                if (p->actor.wallBgId != BGCHECK_SCENE) {
+                    DynaPolyActor* wallPolyActor = DynaPoly_GetActor(&play->colCtx, p->actor.wallBgId);
+                    if (wallPolyActor != NULL) {
+                        wallPolyActor->actor.home.rot.z = 1;
+                    }
+                }
+            }
+        }
+
+        // OC collision with trees (EN_WOOD02) — same as roll
+        if (p->cylinder.base.ocFlags1 & OC1_HIT) {
+            ocCollidedActor = p->cylinder.base.oc;
+            if (ocCollidedActor != NULL && ocCollidedActor->id == ACTOR_EN_WOOD02) {
+                if (ABS((s16)(p->actor.world.rot.y - ocCollidedActor->yawTowardsPlayer)) > 0x6000) {
+                    ocCollidedActor->home.rot.y = 1; // Signal tree to drop
+                    doBonk = 1;
+                }
+            }
+        }
+
+        if (doBonk) {
+            // Bonk: play hip_down animation, reverse velocity, quake, sounds
+            // (exact roll bonk from z_player.c:10079-10088)
+            LinkAnimation_Change(play, &p->skelAnime, &gPlayerAnim_link_normal_hip_down_free, 1.0f, 0.0f,
+                                 Animation_GetLastFrame(&gPlayerAnim_link_normal_hip_down_free), ANIMMODE_ONCE, -6.0f);
+
+            p->linearVelocity = -p->linearVelocity;
+            p->stateFlags1 &= ~PLAYER_STATE1_CHARGING_SPIN_ATTACK;
+
+            // Quake + rumble
+            Quake_Add(Play_GetCamera(play, 0), 3);
+            Rumble_Request(255.0f, 20, 150, 0);
+
+            // Bonk sounds
+            Audio_PlaySoundGeneral(NA_SE_PL_BODY_HIT, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            Audio_PlaySoundGeneral(NA_SE_VO_LI_CLIMB_END, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+
+            gExtEquipBehavior.pegasusState = PEGASUS_BONK;
+            gExtEquipBehavior.pegasusTimer = 0; // Timer not used — wait for anim to finish
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// State: Bonk - wall hit recovery
+// ---------------------------------------------------------------------------
+static void Pegasus_StateBonk(Player* p, PlayState* play) {
+    // Lock input during bonk
+    p->stateFlags1 &= ~PLAYER_STATE1_CHARGING_SPIN_ATTACK;
+
+    // Decelerate (reverse velocity from bonk)
+    Math_StepToF(&p->linearVelocity, 0.0f, 2.0f);
+    p->actor.speedXZ = fabsf(p->linearVelocity);
+
+    // Wait for hip_down animation to finish
+    if (LinkAnimation_Update(play, &p->skelAnime)) {
+        Pegasus_Stop(p, play, 1);
+    }
+}
+
+// Wind spell texture (from z_magic_wind.inc.c)
+extern char sWindEffTexture[];
+
+// ---------------------------------------------------------------------------
+// Cone barrier vertices: tip in front (Y=0), base behind Link (Y=8000)
+// 8 segments around the cone base, 1 tip vertex = 9 verts
+// ---------------------------------------------------------------------------
+static Vtx sPegasusConeFrontVtx[] = {
+    // 0: Tip (front, converges to a point)
+    VTX(0, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    // 1-8: Base ring (behind Link, radius 4000)
+    VTX(4000, 8000, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(2828, 8000, 2828, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 8000, 4000, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-2828, 8000, 2828, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-4000, 8000, 0, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-2828, 8000, -2828, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 8000, -4000, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(2828, 8000, -2828, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00),
+};
+
+// Cone DL without texture load (texture loaded at runtime to avoid OTR path resolution crash)
+static Gfx gfx_pegasus_cone_geo[] = {
+    gsDPSetCombineLERP(TEXEL1, PRIMITIVE, PRIM_LOD_FRAC, TEXEL0, TEXEL1, TEXEL0, PRIM_LOD_FRAC, TEXEL0, PRIMITIVE,
+                       ENVIRONMENT, COMBINED, ENVIRONMENT, COMBINED, 0, SHADE, 0),
+    gsDPSetRenderMode(G_RM_PASS, G_RM_AA_ZB_XLU_SURF2),
+    gsSPClearGeometryMode(G_CULL_BACK | G_FOG | G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR),
+    gsDPSetPrimColor(0, 0x80, 255, 255, 170, 255),
+    gsDPSetEnvColor(100, 255, 50, 0),
+    // Segment 0x08: animated tex scroll (set per-frame before drawing)
+    gsSPDisplayList(0x08000001),
+    gsSPVertex(sPegasusConeFrontVtx, 9, 0),
+    gsSP2Triangles(0, 1, 2, 0, 0, 2, 3, 0),
+    gsSP2Triangles(0, 3, 4, 0, 0, 4, 5, 0),
+    gsSP2Triangles(0, 5, 6, 0, 0, 6, 7, 0),
+    gsSP2Triangles(0, 7, 8, 0, 0, 8, 1, 0),
+    gsSPEndDisplayList(),
+};
+
+// ---------------------------------------------------------------------------
+// Draw: Wind cone barrier (called from ExtEquip_DrawDispatch)
+// Cone tip in front of Link, base opens behind covering him
+// ---------------------------------------------------------------------------
+static void Pegasus_Draw(Player* p, PlayState* play) {
+    if (gExtEquipBehavior.pegasusState != PEGASUS_RUNNING)
+        return;
+
+    if (gSaveContext.magic <= 0)
+        return;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+
+    Matrix_Push();
+    // Position at Link's chest height, cone tip far in front
+    f32 sinY = Math_SinS(p->actor.shape.rot.y);
+    f32 cosY = Math_CosS(p->actor.shape.rot.y);
+    Matrix_Translate(p->actor.world.pos.x + sinY * 80.0f, p->actor.world.pos.y + 40.0f,
+                     p->actor.world.pos.z + cosY * 80.0f, MTXMODE_NEW);
+    Matrix_RotateY(BINANG_TO_RAD(p->actor.shape.rot.y), MTXMODE_APPLY);
+    // Tip points forward
+    Matrix_RotateX(BINANG_TO_RAD((s16)-0x4000), MTXMODE_APPLY);
+
+    f32 scale = 0.015f;
+    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
+
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+    // Load texture at runtime (can't be in static DL — SOH interprets raw pointers as OTR paths)
+    gDPPipeSync(POLY_XLU_DISP++);
+    gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
+    gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
+    gDPLoadTextureBlock(POLY_XLU_DISP++, sWindEffTexture, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                        G_TX_NOMIRROR | G_TX_WRAP, 6, 6, G_TX_NOLOD, G_TX_NOLOD);
+    gDPLoadMultiBlock(POLY_XLU_DISP++, sWindEffTexture, 0x0100, 1, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64, 0,
+                      G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, 6, 6, 14, 14);
+
+    // Animated texture scroll (same as wind spell)
+    u32 frames = play->gameplayFrames;
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               Gfx_TwoTexScroll(play->state.gfxCtx, 0, -(s32)(frames * 1), (s32)(frames * 20), 0x40, 0x40, 1,
+                                -(s32)(frames * 2), (s32)(frames * 10), 0x40, 0x40));
+
+    gSPDisplayList(POLY_XLU_DISP++, gfx_pegasus_cone_geo);
+
+    Matrix_Pop();
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// ---------------------------------------------------------------------------
+// Anklet custom model REMOVED (Skijer 2026-07-15): the Pegasus Anklet now shows as the
+// vanilla HOVER BOOTS recolored red, drawn with the body in Player_DrawImpl
+// (z_player_lib.c). Behavior (dash + wind barrier) is untouched.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Main Behavior Entry
+// ---------------------------------------------------------------------------
+static void Pegasus_Behavior(Player* player, PlayState* play) {
+    // Skip during cutscenes, etc. (no action reset — the cutscene owns the player)
+    if (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                               PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) {
+        if (gExtEquipBehavior.pegasusState != PEGASUS_IDLE)
+            Pegasus_Stop(player, play, 0);
+        sPegasusNeedsReset = 0;
+        return;
+    }
+
+    // Finish the post-dash reset once we touch ground (dash that ended airborne)
+    if (sPegasusNeedsReset && (player->actor.bgCheckFlags & 0x0001)) {
+        Pegasus_ResetPlayer(player, play);
+    }
+
+    // Always update wing pendulum physics (even when not dashing)
+
+    switch (gExtEquipBehavior.pegasusState) {
+        case PEGASUS_IDLE:
+            Pegasus_StateIdle(player, play);
+            break;
+        case PEGASUS_WINDUP:
+            Pegasus_StateWindup(player, play);
+            break;
+        case PEGASUS_RUNNING:
+            Pegasus_StateRunning(player, play);
+            break;
+        case PEGASUS_BONK:
+            Pegasus_StateBonk(player, play);
+            break;
+        default:
+            gExtEquipBehavior.pegasusState = PEGASUS_IDLE;
+            break;
+    }
+}

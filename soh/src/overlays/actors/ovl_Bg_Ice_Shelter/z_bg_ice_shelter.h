@@ -24,4 +24,14 @@ typedef struct BgIceShelter {
     /* 0x0200 */ s16 alpha;
 } BgIceShelter; // size = 0x0204
 
+// Public: Ball and Chain shatters red ice instantly (ice fragments + Actor_Kill)
+void BgIceShelter_BreakInstantly(Actor* thisx, PlayState* play);
+
+// Public: Ice Rod melts red ice (fast melt animation, like Blue Fire)
+void BgIceShelter_MeltInstantly(Actor* thisx, PlayState* play);
+
+// Public: Ball and Chain shatter + melt — spawns ice fragments and triggers
+// the melt path so VB_RED_ICE_DROP_ITEM fires (entrega rando reward).
+void BgIceShelter_ShatterMelt(Actor* thisx, PlayState* play);
+
 #endif

@@ -1,0 +1,8 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_bombarrows/sArrowShaftDL"/>
+	<CallDisplayList Path="objects/object_nei_bombarrows/sBombBagColorDL"/>
+	<CallDisplayList Path="objects/object_nei_bombarrows/sBombBagDL"/>
+	<CallDisplayList Path="objects/object_nei_bombarrows/sBombBagRingColorDL"/>
+	<CallDisplayList Path="objects/object_nei_bombarrows/sBombBagRingDL"/>
+	<EndDisplayList/>
+</DisplayList>

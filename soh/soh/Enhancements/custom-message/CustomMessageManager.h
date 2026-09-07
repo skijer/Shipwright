@@ -1,6 +1,6 @@
 #pragma once
 #include <unordered_map>
-#include <cstdint>
+#include <stdint.h>
 #include <exception>
 #include <vector>
 #include <string>
@@ -8,7 +8,7 @@
 #include "../../../include/z64item.h"
 #include "../../../include/z64.h"
 #include "../../../include/message_data_textbox_types.h"
-#include "../randomizer/3drando/text.hpp"
+#include "text.h"
 
 #undef MESSAGE_END
 
@@ -62,6 +62,7 @@ class CustomMessage {
     static std::string WAIT_FOR_INPUT();
     static std::string PLAYER_NAME();
     static std::string TWO_WAY_CHOICE();
+    static std::string THREE_WAY_CHOICE();
 
     const std::string GetEnglish(MessageFormat format = MF_FORMATTED) const;
     const std::string GetFrench(MessageFormat format = MF_FORMATTED) const;
@@ -139,6 +140,16 @@ class CustomMessage {
      * @brief Replaces [[1]] style variable strings with the provided vector of customMessages
      */
     void InsertNames(std::vector<CustomMessage> toInsert);
+
+    /**
+     * @brief Replaces any [[N]] token InsertNames did not fill with `fallback`.
+     *
+     * InsertNames only substitutes tokens 1..toInsert.size(); anything the template asks for beyond
+     * that stays in the string and is drawn to the player verbatim. That happens in the combo rando
+     * whenever a hinted item lives in the other game, so the area list comes up short. Call this
+     * after InsertNames on any message built from a variable-length list.
+     */
+    void ReplaceUnfilledNames(const std::string& fallback);
 
     /**
      * @brief Replaces various symbols with the control codes necessary to
@@ -247,7 +258,7 @@ class CustomMessageManager {
   private:
     std::unordered_map<std::string, CustomMessageTable> messageTables;
 
-    bool InsertCustomMessage(std::string tableID, uint16_t textID, CustomMessage message);
+    bool InsertCustomMessage(const std::string& tableID, uint16_t textID, CustomMessage message);
 
   public:
     static CustomMessageManager* Instance;
@@ -266,7 +277,7 @@ class CustomMessageManager {
      * @return true if adding the custom message succeeds, or
      * @return false if it does not.
      */
-    bool CreateGetItemMessage(std::string tableID, uint16_t giid, ItemID iid, CustomMessage message);
+    bool CreateGetItemMessage(const std::string& tableID, uint16_t giid, ItemID iid, CustomMessage message);
 
     /**
      * @brief Formats the provided Custom Message Entry and inserts it into the table with the provided tableID,
@@ -278,7 +289,7 @@ class CustomMessageManager {
      * @return true if adding the custom message succeeds, or
      * @return false if it does not.
      */
-    bool CreateMessage(std::string tableID, uint16_t textID, CustomMessage message);
+    bool CreateMessage(const std::string& tableID, uint16_t textID, CustomMessage message);
 
     /**
      * @brief Retrieves a message from the table with id tableID with the provided textID.
@@ -292,7 +303,7 @@ class CustomMessageManager {
      * @param format the type of formatting to apply to the retrieved message
      * @return CustomMessage
      */
-    CustomMessage RetrieveMessage(std::string tableID, uint16_t textID, MessageFormat format = MF_RAW);
+    CustomMessage RetrieveMessage(const std::string& tableID, uint16_t textID, MessageFormat format = MF_RAW);
 
     /**
      * @brief Empties out the message table identified by tableID.
@@ -301,7 +312,7 @@ class CustomMessageManager {
      * @return true if it was cleared successfully, or
      * @return false if the table did not exist
      */
-    bool ClearMessageTable(std::string tableID);
+    bool ClearMessageTable(const std::string& tableID);
 
     /**
      * @brief Creates an empty CustomMessageTable accessible at the provided tableID
@@ -311,7 +322,7 @@ class CustomMessageManager {
      * @return false if not (i.e. because a table with that ID
      * already exists.)
      */
-    bool AddCustomMessageTable(std::string tableID);
+    bool AddCustomMessageTable(const std::string& tableID);
 };
 
 class MessageNotFoundException : public std::exception {

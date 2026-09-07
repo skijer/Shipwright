@@ -1,6 +1,11 @@
 #include "z_en_bom_chu.h"
+#include "mods/transformation_masks/kafei_form.h"
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+
+// mods/transformation_masks/kafei_landmine.cpp; declared locally the way every mods hook is.
+u8 KafeiLandmine_Settle(EnBomChu* chu, PlayState* play);
+void KafeiLandmine_Draw(PlayState* play, Actor* actor, f32 colorIntensity);
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -240,9 +245,22 @@ void EnBomChu_WaitForRelease(EnBomChu* this, PlayState* play) {
         //! and will cause a crash inside this function.
         EnBomChu_UpdateFloorPoly(this, this->actor.floorPoly, play);
         this->actor.flags |= ACTOR_FLAG_ATTENTION_ENABLED; // make chu targetable
-        func_8002F850(play, &this->actor);
+        Actor_PlaySfx_SurfaceBomb(play, &this->actor);
         this->actionFunc = EnBomChu_Move;
     }
+}
+
+static s32 EnBomChu_ShouldDetonate(EnBomChu* this) {
+    s32 struck = (this->collider.base.acFlags & AC_HIT) != 0;
+    s32 touched = (this->collider.base.ocFlags1 & OC1_HIT) != 0;
+
+    // A landmine has no fuse of its own — it waits to be stepped on, and SW97 asks for an ENEMY
+    // where the vanilla chu settles for anything that is not the player.
+    if (KafeiForm_ReplacesBombchu()) {
+        return struck || (touched && (this->collider.base.oc->category == ACTORCAT_ENEMY));
+    }
+
+    return (this->timer == 0) || struck || (touched && (this->collider.base.oc->category != ACTORCAT_PLAYER));
 }
 
 void EnBomChu_Move(EnBomChu* this, PlayState* play) {
@@ -264,9 +282,13 @@ void EnBomChu_Move(EnBomChu* this, PlayState* play) {
         this->timer--;
     }
 
-    if ((this->timer == 0) || (this->collider.base.acFlags & AC_HIT) ||
-        ((this->collider.base.ocFlags1 & OC1_HIT) && (this->collider.base.oc->category != ACTORCAT_PLAYER))) {
+    if (EnBomChu_ShouldDetonate(this)) {
         EnBomChu_Explode(this, play);
+        return;
+    }
+
+    // Kafei's chus are SW97 landmines: thrown and left, not driven, so only the crawling is replaced.
+    if (KafeiLandmine_Settle(this, play)) {
         return;
     }
 
@@ -347,7 +369,7 @@ void EnBomChu_Move(EnBomChu* this, PlayState* play) {
     Math_ScaledStepToS(&this->actor.shape.rot.y, this->actor.world.rot.y, 0x800);
     Math_ScaledStepToS(&this->actor.shape.rot.z, this->actor.world.rot.z, 0x800);
 
-    func_8002F8F0(&this->actor, NA_SE_IT_BOMBCHU_MOVE - SFX_FLAG);
+    Actor_PlaySfx_Flagged2(&this->actor, NA_SE_IT_BOMBCHU_MOVE - SFX_FLAG);
 }
 
 void EnBomChu_WaitForKill(EnBomChu* this, PlayState* play) {
@@ -442,16 +464,19 @@ void EnBomChu_Update(Actor* thisx, PlayState* play2) {
     Actor_SetFocus(&this->actor, 0.0f);
 
     if (this->actionFunc == EnBomChu_Move) {
-        this->visualJitter =
-            (5.0f + (Rand_ZeroOne() * 3.0f)) * Math_SinS(((Rand_ZeroOne() * (f32)0x200) + (f32)0x3000) * this->timer);
+        // A mine lies still: the chu's shake and its spark trail are both tells that it is running.
+        if (!KafeiForm_ReplacesBombchu()) {
+            this->visualJitter = (5.0f + (Rand_ZeroOne() * 3.0f)) *
+                                 Math_SinS(((Rand_ZeroOne() * (f32)0x200) + (f32)0x3000) * this->timer);
 
-        EnBomChu_ModelToWorld(this, &blureP1Model, &blureP1);
+            EnBomChu_ModelToWorld(this, &blureP1Model, &blureP1);
 
-        EnBomChu_ModelToWorld(this, &blureP2LeftModel, &blureP2);
-        EffectBlure_AddVertex(Effect_GetByIndex(this->blure1Index), &blureP1, &blureP2);
+            EnBomChu_ModelToWorld(this, &blureP2LeftModel, &blureP2);
+            EffectBlure_AddVertex(Effect_GetByIndex(this->blure1Index), &blureP1, &blureP2);
 
-        EnBomChu_ModelToWorld(this, &blureP2RightModel, &blureP2);
-        EffectBlure_AddVertex(Effect_GetByIndex(this->blure2Index), &blureP1, &blureP2);
+            EnBomChu_ModelToWorld(this, &blureP2RightModel, &blureP2);
+            EffectBlure_AddVertex(Effect_GetByIndex(this->blure2Index), &blureP1, &blureP2);
+        }
 
         waterY = this->actor.world.pos.y;
 
@@ -524,8 +549,15 @@ void EnBomChu_Draw(Actor* thisx, PlayState* play) {
     }
 
     Matrix_Translate(this->visualJitter * (1.0f / BOMBCHU_SCALE), 0.0f, 0.0f, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gBombchuDL);
+
+    // Kafei's chus are SW97 landmines: a three-piece model that builds a matrix per piece off the
+    // actor's world position, so this path wants neither the caller's matrix nor its jitter.
+    if (KafeiForm_ReplacesBombchu()) {
+        KafeiLandmine_Draw(play, &this->actor, colorIntensity);
+    } else {
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_OPA_DISP++, gBombchuDL);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

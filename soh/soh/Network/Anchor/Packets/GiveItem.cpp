@@ -1,6 +1,5 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Notification/Notification.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
@@ -10,6 +9,8 @@
 
 extern "C" {
 #include "functions.h"
+#include "mods/extended_inventory.h"
+#include "mods/items/custom_items.h"
 extern PlayState* gPlayState;
 }
 
@@ -54,6 +55,24 @@ void Anchor::HandlePacket_GiveItem(nlohmann::json payload) {
     u16 modId = payload.at("modId").get<u16>();
     u16 getItemId = payload.at("getItemId").get<u16>();
 
+    // Check if this is a custom item (range 0x9C-0xB5)
+    if (modId == MOD_NONE && getItemId >= 0x9C && getItemId <= 0xB5) {
+        // Handle custom items using ExtInv_SetItemById to properly map item ID to slot
+        // This uses the gPage2Items[] array to find the correct slot for each item
+        ExtInv_SetItemById(getItemId);
+
+        // Play item fanfare sound
+        Audio_PlayFanfare(NA_BGM_ITEM_GET | 0x900);
+
+        // Create notification
+        Notification::Emit({
+            .prefix = client.name,
+            .message = "found",
+            .suffix = SohUtils::GetItemName(getItemId),
+        });
+        return;
+    }
+
     GetItemEntry getItemEntry;
     if (modId == MOD_NONE) {
         getItemEntry = ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, getItemId);
@@ -65,7 +84,7 @@ void Anchor::HandlePacket_GiveItem(nlohmann::json payload) {
         if (getItemEntry.getItemId == GI_SWORD_BGS) {
             gSaveContext.bgsFlag = true;
         }
-        Item_Give(gPlayState, getItemEntry.itemId);
+        Item_Give(gPlayState, static_cast<u8>(getItemEntry.itemId));
     } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
         if (getItemEntry.getItemId == RG_ICE_TRAP) {
             gSaveContext.ship.pendingIceTrapCount++;

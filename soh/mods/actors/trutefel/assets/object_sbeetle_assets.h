@@ -1,0 +1,34 @@
+#ifndef TRUTEFEL_OBJECT_SBEETLE_ASSETS_H
+#define TRUTEFEL_OBJECT_SBEETLE_ASSETS_H
+
+#define GSCISSORSBEETLESKEL_BONE_POS_LIMB 0
+#define GSCISSORSBEETLESKEL_BONE_ROT_LIMB 1
+#define GSCISSORSBEETLESKEL_BODYFRONT_LIMB 2
+#define GSCISSORSBEETLESKEL_BODYBACK_LIMB 3
+#define GSCISSORSBEETLESKEL_HORN_L_LIMB 4
+#define GSCISSORSBEETLESKEL_HORN_R_LIMB 5
+#define GSCISSORSBEETLESKEL_HEAD_LIMB 6
+#define GSCISSORSBEETLESKEL_PINCER_L_LIMB 7
+#define GSCISSORSBEETLESKEL_PINCER_R_LIMB 8
+#define GSCISSORSBEETLESKEL_LEGBACK1_L_LIMB 9
+#define GSCISSORSBEETLESKEL_LEGBACK2_L_LIMB 10
+#define GSCISSORSBEETLESKEL_LEGBACK1_R_LIMB 11
+#define GSCISSORSBEETLESKEL_LEGBACK2_R_LIMB 12
+#define GSCISSORSBEETLESKEL_LEGFRONT1_L_LIMB 13
+#define GSCISSORSBEETLESKEL_LEGFRONT2_L_LIMB 14
+#define GSCISSORSBEETLESKEL_LEGFRONT1_R_LIMB 15
+#define GSCISSORSBEETLESKEL_LEGFRONT2_R_LIMB 16
+#define GSCISSORSBEETLESKEL_NUM_LIMBS 17
+
+extern FlexSkeletonHeader gScissorsBeetleSkel;
+extern AnimationHeader gScissorsBeetleSkelAttackAnim;
+extern AnimationHeader gScissorsBeetleSkelDieAnim;
+extern AnimationHeader gScissorsBeetleSkelHopAnim;
+extern AnimationHeader gScissorsBeetleSkelHurtAnim;
+extern AnimationHeader gScissorsBeetleSkelIdle1Anim;
+extern AnimationHeader gScissorsBeetleSkelIdle2Anim;
+extern AnimationHeader gScissorsBeetleSkelIdle3Anim;
+extern AnimationHeader gScissorsBeetleSkelSwingAnim;
+extern AnimationHeader gScissorsBeetleSkelWalkAnim;
+
+#endif

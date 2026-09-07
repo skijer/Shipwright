@@ -318,11 +318,326 @@ RANDO_ENUM_ITEM(RG_HYLIA_LAB_KEY)
 RANDO_ENUM_ITEM(RG_FISHING_HOLE_KEY)
 
 // Custom Items
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_ROCS)
 RANDO_ENUM_ITEM(RG_ROCS_FEATHER)
+RANDO_ENUM_ITEM(RG_ROCS_CAPE)
+RANDO_ENUM_ITEM(RG_WHIP)
+RANDO_ENUM_ITEM(RG_SPINNER)
+RANDO_ENUM_ITEM(RG_BOMB_ARROWS)
+RANDO_ENUM_ITEM(RG_FIRE_ROD)
+RANDO_ENUM_ITEM(RG_DEMISE_DESTRUCTION)
+RANDO_ENUM_ITEM(RG_DEKU_LEAF)
+RANDO_ENUM_ITEM(RG_TIME_GATE)
+RANDO_ENUM_ITEM(RG_BEETLE)
+RANDO_ENUM_ITEM(RG_SWITCH_HOOK)
+RANDO_ENUM_ITEM(RG_ICE_ROD)
+RANDO_ENUM_ITEM(RG_ZONAI_PERMAFROST)
+RANDO_ENUM_ITEM(RG_MOGMA_MITTS)
+RANDO_ENUM_ITEM(RG_GUST_JAR)
+RANDO_ENUM_ITEM(RG_BALL_AND_CHAIN)
+RANDO_ENUM_ITEM(RG_HYLIAS_GRACE)
+RANDO_ENUM_ITEM(RG_LANTERN)
+RANDO_ENUM_ITEM(RG_LIGHT_ROD)
+RANDO_ENUM_ITEM(RG_CANE_OF_SOMARIA)
+RANDO_ENUM_ITEM(RG_SHOVEL)
+RANDO_ENUM_ITEM(RG_DOMINION_ROD)
+RANDO_ENUM_ITEM(RG_DESIRE_SENSOR)
+RANDO_ENUM_ITEM(RG_MINISH_CAP)
+RANDO_ENUM_ITEM(RG_CHATEAU_ROMANI)
+RANDO_ENUM_ITEM(RG_POKEBALL)
+// Extended Equipment
+RANDO_ENUM_ITEM(RG_EXT_CANE_OF_BYRNA)
+RANDO_ENUM_ITEM(RG_EXT_FOUR_SWORD)
+// Was RG_EXT_IRON_KNUCKLE_AXE — now the progressive Hammer (L1 Hammer → L2 Iron Knuckle's
+// Axe). Renamed in place to keep its enum value stable. No longer an ext-equipment sword.
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_HAMMER)
+RANDO_ENUM_ITEM(RG_EXT_DIVINE_SHIELD)
+RANDO_ENUM_ITEM(RG_EXT_SHEIKAH_SHIELD)
+RANDO_ENUM_ITEM(RG_EXT_SHIELD_OF_IKANA)
+RANDO_ENUM_ITEM(RG_EXT_MAGIC_CAPE)
+RANDO_ENUM_ITEM(RG_EXT_SPIRIT_BREASTPLATE)
+RANDO_ENUM_ITEM(RG_EXT_CHAMPIONS_TUNIC)
+RANDO_ENUM_ITEM(RG_EXT_PEGASUS_ANKLET)
+RANDO_ENUM_ITEM(RG_EXT_PENDANT_OF_MEMORIES)
+RANDO_ENUM_ITEM(RG_EXT_WATER_DRAGON_SCALE)
+// MM Masks (24 masks for third inventory page)
+RANDO_ENUM_ITEM(RG_MM_MASK_POSTMAN)
+RANDO_ENUM_ITEM(RG_MM_MASK_ALL_NIGHT)
+RANDO_ENUM_ITEM(RG_MM_MASK_BLAST)
+RANDO_ENUM_ITEM(RG_MM_MASK_STONE)
+RANDO_ENUM_ITEM(RG_MM_MASK_GREAT_FAIRY)
+RANDO_ENUM_ITEM(RG_MM_MASK_DEKU)
+RANDO_ENUM_ITEM(RG_MM_MASK_KEATON)
+RANDO_ENUM_ITEM(RG_MM_MASK_BREMEN)
+RANDO_ENUM_ITEM(RG_MM_MASK_BUNNY)
+RANDO_ENUM_ITEM(RG_MM_MASK_DON_GERO)
+RANDO_ENUM_ITEM(RG_MM_MASK_SCENTS)
+RANDO_ENUM_ITEM(RG_MM_MASK_GORON)
+RANDO_ENUM_ITEM(RG_MM_MASK_ROMANI)
+RANDO_ENUM_ITEM(RG_MM_MASK_CIRCUS_LEADER)
+RANDO_ENUM_ITEM(RG_MM_MASK_KAFEI)
+RANDO_ENUM_ITEM(RG_MM_MASK_COUPLE)
+RANDO_ENUM_ITEM(RG_MM_MASK_TRUTH)
+RANDO_ENUM_ITEM(RG_MM_MASK_ZORA)
+RANDO_ENUM_ITEM(RG_MM_MASK_KAMARO)
+RANDO_ENUM_ITEM(RG_MM_MASK_GIBDO)
+RANDO_ENUM_ITEM(RG_MM_MASK_GARO)
+RANDO_ENUM_ITEM(RG_MM_MASK_CAPTAIN)
+RANDO_ENUM_ITEM(RG_MM_MASK_GIANT)
+RANDO_ENUM_ITEM(RG_MM_MASK_FIERCE_DEITY)
 
 // Logic Only
 RANDO_ENUM_ITEM(RG_STICKS)
 RANDO_ENUM_ITEM(RG_NUTS)
+// Skijer NEI: medallion + projectile elemental damage (virtual capability)
+RANDO_ENUM_ITEM(RG_SW97_FIRE_PROJECTILE)
+RANDO_ENUM_ITEM(RG_SW97_ICE_PROJECTILE)
+RANDO_ENUM_ITEM(RG_SW97_LIGHT_PROJECTILE)
+// Skijer NEI: medallion as standalone spell (virtual capability, gated by gMods.SW97Spells.Enabled)
+RANDO_ENUM_ITEM(RG_SW97_FIRE_SPELL)
+RANDO_ENUM_ITEM(RG_SW97_ICE_SPELL)
+RANDO_ENUM_ITEM(RG_SW97_LIGHT_SPELL)
+RANDO_ENUM_ITEM(RG_SW97_SPIRIT_SPELL)
+// Mask of Scents: Bottle with Magic Mushroom (caught from Lost Woods spots)
+RANDO_ENUM_ITEM(RG_BOTTLE_WITH_MAGIC_MUSHROOM)
+// NEI Weapon Upgrades — progressive versions of the base weapons (replace the vanilla weapon
+// in the pool when RSK_NEI_WEAPON_UPGRADES is on; level 1 = the vanilla weapon).
+// (RG_PROGRESSIVE_HAMMER lives above in the old ext-equipment slot to keep its value stable.)
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_KOKIRI_SWORD) // L1 Kokiri → L2 Razor → L3 Gilded
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_MASTER_SWORD) // L1 Master → L2 Real Master Sword
+RANDO_ENUM_ITEM(RG_PROGRESSIVE_BGS)          // L1 Biggoron → L2 Great Fairy's Sword
+// MM collectibles ported into OoT rando (model + message only, no OoT inventory slot).
+// Stray Fairy = gameplay_keep Flex skeleton; 4 Remains = object_bsmask single DLs.
+RANDO_ENUM_ITEM(RG_MM_STRAY_FAIRY)
+RANDO_ENUM_ITEM(RG_MM_REMAINS_ODOLWA)
+RANDO_ENUM_ITEM(RG_MM_REMAINS_GOHT)
+RANDO_ENUM_ITEM(RG_MM_REMAINS_GYORG)
+RANDO_ENUM_ITEM(RG_MM_REMAINS_TWINMOLD)
+// MM enemy + boss souls (from 2Ship rando). Shared "soul flame" get-item model; give is a no-op.
+RANDO_ENUM_ITEM(RG_MM_SOUL_GOHT)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GYORG)
+RANDO_ENUM_ITEM(RG_MM_SOUL_MAJORA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_ODOLWA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_TWINMOLD)
+RANDO_ENUM_ITEM(RG_MM_SOUL_ALIEN)
+RANDO_ENUM_ITEM(RG_MM_SOUL_ARMOS)
+RANDO_ENUM_ITEM(RG_MM_SOUL_BAD_BAT)
+RANDO_ENUM_ITEM(RG_MM_SOUL_BEAMOS)
+RANDO_ENUM_ITEM(RG_MM_SOUL_BOE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_BUBBLE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_CAPTAIN_KEETA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_CHUCHU)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DEATH_ARMOS)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DEEP_PYTHON)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DEKU_BABA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DEXIHAND)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DINOLFOS)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DODONGO)
+RANDO_ENUM_ITEM(RG_MM_SOUL_DRAGONFLY)
+RANDO_ENUM_ITEM(RG_MM_SOUL_EENO)
+RANDO_ENUM_ITEM(RG_MM_SOUL_EYEGORE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_FREEZARD)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GARO)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GEKKO)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GIANT_BEE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GOMESS)
+RANDO_ENUM_ITEM(RG_MM_SOUL_GUAY)
+RANDO_ENUM_ITEM(RG_MM_SOUL_HIPLOOP)
+RANDO_ENUM_ITEM(RG_MM_SOUL_IGOS_DU_IKANA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_IRON_KNUCKLE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_KEESE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_LEEVER)
+RANDO_ENUM_ITEM(RG_MM_SOUL_LIKE_LIKE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_MAD_SCRUB)
+RANDO_ENUM_ITEM(RG_MM_SOUL_NEJIRON)
+RANDO_ENUM_ITEM(RG_MM_SOUL_OCTOROK)
+RANDO_ENUM_ITEM(RG_MM_SOUL_PEAHAT)
+RANDO_ENUM_ITEM(RG_MM_SOUL_PIRATE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_POE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_REDEAD)
+RANDO_ENUM_ITEM(RG_MM_SOUL_SHELLBLADE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_SKULLFISH)
+RANDO_ENUM_ITEM(RG_MM_SOUL_SKULLTULA)
+RANDO_ENUM_ITEM(RG_MM_SOUL_SNAPPER)
+RANDO_ENUM_ITEM(RG_MM_SOUL_STALCHILD)
+RANDO_ENUM_ITEM(RG_MM_SOUL_TAKKURI)
+RANDO_ENUM_ITEM(RG_MM_SOUL_TEKTITE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_WALLMASTER)
+RANDO_ENUM_ITEM(RG_MM_SOUL_WART)
+RANDO_ENUM_ITEM(RG_MM_SOUL_WIZROBE)
+RANDO_ENUM_ITEM(RG_MM_SOUL_WOLFOS)
+// MM trade / quest-chain items (non-mask) from the 2Ship rando. Get-item model + textbox only;
+// give is a no-op (OoT has no MM quest slots). Single/dual-DL get-item objects from mm.o2r.
+RANDO_ENUM_ITEM(RG_MM_MOONS_TEAR)
+RANDO_ENUM_ITEM(RG_MM_DEED_LAND)
+RANDO_ENUM_ITEM(RG_MM_DEED_SWAMP)
+RANDO_ENUM_ITEM(RG_MM_DEED_MOUNTAIN)
+RANDO_ENUM_ITEM(RG_MM_DEED_OCEAN)
+RANDO_ENUM_ITEM(RG_MM_ROOM_KEY)
+RANDO_ENUM_ITEM(RG_MM_LETTER_TO_KAFEI)
+RANDO_ENUM_ITEM(RG_MM_LETTER_TO_MAMA)
+RANDO_ENUM_ITEM(RG_MM_PENDANT_OF_MEMORIES)
+RANDO_ENUM_ITEM(RG_MM_PICTOGRAPH_BOX)
+RANDO_ENUM_ITEM(RG_MM_POWDER_KEG)
+RANDO_ENUM_ITEM(RG_MM_BOMBERS_NOTEBOOK)
+// MM ocarina songs from the 2Ship rando. Rendered with OoT's own ocarina-note model
+// (OBJECT_GI_MELODY + a GID_SONG_* note color) — no mm.o2r asset needed. Give is a no-op
+// (OoT has no MM song slots); textbox name comes from the NEI registry.
+RANDO_ENUM_ITEM(RG_MM_SONG_SONATA)
+RANDO_ENUM_ITEM(RG_MM_SONG_LULLABY)
+RANDO_ENUM_ITEM(RG_MM_SONG_LULLABY_INTRO)
+RANDO_ENUM_ITEM(RG_MM_SONG_NOVA)
+RANDO_ENUM_ITEM(RG_MM_SONG_ELEGY)
+RANDO_ENUM_ITEM(RG_MM_SONG_OATH)
+RANDO_ENUM_ITEM(RG_MM_SONG_SARIA)
+RANDO_ENUM_ITEM(RG_MM_SONG_EPONA)
+RANDO_ENUM_ITEM(RG_MM_SONG_SOARING)
+RANDO_ENUM_ITEM(RG_MM_SONG_STORMS)
+RANDO_ENUM_ITEM(RG_MM_SONG_SUN)
+RANDO_ENUM_ITEM(RG_MM_SONG_TIME)
+RANDO_ENUM_ITEM(RG_MM_SONG_HEALING)
+RANDO_ENUM_ITEM(RG_MM_SONG_DOUBLE_TIME)
+RANDO_ENUM_ITEM(RG_MM_SONG_INVERTED_TIME)
+// MM owl-statue warp points from the 2Ship rando. Draw the MM owl-statue model
+// (object_sek) via Randomizer_DrawMmOwlStatue. Give is a no-op; name from NEI registry.
+RANDO_ENUM_ITEM(RG_MM_OWL_CLOCK_TOWN_SOUTH)
+RANDO_ENUM_ITEM(RG_MM_OWL_GREAT_BAY_COAST)
+RANDO_ENUM_ITEM(RG_MM_OWL_IKANA_CANYON)
+RANDO_ENUM_ITEM(RG_MM_OWL_MILK_ROAD)
+RANDO_ENUM_ITEM(RG_MM_OWL_MOUNTAIN_VILLAGE)
+RANDO_ENUM_ITEM(RG_MM_OWL_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_OWL_SOUTHERN_SWAMP)
+RANDO_ENUM_ITEM(RG_MM_OWL_STONE_TOWER)
+RANDO_ENUM_ITEM(RG_MM_OWL_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_OWL_ZORA_CAPE)
+// Tingle's region maps from the 2Ship rando. All share the MM field-map model
+// (object_gi_fieldmap) drawn via Randomizer_DrawMmTradeQuest (OPA01). No-op give.
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_CLOCK_TOWN)
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_ROMANI_RANCH)
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_TINGLE_MAP_STONE_TOWER)
+// Per-dungeon MM Stray Fairies (share RG_MM_STRAY_FAIRY's skeleton draw; only the name differs).
+// RG_MM_STRAY_FAIRY above is the Clock Town one; these 4 cover the remaining dungeons.
+RANDO_ENUM_ITEM(RG_MM_STRAY_FAIRY_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_STRAY_FAIRY_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_STRAY_FAIRY_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_STRAY_FAIRY_STONE_TOWER)
+// Per-dungeon MM dungeon items (Small Key / Boss Key / Map / Compass). Each (dungeon, type) is a
+// DISTINCT RG with a distinct name for cross-collection; all variants of a type share one MM model.
+RANDO_ENUM_ITEM(RG_MM_SMALL_KEY_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_SMALL_KEY_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_SMALL_KEY_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_SMALL_KEY_STONE_TOWER)
+RANDO_ENUM_ITEM(RG_MM_BOSS_KEY_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_BOSS_KEY_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_BOSS_KEY_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_BOSS_KEY_STONE_TOWER)
+RANDO_ENUM_ITEM(RG_MM_MAP_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_MAP_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_MAP_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_MAP_STONE_TOWER)
+RANDO_ENUM_ITEM(RG_MM_COMPASS_WOODFALL)
+RANDO_ENUM_ITEM(RG_MM_COMPASS_SNOWHEAD)
+RANDO_ENUM_ITEM(RG_MM_COMPASS_GREAT_BAY)
+RANDO_ENUM_ITEM(RG_MM_COMPASS_STONE_TOWER)
+// MM Clawshot expressed in OoT rando for cross-collection. OoT has no clawshot mechanic, so this is
+// display + obtain-record only; it reuses OoT's native hookshot get-item model and grants no gameplay.
+RANDO_ENUM_ITEM(RG_CLAWSHOT)
+// Mario Mask — granted by the Peach's Castle set piece (mods/mario_mask_scene/).
+// Appended here, not next to the other NEI items: this list is append-only because
+// save files and generated seeds store the raw enum values.
+RANDO_ENUM_ITEM(RG_MARIO_MASK)
+// Bottle Randomizer extra items as REAL rando items (Skijer's NEI, custom_bottles.cpp):
+// Net -> SLOT_BOTTLE_3 (Bottle_SetNetOwned), Bottomless Bottle -> SLOT_BOTTLE_4
+// (Bottle_SetBottomlessOwned). Appended (list is append-only — raw enum values are
+// stored in saves/seeds). These pair with MM's Net / Bottomless in the FC combo table.
+RANDO_ENUM_ITEM(RG_NET)
+RANDO_ENUM_ITEM(RG_BOTTOMLESS_BOTTLE)
+// Final MM cross items (third wave, appended — list is append-only). Swamp/Ocean GS tokens fold
+// into the FC_MM_SKULLS_* registry counters on give; Gold Dust fills an OoT bottle slot with
+// ITEM_GOLD_DUST (mm_bottles_behavior projects the MM content); frogs / great spin / clock halves
+// are draw+message only (their systems are MM-side; cross-collection carries them there).
+RANDO_ENUM_ITEM(RG_MM_GS_TOKEN_SWAMP)
+RANDO_ENUM_ITEM(RG_MM_GS_TOKEN_OCEAN)
+RANDO_ENUM_ITEM(RG_MM_FROG_BLUE)
+RANDO_ENUM_ITEM(RG_MM_FROG_CYAN)
+RANDO_ENUM_ITEM(RG_MM_FROG_PINK)
+RANDO_ENUM_ITEM(RG_MM_FROG_WHITE)
+RANDO_ENUM_ITEM(RG_MM_BOTTLE_GOLD_DUST)
+RANDO_ENUM_ITEM(RG_MM_GREAT_SPIN_ATTACK)
+RANDO_ENUM_ITEM(RG_MM_TIME_DAY_1)
+RANDO_ENUM_ITEM(RG_MM_TIME_DAY_2)
+RANDO_ENUM_ITEM(RG_MM_TIME_DAY_3)
+RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_1)
+RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_2)
+RANDO_ENUM_ITEM(RG_MM_TIME_NIGHT_3)
+// MM's PROGRESSIVE forms of the two chains above. 2ship picks one form or the other per seed
+// (RO_CLOCK_SHUFFLE_PROGRESSIVE for the clock, the Goron Lullaby option for the song), so these never
+// coexist with the individual entries — they are the shape MM's pool uses by default, and without an
+// OoT counterpart they could not cross at all. Skijer's NEI
+// The 3 NEI custom songs. They already exist as PLAYABLE songs (OCARINA_SONG_NEI_*, z64.h) and the MM
+// quest page already draws them in the rows of the three songs they replace, but they had no
+// RandomizerGet — so they could not be shuffled or placed in OoT at all, only handed out by MM. Their
+// FC rows carried rg = FCI_NO_ITEM for exactly this reason. Skijer's NEI
+RANDO_ENUM_ITEM(RG_NEI_SONG_FUGUE_OF_HOME)
+RANDO_ENUM_ITEM(RG_NEI_SONG_COMMAND_MELODY)
+RANDO_ENUM_ITEM(RG_NEI_SONG_BALLAD_OF_HERO)
+RANDO_ENUM_ITEM(RG_MM_TIME_PROGRESSIVE)
+RANDO_ENUM_ITEM(RG_MM_SONG_LULLABY_PROGRESSIVE)
+// Elemental Wand (Skijer's NEI). Which of these enter the pool depends on the wand's randomizer
+// option: "Medallions"/"Single item" place only RG_ELEMENTAL_WAND, "Elemental shuffle" places the six
+// rods instead. All of them grant the same page-2 slot; they differ only in which mode they light.
+// Appended — the list is append-only, raw values live in saves and seeds.
+RANDO_ENUM_ITEM(RG_ELEMENTAL_WAND)
+RANDO_ENUM_ITEM(RG_WAND_SAND_ROD)
+RANDO_ENUM_ITEM(RG_WAND_TORNADO_ROD)
+RANDO_ENUM_ITEM(RG_WAND_WATER_ROD)
+RANDO_ENUM_ITEM(RG_WAND_METEOR_ROD)
+RANDO_ENUM_ITEM(RG_WAND_STORM_ROD)
+RANDO_ENUM_ITEM(RG_WAND_SHADOW_SCEPTER)
+// The last three page-2 equipment cells. They were fully playable in both games (behaviours in
+// mods/equipment) but had NO randomizer identity at all, so they could not be placed in a seed nor
+// synced across games — the only way to own them was the save editor. Appended, never inserted:
+// raw values live in saves and seeds. Skijer's NEI
+RANDO_ENUM_ITEM(RG_EXT_TRIDENT)
+RANDO_ENUM_ITEM(RG_EXT_CLIMB_BOOTS)
+RANDO_ENUM_ITEM(RG_EXT_ROC_BOOTS)
+// The four page-2 cells opened by the 2026-08-06 re-layout (behaviorless-for-now real items).
+RANDO_ENUM_ITEM(RG_SHEIKAH_SLATE)
+RANDO_ENUM_ITEM(RG_PHANTOM_HOURGLASS)
+RANDO_ENUM_ITEM(RG_SHADOW_CRYSTAL)
+RANDO_ENUM_ITEM(RG_ROD_OF_SEASONS)
+// Per-LEVEL identities of the NEI progressive weapon chains. The RG_PROGRESSIVE_* rows stay the
+// POOL items; these are what the progressive GI resolution lands on, so every level presents with
+// its own name, textbox and model (a progressive give must always look like the level you are
+// actually receiving). Never placed directly in a seed. Skijer's NEI
+RANDO_ENUM_ITEM(RG_RAZOR_SWORD)       // Kokiri chain L2
+RANDO_ENUM_ITEM(RG_GILDED_SWORD)      // Kokiri chain L3
+RANDO_ENUM_ITEM(RG_TRUE_MASTER_SWORD) // Master chain L2
+RANDO_ENUM_ITEM(RG_GREAT_FAIRY_SWORD) // BGS chain L2
+RANDO_ENUM_ITEM(RG_IRON_KNUCKLE_AXE)  // Hammer chain L2
+RANDO_ENUM_ITEM(RG_ULTRASHOT)         // Hookshot chain L3
+RANDO_ENUM_ITEM(RG_QUARTZ_OF_MOTION)  // Stone of Agony chain L2
+// Dual Cane per-skill identities (mirror of MM's RI_OOT_NEI_CANE_* — the RG_CANE_OF_SOMARIA row
+// stays the pool item AND the Statue skill; these are what its resolution lands on for gives 2-6,
+// in the fixed order Statue -> Flip -> Block -> Stone -> Platform -> Ultrahand).
+RANDO_ENUM_ITEM(RG_CANE_PACCI_FLIP)       // give 2 (Pacci base — yellow)
+RANDO_ENUM_ITEM(RG_CANE_SOMARIA_BLOCK)    // give 3 (Somaria upgrade — red + flame)
+RANDO_ENUM_ITEM(RG_CANE_PACCI_STONE)      // give 4 (Pacci upgrade — yellow + flame)
+RANDO_ENUM_ITEM(RG_CANE_SOMARIA_PLATFORM) // give 5 (Somaria upgrade — red + flame)
+RANDO_ENUM_ITEM(RG_CANE_PACCI_ULTRAHAND)  // give 6 (Pacci upgrade — yellow + flame)
+// Sheikah Slate runes — sibling items over SLOT_SHEIKAH_SLATE (wand idiom: any order, no levels).
+// Each lights its NeiSaveData.slateRunesOwned bit; the first one also hands over the slate itself.
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_BOMB)         // Remote Bomb (cyan)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_MASTER_CYCLE) // Master Cycle Zero (teal)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_STASIS)       // Stasis (gold)
+RANDO_ENUM_ITEM(RG_SLATE_RUNE_CRYONIS)      // Cryonis (ice blue)
+RANDO_ENUM_ITEM(RG_SEASON_SPRING)           // Rod of Seasons: Spring (blossom pink)
+RANDO_ENUM_ITEM(RG_SEASON_SUMMER)           // Summer (high sun)
+RANDO_ENUM_ITEM(RG_SEASON_AUTUMN)           // Autumn (amber)
+RANDO_ENUM_ITEM(RG_SEASON_WINTER)           // Winter (ice blue)
 RANDO_ENUM_ITEM(RG_MAX)
 RANDO_ENUM_END(RandomizerGet)
 

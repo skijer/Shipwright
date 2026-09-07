@@ -6,11 +6,16 @@
 #include <soh/GameVersions.h>
 #include "soh/ResourceManagerHelpers.h"
 #include "UIWidgets.hpp"
-#include <spdlog/fmt/fmt.h>
+#include <ship/controller/controldeck/ControlDeck.h>
 
 extern "C" {
 #include "include/z64audio.h"
 #include "variables.h"
+#include "transformation_masks/assets/mm_asset_loader.h"
+#include "mods/transformation_masks/transformation_masks.h"
+#include "mods/pak_loader/pak_loader.h"
+#include "mods/o2r_loader/o2r_loader.h"
+#include "mods/voice_pack/voice_pack.h"
 }
 
 namespace SohGui {
@@ -146,11 +151,11 @@ void SohMenu::AddMenuSettings() {
             "This will disable game inputs while the menu is visible.\n\nD-pad to move between "
             "items, A to select, B to move up in scope."));
     AddWidget(path, "Allow background inputs", WIDGET_CVAR_CHECKBOX)
-        .CVar(CVAR_ALLOW_BACKGROUND_INPUTS)
+        .CVar(CVAR_SETTING("AllowBackgroundInputs"))
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
             SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS,
-                        CVarGetInteger(CVAR_ALLOW_BACKGROUND_INPUTS, 1) ? "1" : "0");
+                        CVarGetInteger(CVAR_SETTING("AllowBackgroundInputs"), 1) ? "1" : "0");
         })
         .Options(CheckboxOptions()
                      .Tooltip("Allows controller inputs to be picked up by the game even when the game window isn't "
@@ -167,7 +172,7 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("CursorVisibility"))
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            Ship::Context::GetInstance()->GetWindow()->SetForceCursorVisibility(
+            Ship::Context::GetRawInstance()->GetWindow()->SetForceCursorVisibility(
                 CVarGetInteger(CVAR_SETTING("CursorVisibility"), 0));
         })
         .Options(CheckboxOptions().Tooltip("Makes the cursor always visible, even in full screen."));
@@ -195,7 +200,7 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Open App Files Folder", WIDGET_BUTTON)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            std::string filesPath = Ship::Context::GetInstance()->GetAppDirectoryPath();
+            std::string filesPath = Ship::Context::GetRawInstance()->GetAppDirectoryPath();
             SDL_OpenURL(std::string("file:///" + std::filesystem::absolute(filesPath).string()).c_str());
         })
         .Options(ButtonOptions().Tooltip("Opens the folder that contains the save and mods folders, etc."));
@@ -251,6 +256,10 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_SETTING("A11yNoJabuWobble"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Disable the geometry wobble and camera distortion inside Jabu."));
+    AddWidget(path, "Disable Heat Haze", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_SETTING("A11yNoHeatHaze"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip("Disable the heat haze distortion effect in Death Mountain / Fire Temple."));
     AddWidget(path, "EXPERIMENTAL", WIDGET_SEPARATOR_TEXT).Options(TextOptions().Color(Colors::Orange));
     AddWidget(path, "ImGui Menu Scaling", WIDGET_CVAR_COMBOBOX)
         .CVar(CVAR_SETTING("ImGuiScale"))
@@ -330,13 +339,13 @@ void SohMenu::AddMenuSettings() {
     AddWidget(path, "Graphics Options", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Toggle Fullscreen", WIDGET_BUTTON)
         .RaceDisable(false)
-        .Callback([](WidgetInfo& info) { Ship::Context::GetInstance()->GetWindow()->ToggleFullscreen(); })
+        .Callback([](WidgetInfo& info) { Ship::Context::GetRawInstance()->GetWindow()->ToggleFullscreen(); })
         .Options(ButtonOptions().Tooltip("Toggles Fullscreen On/Off."));
     AddWidget(path, "Internal Resolution", WIDGET_CVAR_SLIDER_FLOAT)
         .CVar(CVAR_INTERNAL_RESOLUTION)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            Ship::Context::GetInstance()->GetWindow()->SetResolutionMultiplier(
+            Ship::Context::GetRawInstance()->GetWindow()->SetResolutionMultiplier(
                 CVarGetFloat(CVAR_INTERNAL_RESOLUTION, 1));
         })
         .PreFunc([](WidgetInfo& info) {
@@ -361,7 +370,7 @@ void SohMenu::AddMenuSettings() {
         .CVar(CVAR_MSAA_VALUE)
         .RaceDisable(false)
         .Callback([](WidgetInfo& info) {
-            Ship::Context::GetInstance()->GetWindow()->SetMsaaLevel(CVarGetInteger(CVAR_MSAA_VALUE, 1));
+            Ship::Context::GetRawInstance()->GetWindow()->SetMsaaLevel(CVarGetInteger(CVAR_MSAA_VALUE, 1));
         })
         .Options(
             IntSliderOptions()
@@ -437,9 +446,10 @@ void SohMenu::AddMenuSettings() {
                 "This will completely erase the controls config, including registered devices.\nContinue?", "Clear",
                 "Cancel",
                 []() {
-                    Ship::Context::GetInstance()->GetConsoleVariables()->ClearBlock(CVAR_PREFIX_SETTING ".Controllers");
+                    Ship::Context::GetRawInstance()->GetConsoleVariables()->ClearBlock(CVAR_PREFIX_SETTING
+                                                                                       ".Controllers");
                     uint8_t bits = 0;
-                    Ship::Context::GetInstance()->GetControlDeck()->Init(&bits);
+                    Ship::Context::GetRawInstance()->GetControlDeck()->Init(&bits);
                 },
                 nullptr);
         })

@@ -1,0 +1,23 @@
+<Skeleton Version="0" Type="Flex" LimbCount="21" DisplayListCount="21">
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_000"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_001"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_002"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_004"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_005"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_006"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_007"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_008"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_009"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_010"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_011"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_012"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_013"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_014"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_015"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_016"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_017"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_018"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_019"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_020"/>
+</Skeleton>

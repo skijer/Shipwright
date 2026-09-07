@@ -6,6 +6,8 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "mods/transformation_masks/boss_super_damage.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
 
@@ -165,7 +167,7 @@ static Vec3f sTwinrovaPillarPos[] = {
     { 0.0f, 380.0f, -580.0f },
 };
 
-u8 sTwInitalized = false;
+static u8 sTwInitialized = false;
 
 static InitChainEntry sInitChain[] = {
     ICHAIN_U8(targetMode, 5, ICHAIN_CONTINUE),
@@ -198,7 +200,13 @@ static u8 D_8094C878;
 static s16 D_8094C87A;
 static s16 D_8094C87C;
 static u8 D_8094C87E;
-BossTwEffect sTwEffects[150];
+static BossTwEffect sEffects[150];
+
+#define BOSS_TW_SHIP_SAVESTATE_FIELDS(F) \
+    F(sTwInitialized)                    \
+    F(sEffects)
+
+SHIP_SAVESTATE_DEFINE(BossTw, BOSS_TW_SHIP_SAVESTATE_FIELDS)
 
 void BossTw_AddDotEffect(PlayState* play, Vec3f* initalPos, Vec3f* initalSpeed, Vec3f* accel, f32 scale, s16 args,
                          s16 countLimit) {
@@ -267,7 +275,7 @@ void BossTw_AddPlayerFreezeEffect(PlayState* play, Actor* target) {
     BossTwEffect* eff;
     s16 i;
 
-    for (eff = play->specialEffects, i = 0; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (eff = play->specialEffects, i = 0; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_PLYR_FRZ;
             eff->curSpeed = sZeroVector;
@@ -291,7 +299,7 @@ void BossTw_AddFlameEffect(PlayState* play, Vec3f* initalPos, Vec3f* initalSpeed
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_FLAME;
             eff->pos = *initalPos;
@@ -311,7 +319,7 @@ void BossTw_AddMergeFlameEffect(PlayState* play, Vec3f* initialPos, f32 scale, f
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_MERGEFLAME;
             eff->pos = *initialPos;
@@ -334,7 +342,7 @@ void BossTw_AddShieldBlastEffect(PlayState* play, Vec3f* initalPos, Vec3f* inita
     s16 i;
     BossTwEffect* eff;
 
-    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sTwEffects); i++, eff++) {
+    for (i = 0, eff = play->specialEffects; i < ARRAY_COUNT(sEffects); i++, eff++) {
         if (eff->type == TWEFF_NONE) {
             eff->type = TWEFF_SHLD_BLST;
             eff->pos = *initalPos;
@@ -361,7 +369,7 @@ void BossTw_AddShieldDeflectEffect(PlayState* play, f32 arg1, s16 arg2) {
     sShieldHitYaw = player->actor.shape.rot.y;
 
     for (i = 0; i < 8; i++) {
-        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sTwEffects); j++, eff++) {
+        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sEffects); j++, eff++) {
             if (eff->type == TWEFF_NONE) {
                 eff->type = TWEFF_SHLD_DEFL;
                 eff->pos = sShieldHitPos;
@@ -391,7 +399,7 @@ void BossTw_AddShieldHitEffect(PlayState* play, f32 arg1, s16 arg2) {
     sShieldHitYaw = player->actor.shape.rot.y;
 
     for (i = 0; i < 8; i++) {
-        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sTwEffects); j++, eff++) {
+        for (eff = play->specialEffects, j = 0; j < ARRAY_COUNT(sEffects); j++, eff++) {
             if (eff->type == TWEFF_NONE) {
                 eff->type = TWEFF_SHLD_HIT;
                 eff->pos = sShieldHitPos;
@@ -455,8 +463,8 @@ void BossTw_Init(Actor* thisx, PlayState* play2) {
     this->actor.colChkInfo.health = 0;
     Collider_InitCylinder(play, &this->collider);
 
-    if (!sTwInitalized) {
-        sTwInitalized = true;
+    if (!sTwInitialized) {
+        sTwInitialized = true;
         play->envCtx.unk_BF = 1;
         play->envCtx.unk_BE = 1;
         play->envCtx.unk_BD = 1;
@@ -468,11 +476,11 @@ void BossTw_Init(Actor* thisx, PlayState* play2) {
 
         D_8094C858 = D_8094C854 = 0.0f;
         sFixedBlastType = Rand_ZeroFloat(1.99f);
-        play->specialEffects = sTwEffects;
+        play->specialEffects = sEffects;
 
-        for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
-            sTwEffects[i].type = TWEFF_NONE;
-            sTwEffects[i].epoch++;
+        for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
+            sEffects[i].type = TWEFF_NONE;
+            sEffects[i].epoch++;
         }
     }
 
@@ -573,7 +581,7 @@ void BossTw_Destroy(Actor* thisx, PlayState* play) {
     }
 
     if (thisx->params == TW_TWINROVA) {
-        sTwInitalized = false;
+        sTwInitialized = false;
     }
 }
 
@@ -708,7 +716,7 @@ void BossTw_SpawnGroundBlast(BossTw* this, PlayState* play, s16 blastType) {
     Vec3f velocity;
     Vec3f accel;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         velocity.x = Rand_CenteredFloat(20.0f);
         velocity.y = Rand_ZeroFloat(10.0f);
         velocity.z = Rand_CenteredFloat(20.0f);
@@ -778,7 +786,7 @@ s32 BossTw_BeamHitPlayerCheck(BossTw* this, PlayState* play) {
         if (sTwinrovaPtr->timers[2] == 0) {
             sTwinrovaPtr->timers[2] = 150;
             this->beamDist = sqrtf(SQ(offset.x) + SQ(offset.y) + SQ(offset.z));
-            func_8002F6D4(play, &this->actor, 3.0f, this->actor.shape.rot.y, 0.0f, 0x20);
+            Actor_SetPlayerKnockbackLarge(play, &this->actor, 3.0f, this->actor.shape.rot.y, 0.0f, 0x20);
 
             if (this->actor.params == 0) {
                 if (sFreezeState == 0) {
@@ -1071,7 +1079,7 @@ void BossTw_ShootBeam(BossTw* this, PlayState* play) {
                         Vec3f velocity;
                         Vec3f accel = { 0.0f, 0.0f, 0.0f };
 
-                        for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+                        for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
                             velocity.x = Rand_CenteredFloat(15.0f);
                             velocity.y = Rand_CenteredFloat(15.0f);
                             velocity.z = Rand_CenteredFloat(15.0f);
@@ -1091,7 +1099,7 @@ void BossTw_ShootBeam(BossTw* this, PlayState* play) {
                         this->groundBlastPos.y = 0.0f;
                         this->groundBlastPos.z = 0.0f;
                         play->envCtx.unk_D8 = 1.0f;
-                        func_800AA000(0.0f, 0x64, 5, 4);
+                        Rumble_Request(0.0f, 0x64, 5, 4);
                     } else if (beamReflection == 0) {
                         BossTw_BeamHitPlayerCheck(this, play);
 
@@ -1368,7 +1376,7 @@ void BossTw_HitByBeam(BossTw* this, PlayState* play) {
     Actor_UpdateBgCheckInfo(play, &this->actor, 50.0f, 50.0f, 100.0f, 4);
     this->actor.world.pos.y += 50.0f;
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         this->actor.speedXZ = 0.0f;
     }
 
@@ -1685,7 +1693,7 @@ void BossTw_TwinrovaMergeCS(BossTw* this, PlayState* play) {
             }
 
             if (this->timers[2] == 1) {
-                Camera* cam = Play_GetCamera(play, MAIN_CAM);
+                Camera* cam = Play_GetCamera(play, CAM_ID_MAIN);
 
                 cam->eye = this->subCamEye;
                 cam->eyeNext = this->subCamEye;
@@ -2247,7 +2255,7 @@ void BossTw_TwinrovaIntroCS(BossTw* this, PlayState* play) {
             }
 
             if (this->work[CS_TIMER_1] == 260) {
-                Camera* cam = Play_GetCamera(play, MAIN_CAM);
+                Camera* cam = Play_GetCamera(play, CAM_ID_MAIN);
 
                 cam->eye = this->subCamEye;
                 cam->eyeNext = this->subCamEye;
@@ -2600,7 +2608,7 @@ void BossTw_TwinrovaDeathCS(BossTw* this, PlayState* play) {
     s16 i;
     Vec3f spD0;
     Player* player = GET_PLAYER(play);
-    Camera* mainCam = Play_GetCamera(play, MAIN_CAM);
+    Camera* mainCam = Play_GetCamera(play, CAM_ID_MAIN);
 
     SkelAnime_Update(&this->skelAnime);
     this->work[UNK_S8] += 20;
@@ -2794,7 +2802,7 @@ void BossTw_TwinrovaDeathCS(BossTw* this, PlayState* play) {
             Actor_SetScale(&sKoumePtr->actor, sKoumePtr->actor.scale.x);
             Actor_SetScale(&sKotakePtr->actor, sKoumePtr->actor.scale.x);
             if (this->work[CS_TIMER_2] >= 1020) {
-                mainCam = Play_GetCamera(play, MAIN_CAM);
+                mainCam = Play_GetCamera(play, CAM_ID_MAIN);
                 mainCam->eye = this->subCamEye;
                 mainCam->eyeNext = this->subCamEye;
                 mainCam->at = this->subCamAt;
@@ -2894,13 +2902,59 @@ void BossTw_Update(Actor* thisx, PlayState* play) {
         this->collider.dim.height = 120;
         this->collider.dim.yShift = -30;
 
+        // ALWAYS register AC (even with INVINC_TIMER) so Gigantamax can hit.
+        // FD/Pika: widen the witch's bumper to accept EVERY damage flag so FD's remote sword
+        // beam (EnMThunder, dmgFlags 0x02000000) reliably lands its AC/AT hit — without an
+        // accepted flag the beam's AT_HIT never fires, so it neither damages NOR despawns
+        // (it just flies through = the "multi-hit that won't die" look). Only while in form,
+        // so normal play is unaffected.
+        if (BossSuperDamage_IsFormActive(play)) {
+            this->collider.info.bumper.dmgFlags = 0xFFFFFFFF;
+        }
+        Collider_UpdateCylinder(&this->actor, &this->collider);
+        CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
+
+        // FD / Pika Gigantamax — PHASE 1 (the two witches). User request: each hit counts
+        // as one shield-magic reflect. Vanilla makes you charge the Mirror Shield with an
+        // element and reflect a beam to score a hit (health++ on a witch); the witches
+        // merge once their combined health reaches 4 (checked in BossTw_Wait on the
+        // TW_TWINROVA actor, which requires BOTH witches in FlyTo). So here a direct FD/Pika
+        // hit just does health++ and sends the witch to FlyTo; when the running total hits
+        // the merge threshold we push BOTH witches to FlyTo so the merge fires. Throttled
+        // by INVINC_TIMER. Detected by accepted AC hit OR the geometric FD reach (bypasses
+        // dmgFlags). Gated on IsFormActive → normal shield-reflect play is untouched.
+        // The witches fly HIGH, so FD's ground-level sword can't reach them by raw 3D
+        // distance (Pika's huge AOE does). Project the witch down to the player's Y so the
+        // horizontal FD swing/touch reaches it — same trick used for Barinade's high parts.
+        Vec3f twWitchFlat = this->actor.world.pos;
+        twWitchFlat.y = GET_PLAYER(play)->actor.world.pos.y + 40.0f;
+        if (BossSuperDamage_IsFormActive(play) && (this->work[INVINC_TIMER] == 0) &&
+            (this->actionFunc != BossTw_MergeCS) &&
+            ((this->collider.base.acFlags & AC_HIT) ||
+             BossSuperDamage_FormAttackReaches(play, &twWitchFlat, BossSuperDamage_FormAttackRange(play) + 100.0f))) {
+            this->collider.base.acFlags &= ~AC_HIT;
+            this->actor.colChkInfo.health++;
+            this->work[INVINC_TIMER] = 10; // short → you can MASH (hits land during the reel too)
+            BossSuperDamage_StartElectricSparks(&this->actor, 60); // FD/Pika electric VFX on the witch
+            Audio_PlayActorSound2(&this->actor, NA_SE_EN_TWINROBA_YOUNG_DAMAGE);
+            play->envCtx.unk_D8 = 1.0f;
+            // Play the "hit by reflected beam" reel ONCE (don't restart it every mash hit) —
+            // mashing keeps incrementing health while she reels.
+            if (this->actionFunc != BossTw_HitByBeam) {
+                BossTw_SetupHitByBeam(this, play);
+            }
+            // Once the combined total reaches the merge threshold, force BOTH witches to FlyTo
+            // so the Twinrova actor's BossTw_Wait sees both in FlyTo with sum>=4 → merge CS.
+            if ((sKoumePtr->actor.colChkInfo.health + sKotakePtr->actor.colChkInfo.health) >= 4) {
+                BossTw_SetupFlyTo(sKoumePtr, play);
+                BossTw_SetupFlyTo(sKotakePtr, play);
+            }
+        }
+
         if (this->work[INVINC_TIMER] == 0) {
             if (this->collider.base.acFlags & AC_HIT) {
                 this->collider.base.acFlags &= ~AC_HIT;
             }
-
-            Collider_UpdateCylinder(&this->actor, &this->collider);
-            CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
             CollisionCheck_SetAT(play, &play->colChkCtx, &this->collider.base);
         }
 
@@ -3076,6 +3130,33 @@ void BossTw_TwinrovaUpdate(Actor* thisx, PlayState* play2) {
     this->collider.dim.height = 150;
     this->collider.dim.yShift = -60;
     Collider_UpdateCylinder(&this->actor, &this->collider);
+
+    // FD / Pika Gigantamax — PHASE 2 (merged Twinrova): unified paralyze-or-damage.
+    // BossTw_TwinrovaDamage already branches on state — if she is NOT in BossTw_TwinrovaStun
+    // it plays the charged-attack-hit stun (paralyze); if she IS stunned it subtracts the
+    // damage and runs the death CS at 0. So one call gives "stun, then mash to death", like
+    // the vanilla reflect→sword loop. Throttled by INVINC_TIMER (the damage branch sets it
+    // to 20; we add a short gap after a fresh stun). Detected by accepted AC hit OR the
+    // geometric FD reach (bypasses dmgFlags). Gated on IsFormActive → normal shield-reflect
+    // play is untouched.
+    // Twinrova also floats high, so project her to the player's Y (Barinade trick) so the
+    // FD ground swing reaches her geometrically; the AC_HIT path covers her beam/Pika.
+    Vec3f twFlat = this->actor.world.pos;
+    twFlat.y = GET_PLAYER(play)->actor.world.pos.y + 40.0f;
+    if (BossSuperDamage_IsFormActive(play) && (this->work[INVINC_TIMER] == 0) &&
+        ((s8)this->actor.colChkInfo.health > 0) && (this->actionFunc != BossTw_Wait) &&
+        (this->actionFunc != BossTw_TwinrovaMergeCS) &&
+        ((this->collider.base.acFlags & AC_HIT) ||
+         BossSuperDamage_FormAttackReaches(play, &twFlat, BossSuperDamage_FormAttackRange(play) + 100.0f))) {
+        u8 wasStunned = (this->actionFunc == BossTw_TwinrovaStun);
+        this->collider.base.acFlags &= ~AC_HIT;
+        BossSuperDamage_StartElectricSparks(&this->actor, 90);
+        BossTw_TwinrovaDamage(this, play,
+                              BossSuperDamage_FormDamage(play)); // not stunned → stun; stunned → -dmg (death CS at 0)
+        if (!wasStunned) {
+            this->work[INVINC_TIMER] = 12; // brief gap between the stun and the first damage
+        }
+    }
 
     if (this->work[INVINC_TIMER] == 0) {
         if (this->actionFunc != BossTw_TwinrovaStun) {
@@ -3551,6 +3632,16 @@ void BossTw_Draw(Actor* thisx, PlayState* play2) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+
+    // FD / Pika Gigantamax electric glow on a hit witch (phase 1). Two anchors — body +
+    // head. No-op when the spark timer is 0 (not recently hit).
+    {
+        Vec3f limbs[2];
+        limbs[0] = this->actor.world.pos;
+        limbs[1] = this->actor.world.pos;
+        limbs[1].y += 60.0f;
+        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 2, 1.2f);
+    }
 }
 
 void* D_8094A9B0[] = {
@@ -3880,6 +3971,16 @@ void BossTw_TwinrovaDraw(Actor* thisx, PlayState* play2) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+
+    // FD / Pika Gigantamax electric glow on the merged Twinrova (phase 2). Two anchors —
+    // body + head. No-op when the spark timer is 0 (not recently hit).
+    {
+        Vec3f limbs[2];
+        limbs[0] = this->actor.world.pos;
+        limbs[1] = this->actor.world.pos;
+        limbs[1].y += 80.0f;
+        BossSuperDamage_DrawElectricSparks(&this->actor, play, limbs, 2, 1.4f);
+    }
 }
 
 void BossTw_BlastFire(BossTw* this, PlayState* play) {
@@ -4246,7 +4347,7 @@ void BossTw_BlastIce(BossTw* this, PlayState* play) {
                 Math_ApproachF(&sKotakePtr->workf[UNK_F9], 80.0f, 1.0f, 3.0f);
                 Math_ApproachF(&sKotakePtr->workf[UNK_F11], 255.0f, 1.0f, 10.0f);
                 Math_ApproachF(&sKotakePtr->workf[UNK_F12], 0.04f, 0.1f, 0.002f);
-                Math_ApproachF(&sKotakePtr->workf[UNK_F16], 70.0f, 1.0f, 5.0f);
+                Math_ApproachF(&sKotakePtr->workf[UNK_F16], 70.0f, 1.0f, -5.0f);
 
                 if ((this->timers[0] == 70) || (this->timers[0] == 30)) {
                     sKotakePtr->workf[UNK_F16] = 10.0f;
@@ -4307,7 +4408,7 @@ s32 BossTw_BlastShieldCheck(BossTw* this, PlayState* play) {
             if (info->toucher.dmgFlags & DMG_SHIELD) {
                 this->work[INVINC_TIMER] = 7;
                 play->envCtx.unk_D8 = 1.0f;
-                func_800AA000(0.0f, 100, 5, 4);
+                Rumble_Request(0.0f, 100, 5, 4);
 
                 if (Player_HasMirrorShieldEquipped(play)) {
                     if (this->blastType == 1) {
@@ -4564,7 +4665,7 @@ void BossTw_UpdateEffects(PlayState* play) {
     f32 phi_f0;
     Actor* unk44;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (eff->type != 0) {
             eff->pos.x += eff->curSpeed.x;
             eff->pos.y += eff->curSpeed.y;
@@ -4896,7 +4997,7 @@ void BossTw_DrawEffects(PlayState* play) {
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 1) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4921,7 +5022,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 3) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4949,7 +5050,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 2) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -4979,7 +5080,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type == 4) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -5027,7 +5128,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         Actor* actor;
         Vec3f off;
 
@@ -5077,7 +5178,7 @@ void BossTw_DrawEffects(PlayState* play) {
     sp18F = 0;
     currentEffect = effectHead;
 
-    for (i = 0; i < ARRAY_COUNT(sTwEffects); i++) {
+    for (i = 0; i < ARRAY_COUNT(sEffects); i++) {
         if (currentEffect->type >= 6) {
             FrameInterpolation_RecordOpenChild(currentEffect, currentEffect->epoch);
 
@@ -5335,7 +5436,7 @@ void BossTw_TwinrovaStun(BossTw* this, PlayState* play) {
         Animation_MorphToLoop(&this->skelAnime, &gTwinrovaStunLoopAnim, 0.0f);
     }
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         this->actor.velocity.y = 0.0f;
     }
 
@@ -5469,6 +5570,6 @@ void BossTw_TwinrovaLaugh(BossTw* this, PlayState* play) {
 }
 
 void BossTw_Reset(void) {
-    sTwInitalized = false;
-    memset(sTwEffects, 0, sizeof(sTwEffects));
+    sTwInitialized = false;
+    memset(sEffects, 0, sizeof(sEffects));
 }

@@ -13,6 +13,28 @@
 #define STARTING_HEALTH (3 * FULL_HEART_HEALTH)
 #define MAX_HEALTH (20 * FULL_HEART_HEALTH)
 
+// `_FORCE` means that this request will respond to `forceRisingButtonAlphas`.
+// If set, the buttons will also raise alphas but will also account for disabled buttons
+
+typedef enum HudVisibilityMode {
+    /*  0 */ HUD_VISIBILITY_NO_CHANGE,
+    /*  1 */ HUD_VISIBILITY_NOTHING,
+    /*  2 */ HUD_VISIBILITY_NOTHING_ALT, // Identical to HUD_VISIBILITY_NOTHING
+    /*  3 */ HUD_VISIBILITY_HEARTS_FORCE, // See above
+    /*  4 */ HUD_VISIBILITY_A,
+    /*  5 */ HUD_VISIBILITY_A_HEARTS_MAGIC_FORCE, // See above
+    /*  6 */ HUD_VISIBILITY_A_HEARTS_MAGIC_MINIMAP_FORCE, // See above
+    /*  7 */ HUD_VISIBILITY_ALL_NO_MINIMAP_BY_BTN_STATUS, // Only raises button alphas if not disabled
+    /*  8 */ HUD_VISIBILITY_B,
+    /*  9 */ HUD_VISIBILITY_HEARTS_MAGIC,
+    /* 10 */ HUD_VISIBILITY_B_ALT, // Identical to HUD_VISIBILITY_B
+    /* 11 */ HUD_VISIBILITY_HEARTS,
+    /* 12 */ HUD_VISIBILITY_A_B_MINIMAP,
+    /* 13 */ HUD_VISIBILITY_HEARTS_MAGIC_FORCE, // See above
+    /* 50 */ HUD_VISIBILITY_ALL = 50, // Only raises button alphas if not disabled
+    /* 52 */ HUD_VISIBILITY_NOTHING_INSTANT = 52
+} HudVisibilityMode;
+
 typedef enum {
     /* 0x0 */ MAGIC_STATE_IDLE, // Regular gameplay
     /* 0x1 */ MAGIC_STATE_CONSUME_SETUP, // Sets the speed at which magic border flashes
@@ -222,6 +244,14 @@ typedef struct ShipQuestSaveContextData {
     ShipQuestSpecificSaveContextData data;
 } ShipQuestSaveContextData;
 
+// Extended-button storage — the real (u16) item id per button, only meaningful where
+// equips.buttonItems[button] == ITEM_EXT_BUTTON (the reserved u8 marker in z64item.h); everywhere
+// else it stays 0. Unlike MM, OoT's equips arrays are FLAT (no per-form dimension), so this array is
+// indexed exactly like buttonItems: 0 = B, 1-3 = C-left/down/right, 4-7 = D-pad.
+typedef struct ExtButtonSaveInfo {
+    u16 items[8];
+} ExtButtonSaveInfo;
+
 typedef struct ShipSaveContextData {
     u16 pendingSale;
     u16 pendingSaleMod;
@@ -233,6 +263,9 @@ typedef struct ShipSaveContextData {
     u8 filenameLanguage;
     //TODO: Move non-rando specific flags to a new sohInf and move the remaining randomizerInf to ShipRandomizerSaveContextData
     u16 randomizerInf[(RAND_INF_MAX + 15) / 16];
+    // APPEND-ONLY past this point: members are serialized by name but the struct is also snapshotted
+    // wholesale (SaveContext copies), so inserting above shifts existing offsets.
+    ExtButtonSaveInfo extButtons;
 } ShipSaveContextData;
 
 #pragma endregion
@@ -292,7 +325,7 @@ typedef struct {
     /* 0x1354 */ s32 fileNum; // "file_no"
     /* 0x1358 */ char unk_1358[0x0004];
     /* 0x135C */ s32 gameMode;
-    /* 0x1360 */ s32 sceneSetupIndex; // "counter" // Upstream TODO: sceneLayer
+    /* 0x1360 */ s32 sceneLayer; // "counter"
     /* 0x1364 */ s32 respawnFlag; // "restart_flag"
     /* 0x1368 */ RespawnData respawn[RESPAWN_MODE_MAX]; // "restart_data"
     /* 0x13BC */ f32 entranceSpeed;
@@ -316,10 +349,10 @@ typedef struct {
     /* 0x13E1 */ u8 natureAmbienceId;
     /* 0x13E2 */ u8 buttonStatus[9]; // SOH [Enhancements] Changed from 5 to 9 to support Dpad equips
     /* 0x13E7 */ u8 forceRisingButtonAlphas; // alpha related
-    /* 0x13E8 */ u16 unk_13E8; // alpha type?
-    /* 0x13EA */ u16 unk_13EA; // also alpha type?
-    /* 0x13EC */ u16 unk_13EC; // alpha type counter?
-    /* 0x13EE */ u16 unk_13EE; // previous alpha type?
+    /* 0x13E8 */ u16 nextHudVisibilityMode; // triggers the hud to change visibility mode to the requested value. Reset to HUD_VISIBILITY_NO_CHANGE when target is reached
+    /* 0x13EA */ u16 hudVisibilityMode; // current hud visibility mode
+    /* 0x13EC */ u16 hudVisibilityModeTimer; // number of frames in the transition to a new hud visibility mode. Used to step alpha
+    /* 0x13EE */ u16 prevHudVisibilityMode; // used to store and recover hud visibility mode for pause menu and text boxes
     /* 0x13F0 */ s16 magicState; // determines magic meter behavior on each frame
     /* 0x13F2 */ s16 prevMagicState; // used to resume the previous state after adding or filling magic
     /* 0x13F4 */ s16 magicCapacity; // maximum magic available
@@ -358,12 +391,23 @@ typedef enum {
     /* 01 */ QUEST_MASTER,
     /* 02 */ QUEST_RANDOMIZER,
     /* 03 */ QUEST_BOSSRUSH,
+    /* 04 */ QUEST_OOTXMM, // Fleet Ship Combo (OoT x MM): a randomizer save paired with a MM slot
 } Quest;
 
 #define IS_VANILLA (gSaveContext.ship.quest.id == QUEST_NORMAL)
 #define IS_MASTER_QUEST (gSaveContext.ship.quest.id == QUEST_MASTER)
-#define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER)
+// A COMBO (OoTxMM) save IS a randomizer run (it carries a generated seed) paired with a MM slot, so
+// IS_RANDO is TRUE for it too — every existing rando code path applies unchanged. Use IS_OOTXMM only
+// for the combo-SPECIFIC bits (file-select label, save-pair creation, which game boots). NOTE: code
+// that compares `quest.id == QUEST_RANDOMIZER` DIRECTLY (not via IS_RANDO) won't catch combo — those
+// few spots are the residual audit if combo ever misbehaves like plain rando.
+#define IS_OOTXMM (gSaveContext.ship.quest.id == QUEST_OOTXMM)
+#define IS_RANDO (gSaveContext.ship.quest.id == QUEST_RANDOMIZER || IS_OOTXMM)
 #define IS_BOSS_RUSH (gSaveContext.ship.quest.id == QUEST_BOSSRUSH)
+
+// Extended-button real (u16) id for a button slot marked ITEM_EXT_BUTTON in equips.buttonItems.
+// `btn` uses the flat buttonItems indexing (0 = B, 1-3 = C, 4-7 = D-pad) — OoT has no form dimension.
+#define EXT_BUTTON_ITEM(btn) (gSaveContext.ship.extButtons.items[btn])
 
 typedef enum {
     /* 0x00 */ BTN_ENABLED,
@@ -423,7 +467,7 @@ typedef enum {
     /* 4 */ SCENE_LAYER_CUTSCENE_FIRST
 } SceneLayer;
 
-#define IS_CUTSCENE_LAYER (gSaveContext.sceneSetupIndex >= SCENE_LAYER_CUTSCENE_FIRST)
+#define IS_CUTSCENE_LAYER (gSaveContext.sceneLayer >= SCENE_LAYER_CUTSCENE_FIRST)
 
 typedef enum {
     /* 0 */ LINK_AGE_ADULT,

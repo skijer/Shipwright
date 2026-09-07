@@ -338,14 +338,16 @@ void EnButte_FollowLink(EnButte* this, PlayState* play) {
 
     distSqFromHome = Math3D_Dist2DSq(this->actor.world.pos.x, this->actor.world.pos.z, this->actor.home.pos.x,
                                      this->actor.home.pos.z);
-    if (!((player->heldItemAction == PLAYER_IA_DEKU_STICK) && (fabsf(player->actor.speedXZ) < 1.8f) &&
-          (this->swordDownTimer <= 0) && (distSqFromHome < SQ(320.0f)))) {
-        EnButte_SetupFlyAround(this);
-    } else if (distSqFromHome > SQ(240.0f)) {
-        distSqFromSword = Math3D_Dist2DSq(player->meleeWeaponInfo[0].tip.x, player->meleeWeaponInfo[0].tip.z,
-                                          this->actor.world.pos.x, this->actor.world.pos.z);
-        if (distSqFromSword < SQ(60.0f)) {
-            EnButte_SetupTransformIntoFairy(this);
+    if (GameInteractor_Should(VB_SPAWN_BUTTERFLY_FAIRY_EASY, true, this)) {
+        if (!((player->heldItemAction == PLAYER_IA_DEKU_STICK) && (fabsf(player->actor.speedXZ) < 1.8f) &&
+              (this->swordDownTimer <= 0) && (distSqFromHome < SQ(320.0f)))) {
+            EnButte_SetupFlyAround(this);
+        } else if (distSqFromHome > SQ(240.0f)) {
+            distSqFromSword = Math3D_Dist2DSq(player->meleeWeaponInfo[0].tip.x, player->meleeWeaponInfo[0].tip.z,
+                                              this->actor.world.pos.x, this->actor.world.pos.z);
+            if (distSqFromSword < SQ(60.0f)) {
+                EnButte_SetupTransformIntoFairy(this);
+            }
         }
     }
 }
@@ -358,6 +360,46 @@ void EnButte_SetupTransformIntoFairy(EnButte* this) {
     this->actionFunc = EnButte_TransformIntoFairy;
 }
 
+// Skijer's NEI Net: hand the just-transformed fairy straight to the player. Bottle it when a bottle
+// is free (kill the actor — it's in the bottle now); otherwise send it onto Link so the vanilla
+// heal-touch fires (Health +8 hearts, and with fairy shuffle VB_FAIRY_HEAL also grants the check).
+static void EnButte_NetGrantFairy(PlayState* play, Actor* fairy, u8 allowBottle) {
+    extern uint8_t Bottle_CatchIntoEmpty(uint16_t content);
+    Player* player = GET_PLAYER(play);
+
+    if (allowBottle && Bottle_CatchIntoEmpty(ITEM_FAIRY)) {
+        Audio_PlayFanfare(NA_BGM_ITEM_GET | 0x900);
+        Actor_Kill(fairy);
+        return;
+    }
+    // No bottle (or a rando check fairy): park it right on Link — the fairy's own update heals on
+    // touch (<10 xz, 0-60 above the base), which is also where the fairy-shuffle check is granted.
+    fairy->world.pos.x = player->actor.world.pos.x;
+    fairy->world.pos.y = player->actor.world.pos.y + 30.0f;
+    fairy->world.pos.z = player->actor.world.pos.z;
+}
+
+// Rando path helper: fairy shuffle spawned the CHECK fairy at our focus pos (inside the VB) — find it.
+static Actor* EnButte_FindSpawnedFairy(EnButte* this, PlayState* play) {
+    Actor* best = NULL;
+    f32 bestDist = 100.0f;
+    s32 cat;
+    for (cat = 0; cat < ACTORCAT_MAX; cat++) {
+        Actor* actor = play->actorCtx.actorLists[cat].head;
+        while (actor != NULL) {
+            if (actor->id == ACTOR_EN_ELF) {
+                f32 d = Math_Vec3f_DistXYZ(&this->actor.focus.pos, &actor->world.pos);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = actor;
+                }
+            }
+            actor = actor->next;
+        }
+    }
+    return best;
+}
+
 void EnButte_TransformIntoFairy(EnButte* this, PlayState* play) {
     SkelAnime_Update(&this->skelAnime);
     EnButte_UpdateTransformationEffect();
@@ -365,8 +407,22 @@ void EnButte_TransformIntoFairy(EnButte* this, PlayState* play) {
     if (this->timer == 5) {
         SoundSource_PlaySfxAtFixedWorldPos(play, &this->actor.world.pos, 60, NA_SE_EV_BUTTERFRY_TO_FAIRY);
     } else if (GameInteractor_Should(VB_SPAWN_BUTTERFLY_FAIRY, this->timer == 4, this)) {
-        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.focus.pos.x, this->actor.focus.pos.y,
-                    this->actor.focus.pos.z, 0, this->actor.shape.rot.y, 0, FAIRY_HEAL_TIMED);
+        Actor* fairy =
+            Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.focus.pos.x, this->actor.focus.pos.y,
+                        this->actor.focus.pos.z, 0, this->actor.shape.rot.y, 0, FAIRY_HEAL_TIMED);
+        // Net-forced: also GRANT it — bottle the fairy, or heal Link if no bottle is free.
+        if (this->netForced && (fairy != NULL)) {
+            EnButte_NetGrantFairy(play, fairy, true);
+        }
+        this->drawSkelAnime = false;
+    } else if (this->netForced && (this->timer == 4)) {
+        // Fairy shuffle consumed the spawn (VB false) and spawned the CHECK fairy in our place — send
+        // it to Link so the heal-touch grants the rando item right away (no bottling a check fairy:
+        // the check grant lives in the heal/touch path).
+        Actor* fairy = EnButte_FindSpawnedFairy(this, play);
+        if (fairy != NULL) {
+            EnButte_NetGrantFairy(play, fairy, false);
+        }
         this->drawSkelAnime = false;
     } else if (this->timer <= 0) {
         EnButte_SetupWaitToDie(this);
@@ -383,6 +439,23 @@ void EnButte_WaitToDie(EnButte* this, PlayState* play) {
     if (this->timer <= 0) {
         Actor_Kill(&this->actor);
     }
+}
+
+// Skijer's NEI Net: the net touching this butterfly forces its fairy transform directly — no held
+// deku stick / follow dance needed. Goes through the vanilla transform path, so with fairy shuffle on
+// VB_SPAWN_BUTTERFLY_FAIRY (ShuffleFairies.cpp) hands out the rando check instead of the fairy.
+// Called from Net_CaptureAtBlade (z_player_lib.c).
+void EnButte_NetForceTransform(Actor* thisx) {
+    EnButte* this = (EnButte*)thisx;
+
+    if ((this->actor.params & 1) != 1) {
+        return; // only fairy-capable butterflies (same gate as the vanilla stick check)
+    }
+    if (this->actionFunc == EnButte_TransformIntoFairy || this->actionFunc == EnButte_WaitToDie) {
+        return; // already transforming / spent
+    }
+    this->netForced = 1; // auto-grant the fairy when it comes out (bottle / heal / rando check)
+    EnButte_SetupTransformIntoFairy(this);
 }
 
 void EnButte_Update(Actor* thisx, PlayState* play) {

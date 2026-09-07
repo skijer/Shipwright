@@ -1,0 +1,11 @@
+<Skeleton Version="0" Type="Flex" LimbCount="9" DisplayListCount="9">
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_000"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_001"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_002"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_003"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_004"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_005"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_006"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_007"/>
+	<SkeletonLimb Path="objects/forms/keaton/object_link_boy/gLinkAdultTailsLimb_008"/>
+</Skeleton>

@@ -1,0 +1,9 @@
+<DisplayList Version="0">
+	<LoadVertices Path="objects/object_nei_fire_rod/Cylinder_001_Cylinder_001_mesh_layer_Opaque_vtx_3" VertexBufferIndex="0" VertexOffset="0" Count="17"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="2" V12="3" Flag1="0"/>
+	<Triangles2 V00="4" V01="5" V02="6" Flag0="0" V10="4" V11="6" V12="7" Flag1="0"/>
+	<Triangles2 V00="8" V01="9" V02="10" Flag0="0" V10="10" V11="11" V12="8" Flag1="0"/>
+	<Triangles2 V00="10" V01="12" V02="11" Flag0="0" V10="13" V11="14" V12="15" Flag1="0"/>
+	<Triangle1 V00="13" V01="15" V02="16" Flag0="0"/>
+	<EndDisplayList/>
+</DisplayList>

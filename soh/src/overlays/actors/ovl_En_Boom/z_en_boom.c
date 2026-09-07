@@ -6,6 +6,9 @@
 
 #include "z_en_boom.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+#include "mods/transformation_masks/transformation_masks.h"
+#include "mods/extended_equipment.h"
+#include "mods/equipment/objects/ikaxe_DL/header.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
 
@@ -66,25 +69,71 @@ void EnBoom_Init(Actor* thisx, PlayState* play) {
 
     Actor_ProcessInitChain(&this->actor, sInitChain);
 
-    blure.p1StartColor[0] = 255;
-    blure.p1StartColor[1] = 255;
-    blure.p1StartColor[2] = 100;
-    blure.p1StartColor[3] = 255;
+    // IK Axe tomahawk: params 99 is set ONLY by the explicit IKAxe throw (equip_ikaxe_throw.inc.c),
+    // exactly like the Zora fins spawn params 1/2 explicitly. A normal boomerang (params 0) stays a
+    // normal boomerang even while the hammer upgrade is owned — no global conversion.
+    if (this->actor.params == 99) {
+        blure.p1StartColor[0] = 255;
+        blure.p1StartColor[1] = 150;
+        blure.p1StartColor[2] = 50;
+        blure.p1StartColor[3] = 255;
 
-    blure.p2StartColor[0] = 255;
-    blure.p2StartColor[1] = 255;
-    blure.p2StartColor[2] = 100;
-    blure.p2StartColor[3] = 64;
+        blure.p2StartColor[0] = 255;
+        blure.p2StartColor[1] = 80;
+        blure.p2StartColor[2] = 20;
+        blure.p2StartColor[3] = 64;
 
-    blure.p1EndColor[0] = 255;
-    blure.p1EndColor[1] = 255;
-    blure.p1EndColor[2] = 100;
-    blure.p1EndColor[3] = 0;
+        blure.p1EndColor[0] = 200;
+        blure.p1EndColor[1] = 60;
+        blure.p1EndColor[2] = 10;
+        blure.p1EndColor[3] = 0;
 
-    blure.p2EndColor[0] = 255;
-    blure.p2EndColor[1] = 255;
-    blure.p2EndColor[2] = 100;
-    blure.p2EndColor[3] = 0;
+        blure.p2EndColor[0] = 200;
+        blure.p2EndColor[1] = 60;
+        blure.p2EndColor[2] = 10;
+        blure.p2EndColor[3] = 0;
+        // Zora fin boomerangs (params 1=left, 2=right) use cyan trail
+    } else if (this->actor.params == 1 || this->actor.params == 2) {
+        blure.p1StartColor[0] = 100;
+        blure.p1StartColor[1] = 220;
+        blure.p1StartColor[2] = 255;
+        blure.p1StartColor[3] = 255;
+
+        blure.p2StartColor[0] = 50;
+        blure.p2StartColor[1] = 180;
+        blure.p2StartColor[2] = 255;
+        blure.p2StartColor[3] = 64;
+
+        blure.p1EndColor[0] = 50;
+        blure.p1EndColor[1] = 180;
+        blure.p1EndColor[2] = 255;
+        blure.p1EndColor[3] = 0;
+
+        blure.p2EndColor[0] = 50;
+        blure.p2EndColor[1] = 180;
+        blure.p2EndColor[2] = 255;
+        blure.p2EndColor[3] = 0;
+    } else {
+        blure.p1StartColor[0] = 255;
+        blure.p1StartColor[1] = 255;
+        blure.p1StartColor[2] = 100;
+        blure.p1StartColor[3] = 255;
+
+        blure.p2StartColor[0] = 255;
+        blure.p2StartColor[1] = 255;
+        blure.p2StartColor[2] = 100;
+        blure.p2StartColor[3] = 64;
+
+        blure.p1EndColor[0] = 255;
+        blure.p1EndColor[1] = 255;
+        blure.p1EndColor[2] = 100;
+        blure.p1EndColor[3] = 0;
+
+        blure.p2EndColor[0] = 255;
+        blure.p2EndColor[1] = 255;
+        blure.p2EndColor[2] = 100;
+        blure.p2EndColor[3] = 0;
+    }
 
     blure.elemDuration = 8;
     blure.unkFlag = 0;
@@ -95,6 +144,22 @@ void EnBoom_Init(Actor* thisx, PlayState* play) {
 
     Collider_InitQuad(play, &this->collider);
     Collider_SetQuad(play, &this->collider, &this->actor, &sQuadInit);
+
+    // IK Axe tomahawk: real Megaton-Hammer damage on the thrown axe (the old 0x2 was not a hammer
+    // flag, so the "boomerang" hit nothing as a hammer). DMG_HAMMER = swing | jump.
+    if (this->actor.params == 99) {
+        this->collider.info.toucher.dmgFlags = DMG_HAMMER;
+        this->collider.info.toucher.damage = 8; // hammer-tier hit
+    }
+
+    // Zora cutter fins (params 1=left, 2=right): MM does 2 damage per fin
+    // (DMG_ZORA_BOOMERANG, qty=2). Vanilla OOT boomerang only does 1 — override
+    // the qty here when spawned by Player_StartZoraBoomerang so the Zora form
+    // matches MM. Flag bit (0x10) is identical between DMG_BOOMERANG (OOT) and
+    // DMG_ZORA_BOOMERANG (MM), so the default flag is left as-is.
+    if (this->actor.params == 1 || this->actor.params == 2) {
+        this->collider.info.toucher.damage = 2;
+    }
 
     EnBoom_SetupAction(this, EnBoom_Fly);
 }
@@ -123,6 +188,10 @@ void EnBoom_Fly(EnBoom* this, PlayState* play) {
     s32 pad2;
 
     player = GET_PLAYER(play);
+
+    // IK Axe tomahawk (params 99) flies 1:1 like the vanilla boomerang (this same function) —
+    // only its model (axe DL) and damage type (hammer, set in Init) differ.
+
     target = this->moveTo;
 
     // If the boomerang is moving toward a targeted actor, handle setting the proper x and y angle to fly toward it.
@@ -152,7 +221,7 @@ void EnBoom_Fly(EnBoom* this, PlayState* play) {
     // Set xyz speed, move forward, and play the boomerang sound
     Actor_SetProjectileSpeed(&this->actor, 12.0f);
     Actor_MoveXZGravity(&this->actor);
-    func_8002F974(&this->actor, NA_SE_IT_BOOMERANG_FLY - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->actor, NA_SE_IT_BOOMERANG_FLY - SFX_FLAG);
 
     // If the boomerang collides with EnItem00 or a Skulltula token, set grabbed pointer to pick it up
     collided = this->collider.base.atFlags & AT_HIT;
@@ -269,10 +338,30 @@ void EnBoom_Draw(Actor* thisx, PlayState* play) {
     }
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_RotateY((this->activeTimer * 12000) * (M_PI / 0x8000), MTXMODE_APPLY);
 
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gBoomerangRefDL);
+    if (this->actor.params == 99) {
+        // IK Axe tomahawk: slower spin, axe DL on XLU
+        Matrix_RotateY((this->activeTimer * 4000) * (M_PI / 0x8000), MTXMODE_APPLY);
+        Matrix_Scale(0.15f, 0.15f, 0.15f, MTXMODE_APPLY);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, gIKAxeInlineDL);
+    } else {
+        // Zora fins (params 1/2): flat arc flight, no spin. Normal boomerang: fast spin.
+        if (this->actor.params != 1 && this->actor.params != 2) {
+            Matrix_RotateY((this->activeTimer * 12000) * (M_PI / 0x8000), MTXMODE_APPLY);
+        }
+
+        gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+        // Zora fin boomerangs: use MM fin DLs instead of OOT boomerang
+        if (this->actor.params == 1 && gZoraFinBoomerangLDL != NULL) {
+            gSPDisplayList(POLY_OPA_DISP++, gZoraFinBoomerangLDL);
+        } else if (this->actor.params == 2 && gZoraFinBoomerangRDL != NULL) {
+            gSPDisplayList(POLY_OPA_DISP++, gZoraFinBoomerangRDL);
+        } else {
+            gSPDisplayList(POLY_OPA_DISP++, gBoomerangRefDL);
+        }
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

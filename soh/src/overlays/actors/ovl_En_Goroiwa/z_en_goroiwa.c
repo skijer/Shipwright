@@ -9,6 +9,7 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/object_goroiwa/object_goroiwa.h"
 #include "vt.h"
+#include "mods/items/logic/weapon_upgrades.h" // Skijer's NEI: Iron Knuckle's Axe prop-smash
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -594,7 +595,7 @@ void EnGoroiwa_Roll(EnGoroiwa* this, PlayState* play) {
                 EnGoroiwa_FaceNextWaypoint(this, play);
             }
         }
-        func_8002F6D4(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 0);
+        Actor_SetPlayerKnockbackLarge(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 0);
         osSyncPrintf(VT_FGCOL(CYAN));
         osSyncPrintf("Player ぶっ飛ばし\n"); // "Player knocked down"
         osSyncPrintf(VT_RST);
@@ -642,7 +643,7 @@ void EnGoroiwa_SetupMoveAndFallToGround(EnGoroiwa* this) {
 
 void EnGoroiwa_MoveAndFallToGround(EnGoroiwa* this, PlayState* play) {
     EnGoroiwa_MoveAndFall(this, play);
-    if ((this->actor.bgCheckFlags & 1) && this->actor.velocity.y < 0.0f) {
+    if ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && this->actor.velocity.y < 0.0f) {
         if ((this->stateFlags & ENGOROIWA_PLAYER_IN_THE_WAY) && (this->actor.home.rot.z & 1) == 1) {
             EnGoroiwa_ReverseDirection(this);
             EnGoroiwa_FaceNextWaypoint(this, play);
@@ -680,7 +681,7 @@ void EnGoroiwa_SetupMoveUp(EnGoroiwa* this) {
 void EnGoroiwa_MoveUp(EnGoroiwa* this, PlayState* play) {
     if (this->collider.base.atFlags & AT_HIT) {
         this->collider.base.atFlags &= ~AT_HIT;
-        func_8002F6D4(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 4);
+        Actor_SetPlayerKnockbackLarge(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 4);
         Player_PlaySfx(&GET_PLAYER(play)->actor, NA_SE_PL_BODY_HIT);
         if ((this->actor.home.rot.z & 1) == 1) {
             this->collisionDisabledTimer = 50;
@@ -705,7 +706,7 @@ void EnGoroiwa_SetupMoveDown(EnGoroiwa* this) {
 void EnGoroiwa_MoveDown(EnGoroiwa* this, PlayState* play) {
     if (this->collider.base.atFlags & AT_HIT) {
         this->collider.base.atFlags &= ~AT_HIT;
-        func_8002F6D4(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 4);
+        Actor_SetPlayerKnockbackLarge(play, &this->actor, 2.0f, this->actor.yawTowardsPlayer, 0.0f, 4);
         Player_PlaySfx(&GET_PLAYER(play)->actor, NA_SE_PL_BODY_HIT);
         if ((this->actor.home.rot.z & 1) == 1) {
             this->collisionDisabledTimer = 50;
@@ -726,6 +727,13 @@ void EnGoroiwa_Update(Actor* thisx, PlayState* play) {
 
     if (!(player->stateFlags1 &
           (PLAYER_STATE1_TALKING | PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE))) {
+        // NEI: the Iron Knuckle's Axe smashes this rolling boulder in one hit (drops a reward).
+        if (WeaponUpgrade_IKAxeStrike(&this->actor, play, 1, 120.0f)) {
+            EnGoroiwa_SpawnFragments(this, play);
+            Item_DropCollectibleRandom(play, &this->actor, &this->actor.world.pos, 0);
+            Actor_Kill(&this->actor);
+            return;
+        }
         if (this->collisionDisabledTimer > 0) {
             this->collisionDisabledTimer--;
         }

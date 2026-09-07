@@ -1,14 +1,19 @@
 #include "GameInteractor.h"
-#include <libultraship/bridge.h>
-#include "soh/Enhancements/randomizer/3drando/random.hpp"
+#include "soh/ShipUtils.h"
 #include <math.h>
 #include "soh/Enhancements/debugger/colViewer.h"
 #include "soh/Enhancements/nametag.h"
+#include "soh/Enhancements/item-tables/ItemTableManager.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
+// The SaveConsoleVariablesNextFrame() call at the bottom of this file came in with the upstream
+// merge; its include was in the region we resolved in favour of our own, so it has to be restored.
+#include <ship/Context.h>
+#include <ship/window/Window.h>
+#include <fast/Fast3dGui.h>
 
 extern "C" {
 #include "variables.h"
 #include "macros.h"
-#include "soh/cvar_prefixes.h"
 #include "functions.h"
 extern PlayState* gPlayState;
 }
@@ -125,7 +130,8 @@ void GameInteractor::RawAction::ElectrocutePlayer() {
 
 void GameInteractor::RawAction::KnockbackPlayer(float strength) {
     Player* player = GET_PLAYER(gPlayState);
-    func_8002F71C(gPlayState, &player->actor, strength * 5, player->actor.world.rot.y + 0x8000, strength * 5);
+    Actor_SetPlayerKnockbackLargeNoDamage(gPlayState, &player->actor, strength * 5, player->actor.world.rot.y + 0x8000,
+                                          strength * 5);
 }
 
 void GameInteractor::RawAction::SetSceneFlag(int16_t sceneNum, int16_t flagType, int16_t flag) {
@@ -245,11 +251,6 @@ void GameInteractor::RawAction::SetFlag(int16_t flagType, int16_t flag) {
             gSaveContext.eventInf[flag >> 4] |= (1 << (flag & 0xF));
             break;
         case FlagType::FLAG_RANDOMIZER_INF:
-            if (!IS_RANDO) {
-                LUSLOG_ERROR("Tried to set randomizerInf flag outside of rando (%d)", flag);
-                assert(false);
-                break;
-            }
             gSaveContext.ship.randomizerInf[flag >> 4] |= (1 << (flag & 0xF));
             break;
         case FlagType::FLAG_GS_TOKEN:
@@ -333,7 +334,7 @@ void GameInteractor::RawAction::GiveOrTakeShield(int32_t shield) {
 }
 
 void GameInteractor::RawAction::ForceInterfaceUpdate() {
-    gSaveContext.unk_13E8 = 50;
+    gSaveContext.nextHudVisibilityMode = 50;
     Interface_Update(gPlayState);
 }
 
@@ -410,15 +411,11 @@ void GameInteractor::RawAction::EmulateButtonPress(int32_t button) {
 }
 
 void GameInteractor::RawAction::EmulateRandomButtonPress(uint32_t chancePercentage) {
-    uint32_t emulatedButton;
-    uint32_t randomNumber = rand();
+    uint32_t randomNumber = ShipUtils::Random(0, 1400);
     uint32_t possibleButtons[14] = { BTN_CRIGHT, BTN_CLEFT, BTN_CDOWN, BTN_CUP,   BTN_R, BTN_L, BTN_DRIGHT,
                                      BTN_DLEFT,  BTN_DDOWN, BTN_DUP,   BTN_START, BTN_Z, BTN_B, BTN_A };
-
-    emulatedButton = possibleButtons[randomNumber % 14];
-
     if (randomNumber % 100 < chancePercentage) {
-        GameInteractor::State::EmulatedButtons |= emulatedButton;
+        GameInteractor::State::EmulatedButtons |= possibleButtons[randomNumber / 100];
     }
 }
 
@@ -431,7 +428,7 @@ void GameInteractor::RawAction::SetRandomWind(bool active) {
     if (active) {
         GameInteractor::State::RandomWindActive = 1;
         if (GameInteractor::State::RandomWindSecondsSinceLastDirectionChange == 0) {
-            player->pushedYaw = (rand() % 49152) - 32767;
+            player->pushedYaw = ShipUtils::Random(0, 0xc000) - 0x8000;
             GameInteractor::State::RandomWindSecondsSinceLastDirectionChange = 5;
         } else {
             GameInteractor::State::RandomWindSecondsSinceLastDirectionChange--;
@@ -498,7 +495,7 @@ GameInteractionEffectQueryResult GameInteractor::RawAction::SpawnEnemyWithOffset
     }
 
     // Generate point in random angle with a radius.
-    float angle = static_cast<float>(RandomDouble() * 2 * M_PI);
+    float angle = static_cast<float>(ShipUtils::RandomDouble() * 2 * M_PI);
     float radius = 150;
     float posXOffset = radius * cos(angle);
     float posZOffset = radius * sin(angle);
@@ -616,4 +613,119 @@ GameInteractionEffectQueryResult GameInteractor::RawAction::SpawnActor(uint32_t 
     }
 
     return GameInteractionEffectQueryResult::TemporarilyNotPossible;
+}
+
+void GameInteractor::RawAction::GiveItem(uint16_t modId, uint16_t itemId) {
+    GetItemEntry getItemEntry;
+    if (modId == MOD_NONE) {
+        getItemEntry = ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, itemId);
+    } else {
+        getItemEntry = Rando::StaticData::RetrieveItem(static_cast<RandomizerGet>(itemId)).GetGIEntry_Copy();
+    }
+
+    if (getItemEntry.modIndex == MOD_NONE) {
+        if (getItemEntry.getItemId == GI_SWORD_BGS) {
+            gSaveContext.bgsFlag = true;
+        }
+        Item_Give(gPlayState, getItemEntry.itemId);
+    } else if (getItemEntry.modIndex == MOD_RANDOMIZER) {
+        if (getItemEntry.getItemId == RG_ICE_TRAP) {
+            gSaveContext.ship.pendingIceTrapCount++;
+        } else {
+            Randomizer_Item_Give(gPlayState, getItemEntry);
+        }
+    }
+}
+
+void GameInteractor::RawAction::SetCosmeticsColor(uint8_t cosmeticCategory, uint8_t colorValue) {
+    Color_RGBA8 newColor;
+    newColor.r = 255;
+    newColor.g = 255;
+    newColor.b = 255;
+    newColor.a = 255;
+
+    switch (colorValue) {
+        case GI_COLOR_RED:
+            newColor.r = 200;
+            newColor.g = 30;
+            newColor.b = 30;
+            break;
+        case GI_COLOR_GREEN:
+            newColor.r = 50;
+            newColor.g = 200;
+            newColor.b = 50;
+            break;
+        case GI_COLOR_BLUE:
+            newColor.r = 50;
+            newColor.g = 50;
+            newColor.b = 200;
+            break;
+        case GI_COLOR_ORANGE:
+            newColor.r = 200;
+            newColor.g = 120;
+            newColor.b = 0;
+            break;
+        case GI_COLOR_YELLOW:
+            newColor.r = 234;
+            newColor.g = 240;
+            newColor.b = 33;
+            break;
+        case GI_COLOR_PURPLE:
+            newColor.r = 144;
+            newColor.g = 13;
+            newColor.b = 178;
+            break;
+        case GI_COLOR_PINK:
+            newColor.r = 215;
+            newColor.g = 93;
+            newColor.b = 246;
+            break;
+        case GI_COLOR_BROWN:
+            newColor.r = 108;
+            newColor.g = 72;
+            newColor.b = 15;
+            break;
+        case GI_COLOR_BLACK:
+            newColor.r = 0;
+            newColor.g = 0;
+            newColor.b = 0;
+            break;
+        default:
+            break;
+    }
+
+    switch (cosmeticCategory) {
+        case GI_COSMETICS_TUNICS:
+            CVarSetColor("gCosmetics.Link_KokiriTunic.Value", newColor);
+            CVarSetInteger("gCosmetics.Link_KokiriTunic.Changed", 1);
+            CVarSetColor("gCosmetics.Link_GoronTunic.Value", newColor);
+            CVarSetInteger("gCosmetics.Link_GoronTunic.Changed", 1);
+            CVarSetColor("gCosmetics.Link_ZoraTunic.Value", newColor);
+            CVarSetInteger("gCosmetics.Link_ZoraTunic.Changed", 1);
+            break;
+        case GI_COSMETICS_NAVI:
+            CVarSetColor("gCosmetics.Navi_EnemyPrimary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_EnemyPrimary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_EnemySecondary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_EnemySecondary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_IdlePrimary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_IdlePrimary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_IdleSecondary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_IdleSecondary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_NPCPrimary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_NPCPrimary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_NPCSecondary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_NPCSecondary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_PropsPrimary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_PropsPrimary.Changed", 1);
+            CVarSetColor("gCosmetics.Navi_PropsSecondary.Value", newColor);
+            CVarSetInteger("gCosmetics.Navi_PropsSecondary.Changed", 1);
+            break;
+        case GI_COSMETICS_HAIR:
+            CVarSetColor("gCosmetics.Link_Hair.Value", newColor);
+            CVarSetInteger("gCosmetics.Link_Hair.Changed", 1);
+            break;
+    }
+
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }

@@ -5,8 +5,6 @@
 extern "C" {
 #endif
 
-#include <ship/utils/binarytools/endianness.h>
-
 #define MK_CMD(b0,b1,b2,b3) ((((b0) & 0xFF) << 0x18) | (((b1) & 0xFF) << 0x10) | (((b2) & 0xFF) << 0x8) | (((b3) & 0xFF) << 0))
 
 #define NO_LAYER ((SequenceLayer*)(-1))
@@ -30,6 +28,23 @@ extern "C" {
 extern size_t sequenceMapSize;
 extern size_t fontMapSize;
 extern char** fontMap;
+extern char** sequenceMap;
+
+// MM BGM custom-seq registration helpers (impl in audio_load.c). Used by
+// soh/mods/sound_translator/mm_bgm_loader.cpp to install MM seqs from mm.o2r.
+s32 AudioLoad_FindNextFreeSeqId(void);
+s32 AudioLoad_FindNextFreeFontIndex(void);
+s32 AudioLoad_RegisterMmSequence(const char* path, u16 seqNum);
+s32 AudioLoad_RegisterMmFont(const char* path, s32 fontIndex);
+
+// One-shot per-player MM seq side-channel primer (impl in code_800F9280.c).
+// Sets seqToPlay[playerIdx] to the 16-bit MM seq id and arms a one-shot bypass
+// flag consumed by the very next Audio_QueueSeqCmd on that player. Use this
+// instead of writing seqReplaced/seqToPlay directly, so the MM bypass cannot
+// leak into the custom/music/* randomizer's own use of those fields.
+void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId);
+
+// PopulateMmFontMeta declaration lives below, after the SoundFont typedef.
 
 #define MAX_AUTHENTIC_SEQID 110
 
@@ -247,6 +262,11 @@ typedef struct {
     /* 0x10 */ SoundFontSound* soundEffects;
     s32 fntIndex;
 } SoundFont; // size = 0x14
+
+// SOH-side: shallow-copy a loaded SoundFont's meta + pointers into
+// gAudioContext.soundFonts[fontIndex] so the audio synth thread can resolve
+// instrument/drum/sfx tables without going OOB on MM seqs.
+void AudioLoad_PopulateMmFontMeta(s32 fontIndex, SoundFont* sf);
 
 typedef struct {
     /* 0x00 */ u8* pc;
@@ -1087,35 +1107,88 @@ typedef struct {
     u16 params;
 } SoundParams;
 
-typedef struct {
-    /* 0x0000 */ u8 noteIdx;
-    /* 0x0001 */ u8 unk_01;
-    /* 0x0002 */ u16 unk_02;
-    /* 0x0004 */ u8 volume;
-    /* 0x0005 */ u8 vibrato;
-    /* 0x0006 */ s8 tone;
-    /* 0x0007 */ u8 semitone;
+/**
+ * semitone Note:
+ * Flag for resolving whether (pitch = OCARINA_PITCH_BFLAT4)
+ * gets mapped to either C_RIGHT and C_LEFT
+ *
+ * This is required as C_RIGHT and C_LEFT are the only notes
+ * that map to two semitones apart (OCARINA_PITCH_A4 and OCARINA_PITCH_B4)
+ *      0x40 - BTN_Z is pressed to lower note by a semitone
+ *      0x80 - BTN_R is pressed to raise note by a semitone
+ */
+
+typedef struct OcarinaNote {
+    /* 0x0 */ u8 pitch; // number of semitones above middle C
+    /* 0x2 */ u16 length; // number of frames the note is sustained
+    /* 0x4 */ u8 volume;
+    /* 0x5 */ u8 vibrato;
+    /* 0x6 */ s8 bend; // frequency multiplicative offset from the pitch
+    /* 0x7 */ u8 bFlat4Flag; // See note above
 } OcarinaNote;  // size = 0x8
 
-typedef struct {
-    u8 len;
-    u8 notesIdx[8];
-} OcarinaSongInfo;
+typedef struct OcarinaSongButtons {
+    /* 0x0 */ u8 numButtons;
+    /* 0x1 */ u8 buttonsIndex[8];
+} OcarinaSongButtons; // size = 0x9
 
-typedef struct {
-    u8 noteIdx;
-    u8 state;   // original name: "status"
-    u8 pos;     // original name: "locate"
-} OcarinaStaff;
+typedef struct OcarinaStaff {
+    /* 0x0 */ u8 buttonIndex;
+    /* 0x1 */ u8 state;   // multi-use. Playing: used as songIndex. Playback: used as repeat count of song. Recording: used as OcarinaRecordingState. "status"
+    /* 0x2 */ u8 pos;     // "locate"
+} OcarinaStaff; // size = 0x3
 
-typedef enum {
-    /*  0 */ OCARINA_NOTE_D4,
-    /*  1 */ OCARINA_NOTE_F4,
-    /*  2 */ OCARINA_NOTE_A4,
-    /*  3 */ OCARINA_NOTE_B4,
-    /*  4 */ OCARINA_NOTE_D5,
-    /* -1 */ OCARINA_NOTE_INVALID = 0xFF
-} OcarinaNoteIdx;
+typedef enum OcarinaButtonIndex {
+    /* 0 */ OCARINA_BTN_A,
+    /* 1 */ OCARINA_BTN_C_DOWN,
+    /* 2 */ OCARINA_BTN_C_RIGHT,
+    /* 3 */ OCARINA_BTN_C_LEFT,
+    /* 4 */ OCARINA_BTN_C_UP,
+    /* 5 */ OCARINA_BTN_C_RIGHT_OR_C_LEFT,  // Special case for bFlat4: Interface/Overlap between C_RIGHT and C_LEFT
+    /* 0xFF */ OCARINA_BTN_INVALID = 0xFF
+} OcarinaButtonIndex;
+
+typedef enum OcarinaInstrumentId {
+    /* 0 */ OCARINA_INSTRUMENT_OFF,
+    /* 1 */ OCARINA_INSTRUMENT_DEFAULT,
+    /* 2 */ OCARINA_INSTRUMENT_MALON,
+    /* 3 */ OCARINA_INSTRUMENT_WHISTLE,
+    /* 4 */ OCARINA_INSTRUMENT_HARP,
+    /* 5 */ OCARINA_INSTRUMENT_GRIND_ORGAN,
+    /* 6 */ OCARINA_INSTRUMENT_FLUTE,
+    /* 7 */ OCARINA_INSTRUMENT_MAX,
+    /* 7 */ OCARINA_INSTRUMENT_DEFAULT_COPY1 = OCARINA_INSTRUMENT_MAX, // Unused but present in Sequence 0 table
+    /* 8 */ OCARINA_INSTRUMENT_DEFAULT_COPY2 = OCARINA_INSTRUMENT_MAX + 1 // Unused but present in Sequence 0 table
+} OcarinaInstrumentId;
+
+typedef enum OcarinaRecordingState {
+    /*    0 */ OCARINA_RECORD_OFF,
+    /*    1 */ OCARINA_RECORD_SCARECROW_LONG,
+    /*    2 */ OCARINA_RECORD_SCARECROW_SPAWN,
+    /* 0xFF */ OCARINA_RECORD_REJECTED = 0xFF
+} OcarinaRecordingState;
+
+// Uses scientific pitch notation relative to middle C
+// https://en.wikipedia.org/wiki/Scientific_pitch_notation
+typedef enum OcarinaPitch {
+    /* 0x0 */ OCARINA_PITCH_C4,
+    /* 0x1 */ OCARINA_PITCH_DFLAT4,
+    /* 0x2 */ OCARINA_PITCH_D4,
+    /* 0x3 */ OCARINA_PITCH_EFLAT4,
+    /* 0x4 */ OCARINA_PITCH_E4,
+    /* 0x5 */ OCARINA_PITCH_F4,
+    /* 0x6 */ OCARINA_PITCH_GFLAT4,
+    /* 0x7 */ OCARINA_PITCH_G4,
+    /* 0x8 */ OCARINA_PITCH_AFLAT4,
+    /* 0x9 */ OCARINA_PITCH_A4,
+    /* 0xA */ OCARINA_PITCH_BFLAT4,
+    /* 0xB */ OCARINA_PITCH_B4,
+    /* 0xC */ OCARINA_PITCH_C5,
+    /* 0xD */ OCARINA_PITCH_DFLAT5,
+    /* 0xE */ OCARINA_PITCH_D5,
+    /* 0xF */ OCARINA_PITCH_EFLAT5,
+    /* 0xFF */ OCARINA_PITCH_NONE = 0xFF
+} OcarinaPitch;
 
 typedef struct {
     char* seqData;
@@ -1125,6 +1198,10 @@ typedef struct {
     uint8_t cachePolicy;
     int32_t numFonts;
     uint8_t fonts[16];
+    // Full-width resolved soundfont index for streamed custom songs (lifts the
+    // 256-soundfont cap that truncates in the u8 fonts[]). -1 = use fonts[].
+    // MUST stay layout-identical to SOH::Sequence (AudioSequence.h).
+    int32_t resolvedFont;
 } SequenceData;
 
 void Audio_SetGameVolume(int player_id, f32 volume);

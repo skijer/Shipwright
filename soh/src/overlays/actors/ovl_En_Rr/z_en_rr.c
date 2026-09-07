@@ -300,7 +300,10 @@ void EnRr_SetupReleasePlayer(EnRr* this, PlayState* play) {
     this->wobbleSizeTarget = 2048.0f;
     tunic = 0;
     shield = 0;
-    if (CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD) != EQUIP_VALUE_SHIELD_MIRROR) {
+    // Was a raw CUR_EQUIP_VALUE comparison, which is the one mirror-shield site in the
+    // game that does not go through the predicate — so the Rito's shield did not protect
+    // against it while every other reflection did.
+    if (!Player_HasMirrorShieldEquipped(play)) {
         shield = Inventory_DeleteEquipment(play, EQUIP_TYPE_SHIELD);
         if (shield != 0) {
             this->eatenShield = shield;
@@ -327,7 +330,7 @@ void EnRr_SetupReleasePlayer(EnRr* this, PlayState* play) {
             break;
     }
     osSyncPrintf(VT_FGCOL(YELLOW) "%s[%d] : Rr_Catch_Cancel" VT_RST "\n", __FILE__, __LINE__);
-    func_8002F6D4(play, &this->actor, 4.0f, this->actor.shape.rot.y, 12.0f, 8);
+    Actor_SetPlayerKnockbackLarge(play, &this->actor, 4.0f, this->actor.shape.rot.y, 12.0f, 8);
     if (this->actor.colorFilterTimer == 0) {
         this->actionFunc = EnRr_Approach;
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_LIKE_THROW);
@@ -624,7 +627,7 @@ void EnRr_Reach(EnRr* this, PlayState* play) {
 void EnRr_GrabPlayer(EnRr* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
-    func_800AA000(this->actor.xyzDistToPlayerSq, 120, 2, 120);
+    Rumble_Request(this->actor.xyzDistToPlayerSq, 120, 2, 120);
     if ((this->frameCount % 8) == 0) {
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_LIKE_EAT);
     }

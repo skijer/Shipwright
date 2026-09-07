@@ -1,5 +1,6 @@
 #include <soh/OTRGlobals.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/ShipInit.hpp"
 #include <soh_assets.h>
 
@@ -8,9 +9,12 @@ extern "C" {
 #include "functions.h"
 #include "variables.h"
 #include "macros.h"
-#include "objects/gameplay_keep/gameplay_keep.h"
 extern PlayState* gPlayState;
 }
+
+// Rito: mid-air Roc's costs magic instead of being limited to one use.
+// Defined in mods/transformation_masks/rito_flight.inc.c.
+extern "C" uint8_t MmForm_RitoAirRocsAllowed(Player* player);
 
 #define MAX_ROCS_USES 1
 
@@ -45,7 +49,11 @@ void RegisterRocsFeather() {
         if (usedItem == ITEM_ROCS_FEATHER) {
             *should = false;
 
-            if (rocsUseCount < MAX_ROCS_USES) {
+            // As a Rito, Roc's works in mid-air as often as you like — each use billed
+            // in magic instead of counted. MmForm_RitoAirRocsAllowed charges it and
+            // returns 0 for everyone else, so the vanilla one-use limit is untouched.
+            // Skijer's NEI
+            if ((rocsUseCount < MAX_ROCS_USES) || MmForm_RitoAirRocsAllowed(GET_PLAYER(gPlayState))) {
                 rocsUseCount++;
 
                 Player* player = GET_PLAYER(gPlayState);
@@ -70,8 +78,9 @@ void RegisterRocsFeather() {
                 Vec3f effectsPos = player->actor.home.pos;
                 effectsPos.y += 3;
 
-                EffectSsGRipple_Spawn(gPlayState, &effectsPos, 200 * effectsScale, 300 * effectsScale, 1);
-                EffectSsGSplash_Spawn(gPlayState, &effectsPos, NULL, NULL, 0, 150 * effectsScale);
+                EffectSsGRipple_Spawn(gPlayState, &effectsPos, static_cast<s16>(200 * effectsScale),
+                                      static_cast<s16>(300 * effectsScale), 1);
+                EffectSsGSplash_Spawn(gPlayState, &effectsPos, NULL, NULL, 0, static_cast<s16>(150 * effectsScale));
 
                 // Remove hopping state when using Roc's after sidehop/backflip to allow grabbing ledges again
                 player->stateFlags2 &= ~(PLAYER_STATE2_HOPPING);

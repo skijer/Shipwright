@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 
 void FrameAdvance_Init(FrameAdvanceContext* frameAdvCtx) {
     frameAdvCtx->timer = 0;
@@ -14,6 +15,13 @@ void FrameAdvance_Init(FrameAdvanceContext* frameAdvCtx) {
  * This function returns true when frame advance is not active (game will run normally)
  */
 s32 FrameAdvance_Update(FrameAdvanceContext* frameAdvCtx, Input* input) {
+    // Fleet Ship Combo: an inactive OoT is normally PARKED in the waiting room (a sealed scene
+    // with time speed 0) and keeps running there. The full freeze only remains as the fallback for
+    // an inactive game that could not be parked.
+    if (FleetShipCombo_IsGameSuspended()) {
+        return false;
+    }
+
     if (CHECK_BTN_ALL(input->cur.button, BTN_R) && CHECK_BTN_ALL(input->press.button, BTN_DDOWN)) {
         frameAdvCtx->enabled = !frameAdvCtx->enabled;
     }

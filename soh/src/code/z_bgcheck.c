@@ -3,7 +3,20 @@
 
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
+
+// Power-ups that FORCE the NoClip wall-bypass for the player (independent of the
+// gCheats.NoClip CVar): SM64 Mario's Vanish Cap and Hylia's Grace fairy flight.
+// Both phase through walls; forcing NoClip here keeps actor.wallPoly from going
+// stale so OOT's floor-based loading-zone detection still fires. Defined in
+// expansions/sm64/sm64_mario.c and mods/items/logic/item_hylias_grace.c.
+extern u8 Sm64Mario_IsVanishActive(void);
+extern s32 HGrace_WantsNoClip(void);
+// Skijer's NEI switchhook: during the position swap (+ a few settle frames) the player gets the
+// SAME full collision bypass as the NoClip cheat (z_arms_hook.c SwitchHook_PlayerNoClip), so the
+// swap can materialize Link behind walls / below floors.
+extern s32 SwitchHook_PlayerNoClip(void);
 
 #define SS_NULL 0xFFFF
 
@@ -398,16 +411,6 @@ s32 CollisionPoly_LineVsPoly(CollisionPoly* poly, Vec3s* vtxList, Vec3f* posA, V
     planeDistB =
         (poly->normal.x * posB->x + poly->normal.y * posB->y + poly->normal.z * posB->z) * COLPOLY_NORMAL_FRAC +
         plane.originDist;
-
-#if defined(__SWITCH__) || defined(__WIIU__)
-    // on some platforms this ends up as very small numbers due to rounding issues
-    if (IS_ZERO(planeDistA)) {
-        planeDistA = 0.0f;
-    }
-    if (IS_ZERO(planeDistB)) {
-        planeDistB = 0.0f;
-    }
-#endif
 
     planeDistDelta = planeDistA - planeDistB;
     if ((planeDistA >= 0.0f && planeDistB >= 0.0f) || (planeDistA < 0.0f && planeDistB < 0.0f) ||
@@ -1902,7 +1905,15 @@ s32 BgCheck_CheckWallImpl(CollisionContext* colCtx, u16 xpFlags, Vec3f* posResul
     s32 bgId2;
     f32 nx, ny, nz; // unit normal of polygon
 
-    if (CVarGetInteger(CVAR_CHEAT("NoClip"), 0) && actor != NULL && actor->id == ACTOR_PLAYER) {
+    // Upstream moved the NoClip cheat itself behind VB_PERFORM_WALL_COLLISION_CHECK
+    // (Enhancements/Cheats/NoClip.cpp), so testing CVAR_CHEAT("NoClip") here would be redundant.
+    // The remaining conditions are ours and have no vanilla-behavior hook of their own: SM64
+    // Mario's vanish cap, Hylia's Grace and the switchhook's post-swap window, all player-only.
+    if (!GameInteractor_Should(VB_PERFORM_WALL_COLLISION_CHECK, true, actor) ||
+        ((Sm64Mario_IsVanishActive() || HGrace_WantsNoClip() ||
+          SwitchHook_PlayerNoClip()) && // Skijer's NEI switchhook: post-swap noclip window
+         actor != NULL &&
+         actor->id == ACTOR_PLAYER)) {
         return false;
     }
 
@@ -3999,7 +4010,7 @@ u32 SurfaceType_GetSceneExitIndex(CollisionContext* colCtx, CollisionPoly* poly,
 /**
  * SurfaceType Get ? Property (& 0x0003 E000)
  */
-u32 func_80041D4C(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
+u32 SurfaceType_GetFloorType(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
     return SurfaceType_GetData(colCtx, poly, bgId, 0) >> 13 & 0x1F;
 }
 
@@ -4020,8 +4031,20 @@ u32 func_80041D94(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
 /**
  * SurfaceType Get Wall Flags
  */
+extern u8 gMogmaMittsClimbActive;
+extern u8 gKeatonClimbActive;
+// Skijer's NEI — a body held by the Sheikah Slate's Stasis rune, or a pillar raised by its Cryonis
+// rune, becomes climbable, but ONLY that body: the check is against its own bgId, so nothing else in
+// the scene is affected and the surface reverts by itself the moment the rune lets go. This is
+// deliberately done here rather than by editing surfaceTypeList — collision headers are shared,
+// cached resources, so writing to one would make every instance of that collision climbable for the
+// rest of the session.
+extern u8 Slate_IsClimbableBgId(s32 bgId);
 s32 func_80041DB8(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
-    if (CVarGetInteger(CVAR_CHEAT("ClimbEverything"), 0) != 0) {
+    // ClimbEverything now lives behind VB_SURFACE_IS_CLIMBABLE (Enhancements/Cheats/ClimbEverything.cpp);
+    // the Mogma Mitts flag is ours and still has to be checked alongside it.
+    if (GameInteractor_Should(VB_SURFACE_IS_CLIMBABLE, false) || gMogmaMittsClimbActive || gKeatonClimbActive ||
+        Slate_IsClimbableBgId(bgId)) {
         return (1 << 3) | D_80119D90[func_80041D94(colCtx, poly, bgId)];
     } else {
         return D_80119D90[func_80041D94(colCtx, poly, bgId)];
@@ -4096,7 +4119,7 @@ u16 SurfaceType_GetSfx(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) 
 /**
  * SurfaceType get terrain slope surface
  */
-u32 SurfaceType_GetSlope(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
+u32 SurfaceType_GetFloorEffect(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
     return SurfaceType_GetData(colCtx, poly, bgId, 1) >> 4 & 3;
 }
 
@@ -4118,7 +4141,7 @@ u32 SurfaceType_GetEcho(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId)
  * SurfaceType Is Hookshot Surface
  */
 u32 SurfaceType_IsHookshotSurface(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
-    return CVarGetInteger(CVAR_CHEAT("HookshotEverything"), 0) || SurfaceType_GetData(colCtx, poly, bgId, 1) >> 17 & 1;
+    return GameInteractor_Should(VB_SURFACE_IS_HOOKSHOT, SurfaceType_GetData(colCtx, poly, bgId, 1) >> 17 & 1);
 }
 
 /**

@@ -167,7 +167,34 @@ typedef enum PlayerItemAction {
     /* 0x40 */ PLAYER_IA_MASK_GERUDO,
     /* 0x41 */ PLAYER_IA_MASK_TRUTH,
     /* 0x42 */ PLAYER_IA_LENS_OF_TRUTH,
-    /* 0x43 */ PLAYER_IA_MAX
+    /* 0x43 */ PLAYER_IA_ROCS_FEATHER_SKIJER, // Skijer's NEI
+    /* 0x44 */ PLAYER_IA_ROCS_CAPE,
+    /* 0x45 */ PLAYER_IA_DESIRE_SENSOR,
+    /* 0x46 */ PLAYER_IA_HYLIAS_GRACE,
+    /* 0x47 */ PLAYER_IA_ZONAI_PERMAFROST,
+    /* 0x48 */ PLAYER_IA_DEMISE_DESTRUCTION,
+    /* 0x49 */ PLAYER_IA_DEKU_LEAF,
+    /* 0x4A */ PLAYER_IA_SWITCH_HOOK,
+    /* 0x4B */ PLAYER_IA_MOGMA_MITTS,
+    /* 0x4C */ PLAYER_IA_GUST_JAR,
+    /* 0x4D */ PLAYER_IA_BALL_AND_CHAIN,
+    /* 0x4E */ PLAYER_IA_WHIP,
+    /* 0x4F */ PLAYER_IA_SPINNER,
+    /* 0x50 */ PLAYER_IA_CANE_OF_SOMARIA,
+    /* 0x51 */ PLAYER_IA_DOMINION_ROD,
+    /* 0x52 */ PLAYER_IA_TIME_GATE,
+    /* 0x53 */ PLAYER_IA_BOMB_ARROWS,
+    /* 0x54 */ PLAYER_IA_ROD_FIRE,
+    /* 0x55 */ PLAYER_IA_ROD_ICE,
+    /* 0x56 */ PLAYER_IA_ROD_LIGHT,
+    /* 0x57 */ PLAYER_IA_BEETLE,
+    /* 0x58 */ PLAYER_IA_SHOVEL,
+    /* 0x59 */ PLAYER_IA_MINISH_CAP,
+    /* 0x5A */ PLAYER_IA_LANTERN,
+    /* 0x5B */ PLAYER_IA_UNUSED_5B,
+    /* 0x5C */ PLAYER_IA_POKEBALL,
+    // PLAYER_IA values 0x5D-0x74 are #defined in mods/extended_player.h (MM_MASK_*) above PLAYER_IA_MAX; Skijer's NEI
+    /* 0x5D */ PLAYER_IA_MAX
 } PlayerItemAction;
 
 typedef enum PlayerLimb {
@@ -587,20 +614,20 @@ typedef enum PlayerStickDirection {
     /*  3 */ PLAYER_STICK_DIR_RIGHT
 } PlayerStickDirection;
 
-typedef enum {
+typedef enum PlayerKnockbackType {
     /* 0 */ PLAYER_KNOCKBACK_NONE, // No knockback
     /* 1 */ PLAYER_KNOCKBACK_SMALL, // A small hop, remains standing up
     /* 2 */ PLAYER_KNOCKBACK_LARGE, // Sent flying in the air and lands laying down on the floor
-    /* 3 */ PLAYER_KNOCKBACK_LARGE_SHOCK // Same as`PLAYER_KNOCKBACK_LARGE` with a shock effect
+    /* 3 */ PLAYER_KNOCKBACK_LARGE_ELECTRIFIED // Same as`PLAYER_KNOCKBACK_LARGE` with a shock effect
 } PlayerKnockbackType;
 
-typedef enum {
+typedef enum PlayerHitResponseType {
     /* 0 */ PLAYER_HIT_RESPONSE_NONE,
     /* 1 */ PLAYER_HIT_RESPONSE_KNOCKBACK_LARGE,
     /* 2 */ PLAYER_HIT_RESPONSE_KNOCKBACK_SMALL,
-    /* 3 */ PLAYER_HIT_RESPONSE_ICE_TRAP,
-    /* 4 */ PLAYER_HIT_RESPONSE_ELECTRIC_SHOCK
-} PlayerDamageResponseType;
+    /* 3 */ PLAYER_HIT_RESPONSE_FROZEN,
+    /* 4 */ PLAYER_HIT_RESPONSE_ELECTRIFIED
+} PlayerHitResponseType;
 
 typedef struct PlayerAgeProperties {
     /* 0x00 */ f32 ceilingCheckHeight;
@@ -845,7 +872,7 @@ typedef struct Player {
     /* 0x06A4 */ f32 closestSecretDistSq;
     /* 0x06A8 */ Actor* unk_6A8;
     /* 0x06AC */ s8 idleType;
-    /* 0x06AD */ u8 unk_6AD;
+    /* 0x06AD */ u8 unk_6AD; // Camera related. 0 = normal, 1 = first person without weapon, 2 = first person with weapon, 3 = cutscene action, 4 = cutscene items
     /* 0x06AE */ u16 unk_6AE_rotFlags; // See `UNK6AE_ROT_` macros. If its flag isn't set, a rot steps to 0.
     /* 0x06B0 */ s16 upperLimbYawSecondary;
     /* 0x06B2 */ char unk_6B4[0x004];
@@ -951,7 +978,7 @@ typedef struct Player {
     // #region SOH [Enhancements]
     // Upstream TODO: Rename this to make it more obvious it is apart of an enhancement
     /*        */ u8 boomerangQuickRecall; // Has the player pressed the boomerang button while it's in the air still?
-    /*        */ u8 ivanFloating;
+    /*        */ u8 ivanFloating; // Skijer's NEI
     /*        */ u8 ivanDamageMultiplier;
     // #endregion
 } Player; // size = 0xA94

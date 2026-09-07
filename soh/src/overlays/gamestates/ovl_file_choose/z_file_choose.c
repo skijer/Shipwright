@@ -18,6 +18,7 @@
 #include "soh/Enhancements/boss-rush/BossRush.h"
 #include "soh/Enhancements/FileSelectEnhancements.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include <assert.h>
 #include "z64save.h"
 #include "soh/SaveManager.h"
@@ -26,10 +27,15 @@
 #include "soh/ShipUtils.h"
 
 #define MIN_QUEST (ResourceMgr_GameHasOriginal() ? QUEST_NORMAL : QUEST_MASTER)
-#define MAX_QUEST QUEST_BOSSRUSH
+// The OoTxMM (COMBO) mode is only selectable while the Fleet Ship Combo is running; otherwise the
+// quest cycle stops at Boss Rush exactly as before.
+#define MAX_QUEST (CVarGetInteger("isFleetShipCombo.Enabled", 0) ? QUEST_OOTXMM : QUEST_BOSSRUSH)
 
 void Sram_InitDebugSave(void);
 void Sram_InitBossRushSave();
+
+// COMBO file-select: which .fleet the "Load Combo Seed" row currently points at (cycled with L/R).
+static int sComboFleetIdx = 0;
 
 void FileChoose_DrawTextureI8(GraphicsContext* gfxCtx, const void* texture, s16 texWidth, s16 texHeight, s16 rectLeft,
                               s16 rectTop, s16 rectWidth, s16 rectHeight, s16 dsdx, s16 dtdy) {
@@ -339,7 +345,7 @@ void DrawSeedHashSprites(FileChooseContext* this) {
            this->configMode == CM_NAME_ENTRY_TO_RANDOMIZER_SETTINGS_MENU || this->configMode == CM_START_NAME_ENTRY ||
            this->configMode == CM_START_RANDOMIZER_SETTINGS_MENU) ||
           this->configMode == CM_RANDOMIZER_SETTINGS_MENU) &&
-         gSaveContext.ship.quest.id == QUEST_RANDOMIZER)) {
+         IS_RANDO)) { // IS_RANDO includes the OoTxMM combo -> seed-hash icons show for combo too
 
         gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0xFF, 0xFF, 0xFF, 0xFF);
         u16 xStart = 64;
@@ -361,7 +367,7 @@ bool fileSelectSpoilerFileLoaded = false;
 void FileChoose_UpdateRandomizer() {
     if (CVarGetInteger(CVAR_GENERAL("RandoGenerating"), 0) != 0 && generating == 0) {
         generating = 1;
-        func_800F5E18(SEQ_PLAYER_BGM_MAIN, NA_BGM_HORSE, 0, 7, 1);
+        Audio_PlaySequenceWithSeqPlayerIO(SEQ_PLAYER_BGM_MAIN, NA_BGM_HORSE, 0, 7, 1);
         return;
     } else if (CVarGetInteger(CVAR_GENERAL("RandoGenerating"), 0) == 0 && generating) {
         if (Randomizer_IsSeedGenerated()) {
@@ -370,7 +376,7 @@ void FileChoose_UpdateRandomizer() {
         } else {
             Sfx_PlaySfxCentered(NA_SE_SY_OCARINA_ERROR);
         }
-        func_800F5E18(SEQ_PLAYER_BGM_MAIN, NA_BGM_FILE_SELECT, 0, 7, 1);
+        Audio_PlaySequenceWithSeqPlayerIO(SEQ_PLAYER_BGM_MAIN, NA_BGM_FILE_SELECT, 0, 7, 1);
         generating = 0;
         return;
     } else if (generating) {
@@ -677,7 +683,14 @@ void FileChoose_UpdateQuestMenu(GameState* thisx) {
             this->prevConfigMode = this->configMode;
             this->configMode = CM_ROTATE_TO_BOSS_RUSH_MENU;
             return;
-        } else if (this->questType[this->buttonIndex] == QUEST_RANDOMIZER) {
+        } else if (this->questType[this->buttonIndex] == QUEST_RANDOMIZER ||
+                   this->questType[this->buttonIndex] == QUEST_OOTXMM) {
+            // COMBO reuses the randomizer settings sub-screen (Start / Generate / Load Combo Seed /
+            // Open Settings); the actions branch on the quest type inside FileChoose_UpdateRandomizerMenu.
+            if (this->questType[this->buttonIndex] == QUEST_OOTXMM) {
+                FleetComboFS_RefreshFleets(); // scan the fleet/ folder once for the Load Combo Seed picker
+                sComboFleetIdx = 0;
+            }
             Audio_PlaySoundGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             this->prevConfigMode = this->configMode;
@@ -729,10 +742,15 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
     FileChooseContext* this = (FileChooseContext*)thisx;
     Input* input = &this->state.input[0];
     bool dpad = CVarGetInteger(CVAR_SETTING("DpadInText"), 0);
+    // COMBO (OoTxMM) reuses this menu with a 4th option (Load Combo Seed); rando keeps its 3.
+    bool isCombo = (this->questType[this->buttonIndex] == QUEST_OOTXMM);
+    uint8_t lastOpt = isCombo ? CBO_OPEN_SETTINGS : RSM_OPEN_RANDOMIZER_SETTINGS;
 
     FileChoose_UpdateRandomizer();
 
-    if (generating) {
+    // The combo generator runs on its own thread, so treat it as "generating" too (grays options /
+    // blocks input while it works).
+    if (generating || FleetComboFS_IsBusy()) {
         return;
     }
 
@@ -747,7 +765,7 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
         // Move down
         if (this->stickRelY < -30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DDOWN))) {
             // When selecting past the last option, cycle back to the first option.
-            if ((this->randomizerIndex + 1) > RSM_OPEN_RANDOMIZER_SETTINGS) {
+            if ((this->randomizerIndex + 1) > lastOpt) {
                 this->randomizerIndex = RSM_START_RANDOMIZER;
             } else {
                 this->randomizerIndex++;
@@ -756,7 +774,7 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
             // When selecting past the first option, cycle back to the last option and offset the list to view it
             // properly.
             if ((this->randomizerIndex - 1) < RSM_START_RANDOMIZER) {
-                this->randomizerIndex = RSM_OPEN_RANDOMIZER_SETTINGS;
+                this->randomizerIndex = lastOpt;
             } else {
                 this->randomizerIndex--;
             }
@@ -766,6 +784,21 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
 
         Audio_PlaySoundGeneral(NA_SE_SY_FSEL_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    }
+
+    // COMBO: on the "Load Combo Seed" row, stick left/right picks which .fleet to load.
+    if (isCombo && this->randomizerIndex == CBO_LOAD_SEED) {
+        int cnt = FleetComboFS_FleetCount();
+        if (cnt > 0 &&
+            (ABS(this->stickRelX) > 30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DLEFT | BTN_DRIGHT)))) {
+            if (this->stickRelX > 30 || (dpad && CHECK_BTN_ANY(input->press.button, BTN_DRIGHT))) {
+                sComboFleetIdx = (sComboFleetIdx + 1) % cnt;
+            } else {
+                sComboFleetIdx = (sComboFleetIdx + cnt - 1) % cnt;
+            }
+            Audio_PlaySoundGeneral(NA_SE_SY_FSEL_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        }
     }
 
     if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
@@ -818,11 +851,26 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
                 Sfx_PlaySfxCentered(NA_SE_SY_OCARINA_ERROR);
             }
         } else if (this->randomizerIndex == RSM_GENERATE_RANDOMIZER) {
-            Randomizer_GenerateRandomizer();
+            if (isCombo) {
+                FleetComboFS_Generate(); // combo seed generation (own thread; marks Rando ctx seed-generated on finish)
+            } else {
+                Randomizer_GenerateRandomizer();
+            }
         } else if (this->randomizerIndex == RSM_OPEN_RANDOMIZER_SETTINGS) {
+            // index 2: rando = Open Settings; COMBO = Load the picked .fleet SEED-ONLY (Start then
+            // bakes it into this file-select slot).
             Audio_PlaySoundGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-            Randomizer_ShowRandomizerMenu();
+            if (isCombo) {
+                FleetComboFS_LoadSeedIndex(sComboFleetIdx);
+            } else {
+                Randomizer_ShowRandomizerMenu();
+            }
+        } else if (isCombo && this->randomizerIndex == CBO_OPEN_SETTINGS) {
+            // COMBO index 3: open the shared combo settings (knobs / advanced .fleet management).
+            Audio_PlaySoundGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            FleetComboFS_OpenSettings();
         }
     }
 }
@@ -1060,7 +1108,7 @@ void FileChoose_ConfigModeUpdate(GameState* thisx) {
     if (previousLanguage != gSaveContext.language) {
         if (ResourceMgr_GetGameRegion(0) == GAME_REGION_PAL && gSaveContext.language != LANGUAGE_JPN) {
             Font_LoadOrderedFont(&this->font);
-        } else { // GAME_REGION_NTSC
+        } else {
             Font_LoadOrderedFontNTSC(&this->font);
         }
         previousLanguage = gSaveContext.language;
@@ -1809,14 +1857,35 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                     ResourceMgr_GameHasOriginal() ? gTitleZeldaShieldLogoTex : gTitleZeldaShieldLogoMQTex, 160, 160);
                 FileChoose_DrawImageRGBA32(this->state.gfxCtx, 182, 180, gTitleBossRushSubtitleTex, 128, 32);
                 break;
+
+            case QUEST_OOTXMM:
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, this->logoAlpha);
+                FileChoose_DrawTextureI8(this->state.gfxCtx, gTitleTheLegendOfTextTex, 72, 8, 156, 108, 72, 8, 1024,
+                                         1024);
+                FileChoose_DrawTextureI8(this->state.gfxCtx, gTitleOcarinaOfTimeTMTextTex, 96, 8, 154, 163, 96, 8, 1024,
+                                         1024);
+                FileChoose_DrawImageRGBA32(
+                    this->state.gfxCtx, 160, 135,
+                    ResourceMgr_GameHasOriginal() ? gTitleZeldaShieldLogoTex : gTitleZeldaShieldLogoMQTex, 160, 160);
+                // "COMBO" subtitle. Edit the source PNG (128x32 RGBA) in GIMP:
+                //   soh/assets/custom/objects/object_mag/gTitleOoTxMMSubtitleTex.rgba32.png
+                FileChoose_DrawImageRGBA32(this->state.gfxCtx, 182, 180, gTitleOoTxMMSubtitleTex, 128, 32);
+                break;
         }
     } else if (this->configMode == CM_BOSS_RUSH_MENU) {
         FileChoose_DrawBossRushMenuWindowContents(this);
     } else if (this->configMode == CM_RANDOMIZER_SETTINGS_MENU) {
         uint8_t language = (gSaveContext.language == LANGUAGE_JPN) ? LANGUAGE_ENG : gSaveContext.language;
         uint8_t textAlpha = this->randomizerUIAlpha;
+        // COMBO (OoTxMM) reuses this sub-screen -> combo-worded option labels.
+        bool isCombo = (this->questType[this->buttonIndex] == QUEST_OOTXMM);
 
-        for (uint8_t index = 0; index <= RSM_OPEN_RANDOMIZER_SETTINGS; index++) {
+        // COMBO adds a 4th selectable option (Load Combo Seed); status/hint text uses combo indices.
+        uint8_t lastOpt = isCombo ? CBO_OPEN_SETTINGS : RSM_OPEN_RANDOMIZER_SETTINGS;
+        uint8_t genTextIdx = isCombo ? CBO_GENERATING : RSM_GENERATING;
+        uint8_t noSeedTextIdx = isCombo ? CBO_NO_SEED : RSM_NO_RANDOMIZER_GENERATED;
+
+        for (uint8_t index = 0; index <= lastOpt; index++) {
             uint8_t textColorR = 255;
             uint8_t textColorG = 255;
             uint8_t textColorB = 255;
@@ -1826,30 +1895,64 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                 textColorB = 80;
             }
 
-            // If no randomizer is loaded and text is "start randomizer" or when a seed is generating, make all options
-            // gray.
+            // Gray out "Start" when no seed is ready, and everything while generating. (COMBO
+            // generation runs on its own thread -> FleetComboFS_IsBusy joins `generating`.)
             if ((index == RSM_START_RANDOMIZER && !Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded()) ||
-                generating) {
+                generating || FleetComboFS_IsBusy()) {
                 textColorR = textColorG = textColorB = 100;
             }
 
-            Interface_DrawTextLine(this->state.gfxCtx, SohFileSelect_GetSettingText(index, language), 70,
-                                   (80 + (index * 16)), textColorR, textColorG, textColorB, textAlpha, 0.8f, true);
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(index, language), 70,
+                (80 + (index * 16)), textColorR, textColorG, textColorB, textAlpha, 0.8f, true);
         }
 
-        // Show text to indicate randomizer is being generated.
-        if (generating) {
-            Interface_DrawTextLine(this->state.gfxCtx, SohFileSelect_GetSettingText(RSM_GENERATING, language), 70,
-                                   (80 + 64), 255, 255, 255, textAlpha, 0.8f, true);
+        // COMBO: while the "Load Combo Seed" row is selected, show the currently-picked .fleet file
+        // (stick left/right cycles it). Drawn under the options.
+        if (isCombo && this->randomizerIndex == CBO_LOAD_SEED) {
+            static char sSeedLine[64];
+            int cnt = FleetComboFS_FleetCount();
+            if (cnt > 0) {
+                int idx = sComboFleetIdx;
+                if (idx < 0) {
+                    idx = 0;
+                }
+                if (idx >= cnt) {
+                    idx = cnt - 1;
+                }
+                snprintf(sSeedLine, sizeof(sSeedLine), "> %s   (<- -> to pick, A to load)",
+                         FleetComboFS_FleetName(idx));
+            } else {
+                snprintf(sSeedLine, sizeof(sSeedLine), "(no .fleet in the fleet/ folder)");
+            }
+            Interface_DrawTextLine(this->state.gfxCtx, sSeedLine, 70, (80 + 72), 255, 255, 160, textAlpha, 0.7f, true);
         }
 
-        // If no randomizer is generated and "start randomizer" is selected, show text to explain why user can't start
-        // the randomizer.
+        // Show text to indicate randomizer / combo is being generated.
+        if (generating || FleetComboFS_IsBusy()) {
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(genTextIdx, language), 70,
+                (80 + 72), 255, 255, 255, textAlpha, 0.8f, true);
+        }
+
+        // If no seed is ready and "Start" is selected, explain why you can't start yet.
         if (!Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded() &&
             this->randomizerIndex == RSM_START_RANDOMIZER) {
-            Interface_DrawTextLine(this->state.gfxCtx,
-                                   SohFileSelect_GetSettingText(RSM_NO_RANDOMIZER_GENERATED, language), 70, (80 + 64),
-                                   240, 80, 80, textAlpha, 0.8f, true);
+            Interface_DrawTextLine(
+                this->state.gfxCtx,
+                (isCombo ? SohFileSelect_GetComboSettingText : SohFileSelect_GetSettingText)(noSeedTextIdx, language),
+                70, (80 + 72), 240, 80, 80, textAlpha, 0.8f, true);
+        }
+
+        // COMBO: a small line describing the OoT x MM run (goal). Seed-hash icons draw via the normal
+        // rando path (IS_RANDO is true for combo) once a seed is ready.
+        if (isCombo) {
+            int goal = CVarGetInteger("gFleetCombo.GoalMode", 0);
+            const char* comboLine =
+                (goal == 1) ? "OoT x MM combo  -  Goal: Triforce Hunt" : "OoT x MM combo  -  Goal: Beat Both Bosses";
+            Interface_DrawTextLine(this->state.gfxCtx, comboLine, 70, (80 + 90), 170, 200, 255, textAlpha, 0.7f, true);
         }
 
         uint16_t textOffset = 16 * this->randomizerIndex;
@@ -2379,7 +2482,7 @@ void FileChoose_ConfirmFile(GameState* thisx) {
 
     if (CHECK_BTN_ALL(input->press.button, BTN_START) || (CHECK_BTN_ALL(input->press.button, BTN_A))) {
         if (this->confirmButtonIndex == FS_BTN_CONFIRM_YES) {
-            func_800AA000(300.0f, 180, 20, 100);
+            Rumble_Request(300.0f, 180, 20, 100);
             Audio_PlaySoundGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             this->selectMode = SM_FADE_OUT;
@@ -2526,6 +2629,12 @@ void FileChoose_LoadGame(GameState* thisx) {
         SET_NEXT_GAMESTATE(&this->state, Play_Init, PlayState);
     }
 
+    // Fleet Ship Combo: a COMBO (OoTxMM) file remembers which game it boots into (per-slot start-in
+    // flag) — apply it now that the save is loaded (quest.id is set).
+    if (IS_OOTXMM) {
+        FleetComboFS_OnLoadSave(gSaveContext.fileNum);
+    }
+
     this->state.running = false;
 
     gSaveContext.respawn[0].entranceIndex = ENTR_LOAD_OPENING;
@@ -2542,7 +2651,7 @@ void FileChoose_LoadGame(GameState* thisx) {
     gSaveContext.eventInf[1] = 0;
     gSaveContext.eventInf[2] = 0;
     gSaveContext.eventInf[3] = 0;
-    gSaveContext.unk_13EE = 0x32;
+    gSaveContext.prevHudVisibilityMode = 0x32;
     gSaveContext.nayrusLoveTimer = 0;
     gSaveContext.healthAccumulator = 0;
     gSaveContext.magicState = MAGIC_STATE_IDLE;
@@ -2560,8 +2669,8 @@ void FileChoose_LoadGame(GameState* thisx) {
         gSaveContext.buttonStatus[buttonIndex] = BTN_ENABLED;
     }
 
-    gSaveContext.forceRisingButtonAlphas = gSaveContext.unk_13E8 = gSaveContext.unk_13EA = gSaveContext.unk_13EC =
-        gSaveContext.magicCapacity = 0;
+    gSaveContext.forceRisingButtonAlphas = gSaveContext.nextHudVisibilityMode = gSaveContext.hudVisibilityMode =
+        gSaveContext.hudVisibilityModeTimer = gSaveContext.magicCapacity = 0;
 
     gSaveContext.magicFillTarget = gSaveContext.magic;
     gSaveContext.magic = 0;
@@ -3062,14 +3171,14 @@ void FileChoose_InitContext(GameState* thisx) {
     this->bossRushOffset = 0;
     this->randomizerIndex = 0;
 
-    ShrinkWindow_SetVal(0);
+    Letterbox_SetSizeTarget(0);
 
     gSaveContext.skyboxTime = 0;
     gSaveContext.dayTime = 0;
 
     Skybox_Init(&this->state, &this->skyboxCtx, SKYBOX_NORMAL_SKY);
 
-    gTimeIncrement = 10;
+    gTimeSpeed = 10;
 
     envCtx->unk_19 = 0;
     envCtx->unk_1A = 0;
@@ -3130,11 +3239,15 @@ void FileChoose_Init(GameState* thisx) {
     this->state.main = FileChoose_Main;
     this->state.destroy = FileChoose_Destroy;
     FileChoose_InitContext(&this->state);
+    // Use IsPalLoaded() instead of GetGameRegion(0): mm.o2r at archive slot 0 can
+    // skew region detection (MM is NTSC), but the actual PAL font data availability
+    // is determined by whether the NES message table has the 0xFFFC entry.
+    // Same pattern as z_en_mag.c (title screen).
     if (ResourceMgr_GetGameRegion(0) == GAME_REGION_PAL && gSaveContext.language != LANGUAGE_JPN) {
         Font_LoadOrderedFont(&this->font);
-    } else { // GAME_REGION_NTSC
+    } else {
         Font_LoadOrderedFontNTSC(&this->font);
     }
     Audio_QueueSeqCmd(0xF << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0xA);
-    func_800F5E18(SEQ_PLAYER_BGM_MAIN, NA_BGM_FILE_SELECT, 0, 7, 1);
+    Audio_PlaySequenceWithSeqPlayerIO(SEQ_PLAYER_BGM_MAIN, NA_BGM_FILE_SELECT, 0, 7, 1);
 }

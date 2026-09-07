@@ -10,6 +10,7 @@
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "mods/transformation_masks/gerudo_form.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY)
 
@@ -204,7 +205,7 @@ s32 EnGe1_SetTalkAction(EnGe1* this, PlayState* play, u16 textId, f32 arg3, EnGe
     this->actor.textId = textId;
 
     if (this->actor.xzDistToPlayer < arg3) {
-        func_8002F2CC(&this->actor, play, arg3);
+        Actor_OfferTalk(&this->actor, play, arg3);
     }
 
     return false;
@@ -226,6 +227,35 @@ s32 EnGe1_CheckCarpentersFreed(void) {
 }
 
 /**
+ * The friendly check normally runs only in Init, so a guard that spawned hostile
+ * stays hostile even if the player becomes a Gerudo (Gerudo Mask transform)
+ * mid-scene. Re-run the Init dispatch from the watch actions so the guard flips
+ * to her friendly behavior instead of capturing the player on approach.
+ * Returns true if the guard switched to a friendly action this frame.
+ */
+s32 EnGe1_TryBecomeFriendly(EnGe1* this) {
+    if (!GameInteractor_Should(VB_GERUDOS_BE_FRIENDLY, EnGe1_CheckCarpentersFreed())) {
+        return false;
+    }
+
+    switch (this->actor.params & 0xFF) {
+        case GE1_TYPE_GATE_OPERATOR:
+            this->actionFunc = EnGe1_CheckGate_GateOp;
+            break;
+        case GE1_TYPE_HORSEBACK_ARCHERY:
+            this->actionFunc = EnGe1_Wait_Archery;
+            break;
+        case GE1_TYPE_TRAINING_GROUND_GUARD:
+            this->actionFunc = EnGe1_CheckForCard_GTGGuard;
+            break;
+        default:
+            this->actionFunc = EnGe1_SetNormalText;
+            break;
+    }
+    return true;
+}
+
+/**
  * Sends player to different places depending on if has hookshot, and if this is the first time captured
  */
 void EnGe1_KickPlayer(EnGe1* this, PlayState* play) {
@@ -234,7 +264,7 @@ void EnGe1_KickPlayer(EnGe1* this, PlayState* play) {
     if (this->cutsceneTimer > 0) {
         this->cutsceneTimer--;
     } else {
-        func_8006D074(play);
+        Horse_ResetHorseData(play);
 
         if ((INV_CONTENT(ITEM_HOOKSHOT) == ITEM_NONE) || (INV_CONTENT(ITEM_LONGSHOT) == ITEM_NONE)) {
             play->nextEntranceIndex = ENTR_GERUDO_VALLEY_1;
@@ -263,7 +293,13 @@ void EnGe1_SpotPlayer(EnGe1* this, PlayState* play) {
 }
 
 void EnGe1_WatchForPlayerFrontOnly(EnGe1* this, PlayState* play) {
-    s16 angleDiff = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
+    s16 angleDiff;
+
+    if (EnGe1_TryBecomeFriendly(this)) {
+        return;
+    }
+
+    angleDiff = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
 
     if ((ABS(angleDiff) <= 0x4300) && (this->actor.xzDistToPlayer < 100.0f)) {
         EnGe1_SpotPlayer(this, play);
@@ -306,7 +342,13 @@ void EnGe1_SetNormalText(EnGe1* this, PlayState* play) {
 }
 
 void EnGe1_WatchForAndSensePlayer(EnGe1* this, PlayState* play) {
-    s16 angleDiff = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
+    s16 angleDiff;
+
+    if (EnGe1_TryBecomeFriendly(this)) {
+        return;
+    }
+
+    angleDiff = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
 
     if ((this->actor.xzDistToPlayer < 50.0f) || ((ABS(angleDiff) <= 0x4300) && (this->actor.xzDistToPlayer < 400.0f))) {
         EnGe1_SpotPlayer(this, play);
@@ -403,7 +445,9 @@ void EnGe1_RefuseOpenNoCard_GTGGuard(EnGe1* this, PlayState* play) {
 }
 
 void EnGe1_CheckForCard_GTGGuard(EnGe1* this, PlayState* play) {
-    if (CHECK_QUEST_ITEM(QUEST_GERUDO_CARD)) {
+    // Gerudo Mask cheat: wearing the OOT Gerudo Mask grants temporary GTG access
+    // without owning the card (the mask is enough proof of Gerudo identity).
+    if (CHECK_QUEST_ITEM(QUEST_GERUDO_CARD) || GerudoForm_IsActive()) {
         EnGe1_SetTalkAction(this, play, 0x6014, 100.0f, EnGe1_OfferOpen_GTGGuard);
     } else {
         //! @bug This outcome is inaccessible in normal gameplay since this function it is unreachable without
@@ -572,7 +616,7 @@ void EnGe1_TalkWinPrize_Archery(EnGe1* this, PlayState* play) {
         this->actionFunc = EnGe1_BeginGiveItem_Archery;
         this->actor.flags &= ~ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED;
     } else {
-        func_8002F2CC(&this->actor, play, 200.0f);
+        Actor_OfferTalk(&this->actor, play, 200.0f);
     }
 }
 
@@ -599,7 +643,7 @@ void EnGe1_BeginGame_Archery(EnGe1* this, PlayState* play) {
                 if (gSaveContext.rupees < 20) {
                     Message_ContinueTextbox(play, 0x85);
                     this->actionFunc = EnGe1_TalkTooPoor_Archery;
-                } else {
+                } else if (GameInteractor_Should(VB_PLAY_HORSEBACK_ARCHERY, true, this, play)) {
                     Rupees_ChangeBy(-20);
                     play->nextEntranceIndex = ENTR_GERUDOS_FORTRESS_EAST_EXIT;
                     gSaveContext.nextCutsceneIndex = 0xFFF0;
@@ -642,7 +686,7 @@ void EnGe1_TalkNoPrize_Archery(EnGe1* this, PlayState* play) {
     if (Actor_ProcessTalkRequest(&this->actor, play)) {
         this->actionFunc = EnGe1_TalkOfferPlay_Archery;
     } else {
-        func_8002F2CC(&this->actor, play, 300.0f);
+        Actor_OfferTalk(&this->actor, play, 300.0f);
     }
 }
 
@@ -713,7 +757,7 @@ void EnGe1_TurnToFacePlayer(EnGe1* this, PlayState* play) {
     if (ABS(angleDiff) <= 0x4000) {
         Math_SmoothStepToS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 6, 4000, 100);
         this->actor.world.rot.y = this->actor.shape.rot.y;
-        func_80038290(play, &this->actor, &this->headRot, &this->unk_2A2, this->actor.focus.pos);
+        Actor_TrackPlayer(play, &this->actor, &this->headRot, &this->unk_2A2, this->actor.focus.pos);
     } else {
         if (angleDiff < 0) {
             Math_SmoothStepToS(&this->headRot.y, -0x2000, 6, 6200, 0x100);
@@ -730,7 +774,7 @@ void EnGe1_LookAtPlayer(EnGe1* this, PlayState* play) {
     s16 angleDiff = this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
 
     if ((ABS(angleDiff) <= 0x4300) && (this->actor.xzDistToPlayer < 100.0f)) {
-        func_80038290(play, &this->actor, &this->headRot, &this->unk_2A2, this->actor.focus.pos);
+        Actor_TrackPlayer(play, &this->actor, &this->headRot, &this->unk_2A2, this->actor.focus.pos);
     } else {
         Math_SmoothStepToS(&this->headRot.x, 0, 6, 6200, 100);
         Math_SmoothStepToS(&this->headRot.y, 0, 6, 6200, 100);

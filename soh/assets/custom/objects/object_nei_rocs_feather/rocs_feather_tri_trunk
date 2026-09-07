@@ -1,0 +1,9 @@
+<DisplayList Version="0">
+	<LoadVertices Path="objects/object_nei_rocs_feather/rocs_feather_vtx_trunk" VertexBufferIndex="0" VertexOffset="0" Count="12"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="2" V12="3" Flag1="0"/>
+	<Triangles2 V00="4" V01="5" V02="6" Flag0="0" V10="5" V11="7" V12="6" Flag1="0"/>
+	<Triangles2 V00="5" V01="8" V02="7" Flag0="0" V10="8" V11="9" V12="7" Flag1="0"/>
+	<Triangles2 V00="8" V01="10" V02="9" Flag0="0" V10="10" V11="11" V12="9" Flag1="0"/>
+	<Triangles2 V00="10" V01="4" V02="11" Flag0="0" V10="4" V11="6" V12="11" Flag1="0"/>
+	<EndDisplayList/>
+</DisplayList>

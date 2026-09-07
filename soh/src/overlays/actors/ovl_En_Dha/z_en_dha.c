@@ -7,6 +7,7 @@
 #include "z_en_dha.h"
 #include "overlays/actors/ovl_En_Dh/z_en_dh.h"
 #include "objects/object_dh/object_dh.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
@@ -217,7 +218,7 @@ void EnDha_Wait(EnDha* this, PlayState* play) {
 
         if (Math_Vec3f_DistXYZ(&playerPos, &this->handPos[0]) <= 12.0f) {
             if (this->unk_1CC == 0) {
-                if (play->grabPlayer(play, player)) {
+                if (GameInteractor_Should(VB_ENEMY_GRAB_PLAYER, true, this) && play->grabPlayer(play, player)) {
                     this->timer = 0;
                     this->unk_1CC++;
 

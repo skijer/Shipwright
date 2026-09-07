@@ -9,24 +9,16 @@
                 "-S",
                 ".",
                 "-B",
-                "build-cmake",
+                "build/x64",
                 "-G",
-                "Ninja"
+                "Visual Studio 17 2022",
+                "-T",
+                "v143",
+                "-A",
+                "x64",
+                "-DBUILD_REMOTE_CONTROL=ON",
+                "-DCMAKE_PREFIX_PATH=C:/vcpkg/installed/x64-windows"
             ],
-            "windows": {
-                "args": [
-                    "-S",
-                    ".",
-                    "-B",
-                    "build/x64",
-                    "-G",
-                    "Visual Studio 17 2022",
-                    "-T",
-                    "v143",
-                    "-A",
-                    "x64"
-                ]
-            },
             "group": "build",
             "problemMatcher": []
         },
@@ -36,19 +28,10 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "build-cmake",
+                "./build/x64",
                 "--target",
-                "GenerateSohOtr",
-                "--parallel"
+                "GenerateSohOtr"
             ],
-            "windows": {
-                "args": [
-                    "--build",
-                    "./build/x64",
-                    "--target",
-                    "GenerateSohOtr"
-                ]
-            },
             "group": "build",
             "problemMatcher": []
         },
@@ -58,23 +41,20 @@
             "command": "cmake",
             "args": [
                 "--build",
-                "build-cmake"
+                "./build/x64"
             ],
-            "windows": {
-                "args": [
-                    "--build",
-                    "./build/x64"
-                ]
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "dependsOn": ["Generate SOH OTR"],
+            "group": "build",
+            "dependsOn": [
+                "Generate SOH OTR"
+            ],
             "problemMatcher": []
         },
         {
             "label": "Build All",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "dependsOrder": "sequence",
             "dependsOn": [
                 "Setup CMake Project",

@@ -73,15 +73,26 @@ void OceffWipe_Draw(Actor* thisx, PlayState* play) {
     u8 alphaTable[3];
     s32 i;
     Vec3f eye;
-    Vtx* vtxPtr;
     Vec3f vec;
 
     eye = GET_ACTIVE_CAM(play)->eye;
     Camera_GetSkyboxOffset(&vec, GET_ACTIVE_CAM(play));
 
+    // Skijer's NEI: this NEI/combo build's soh.o2r ships NO ovl_Oceff assets — the local sFrustumVtx/
+    // sMaterialDL/sFrustumDL ("__OTR__overlays/ovl_Oceff_Wipe/sFrustumVtx" ...) resolve to nothing, so
+    // the song effect drew untextured/invisible. mm.o2r DOES carry them, under the decomp asset names
+    // (sSongOfTimeFrustumVtx / ...MaterialDL / ...ModelDL). Load those instead. NULL-guard BEFORE
+    // OPEN_DISPS (you can't early-return between OPEN_DISPS/CLOSE_DISPS — the macro braces don't nest
+    // with the if). Fixes MM/custom songs (which spawn OCEFF_WIPE) AND vanilla Lullaby / Song of Time.
+    Vtx* frustumVtx = ResourceMgr_LoadVtxByName("__OTR__overlays/ovl_Oceff_Wipe/sSongOfTimeFrustumVtx");
+    int fastOcarinaPlayback = (CVarGetInteger(CVAR_ENHANCEMENT("FastOcarinaPlayback"), 0) != 0);
+
+    if (frustumVtx == NULL) {
+        return;
+    }
+
     OPEN_DISPS(play->state.gfxCtx);
 
-    int fastOcarinaPlayback = (CVarGetInteger(CVAR_ENHANCEMENT("FastOcarinaPlayback"), 0) != 0);
     if (this->timer < 32) {
         z = Math_SinS(this->timer << 9) * (fastOcarinaPlayback ? 1200.0f : 1400.0f);
     } else {
@@ -99,9 +110,8 @@ void OceffWipe_Draw(Actor* thisx, PlayState* play) {
     }
 
     for (i = 0; i < 20; i++) {
-        vtxPtr = ResourceMgr_LoadVtxByName(sFrustumVtx);
-        vtxPtr[i * 2 + 0].v.cn[3] = alphaTable[(sAlphaIndices[i] & 0xF0) >> 4];
-        vtxPtr[i * 2 + 1].v.cn[3] = alphaTable[sAlphaIndices[i] & 0xF];
+        frustumVtx[i * 2 + 0].v.cn[3] = alphaTable[(sAlphaIndices[i] & 0xF0) >> 4];
+        frustumVtx[i * 2 + 1].v.cn[3] = alphaTable[sAlphaIndices[i] & 0xF];
     }
 
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
@@ -121,10 +131,10 @@ void OceffWipe_Draw(Actor* thisx, PlayState* play) {
         gDPSetEnvColor(POLY_XLU_DISP++, 100, 0, 255, 128);
     }
 
-    gSPDisplayList(POLY_XLU_DISP++, sMaterialDL);
+    gSPDisplayList(POLY_XLU_DISP++, "__OTR__overlays/ovl_Oceff_Wipe/sSongOfTimeFrustumMaterialDL");
     gSPDisplayList(POLY_XLU_DISP++, Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0 - scroll, scroll * (-2), 32, 32, 1,
                                                        0 - scroll, scroll * (-2), 32, 32, -1, -2, -1, -2));
-    gSPDisplayList(POLY_XLU_DISP++, sFrustumDL);
+    gSPDisplayList(POLY_XLU_DISP++, "__OTR__overlays/ovl_Oceff_Wipe/sSongOfTimeFrustumModelDL");
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

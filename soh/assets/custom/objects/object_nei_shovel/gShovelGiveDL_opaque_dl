@@ -1,0 +1,25 @@
+<DisplayList Version="0">
+	<ClearGeometryMode G_LIGHTING="1" />
+	<LoadVertices Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_vtx_cull" VertexBufferIndex="0" VertexOffset="0" Count="8"/>
+	<SetGeometryMode G_LIGHTING="1" />
+	<CullDisplayList Start="0" End="7"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_259_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_260_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_261_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_2"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_262_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_3"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_263_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_4"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_264_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_5"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_265_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_6"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_266_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_7"/>
+	<CallDisplayList Path="objects/object_nei_shovel/mat_gShovelGiveDL_f3dlite_material_267_layerOpaque"/>
+	<CallDisplayList Path="objects/object_nei_shovel/gShovelGiveDL_gShovelGiveDL_mesh_layer_Opaque_tri_8"/>
+	<EndDisplayList/>
+</DisplayList>

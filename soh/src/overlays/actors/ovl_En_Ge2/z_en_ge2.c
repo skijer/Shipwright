@@ -11,6 +11,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
 #include "soh/ResourceManagerHelpers.h"
+#include "mods/transformation_masks/gerudo_form.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -155,8 +156,14 @@ void EnGe2_Init(Actor* thisx, PlayState* play) {
             break;
         case GE2_TYPE_GERUDO_CARD_GIVER:
             EnGe2_ChangeAction(this, GE2_ACTION_WAITLOOKATPLAYER);
-            this->actor.update = EnGe2_UpdateAfterTalk;
-            this->actionFunc = EnGe2_ForceTalk;
+            // Gerudo Mask cheat: wearing the mask makes Card-Giver Gerudos act like
+            // friendly Gerudos — no forced card-giving cutscene.
+            if (GerudoForm_IsActive()) {
+                this->actor.update = EnGe2_UpdateFriendly;
+            } else {
+                this->actor.update = EnGe2_UpdateAfterTalk;
+                this->actionFunc = EnGe2_ForceTalk;
+            }
             this->actor.targetMode = 6;
             break;
         default:
@@ -243,7 +250,7 @@ void EnGe2_CaptureClose(EnGe2* this, PlayState* play) {
     if (this->timer > 0) {
         this->timer--;
     } else {
-        func_8006D074(play);
+        Horse_ResetHorseData(play);
 
         if ((INV_CONTENT(ITEM_HOOKSHOT) == ITEM_NONE) || (INV_CONTENT(ITEM_LONGSHOT) == ITEM_NONE)) {
             play->nextEntranceIndex = ENTR_GERUDO_VALLEY_1;
@@ -273,7 +280,7 @@ void EnGe2_CaptureCharge(EnGe2* this, PlayState* play) {
     if (this->timer > 0) {
         this->timer--;
     } else {
-        func_8006D074(play);
+        Horse_ResetHorseData(play);
 
         if ((INV_CONTENT(ITEM_HOOKSHOT) == ITEM_NONE) || (INV_CONTENT(ITEM_LONGSHOT) == ITEM_NONE)) {
             play->nextEntranceIndex = ENTR_GERUDO_VALLEY_1;
@@ -411,7 +418,7 @@ void EnGe2_TurnToFacePlayer(EnGe2* this, PlayState* play) {
     if (ABS(angleDiff) <= 0x4000) {
         Math_SmoothStepToS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 6, 4000, 100);
         this->actor.world.rot.y = this->actor.shape.rot.y;
-        func_80038290(play, &this->actor, &this->headRot, &this->unk_2EE, this->actor.focus.pos);
+        Actor_TrackPlayer(play, &this->actor, &this->headRot, &this->unk_2EE, this->actor.focus.pos);
     } else {
         if (angleDiff < 0) {
             Math_SmoothStepToS(&this->headRot.y, -0x2000, 6, 6200, 0x100);
@@ -427,7 +434,7 @@ void EnGe2_TurnToFacePlayer(EnGe2* this, PlayState* play) {
 void EnGe2_LookAtPlayer(EnGe2* this, PlayState* play) {
     if ((ABS((s16)(this->actor.yawTowardsPlayer - this->actor.shape.rot.y)) <= 0x4300) &&
         (this->actor.xzDistToPlayer < 200.0f)) {
-        func_80038290(play, &this->actor, &this->headRot, &this->unk_2EE, this->actor.focus.pos);
+        Actor_TrackPlayer(play, &this->actor, &this->headRot, &this->unk_2EE, this->actor.focus.pos);
     } else {
         Math_SmoothStepToS(&this->headRot.x, 0, 6, 6200, 100);
         Math_SmoothStepToS(&this->headRot.y, 0, 6, 6200, 100);
@@ -488,12 +495,22 @@ void EnGe2_ForceTalk(EnGe2* this, PlayState* play) {
     } else {
         this->actor.textId = 0x6004;
         this->actor.flags |= ACTOR_FLAG_TALK_OFFER_AUTO_ACCEPTED;
-        func_8002F1C4(&this->actor, play, 300.0f, 300.0f, 0);
+        Actor_OfferTalkExchange(&this->actor, play, 300.0f, 300.0f, 0);
     }
     EnGe2_LookAtPlayer(this, play);
 }
 
 void EnGe2_SetupCapturePlayer(EnGe2* this, PlayState* play) {
+    // Never start a capture while the guards should be friendly. The friendly
+    // re-check at the bottom of EnGe2_Update only flips this->actor.update on
+    // the NEXT frame, so a detection on the same frame the player becomes a
+    // Gerudo (Gerudo Mask transform) would still capture without this gate.
+    if (GameInteractor_Should(VB_GERUDOS_BE_FRIENDLY, EnGe2_CheckCarpentersFreed())) {
+        this->actor.update = EnGe2_UpdateFriendly;
+        this->actor.targetMode = 6;
+        return;
+    }
+
     this->stateFlags |= GE2_STATE_CAPTURING;
     this->actor.speedXZ = 0.0f;
     EnGe2_ChangeAction(this, GE2_ACTION_CAPTURETURN);
@@ -547,7 +564,7 @@ void EnGe2_UpdateFriendly(Actor* thisx, PlayState* play) {
         this->actor.textId = 0x6005;
 
         if (this->actor.xzDistToPlayer < 100.0f) {
-            func_8002F2CC(&this->actor, play, 100.0f);
+            Actor_OfferTalk(&this->actor, play, 100.0f);
         }
     }
     EnGe2_MoveAndBlink(this, play);

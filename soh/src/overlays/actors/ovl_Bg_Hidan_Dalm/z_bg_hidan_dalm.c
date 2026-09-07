@@ -127,10 +127,24 @@ void BgHidanDalm_Destroy(Actor* thisx, PlayState* play) {
 void BgHidanDalm_Wait(BgHidanDalm* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
+    // Also accept Goron punch/ground pound (DMG_HAMMER_SWING) from transformation masks.
+    // Original only checks meleeWeaponAnimation for hammer, but Goron attacks use
+    // DMG_HAMMER_SWING on their collider which is functionally equivalent.
+    // Iterate all 4 tris so a Goron punch landing on the -X face (elements 2/3)
+    // is recognised, not just the +X face (elements 0/1).
+    s32 isHammerHit = (player->meleeWeaponAnimation == PLAYER_MWA_HAMMER_FORWARD ||
+                       player->meleeWeaponAnimation == PLAYER_MWA_HAMMER_SIDE);
+    if (!isHammerHit && (this->collider.base.acFlags & AC_HIT)) {
+        for (s32 i = 0; i < 4; i++) {
+            ColliderInfo* hitInfo = this->collider.elements[i].info.acHitInfo;
+            if (hitInfo != NULL && (hitInfo->toucher.dmgFlags & DMG_HAMMER_SWING)) {
+                isHammerHit = 1;
+                break;
+            }
+        }
+    }
     if (GameInteractor_Should(VB_HAMMER_TOTEM_BREAK,
-                              (this->collider.base.acFlags & AC_HIT) && !Player_InCsMode(play) &&
-                                  (player->meleeWeaponAnimation == 22 || player->meleeWeaponAnimation == 23),
-                              this)) {
+                              (this->collider.base.acFlags & AC_HIT) && !Player_InCsMode(play) && isHammerHit, this)) {
         this->collider.base.acFlags &= ~AC_HIT;
         if ((this->collider.elements[0].info.bumperFlags & BUMP_HIT) ||
             (this->collider.elements[1].info.bumperFlags & BUMP_HIT)) {
@@ -141,7 +155,12 @@ void BgHidanDalm_Wait(BgHidanDalm* this, PlayState* play) {
         this->dyna.actor.world.pos.x += 32.5f * Math_SinS(this->dyna.actor.world.rot.y);
         this->dyna.actor.world.pos.z += 32.5f * Math_CosS(this->dyna.actor.world.rot.y);
 
-        Player_SetCsActionWithHaltedActors(play, &this->dyna.actor, 8);
+        // SM64 Mario mode: the player is driven by libsm64, so a cutscene
+        // csAction never releases → softlock. Skip the player halt; the totem
+        // still rotates/shrinks/breaks and Mario keeps control.
+        if (!CVarGetInteger("gSm64Mario", 0)) {
+            Player_SetCsActionWithHaltedActors(play, &this->dyna.actor, 8);
+        }
         this->dyna.actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
         this->actionFunc = BgHidanDalm_Shrink;
         this->dyna.actor.bgCheckFlags &= ~2;
@@ -162,7 +181,10 @@ void BgHidanDalm_Shrink(BgHidanDalm* this, PlayState* play) {
     Vec3f pos;
 
     if (Math_StepToF(&this->dyna.actor.scale.x, 0.0f, 0.004f)) {
-        Player_SetCsActionWithHaltedActors(play, &this->dyna.actor, 7);
+        // See BgHidanDalm_Wait: don't halt/release the player in Mario mode.
+        if (!CVarGetInteger("gSm64Mario", 0)) {
+            Player_SetCsActionWithHaltedActors(play, &this->dyna.actor, 7);
+        }
         Actor_Kill(&this->dyna.actor);
     }
 

@@ -8,6 +8,8 @@
 
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/controls/Mouse.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/savestate_serialize.h"
 
 s16 Camera_ChangeSettingFlags(Camera* camera, s16 setting, s16 flags);
 s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags);
@@ -429,7 +431,7 @@ f32 Camera_GetFloorYLayer(Camera* camera, Vec3f* norm, Vec3f* pos, s32* bgId) {
             norm->z = 0.0f;
             floorY = BGCHECK_Y_MIN;
             break;
-        } else if (func_80041D4C(colCtx, floorPoly, *bgId) == 1) {
+        } else if (SurfaceType_GetFloorType(colCtx, floorPoly, *bgId) == 1) {
             // floor is not solid, check below that floor.
             pos->y = floorY - 10.0f;
             continue;
@@ -572,9 +574,9 @@ s16 Camera_XZAngle(Vec3f* to, Vec3f* from) {
     return DEGF_TO_BINANG(RADF_TO_DEGF(Math_FAtan2F(from->x - to->x, from->z - to->z)));
 }
 
-f32 D_8015CE50;
-f32 D_8015CE54;
-CamColChk D_8015CE58;
+static f32 D_8015CE50;
+static f32 D_8015CE54;
+static CamColChk D_8015CE58;
 s16 func_80044ADC(Camera* camera, s16 yaw, s16 arg2) {
     Vec3f playerPos;
     Vec3f rotatedPos;
@@ -774,7 +776,7 @@ void Camera_UpdateInterface(s16 flags) {
         if (flags & SHRINKWIN_CURVAL) {
             ShrinkWindow_SetCurrentVal(sCameraShrinkWindowVal);
         } else {
-            ShrinkWindow_SetVal(sCameraShrinkWindowVal);
+            Letterbox_SetSizeTarget(sCameraShrinkWindowVal);
         }
     }
 
@@ -785,7 +787,7 @@ void Camera_UpdateInterface(s16 flags) {
         }
         if (interfaceAlpha != sCameraInterfaceAlpha) {
             sCameraInterfaceAlpha = interfaceAlpha;
-            Interface_ChangeAlpha(sCameraInterfaceAlpha);
+            Interface_ChangeHudVisibilityMode(sCameraInterfaceAlpha);
         }
     }
 }
@@ -1440,14 +1442,34 @@ s32 SetCameraManual(Camera* camera) {
     return 0;
 }
 
-s32 Camera_Free(Camera* camera) {
+/**
+ * SOH [Enhancement] Free-look movement, shared by every camera function that hands control to the
+ * player: orbits `at` (the player) with the right stick / mouse at `distTarget` units of distance.
+ * Split out of Camera_Free so scripted camera functions can reuse it: Camera_Free's parameter
+ * handling casts camera->paramData to Parallel1 and reads the mode's value table with the Parallel1
+ * layout, which would corrupt the parameters of any camera function that owns a different struct.
+ */
+s32 Camera_FreeMove(Camera* camera, f32 distTarget) {
     Vec3f* eye = &camera->eye;
     Vec3f* at = &camera->at;
     Vec3f* eyeNext = &camera->eyeNext;
     VecSph spA8;
     CamColChk sp6C;
-    Parallel1* para1 = (Parallel1*)camera->paramData;
-    f32 playerHeight;
+
+    // SOH [Enhancement] If free-look resuming after another camera drove view (e.g. Spirit Temple alcove,
+    // or crawling), re-seed free-look angles so view continues from where it was left instead of snapping
+    // back to the pre-interruption angle. Seed from play->view (what was actually on screen last frame),
+    // not camera->at/eye: for a subcamera-driven OnePoint cutscene like crawlspace exit, main camera's own
+    // eye is left stale and aims re-seed at sky, while play->view still holds cutscene's final framing of Link.
+    static s32 sFreeLastFrame = 0;
+    s32 curFrame = camera->play->state.frames;
+    if (curFrame - sFreeLastFrame > 1) {
+        VecSph eyeAdjustment;
+        OLib_Vec3fDiffToVecSphGeo(&eyeAdjustment, &camera->play->view.lookAt, &camera->play->view.eye);
+        camera->play->camX = eyeAdjustment.yaw;
+        camera->play->camY = eyeAdjustment.pitch;
+    }
+    sFreeLastFrame = curFrame;
 
     at->x = Camera_LERPCeilF(camera->player->actor.world.pos.x, camera->at.x, 0.5f, 1.0f);
     at->y = Camera_LERPCeilF(camera->player->actor.world.pos.y + (camera->player->rideActor != NULL
@@ -1456,6 +1478,60 @@ s32 Camera_Free(Camera* camera) {
                                                                      1.2f,
                              camera->at.y, 0.5f, 1.0f);
     at->z = Camera_LERPCeilF(camera->player->actor.world.pos.z, camera->at.z, 0.5f, 1.0f);
+
+    f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
+    f32 newCamY = +D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
+
+    /* Disable mouse movement when holding down the shield */
+    if (!(camera->player->stateFlags1 & 0x400000)) {
+        Mouse_HandleThirdPerson(&newCamX, &newCamY);
+    }
+
+    newCamX *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.X"), 1.0f));
+    newCamY *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.Y"), 1.0f));
+
+    bool invertXAxis = (CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
+                        !CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) ||
+                       (!CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
+                        CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0));
+
+    camera->play->camX += newCamX * (invertXAxis ? -1 : 1);
+    camera->play->camY += newCamY * (CVarGetInteger(CVAR_SETTING("FreeLook.InvertYAxis"), 1) ? 1 : -1);
+
+    if (camera->play->camY > 0x32A4) {
+        camera->play->camY = 0x32A4;
+    }
+    if (camera->play->camY < -0x228C) {
+        camera->play->camY = -0x228C;
+    }
+
+    f32 speedScaler = CVarGetInteger(CVAR_SETTING("FreeLook.TransitionSpeed"), 25);
+    f32 distDiff = ABS(distTarget - camera->dist);
+    if (distDiff > 0)
+        camera->dist = Camera_LERPCeilF(distTarget, camera->dist, speedScaler / (distDiff + speedScaler), 0.0f);
+    OLib_Vec3fDiffToVecSphGeo(&spA8, at, eyeNext);
+
+    spA8.r = camera->dist;
+    spA8.yaw = camera->play->camX;
+    spA8.pitch = camera->play->camY;
+
+    Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spA8);
+    if (camera->status == CAM_STAT_ACTIVE) {
+        sp6C.pos = *eyeNext;
+        Camera_BGCheckInfo(camera, at, &sp6C);
+        *eye = sp6C.pos;
+    }
+
+    camera->fov = Camera_LERPCeilF(65.0f, camera->fov, camera->fovUpdateRate, 1.0f);
+    camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5, 0xA);
+
+    return 1;
+}
+
+s32 Camera_Free(Camera* camera) {
+    VecSph spA8;
+    Parallel1* para1 = (Parallel1*)camera->paramData;
+    f32 playerHeight;
 
     playerHeight = Player_GetHeight(camera->player);
 
@@ -1486,54 +1562,57 @@ s32 Camera_Free(Camera* camera) {
 
     camera->animState = 0;
 
-    f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
-    f32 newCamY = +D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
+    // SOH [Enhancement] When set, use the game's per-mode default distance (para1->distTarget)
+    // instead of the fixed free-look distance.
+    f32 distTarget = CVarGetInteger(CVAR_SETTING("FreeLook.UseGameDistance"), 0)
+                         ? para1->distTarget
+                         : CVarGetInteger(CVAR_SETTING("FreeLook.MaxCameraDistance"), para1->distTarget);
 
-    /* Disable mouse movement when holding down the shield */
-    if (!(camera->player->stateFlags1 & 0x400000)) {
+    return Camera_FreeMove(camera, distTarget);
+}
+
+/**
+ * SOH [Enhancement] Free camera during the scripted "turn around" camera settings (CAM_SET_TURN_AROUND,
+ * i.e. Camera_KeepOn4): getting an item, opening doors, drinking a bottle, playing the ocarina...
+ * The vanilla framing plays as usual until the player actually pushes the right stick (or moves the
+ * mouse), and free look then drives the camera for the rest of that scene.
+ *
+ * This deliberately does not use SetCameraManual()/play->manualCamera: that flag is shared with the
+ * gameplay cameras and is normally already set when one of these scenes starts, which would snap the
+ * camera to the free-look angles on the very first frame and destroy the framing every single time.
+ * Instead the arming is tracked locally and reset whenever this camera function stops running for a
+ * frame, i.e. when a new scripted camera scene begins.
+ */
+s32 Camera_ScriptedFreeCamActive(Camera* camera) {
+    static s32 sScriptedFreeLastFrame = 0;
+    static s32 sScriptedFreeArmed = 0;
+
+    s32 curFrame = camera->play->state.frames;
+
+    if (curFrame - sScriptedFreeLastFrame > 1) {
+        sScriptedFreeArmed = 0;
+    }
+    sScriptedFreeLastFrame = curFrame;
+
+    if (!sScriptedFreeArmed) {
+        f32 newCamX = -D_8015BD7C->state.input[0].cur.right_stick_x * 10.0f;
+        f32 newCamY = D_8015BD7C->state.input[0].cur.right_stick_y * 10.0f;
+
         Mouse_HandleThirdPerson(&newCamX, &newCamY);
+
+        if ((fabsf(newCamX) >= 15.0f) || (fabsf(newCamY) >= 15.0f)) {
+            VecSph eyeAdjustment;
+
+            // Take over from whatever the scripted camera had framed, so there is no snap.
+            OLib_Vec3fDiffToVecSphGeo(&eyeAdjustment, &camera->at, &camera->eye);
+            camera->play->camX = eyeAdjustment.yaw;
+            camera->play->camY = eyeAdjustment.pitch;
+
+            sScriptedFreeArmed = 1;
+        }
     }
 
-    newCamX *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.X"), 1.0f));
-    newCamY *= (CVarGetFloat(CVAR_SETTING("FreeLook.CameraSensitivity.Y"), 1.0f));
-
-    bool invertXAxis = (CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
-                        !CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0)) ||
-                       (!CVarGetInteger(CVAR_SETTING("FreeLook.InvertXAxis"), 0) &&
-                        CVarGetInteger(CVAR_ENHANCEMENT("MirroredWorld"), 0));
-
-    camera->play->camX += newCamX * (invertXAxis ? -1 : 1);
-    camera->play->camY += newCamY * (CVarGetInteger(CVAR_SETTING("FreeLook.InvertYAxis"), 1) ? 1 : -1);
-
-    if (camera->play->camY > 0x32A4) {
-        camera->play->camY = 0x32A4;
-    }
-    if (camera->play->camY < -0x228C) {
-        camera->play->camY = -0x228C;
-    }
-
-    f32 distTarget = CVarGetInteger(CVAR_SETTING("FreeLook.MaxCameraDistance"), para1->distTarget);
-    f32 speedScaler = CVarGetInteger(CVAR_SETTING("FreeLook.TransitionSpeed"), 25);
-    f32 distDiff = ABS(distTarget - camera->dist);
-    if (distDiff > 0)
-        camera->dist = Camera_LERPCeilF(distTarget, camera->dist, speedScaler / (distDiff + speedScaler), 0.0f);
-    OLib_Vec3fDiffToVecSphGeo(&spA8, at, eyeNext);
-
-    spA8.r = camera->dist;
-    spA8.yaw = camera->play->camX;
-    spA8.pitch = camera->play->camY;
-
-    Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spA8);
-    if (camera->status == CAM_STAT_ACTIVE) {
-        sp6C.pos = *eyeNext;
-        Camera_BGCheckInfo(camera, at, &sp6C);
-        *eye = sp6C.pos;
-    }
-
-    camera->fov = Camera_LERPCeilF(65.0f, camera->fov, camera->fovUpdateRate, 1.0f);
-    camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5, 0xA);
-
-    return 1;
+    return sScriptedFreeArmed;
 }
 
 s32 Camera_Normal1(Camera* camera) {
@@ -1687,8 +1766,12 @@ s32 Camera_Normal1(Camera* camera) {
 
     OLib_Vec3fDiffToVecSphGeo(&eyeAdjustment, at, eyeNext);
 
+    // Skijer's NEI: a stack of four Links needs more room than one.
+    extern f32 FourSword_CameraDistanceScale(void);
+    f32 distScale = FourSword_CameraDistanceScale();
+
     camera->dist = eyeAdjustment.r =
-        Camera_ClampDist(camera, eyeAdjustment.r, norm1->distMin, norm1->distMax, anim->unk_28);
+        Camera_ClampDist(camera, eyeAdjustment.r, norm1->distMin * distScale, norm1->distMax * distScale, anim->unk_28);
 
     if (anim->startSwingTimer <= 0) {
         // idle camera re-center
@@ -2696,8 +2779,8 @@ s32 Camera_Jump3(Camera* camera) {
             anim->mode = CAM_MODE_NORMAL;
             modeSwitch = true;
         }
-    } else if (((camera->waterYPos - eye->y) > OREG(45)) && (anim->mode != CAM_MODE_BOOMERANG)) {
-        anim->mode = CAM_MODE_BOOMERANG;
+    } else if (((camera->waterYPos - eye->y) > OREG(45)) && (anim->mode != CAM_MODE_AIM_BOOMERANG)) {
+        anim->mode = CAM_MODE_AIM_BOOMERANG;
         modeSwitch = true;
     }
 
@@ -3883,7 +3966,17 @@ s32 Camera_KeepOn4(Camera* camera) {
         Camera_Vec3fVecSphGeoAdd(at, at, &spB8);
     }
     camera->atLERPStepScale = 0.0f;
-    camera->dist = Camera_LERPCeilF(keep4->unk_04, camera->dist, 0.25f, 2.0f);
+    // SOH [Enhancement] Free camera during item-get / turn-around cutscenes. Checked here, before the
+    // scene's own distance LERP, so the free-look distance is not fought over by both every frame; the
+    // camera itself is only taken over further below, after this function has had the chance to hand the
+    // previous camera setting back when the cutscene ends (see the camera->unk_14C & 8 branch).
+    s32 scriptedFreeCam = CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0) &&
+                          CVarGetInteger(CVAR_SETTING("FreeLook.TurnAroundCam"), 0) &&
+                          Camera_ScriptedFreeCamActive(camera);
+
+    if (!scriptedFreeCam) {
+        camera->dist = Camera_LERPCeilF(keep4->unk_04, camera->dist, 0.25f, 2.0f);
+    }
     spB8.r = camera->dist;
     if (unk20->unk_10 != 0) {
         camera->unk_14C |= 0x20;
@@ -3911,6 +4004,15 @@ s32 Camera_KeepOn4(Camera* camera) {
             }
         }
     }
+    if (scriptedFreeCam) {
+        f32 freeDist = CVarGetInteger(CVAR_SETTING("FreeLook.UseGameDistance"), 0)
+                           ? keep4->unk_04
+                           : CVarGetInteger(CVAR_SETTING("FreeLook.MaxCameraDistance"), keep4->unk_04);
+
+        Camera_FreeMove(camera, freeDist);
+        return 1;
+    }
+
     spB8.yaw = Camera_LERPCeilS(unk20->unk_0C, spA8.yaw, keep4->unk_14, 4);
     spB8.pitch = Camera_LERPCeilS(unk20->unk_0E, spA8.pitch, keep4->unk_14, 4);
     Camera_Vec3fVecSphGeoAdd(eyeNext, at, &spB8);
@@ -3918,6 +4020,8 @@ s32 Camera_KeepOn4(Camera* camera) {
     Camera_BGCheck(camera, at, eye);
     camera->fov = Camera_LERPCeilF(keep4->unk_18, camera->fov, camera->fovUpdateRate, 1.0f);
     camera->roll = Camera_LERPCeilS(0, camera->roll, 0.5f, 0xA);
+
+    return 1;
 }
 
 /**
@@ -4542,9 +4646,9 @@ s32 Camera_Subj4(Camera* camera) {
     }
 
     anim->unk_28 = temp_f16;
-    // camera->player->actor.world.pos = *eyeNext;
-    // camera->player->actor.world.pos.y = camera->playerGroundY;
-    // camera->player->actor.shape.rot.y = sp64.yaw;
+    camera->player->actor.world.pos = *eyeNext;
+    camera->player->actor.world.pos.y = camera->playerGroundY;
+    camera->player->actor.shape.rot.y = sp64.yaw;
     temp_f16 = ((240.0f * temp_f16) * (anim->unk_24 * 0.416667f));
     temp_a0 = temp_f16 + anim->unk_30;
     at->x = eye->x + (Math_SinS(temp_a0) * 10.0f);
@@ -5253,16 +5357,16 @@ s32 Camera_Unique9(Camera* camera) {
                     Camera_UpdateInterface(0xF000 | ((anim->curKeyFrame->unk_01 & 0xF) << 8));
                 } else if (camera->player->stateFlags1 & PLAYER_STATE1_IN_WATER &&
                            player->currentBoots != PLAYER_BOOTS_IRON) {
-                    func_8002DF38(camera->play, camera->target, 8);
+                    Player_SetCsAction(camera->play, camera->target, 8);
                     osSyncPrintf("camera: demo: player demo set WAIT\n");
                 } else {
                     osSyncPrintf("camera: demo: player demo set %d\n", anim->curKeyFrame->unk_01);
-                    func_8002DF38(camera->play, camera->target, anim->curKeyFrame->unk_01);
+                    Player_SetCsAction(camera->play, camera->target, anim->curKeyFrame->unk_01);
                 }
             }
         } else {
             // We've gone through all the keyframes.
-            if (camera->thisIdx != MAIN_CAM) {
+            if (camera->thisIdx != CAM_ID_MAIN) {
                 camera->timer = 0;
             }
             return true;
@@ -5599,20 +5703,20 @@ s32 Camera_Unique9(Camera* camera) {
             break;
         case 19: {
             // Change the parent camera (or default)'s mode to normal
-            s32 camIdx = camera->parentCamIdx <= SUBCAM_NONE ? MAIN_CAM : camera->parentCamIdx;
+            s32 camIdx = camera->parentCamIdx <= SUBCAM_NONE ? CAM_ID_MAIN : camera->parentCamIdx;
 
             Camera_ChangeModeFlags(camera->play->cameraPtrs[camIdx], CAM_MODE_NORMAL, 1);
         }
         case 18: {
             // copy the current camera to the parent (or default)'s camera.
-            s32 camIdx = camera->parentCamIdx <= SUBCAM_NONE ? MAIN_CAM : camera->parentCamIdx;
+            s32 camIdx = camera->parentCamIdx <= SUBCAM_NONE ? CAM_ID_MAIN : camera->parentCamIdx;
             Camera* cam = camera->play->cameraPtrs[camIdx];
 
             *eye = *eyeNext;
             Camera_Copy(cam, camera);
         }
         default:
-            if (camera->thisIdx != MAIN_CAM) {
+            if (camera->thisIdx != CAM_ID_MAIN) {
                 camera->timer = 0;
             }
     }
@@ -6033,7 +6137,7 @@ s32 Camera_Demo5(Camera* camera) {
             D_8011D6AC[1].eyeTargetInit.x = Rand_ZeroOne() * 10.0f;
             ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D6AC;
             ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D6AC);
-            if (camera->parentCamIdx != MAIN_CAM) {
+            if (camera->parentCamIdx != CAM_ID_MAIN) {
                 ONEPOINT_CS_INFO(camera)->keyFrameCnt--;
             } else {
                 camera->timer += D_8011D6AC[2].timerInit;
@@ -6043,7 +6147,7 @@ s32 Camera_Demo5(Camera* camera) {
             D_8011D724[1].timerInit = camera->timer - 1;
             ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D724;
             ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D724);
-            if (camera->parentCamIdx != MAIN_CAM) {
+            if (camera->parentCamIdx != CAM_ID_MAIN) {
                 ONEPOINT_CS_INFO(camera)->keyFrameCnt--;
             } else {
                 camera->timer += D_8011D724[2].timerInit;
@@ -6065,7 +6169,7 @@ s32 Camera_Demo5(Camera* camera) {
 
         D_8011D79C[1].timerInit = camera->timer - 1;
 
-        if (camera->parentCamIdx != MAIN_CAM) {
+        if (camera->parentCamIdx != CAM_ID_MAIN) {
             ONEPOINT_CS_INFO(camera)->keyFrameCnt -= 2;
         } else {
             camera->timer += D_8011D79C[2].timerInit + D_8011D79C[3].timerInit;
@@ -6076,7 +6180,7 @@ s32 Camera_Demo5(Camera* camera) {
         D_8011D83C[0].timerInit = camera->timer;
         ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D83C;
         ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D83C);
-        if (camera->parentCamIdx != MAIN_CAM) {
+        if (camera->parentCamIdx != CAM_ID_MAIN) {
             ONEPOINT_CS_INFO(camera)->keyFrameCnt--;
         } else {
             camera->timer += D_8011D83C[1].timerInit;
@@ -6089,7 +6193,7 @@ s32 Camera_Demo5(Camera* camera) {
             D_8011D88C[0].timerInit = camera->timer;
             ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D88C;
             ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D88C);
-            if (camera->parentCamIdx != MAIN_CAM) {
+            if (camera->parentCamIdx != CAM_ID_MAIN) {
                 ONEPOINT_CS_INFO(camera)->keyFrameCnt--;
             } else {
                 camera->timer += D_8011D88C[1].timerInit;
@@ -6107,7 +6211,7 @@ s32 Camera_Demo5(Camera* camera) {
             D_8011D8DC[1].timerInit = (s16)(eyeTargetDist * 0.005f) + 8;
             ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D8DC;
             ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D8DC);
-            if (camera->parentCamIdx != MAIN_CAM) {
+            if (camera->parentCamIdx != CAM_ID_MAIN) {
                 ONEPOINT_CS_INFO(camera)->keyFrameCnt -= 2;
             } else {
                 camera->timer += D_8011D8DC[1].timerInit + D_8011D8DC[2].timerInit;
@@ -6144,7 +6248,7 @@ s32 Camera_Demo5(Camera* camera) {
         }
         ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D954;
         ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D954);
-        if (camera->parentCamIdx != MAIN_CAM) {
+        if (camera->parentCamIdx != CAM_ID_MAIN) {
             ONEPOINT_CS_INFO(camera)->keyFrameCnt -= 2;
         } else {
             camera->timer += D_8011D954[2].timerInit + D_8011D954[3].timerInit;
@@ -6169,7 +6273,7 @@ s32 Camera_Demo5(Camera* camera) {
         }
         ONEPOINT_CS_INFO(camera)->keyFrames = D_8011D9F4;
         ONEPOINT_CS_INFO(camera)->keyFrameCnt = ARRAY_COUNT(D_8011D9F4);
-        if (camera->parentCamIdx != MAIN_CAM) {
+        if (camera->parentCamIdx != CAM_ID_MAIN) {
             if (camera->play->state.frames & 1) {
                 D_8011D9F4[0].rollTargetInit = -D_8011D9F4[0].rollTargetInit;
                 D_8011D9F4[1].rollTargetInit = -D_8011D9F4[1].rollTargetInit;
@@ -6231,7 +6335,7 @@ s32 Camera_Demo6(Camera* camera) {
     s16 stateTimers[4];
     Vec3f* at = &camera->at;
 
-    mainCam = Play_GetCamera(camera->play, MAIN_CAM);
+    mainCam = Play_GetCamera(camera->play, CAM_ID_MAIN);
     camFocus = camera->target;
     stateTimers[1] = 0x37;
     stateTimers[2] = 0x46;
@@ -6336,7 +6440,7 @@ s32 Camera_Demo9(Camera* camera) {
     f32* camFOV = &camera->fov;
     Demo9Anim* anim = &demo9->anim;
 
-    mainCam = Play_GetCamera(camera->play, MAIN_CAM);
+    mainCam = Play_GetCamera(camera->play, CAM_ID_MAIN);
     mainCamPlayerPosRot = &mainCam->playerPosRot;
     if (RELOAD_PARAMS) {
         values = sCameraSettings[camera->setting].cameraModes[camera->mode].values;
@@ -6916,14 +7020,19 @@ s32 Camera_Special9(Camera* camera) {
             camera->unk_14C |= (0x400 | 0x10);
             sCameraInterfaceFlags = 0;
 
-            if (camera->xzSpeed > 0.001f || CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_A) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_B) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CLEFT) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CDOWN) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CUP) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CRIGHT) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_R) ||
-                CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_Z) || params->interfaceFlags & 0x8) {
+            // SOH [Enhancement] VB_RELEASE_DOORC_CAMERA lets free look hand the door peek camera
+            // back on right-stick input (see soh/Enhancements/camera/FreeLookDoorCamRelease.cpp).
+            if (GameInteractor_Should(
+                    VB_RELEASE_DOORC_CAMERA,
+                    camera->xzSpeed > 0.001f || CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_A) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_B) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CLEFT) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CDOWN) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CUP) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_CRIGHT) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_R) ||
+                        CHECK_BTN_ALL(D_8015BD7C->state.input[0].press.button, BTN_Z) || params->interfaceFlags & 0x8,
+                    camera)) {
 
                 Camera_ChangeSettingFlags(camera, camera->prevSetting, 2);
                 camera->unk_14C |= (0x4 | 0x2);
@@ -7132,7 +7241,7 @@ void Camera_InitPlayerSettings(Camera* camera, Player* player) {
     Camera_QRegInit();
     osSyncPrintf(VT_FGCOL(BLUE) "camera: personalize ---" VT_RST "\n");
 
-    if (camera->thisIdx == MAIN_CAM) {
+    if (camera->thisIdx == CAM_ID_MAIN) {
         Camera_UpdateWater(camera);
     }
 }
@@ -7363,7 +7472,8 @@ s32 Camera_UpdateWater(Camera* camera) {
 
 s32 Camera_UpdateHotRoom(Camera* camera) {
     camera->distortionFlags &= ~DISTORTION_HOT_ROOM;
-    if (camera->play->roomCtx.curRoom.behaviorType2 == ROOM_BEHAVIOR_TYPE2_3) {
+    if (GameInteractor_Should(VB_HOT_ROOM_DISTORTION,
+                              camera->play->roomCtx.curRoom.behaviorType2 == ROOM_BEHAVIOR_TYPE2_3)) {
         camera->distortionFlags |= DISTORTION_HOT_ROOM;
     }
 
@@ -7373,7 +7483,7 @@ s32 Camera_UpdateHotRoom(Camera* camera) {
 s32 Camera_DbgChangeMode(Camera* camera) {
     s32 changeDir = 0;
 
-    if (!gDbgCamEnabled && camera->play->activeCamera == MAIN_CAM) {
+    if (!gDbgCamEnabled && camera->play->activeCamera == CAM_ID_MAIN) {
         if (CHECK_BTN_ALL(D_8015BD7C->state.input[2].press.button, BTN_CUP)) {
             osSyncPrintf("attention sound URGENCY\n");
             Sfx_PlaySfxCentered(NA_SE_SY_ATTENTION_URGENCY);
@@ -7391,7 +7501,7 @@ s32 Camera_DbgChangeMode(Camera* camera) {
         }
         if (changeDir != 0) {
             sDbgModeIdx = (sDbgModeIdx + changeDir) % 6;
-            if (Camera_ChangeSetting(camera, D_8011DAFC[sDbgModeIdx]) > 0) {
+            if (Camera_RequestSetting(camera, D_8011DAFC[sDbgModeIdx]) > 0) {
                 osSyncPrintf("camera: force change SET to %s!\n", sCameraSettingNames[D_8011DAFC[sDbgModeIdx]]);
             }
         }
@@ -7399,8 +7509,8 @@ s32 Camera_DbgChangeMode(Camera* camera) {
     return true;
 }
 
-s16 depthPhase = 0x3F0;
-s16 screenPlanePhase = 0x156;
+static s16 depthPhase = 0x3F0;
+static s16 screenPlanePhase = 0x156;
 void Camera_UpdateDistortion(Camera* camera) {
     f32 scaleFactor;
     f32 speedFactor;
@@ -7484,7 +7594,7 @@ void Camera_UpdateDistortion(Camera* camera) {
     }
 }
 
-s32 sOOBTimer = 0;
+static s32 sOOBTimer = 0;
 Vec3s Camera_Update(Camera* camera) {
     Vec3f viewAt;
     Vec3f viewEye;
@@ -7500,7 +7610,7 @@ Vec3s Camera_Update(Camera* camera) {
     QuakeCamCalc quake;
     Player* player;
 
-    player = camera->play->cameraPtrs[MAIN_CAM]->player;
+    player = camera->play->cameraPtrs[CAM_ID_MAIN]->player;
 
     if (R_DBG_CAM_UPDATE) {
         osSyncPrintf("camera: in %x\n", camera);
@@ -7606,7 +7716,7 @@ Vec3s Camera_Update(Camera* camera) {
         if ((gSaveContext.gameMode != GAMEMODE_NORMAL) && (gSaveContext.gameMode != GAMEMODE_END_CREDITS)) {
             sCameraInterfaceFlags = 0;
             Camera_UpdateInterface(sCameraInterfaceFlags);
-        } else if ((D_8011D3F0 != 0) && (camera->thisIdx == MAIN_CAM)) {
+        } else if ((D_8011D3F0 != 0) && (camera->thisIdx == CAM_ID_MAIN)) {
             D_8011D3F0--;
             sCameraInterfaceFlags = 0x3200;
             Camera_UpdateInterface(sCameraInterfaceFlags);
@@ -7681,6 +7791,14 @@ Vec3s Camera_Update(Camera* camera) {
         viewFov = camera->fov;
     }
 
+    // Minish Cap tiny mode: pull the rendered eye/at toward tiny Link. Only the
+    // applied view is transformed — the camera's internal state stays at normal
+    // scale, so motion/collision keep working and the zoom undoes itself cleanly.
+    {
+        extern void MinishTiny_AdjustCameraView(Camera * camera, Vec3f * eye, Vec3f * at);
+        MinishTiny_AdjustCameraView(camera, &viewEye, &viewAt);
+    }
+
     if (camera->paramFlags & 4) {
         camera->paramFlags &= ~4;
         viewUp = camera->up;
@@ -7739,13 +7857,13 @@ Vec3s Camera_Update(Camera* camera) {
  * When the camera's timer is 0, change the camera to its parent
  */
 void Camera_Finish(Camera* camera) {
-    Camera* mainCam = camera->play->cameraPtrs[MAIN_CAM];
+    Camera* mainCam = camera->play->cameraPtrs[CAM_ID_MAIN];
     Player* player = GET_PLAYER(camera->play);
 
     if (camera->timer == 0) {
         Play_ChangeCameraStatus(camera->play, camera->parentCamIdx, CAM_STAT_ACTIVE);
 
-        if ((camera->parentCamIdx == MAIN_CAM) && (camera->csId != 0)) {
+        if ((camera->parentCamIdx == CAM_ID_MAIN) && (camera->csId != 0)) {
             player->actor.freezeTimer = 0;
             player->stateFlags1 &= ~PLAYER_STATE1_IN_CUTSCENE;
 
@@ -7765,7 +7883,7 @@ void Camera_Finish(Camera* camera) {
             PARENT_CAM(camera)->childCamIdx = camera->childCamIdx;
         }
 
-        if (PARENT_CAM(camera)->thisIdx == MAIN_CAM) {
+        if (PARENT_CAM(camera)->thisIdx == CAM_ID_MAIN) {
             PARENT_CAM(camera)->animState = 0;
         }
 
@@ -7796,7 +7914,7 @@ s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags) {
     }
 
     if (!((sCameraSettings[camera->setting].unk_00 & 0x3FFFFFFF) & (1 << mode))) {
-        if (mode == CAM_MODE_FIRSTPERSON) {
+        if (mode == CAM_MODE_FIRST_PERSON) {
             osSyncPrintf("camera: error sound\n");
             Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
         }
@@ -7824,7 +7942,7 @@ s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags) {
         Camera_CopyDataToRegs(camera, mode);
         modeChangeFlags = 0;
         switch (mode) {
-            case CAM_MODE_FIRSTPERSON:
+            case CAM_MODE_FIRST_PERSON:
                 modeChangeFlags = 0x20;
                 break;
             case CAM_MODE_BATTLE:
@@ -7845,7 +7963,7 @@ s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags) {
         }
 
         switch (camera->mode) {
-            case CAM_MODE_FIRSTPERSON:
+            case CAM_MODE_FIRST_PERSON:
                 if (modeChangeFlags & 0x20) {
                     camera->animState = 0xA;
                 }
@@ -7907,7 +8025,7 @@ s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags) {
         // Clear free look if an action is performed that would move the camera (targeting, first person, talking)
         if (CVarGetInteger(CVAR_SETTING("FreeLook.Enabled"), 0) && SetCameraManual(camera) == 1 &&
             ((mode >= CAM_MODE_TARGET && mode <= CAM_MODE_BATTLE) ||
-             (mode >= CAM_MODE_FIRSTPERSON && mode <= CAM_MODE_CLIMBZ) || mode == CAM_MODE_HANGZ ||
+             (mode >= CAM_MODE_FIRST_PERSON && mode <= CAM_MODE_CLIMBZ) || mode == CAM_MODE_HANGZ ||
              mode == CAM_MODE_FOLLOWBOOMERANG)) {
             camera->play->manualCamera = false;
         }
@@ -7998,7 +8116,7 @@ s16 Camera_ChangeSettingFlags(Camera* camera, s16 setting, s16 flags) {
     return setting;
 }
 
-s32 Camera_ChangeSetting(Camera* camera, s16 setting) {
+s32 Camera_RequestSetting(Camera* camera, s16 setting) {
     return Camera_ChangeSettingFlags(camera, setting, 0);
 }
 
@@ -8014,6 +8132,21 @@ s32 Camera_ChangeDataIdx(Camera* camera, s32 camDataIdx) {
     if (!(camera->unk_14A & 0x40)) {
         newCameraSetting = Camera_GetCamDataSetting(camera, camDataIdx);
         camera->unk_14A |= 0x40;
+
+        // Minish tiny mode: skip the crawlspace camera setting (CAM_SET_CRAWLSPACE
+        // pulls the eye to distance 2 — an extreme zoom meant for crawling). Tiny
+        // Link walks the crawlspace floor poly normally and already has his own
+        // minish zoom (MinishTiny_AdjustCameraView), so the stacked crawlspace zoom
+        // is unwanted. Keep the current setting and just track the idx so the camera
+        // doesn't re-evaluate it every frame.
+        {
+            extern s32 MinishTiny_IsActive(void);
+            if (MinishTiny_IsActive() && newCameraSetting == CAM_SET_CRAWLSPACE) {
+                camera->camDataIdx = camDataIdx;
+                return 0x80000000 | camDataIdx;
+            }
+        }
+
         settingChangeSuccessful = Camera_ChangeSettingFlags(camera, newCameraSetting, 5) >= 0;
         if (settingChangeSuccessful || sCameraSettings[camera->setting].unk_00 & 0x80000000) {
             camera->camDataIdx = camDataIdx;
@@ -8200,14 +8333,14 @@ s32 Camera_ChangeDoorCam(Camera* camera, Actor* doorActor, s16 camDataIdx, f32 a
     }
 
     if (camDataIdx == -1) {
-        Camera_ChangeSetting(camera, CAM_SET_DOORC);
+        Camera_RequestSetting(camera, CAM_SET_DOORC);
         osSyncPrintf(".... change default door camera (set %d)\n", CAM_SET_DOORC);
     } else {
         s32 setting = Camera_GetCamDataSetting(camera, camDataIdx);
 
         camera->unk_14A |= 0x40;
 
-        if (Camera_ChangeSetting(camera, setting) >= 0) {
+        if (Camera_RequestSetting(camera, setting) >= 0) {
             camera->camDataIdx = camDataIdx;
             camera->unk_14A |= 4;
         }
@@ -8321,10 +8454,38 @@ s32 func_8005B198() {
 s16 func_8005B1A4(Camera* camera) {
     camera->unk_14C |= 0x8;
 
-    if ((camera->thisIdx == MAIN_CAM) && (camera->play->activeCamera != MAIN_CAM)) {
+    if ((camera->thisIdx == CAM_ID_MAIN) && (camera->play->activeCamera != CAM_ID_MAIN)) {
         GET_ACTIVE_CAM(camera->play)->unk_14C |= 0x8;
         return camera->play->activeCamera;
     }
 
     return camera->thisIdx;
 }
+
+#define CAMERA_SHIP_SAVESTATE_FIELDS(F) \
+    F(sInitRegs)                        \
+    F(gDbgCamEnabled)                   \
+    F(sDbgModeIdx)                      \
+    F(sNextUID)                         \
+    F(sCameraInterfaceFlags)            \
+    F(sCameraInterfaceAlpha)            \
+    F(sCameraShrinkWindowVal)           \
+    F(D_8011D3AC)                       \
+    F(sDemo5PrevAction12Frame)          \
+    F(sDemo5PrevSfxFrame)               \
+    F(D_8011D3F0)                       \
+    F(D_8011D6AC)                       \
+    F(D_8011D724)                       \
+    F(D_8011D79C)                       \
+    F(D_8011D83C)                       \
+    F(D_8011D88C)                       \
+    F(D_8011D8DC)                       \
+    F(D_8011D954)                       \
+    F(D_8011D9F4)                       \
+    F(depthPhase)                       \
+    F(screenPlanePhase)                 \
+    F(sOOBTimer)                        \
+    F(D_8015CE50)                       \
+    F(D_8015CE54)                       \
+    F(D_8015CE58)
+SHIP_SAVESTATE_DEFINE(Camera, CAMERA_SHIP_SAVESTATE_FIELDS)

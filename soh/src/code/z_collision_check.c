@@ -4,7 +4,24 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include <assert.h>
 
+// Skijer's NEI: damage scaled by ivanDamageMultiplier (Ivan co-op or SM64 Mario)
+static u8 NEI_PlayerDamageBoostActive(void) {
+    extern u8 gIvanPossessActive;
+    extern u8 Sm64Mario_IsReady(void);
+    return CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0) || gIvanPossessActive || Sm64Mario_IsReady();
+}
+
 typedef s32 (*ColChkResetFunc)(PlayState*, Collider*);
+
+// Skijer's NEI shared time control (mods/items/helpers/timestop_helper.c): caches which AC
+// colliders each actor registers so frozen actors can stay hittable during a time stop.
+void TimeCtl_NoteAcCollider(Collider* collider);
+// Skijer's NEI Champion's Tunic (mods/equipment/behaviors/equip_champion.c): snapshots
+// where every hostile attack collider is, so Flurry Rush can tell that a damage collider
+// is sweeping past Link. It has to be taken HERE because ClearContext wipes the AT list
+// before Actor_UpdateAll, so this is the only point in the frame where the list is whole.
+void Champion_NoteIncomingAttacks(PlayState* play);
+
 typedef void (*ColChkBloodFunc)(PlayState*, Collider*, Vec3f*);
 typedef void (*ColChkApplyFunc)(PlayState*, CollisionCheckContext*, Collider*);
 typedef void (*ColChkVsFunc)(PlayState*, CollisionCheckContext*, Collider*, Collider*);
@@ -1275,6 +1292,11 @@ s32 CollisionCheck_SetAC(PlayState* play, CollisionCheckContext* colChkCtx, Coll
     }
     index = colChkCtx->colACCount;
     colChkCtx->colAC[colChkCtx->colACCount++] = collider;
+    // Skijer's NEI time stop: remember who registered what. A frozen actor never runs
+    // its update, so it never gets here again and would drop out of the AC list —
+    // Link's sword and arrows would pass straight through a stopped enemy. The freeze
+    // pass re-registers these on the actor's behalf. No-op when nothing is frozen.
+    TimeCtl_NoteAcCollider(collider);
     return index;
 }
 
@@ -2641,6 +2663,8 @@ void CollisionCheck_AC(PlayState* play, CollisionCheckContext* colChkCtx, Collid
 void CollisionCheck_AT(PlayState* play, CollisionCheckContext* colChkCtx) {
     Collider** col;
 
+    Champion_NoteIncomingAttacks(play);
+
     if (colChkCtx->colATCount == 0 || colChkCtx->colACCount == 0) {
         return;
     }
@@ -2999,7 +3023,9 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
     if (collider->actor == NULL || !(collider->acFlags & AC_HIT)) {
         return;
     }
-    if (!(info->bumperFlags & BUMP_HIT) || info->bumperFlags & BUMP_NO_DAMAGE) {
+    if (!(info->bumperFlags & BUMP_HIT) ||
+        (info->bumperFlags & BUMP_NO_DAMAGE &&
+         !(info->acHitInfo && info->acHitInfo->toucher.dmgFlags & DMG_UNBLOCKABLE))) {
         return;
     }
 
@@ -3023,11 +3049,20 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         damage = tbl->table[i] & 0xF;
         collider->actor->colChkInfo.damageEffect = tbl->table[i] >> 4 & 0xF;
     }
+    // DMG_UNBLOCKABLE (Gigantamax Pikachu): bypass damage table, force minimum damage
+    if (info->acHitInfo->toucher.dmgFlags & DMG_UNBLOCKABLE) {
+        if (damage < 4)
+            damage = 4; // Minimum 4 damage regardless of resistance
+    }
+    // Skijer's NEI: DMG_FIXED_DAMAGE (forms) uses toucher damage verbatim
+    if (info->acHitInfo->toucher.dmgFlags & DMG_FIXED_DAMAGE) {
+        damage = (f32)info->acHitInfo->toucher.damage;
+    }
     if (!(collider->acFlags & AC_HARD)) {
         collider->actor->colChkInfo.damage += damage;
     }
 
-    if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0)) {
+    if (NEI_PlayerDamageBoostActive()) {
         collider->actor->colChkInfo.damage *= GET_PLAYER(play)->ivanDamageMultiplier;
     }
 }
@@ -3650,7 +3685,20 @@ u8 CollisionCheck_GetSwordDamage(s32 dmgFlags, PlayState* play) {
         damage = 8;
     }
 
-    if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0)) {
+    {
+        // Fierce Deity: use MM's Fierce Deity damage regardless of Link's equipped sword.
+        // MM D_8085D09C dmgTransformed fields (same for every sword): normal slash = 4, strong
+        // slash (jump/flip/spin finish) = 8, sword beam = up to 4. In OOT the strong/jump attack
+        // already resolves to 8 (flag 0x04000000), so keep 8 there and flatten everything else
+        // (normal slashes 1/2/4 + the beam's 2) to MM's 4. FD is the only sword attacker in FD skin
+        // mode, so gating on a recognized sword hit (damage != 0) is safe; normal play is unaffected.
+        extern u8 TransformMasks_IsFDSkinMode(void);
+        if ((damage != 0) && TransformMasks_IsFDSkinMode()) {
+            damage = (damage >= 8) ? 8 : 4;
+        }
+    }
+
+    if (NEI_PlayerDamageBoostActive()) {
         damage *= GET_PLAYER(play)->ivanDamageMultiplier;
     }
 

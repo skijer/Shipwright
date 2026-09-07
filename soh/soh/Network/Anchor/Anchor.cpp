@@ -1,9 +1,10 @@
 #include "Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/nametag.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
+#include "soh/Network/Harpoon/Harpoon.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
 
 extern "C" {
 #include "variables.h"
@@ -14,6 +15,10 @@ extern PlayState* gPlayState;
 // MARK: - Overrides
 
 void Anchor::Enable() {
+    // Auto-switch: disconnect Harpoon if active
+    if (Harpoon::Instance && Harpoon::Instance->isConnected) {
+        Harpoon::Instance->Disable();
+    }
     Network::Enable(CVarGetString(CVAR_REMOTE_ANCHOR("Host"), "anchor.hm64.org"),
                     CVarGetInteger(CVAR_REMOTE_ANCHOR("Port"), 43383));
     ownClientId = CVarGetInteger(CVAR_REMOTE_ANCHOR("LastClientId"), 0);
@@ -226,6 +231,29 @@ void Anchor::RefreshClientActors() {
         client.player = (Player*)dummy;
     }
     spawningDummyPlayerForClientId = 0;
+}
+
+void Anchor::RefreshClientNameTags() {
+    if (!IsSaveLoaded()) {
+        return;
+    }
+
+    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
+    bool hideNameTags = CVarGetInteger(CVAR_REMOTE_ANCHOR("HideNameTags"), 0);
+
+    Actor* actor = gPlayState->actorCtx.actorLists[ACTORCAT_NPC].head;
+    while (actor != NULL) {
+        if (actor->id == ACTOR_EN_OE2 && actor->update == DummyPlayer_Update) {
+            NameTag_RemoveAllForActor(actor);
+            if (!isGlobalRoom && !hideNameTags) {
+                uint32_t clientId = GetDummyPlayerClientId(actor);
+                if (clients.contains(clientId)) {
+                    NameTag_RegisterForActorWithOptions(actor, clients[clientId].name.c_str(), {});
+                }
+            }
+        }
+        actor = actor->next;
+    }
 }
 
 bool Anchor::IsSaveLoaded() {

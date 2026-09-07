@@ -10,7 +10,6 @@ have functions to both enable and disable said effect.
 
 #include "GameInteractionEffect.h"
 #include "GameInteractor.h"
-#include <libultraship/bridge.h>
 #include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
 
 extern "C" {
@@ -111,6 +110,19 @@ GameInteractionEffectQueryResult ModifyHeartContainers::CanBeApplied() {
 
 void ModifyHeartContainers::_Apply() {
     GameInteractor::RawAction::AddOrRemoveHealthContainers(parameters[0]);
+}
+
+// MARK: - GiveItem
+GameInteractionEffectQueryResult GiveItem::CanBeApplied() {
+    if (!GameInteractor::IsSaveLoaded()) {
+        return GameInteractionEffectQueryResult::NotPossible;
+    }
+
+    return GameInteractionEffectQueryResult::Possible;
+}
+
+void GiveItem::_Apply() {
+    GameInteractor::RawAction::GiveItem(parameters[0], parameters[1]);
 }
 
 // MARK: - FillMagic
@@ -259,16 +271,19 @@ void ElectrocutePlayer::_Apply() {
 
 // MARK: - KnockbackPlayer
 GameInteractionEffectQueryResult KnockbackPlayer::CanBeApplied() {
+    if (!GameInteractor::IsPlayerInControl()) {
+        return GameInteractionEffectQueryResult::TemporarilyNotPossible;
+    }
+
     Player* player = GET_PLAYER(gPlayState);
-    if (!GameInteractor::IsSaveLoaded(true) || GameInteractor::IsGameplayPaused() ||
-        player->stateFlags2 & PLAYER_STATE2_CRAWLING) {
+    if (player->stateFlags2 & PLAYER_STATE2_CRAWLING) {
         return GameInteractionEffectQueryResult::TemporarilyNotPossible;
     } else {
         return GameInteractionEffectQueryResult::Possible;
     }
 }
 void KnockbackPlayer::_Apply() {
-    GameInteractor::RawAction::KnockbackPlayer(parameters[0]);
+    GameInteractor::RawAction::KnockbackPlayer(static_cast<f32>(parameters[0]));
 }
 
 // MARK: - ModifyLinkSize
@@ -395,6 +410,21 @@ void ModifyMovementSpeedMultiplier::_Remove() {
     GameInteractor::State::MovementSpeedMultiplier = 1.0f;
 }
 
+// MARK: - ModifyRunSpeedModifier
+GameInteractionEffectQueryResult ModifyRunSpeedModifier::CanBeApplied() {
+    if (!GameInteractor::IsSaveLoaded() || GameInteractor::IsGameplayPaused()) {
+        return GameInteractionEffectQueryResult::TemporarilyNotPossible;
+    } else {
+        return GameInteractionEffectQueryResult::Possible;
+    }
+}
+void ModifyRunSpeedModifier::_Apply() {
+    GameInteractor::State::RunSpeedModifier = parameters[0];
+}
+void ModifyRunSpeedModifier::_Remove() {
+    GameInteractor::State::RunSpeedModifier = 0;
+}
+
 // MARK: - OneHitKO
 GameInteractionEffectQueryResult OneHitKO::CanBeApplied() {
     if (!GameInteractor::IsSaveLoaded(true) || GameInteractor::IsGameplayPaused()) {
@@ -492,6 +522,18 @@ void SetCollisionViewer::_Apply() {
 }
 void SetCollisionViewer::_Remove() {
     GameInteractor::RawAction::SetCollisionViewer(false);
+}
+
+// MARK: - SetCosmeticsColor
+GameInteractionEffectQueryResult SetCosmeticsColor::CanBeApplied() {
+    if (!GameInteractor::IsSaveLoaded()) {
+        return GameInteractionEffectQueryResult::TemporarilyNotPossible;
+    } else {
+        return GameInteractionEffectQueryResult::Possible;
+    }
+}
+void SetCosmeticsColor::_Apply() {
+    GameInteractor::RawAction::SetCosmeticsColor(parameters[0], parameters[1]);
 }
 
 // MARK: - RandomizeCosmetics

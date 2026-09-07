@@ -1,0 +1,189 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_0" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_0" VertexBufferIndex="0" VertexOffset="0" Count="14"/>
+	<Matrix Path="&gt;0x0d000000" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_1" VertexBufferIndex="14" VertexOffset="0" Count="5"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="2" V11="3" V12="14" Flag1="0"/>
+	<Triangles2 V00="0" V01="2" V02="14" Flag0="0" V10="4" V11="5" V12="6" Flag1="0"/>
+	<Triangles2 V00="15" V01="7" V02="8" Flag0="0" V10="9" V11="10" V12="11" Flag1="0"/>
+	<Triangles2 V00="12" V01="13" V02="4" Flag0="0" V10="12" V11="4" V12="7" Flag1="0"/>
+	<Triangles2 V00="16" V01="12" V02="7" Flag0="0" V10="17" V11="13" V12="12" Flag1="0"/>
+	<Triangles2 V00="11" V01="0" V02="18" Flag0="0" V10="11" V11="10" V12="0" Flag1="0"/>
+	<Triangles2 V00="10" V01="1" V02="0" Flag0="0" V10="8" V11="6" V12="9" Flag1="0"/>
+	<Triangles2 V00="8" V01="7" V02="6" Flag0="0" V10="7" V11="4" V12="6" Flag1="0"/>
+	<Triangles2 V00="6" V01="10" V02="9" Flag0="0" V10="6" V11="5" V12="10" Flag1="0"/>
+	<Triangle1 V00="5" V01="1" V02="10" Flag0="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_1" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_2" VertexBufferIndex="0" VertexOffset="0" Count="19"/>
+	<Matrix Path="&gt;0x0d000000" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_3" VertexBufferIndex="19" VertexOffset="0" Count="4"/>
+	<Matrix Path="&gt;0x0d000100" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_4" VertexBufferIndex="23" VertexOffset="0" Count="2"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="3" V11="4" V12="5" Flag1="0"/>
+	<Triangles2 V00="3" V01="5" V02="6" Flag0="0" V10="0" V11="2" V12="7" Flag1="0"/>
+	<Triangles2 V00="8" V01="19" V02="9" Flag0="0" V10="10" V11="23" V12="11" Flag1="0"/>
+	<Triangles2 V00="10" V01="11" V02="12" Flag0="0" V10="13" V11="14" V12="20" Flag1="0"/>
+	<Triangles2 V00="20" V01="14" V02="15" Flag0="0" V10="14" V11="21" V12="15" Flag1="0"/>
+	<Triangles2 V00="16" V01="10" V02="12" Flag0="0" V10="16" V11="12" V12="17" Flag1="0"/>
+	<Triangles2 V00="22" V01="10" V02="16" Flag0="0" V10="24" V11="8" V12="9" Flag1="0"/>
+	<Triangles2 V00="24" V01="9" V02="11" Flag0="0" V10="7" V11="18" V12="13" Flag1="0"/>
+	<Triangles2 V00="7" V01="2" V02="18" Flag0="0" V10="2" V11="19" V12="18" Flag1="0"/>
+	<Triangles2 V00="12" V01="3" V02="6" Flag0="0" V10="12" V11="6" V12="17" Flag1="0"/>
+	<Triangles2 V00="11" V01="1" V02="3" Flag0="0" V10="11" V11="3" V12="12" Flag1="0"/>
+	<Triangles2 V00="1" V01="0" V02="4" Flag0="0" V10="1" V11="4" V12="3" Flag1="0"/>
+	<Triangles2 V00="2" V01="9" V02="19" Flag0="0" V10="2" V11="1" V12="9" Flag1="0"/>
+	<Triangle1 V00="1" V01="11" V02="9" Flag0="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_2" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_5" VertexBufferIndex="0" VertexOffset="0" Count="7"/>
+	<Matrix Path="&gt;0x0d000100" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_6" VertexBufferIndex="7" VertexOffset="0" Count="2"/>
+	<Matrix Path="&gt;0x0d000000" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_7" VertexBufferIndex="9" VertexOffset="0" Count="2"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="2" V12="3" Flag1="0"/>
+	<Triangles2 V00="4" V01="5" V02="7" Flag0="0" V10="4" V11="7" V12="6" Flag1="0"/>
+	<Triangles2 V00="9" V01="5" V02="4" Flag0="0" V10="8" V11="0" V12="3" Flag1="0"/>
+	<Triangles2 V00="8" V01="3" V02="6" Flag0="0" V10="10" V11="1" V12="0" Flag1="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_2" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_8" VertexBufferIndex="0" VertexOffset="0" Count="6"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="2" V11="3" V12="4" Flag1="0"/>
+	<Triangles2 V00="2" V01="1" V02="3" Flag0="0" V10="1" V11="5" V12="3" Flag1="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_3" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_9" VertexBufferIndex="0" VertexOffset="0" Count="8"/>
+	<Matrix Path="&gt;0x0d000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_10" VertexBufferIndex="8" VertexOffset="0" Count="1"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="3" V11="4" V12="8" Flag1="0"/>
+	<Triangles2 V00="3" V01="8" V02="2" Flag0="0" V10="2" V11="5" V12="0" Flag1="0"/>
+	<Triangles2 V00="2" V01="8" V02="5" Flag0="0" V10="2" V11="6" V12="3" Flag1="0"/>
+	<Triangles2 V00="2" V01="1" V02="6" Flag0="0" V10="1" V11="7" V12="6" Flag1="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_2" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_11" VertexBufferIndex="0" VertexOffset="0" Count="2"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_12" VertexBufferIndex="2" VertexOffset="0" Count="6"/>
+	<Triangles2 V00="0" V01="2" V02="3" Flag0="0" V10="4" V11="3" V12="5" Flag1="0"/>
+	<Triangles2 V00="4" V01="1" V02="3" Flag0="0" V10="3" V11="6" V12="5" Flag1="0"/>
+	<Triangles2 V00="3" V01="2" V02="6" Flag0="0" V10="2" V11="7" V12="6" Flag1="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_3" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_13" VertexBufferIndex="0" VertexOffset="0" Count="9"/>
+	<Matrix Path="&gt;0x0d000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_14" VertexBufferIndex="9" VertexOffset="0" Count="2"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="3" V11="9" V12="4" Flag1="0"/>
+	<Triangles2 V00="10" V01="5" V02="6" Flag0="0" V10="9" V11="3" V12="5" Flag1="0"/>
+	<Triangles2 V00="2" V01="7" V02="8" Flag0="0" V10="2" V11="1" V12="7" Flag1="0"/>
+	<Triangle1 V00="1" V01="6" V02="7" Flag0="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_2" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_15" VertexBufferIndex="0" VertexOffset="0" Count="4"/>
+	<Matrix Path="&gt;0x0d000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_16" VertexBufferIndex="4" VertexOffset="0" Count="1"/>
+	<Triangles2 V00="0" V01="1" V02="4" Flag0="0" V10="4" V11="1" V12="2" Flag1="0"/>
+	<Triangle1 V00="1" V01="3" V02="2" Flag0="0"/>
+	<PipeSync/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_SHADE="1" G_LIGHTING="1" G_FOG="1" />
+	<SetCombineLERP A0="G_CCMUX_TEXEL0" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_COMBINED" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_CYC_2CYCLE="1" G_TF_BILERP="1" G_TL_TILE="1" G_TD_CLAMP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_PM_NPRIMITIVE="1" G_CK_NONE="1" G_AD_NOISE="1" G_TP_PERSP="1" G_TT_NONE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="255" G="255" B="255" A="255"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_2" Format="0" Size="2" Width="16" Height="16" MaskS="4" MaskT="4" ShiftS="0" ShiftT="0" CMS_TXClamp="1" CMS_TXNoMirror="1" CMT_TXClamp="1" CMT_TXNoMirror="1"/>
+	<Matrix Path="&gt;0x0d000000" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_17" VertexBufferIndex="0" VertexOffset="0" Count="2"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/keaton/object_link_boy/gLinkAdultSkelLimb_003_DL_vtx_18" VertexBufferIndex="2" VertexOffset="0" Count="9"/>
+	<Triangles2 V00="0" V01="2" V02="3" Flag0="0" V10="4" V11="5" V12="6" Flag1="0"/>
+	<Triangles2 V00="7" V01="8" V02="4" Flag0="0" V10="9" V11="10" V12="7" Flag1="0"/>
+	<Triangles2 V00="0" V01="3" V02="9" Flag0="0" V10="4" V11="6" V12="0" Flag1="0"/>
+	<Triangles2 V00="9" V01="7" V02="4" Flag0="0" V10="0" V11="9" V12="4" Flag1="0"/>
+	<Triangle1 V00="5" V01="1" V02="6" Flag0="0"/>
+	<Matrix Path="&gt;0x0d000040" Param="G_MTX_LOAD"/>
+	<EndDisplayList/>
+</DisplayList>

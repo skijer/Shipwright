@@ -25,6 +25,9 @@ typedef struct EnButte {
     /* 0x025E */ s16 unk_25E;
     /* 0x0260 */ s16 unk_260;
     /* 0x0264 */ f32 posYTarget;
-} EnButte; // size = 0x0268
+    // Skijer's NEI Net: this transform was forced by the net (EnButte_NetForceTransform) — when the
+    // fairy comes out, auto-grant it (bottle / heal / rando check) instead of leaving it to chase.
+    u8 netForced;
+} EnButte; // size = 0x0268 (+NEI)
 
 #endif

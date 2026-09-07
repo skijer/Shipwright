@@ -114,6 +114,14 @@ s32 ObjOshihiki_StrongEnough(ObjOshihiki* this) {
     if (this->cantMove) {
         return 0;
     }
+
+    // Four Sword 2x2 grid: four Links on one block clear the size gate without anyone gaining
+    // strength, so nothing here leaks into lifting a silver boulder. Skijer's NEI
+    extern u8 FourSword_GridPushesAnyBlock(void);
+    if (FourSword_GridPushesAnyBlock()) {
+        return 1;
+    }
+
     strength = Player_GetStrength();
     switch (this->dyna.actor.params & 0xF) {
         case PUSHBLOCK_SMALL_START_ON:

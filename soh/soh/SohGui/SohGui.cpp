@@ -7,10 +7,7 @@
 
 #include "SohGui.hpp"
 
-#include <spdlog/spdlog.h>
 #include <imgui.h>
-#include <imgui_internal.h>
-#include <libultraship/libultraship.h>
 
 #ifdef __APPLE__
 #include <fast/backends/gfx_metal.h>
@@ -23,9 +20,11 @@
 
 #include "soh/Enhancements/debugger/MessageViewer.h"
 #include "soh/Notification/Notification.h"
+#include "soh/FleetShipCombo/FleetShipCombo.h"
 #include "soh/Enhancements/TimeDisplay/TimeDisplay.h"
 #include "soh/Enhancements/mod_menu.h"
 #include "soh/Network/Anchor/Anchor.h"
+#include "soh/Network/Harpoon/RemoteSaveEditor.h"
 
 namespace SohGui {
 
@@ -76,6 +75,7 @@ std::shared_ptr<ColViewerWindow> mColViewerWindow;
 std::shared_ptr<SaveEditorWindow> mSaveEditorWindow;
 std::shared_ptr<HookDebuggerWindow> mHookDebuggerWindow;
 std::shared_ptr<DLViewerWindow> mDLViewerWindow;
+std::shared_ptr<AnimationViewerWindow> mAnimationViewerWindow;
 std::shared_ptr<ValueViewerWindow> mValueViewerWindow;
 std::shared_ptr<MessageViewer> mMessageViewerWindow;
 std::shared_ptr<GameplayStatsWindow> mGameplayStatsWindow;
@@ -83,6 +83,8 @@ std::shared_ptr<CheckTracker::CheckTrackerSettingsWindow> mCheckTrackerSettingsW
 std::shared_ptr<CheckTracker::CheckTrackerWindow> mCheckTrackerWindow;
 std::shared_ptr<EntranceTracker::EntranceTrackerSettingsWindow> mEntranceTrackerSettingsWindow;
 std::shared_ptr<EntranceTracker::EntranceTrackerWindow> mEntranceTrackerWindow;
+std::shared_ptr<HintTracker::HintTrackerSettingsWindow> mHintTrackerSettingsWindow;
+std::shared_ptr<HintTracker::HintTrackerWindow> mHintTrackerWindow;
 std::shared_ptr<ItemTrackerSettingsWindow> mItemTrackerSettingsWindow;
 std::shared_ptr<ItemTrackerWindow> mItemTrackerWindow;
 std::shared_ptr<TimeSplitWindow> mTimeSplitWindow;
@@ -91,6 +93,7 @@ std::shared_ptr<SohModalWindow> mModalWindow;
 std::shared_ptr<Notification::Window> mNotificationWindow;
 std::shared_ptr<TimeDisplayWindow> mTimeDisplayWindow;
 std::shared_ptr<AnchorRoomWindow> mAnchorRoomWindow;
+std::shared_ptr<HarpoonRemoteSaveEditor::RemoteSaveEditorWindow> mHarpoonRemoteSaveEditorWindow;
 
 UIWidgets::Colors GetMenuThemeColor() {
     return mSohMenu->GetMenuThemeColor();
@@ -101,7 +104,7 @@ std::shared_ptr<SohMenu> GetSohMenu() {
 }
 
 void SetupMenu() {
-    auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     mSohMenu = std::make_shared<SohMenu>(CVAR_WINDOW("Menu"), "Port Menu");
     gui->SetMenu(mSohMenu);
 
@@ -115,7 +118,14 @@ void SetupMenuElements() {
 }
 
 void SetupGuiElements() {
-    auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
+
+#ifndef COMBO_BUILD
+    // Fleet Ship Combo: picture-in-picture window that shows 2ship (MM) inside Ship.
+    FleetShipCombo_RegisterConsumerWindow();
+    // Fleet Ship Combo: ventana del tab "Shared" (tests del oráculo + opciones del rando de MM).
+    FleetShipCombo_RegisterSharedWindow();
+#endif
 
     mConsoleWindow = std::make_shared<SohConsoleWindow>(CVAR_WINDOW("SohConsole"), "Console##SoH", ImVec2(820, 630));
     gui->AddGuiWindow(mConsoleWindow);
@@ -158,6 +168,9 @@ void SetupGuiElements() {
     mDLViewerWindow =
         std::make_shared<DLViewerWindow>(CVAR_WINDOW("DisplayListViewer"), "Display List Viewer", ImVec2(520, 600));
     gui->AddGuiWindow(mDLViewerWindow);
+    mAnimationViewerWindow =
+        std::make_shared<AnimationViewerWindow>(CVAR_WINDOW("AnimationViewer"), "Animation Viewer", ImVec2(520, 600));
+    gui->AddGuiWindow(mAnimationViewerWindow);
     mValueViewerWindow =
         std::make_shared<ValueViewerWindow>(CVAR_WINDOW("ValueViewer"), "Value Viewer", ImVec2(520, 600));
     gui->AddGuiWindow(mValueViewerWindow);
@@ -179,6 +192,12 @@ void SetupGuiElements() {
     mEntranceTrackerSettingsWindow = std::make_shared<EntranceTracker::EntranceTrackerSettingsWindow>(
         CVAR_WINDOW("EntranceTrackerSettings"), "Entrance Tracker Settings", ImVec2(600, 375));
     gui->AddGuiWindow(mEntranceTrackerSettingsWindow);
+    mHintTrackerWindow =
+        std::make_shared<HintTracker::HintTrackerWindow>(CVAR_WINDOW("HintTracker"), "Hint Tracker", ImVec2(500, 600));
+    gui->AddGuiWindow(mHintTrackerWindow);
+    mHintTrackerSettingsWindow = std::make_shared<HintTracker::HintTrackerSettingsWindow>(
+        CVAR_WINDOW("HintTrackerSettings"), "Hint Tracker Settings", ImVec2(600, 375));
+    gui->AddGuiWindow(mHintTrackerSettingsWindow);
     mItemTrackerWindow =
         std::make_shared<ItemTrackerWindow>(CVAR_WINDOW("ItemTracker"), "Item Tracker", ImVec2(350, 600));
     gui->AddGuiWindow(mItemTrackerWindow);
@@ -197,10 +216,13 @@ void SetupGuiElements() {
     gui->AddGuiWindow(mTimeDisplayWindow);
     mAnchorRoomWindow = std::make_shared<AnchorRoomWindow>(CVAR_WINDOW("AnchorRoom"), "Anchor Room");
     gui->AddGuiWindow(mAnchorRoomWindow);
+    mHarpoonRemoteSaveEditorWindow = std::make_shared<HarpoonRemoteSaveEditor::RemoteSaveEditorWindow>(
+        CVAR_WINDOW("HarpoonRemoteSaveEditor"), "Remote Save Editor", ImVec2(620, 700));
+    gui->AddGuiWindow(mHarpoonRemoteSaveEditorWindow);
 }
 
 void Destroy() {
-    auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     gui->RemoveAllGuiWindows();
 
     mNotificationWindow = nullptr;
@@ -211,8 +233,11 @@ void Destroy() {
     mEntranceTrackerSettingsWindow = nullptr;
     mCheckTrackerWindow = nullptr;
     mCheckTrackerSettingsWindow = nullptr;
+    mHintTrackerWindow = nullptr;
+    mHintTrackerSettingsWindow = nullptr;
     mGameplayStatsWindow = nullptr;
     mDLViewerWindow = nullptr;
+    mAnimationViewerWindow = nullptr;
     mValueViewerWindow = nullptr;
     mMessageViewerWindow = nullptr;
     mSaveEditorWindow = nullptr;
@@ -231,6 +256,7 @@ void Destroy() {
     mPlandomizerWindow = nullptr;
     mTimeDisplayWindow = nullptr;
     mAnchorRoomWindow = nullptr;
+    mHarpoonRemoteSaveEditorWindow = nullptr;
 }
 
 void RegisterPopup(std::string title, std::string message, std::string button1, std::string button2,

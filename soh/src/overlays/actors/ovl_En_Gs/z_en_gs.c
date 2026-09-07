@@ -10,6 +10,9 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
+// Mask of Truth gossip-stone fairy reveal (randomizer-aware). Skijer's NEI
+extern s32 ShuffleFairies_SpawnStoneFairyOnTalk(EnGs* gossipStone);
+
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_DURING_OCARINA)
 
 void EnGs_Init(Actor* thisx, PlayState* play);
@@ -183,10 +186,23 @@ void func_80A4E648(EnGs* this, PlayState* play) {
         this->unk_19C = func_80A4E3EC(this, play);
     } else if (Actor_ProcessTalkRequest(&this->actor, play)) {
         this->unk_19C = 2;
+        // Mask of Truth: talking to a gossip stone reveals its fairy — the same
+        // fairies the fairy-spawning songs summon (randomizer-checked). Gated by
+        // the stone's own switch flag so it spawns once and the song path won't
+        // re-spawn it afterward. Skijer's NEI
+        if (Player_GetMask(play) == PLAYER_MASK_TRUTH && !Flags_GetSwitch(play, (this->actor.params >> 8) & 0x3F)) {
+            if (!ShuffleFairies_SpawnStoneFairyOnTalk(this)) {
+                // Vanilla (no stone-fairy shuffle): spawn the heal fairy directly.
+                Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, this->actor.world.pos.x,
+                            this->actor.world.pos.y + 40.0f, this->actor.world.pos.z, 0, 0, 0, FAIRY_HEAL_TIMED);
+                Audio_PlayActorSound2(&this->actor, NA_SE_EV_BUTTERFRY_TO_FAIRY);
+                Flags_SetSwitch(play, (this->actor.params >> 8) & 0x3F);
+            }
+        }
     } else {
         Actor_GetScreenPos(play, &this->actor, &sp26, &sp24);
         if ((sp26 >= 0) && (sp26 <= SCREEN_WIDTH) && (sp24 >= 0) && (sp24 <= SCREEN_HEIGHT) && (this->unk_19C != 3)) {
-            if (func_8002F2CC(&this->actor, play, 40.0f) == 1) {
+            if (Actor_OfferTalk(&this->actor, play, 40.0f) == 1) {
                 if (IS_RANDO) {
                     // if we're rando'd, always use the non-mask text id
                     this->actor.textId = 0x2053;
@@ -354,7 +370,7 @@ void func_80A4ED34(EnGs* this, PlayState* play) {
                           (s16)Rand_ZeroFloat(50.0f) + 200, 40, 15);
         }
 
-        func_8002F974(&this->actor, NA_SE_EV_FIRE_PILLAR - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_FIRE_PILLAR - SFX_FLAG);
         if (this->unk_200++ >= 40) {
             this->unk_19E |= 0x10;
             this->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
@@ -377,7 +393,7 @@ void func_80A4ED34(EnGs* this, PlayState* play) {
             this->unk_19E |= 8;
             this->actionFunc = func_80A4F700;
         } else {
-            func_8002F974(&this->actor, NA_SE_EV_STONE_LAUNCH - SFX_FLAG);
+            Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_STONE_LAUNCH - SFX_FLAG);
         }
 
         Actor_MoveXZGravity(&this->actor);

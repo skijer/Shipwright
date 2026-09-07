@@ -1,0 +1,111 @@
+/**
+ * @file object_link_nuts.h
+ * @brief MM Deku form assets - skeleton, DLs, textures
+ *
+ * OTR paths for mm.o2r. Use directly with gSPDisplayList or MmAssets_LoadResource.
+ */
+
+#ifndef MM_OBJECT_LINK_NUTS_H
+#define MM_OBJECT_LINK_NUTS_H
+
+// ============================================================================
+// Skeleton
+// ============================================================================
+
+#define gLinkDekuSkel "__OTR__objects/object_link_nuts/gLinkDekuSkel"
+
+// ============================================================================
+// Shield DL (drawn at TORSO during pn_gurd animation with scaling)
+// From 2Ship z_player_lib.c:4005 — object_link_nuts_DL_00A348
+// ============================================================================
+
+#define gLinkDekuShieldDL "__OTR__objects/object_link_nuts/object_link_nuts_DL_00A348"
+
+// ============================================================================
+// Flower DLs
+// ============================================================================
+
+#define gLinkDekuClosedFlowerDL "__OTR__objects/object_link_nuts/gLinkDekuClosedFlowerDL"
+#define gLinkDekuOpenFlowerDL "__OTR__objects/object_link_nuts/gLinkDekuOpenFlowerDL"
+
+// Hand-petal stem DLs (from 2Ship z_player_lib.c D_801C0B14):
+// Drawn BEFORE the flower at L_HAND/R_HAND during flight. Without the stem the
+// flower has nothing to attach to and appears to float at random.
+// Left  hand stem = object_link_nuts_DL_008760
+// Right hand stem = object_link_nuts_DL_008660
+#define gLinkDekuLeftStemDL "__OTR__objects/object_link_nuts/object_link_nuts_DL_008760"
+#define gLinkDekuRightStemDL "__OTR__objects/object_link_nuts/object_link_nuts_DL_008660"
+
+// Underground flower petals (3 petals drawn at surface while burrowed)
+// From 2Ship z_player.c D_8085D574: object_link_nuts_DL_009C48/009AB8/009DB8
+#define gLinkDekuFlowerPetal1DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_009C48"
+#define gLinkDekuFlowerPetal2DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_009AB8"
+#define gLinkDekuFlowerPetal3DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_009DB8"
+
+// ============================================================================
+// Hand DLs
+// ============================================================================
+
+#define gLinkDekuLeftHandDL "__OTR__objects/object_link_nuts/gLinkDekuLeftHandDL"
+#define gLinkDekuRightHandDL "__OTR__objects/object_link_nuts/gLinkDekuRightHandDL"
+
+// ============================================================================
+// Deku Pipes DLs (from z_player_lib.c PostLimbDraw at PLAYER_LIMB_HEAD)
+// Container + 5 individual pipe pieces
+// ============================================================================
+
+#define gLinkDekuPipeContainerDL "__OTR__objects/object_link_nuts/object_link_nuts_DL_007390"
+#define gLinkDekuPipe1DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_007A28"
+#define gLinkDekuPipe2DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_0077D0"
+#define gLinkDekuPipe3DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_007548"
+#define gLinkDekuPipe4DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_007900"
+#define gLinkDekuPipe5DL "__OTR__objects/object_link_nuts/object_link_nuts_DL_0076A0"
+
+// ============================================================================
+// Limb DLs
+// ============================================================================
+
+#define gLinkDekuTorsoDL "__OTR__objects/object_link_nuts/gLinkDekuTorsoDL"
+#define gLinkDekuHeadDL "__OTR__objects/object_link_nuts/gLinkDekuHeadDL"
+#define gLinkDekuHatDL "__OTR__objects/object_link_nuts/gLinkDekuHatDL"
+#define gLinkDekuCollarDL "__OTR__objects/object_link_nuts/gLinkDekuCollarDL"
+#define gLinkDekuWaistDL "__OTR__objects/object_link_nuts/gLinkDekuWaistDL"
+#define gLinkDekuLeftUpperArmDL "__OTR__objects/object_link_nuts/gLinkDekuLeftUpperArmDL"
+#define gLinkDekuLeftForearmDL "__OTR__objects/object_link_nuts/gLinkDekuLeftForearmDL"
+#define gLinkDekuRightUpperArmDL "__OTR__objects/object_link_nuts/gLinkDekuRightUpperArmDL"
+#define gLinkDekuRightForearmDL "__OTR__objects/object_link_nuts/gLinkDekuRightForearmDL"
+#define gLinkDekuLeftThighDL "__OTR__objects/object_link_nuts/gLinkDekuLeftThighDL"
+#define gLinkDekuLeftShinDL "__OTR__objects/object_link_nuts/gLinkDekuLeftShinDL"
+#define gLinkDekuLeftFootDL "__OTR__objects/object_link_nuts/gLinkDekuLeftFootDL"
+#define gLinkDekuRightThighDL "__OTR__objects/object_link_nuts/gLinkDekuRightThighDL"
+#define gLinkDekuRightShinDL "__OTR__objects/object_link_nuts/gLinkDekuRightShinDL"
+#define gLinkDekuRightFootDL "__OTR__objects/object_link_nuts/gLinkDekuRightFootDL"
+
+// ============================================================================
+// Limb Enum
+// ============================================================================
+
+typedef enum {
+    LINK_DEKU_LIMB_NONE,
+    LINK_DEKU_LIMB_ROOT,
+    LINK_DEKU_LIMB_WAIST,
+    LINK_DEKU_LIMB_LEFT_THIGH,
+    LINK_DEKU_LIMB_LEFT_SHIN,
+    LINK_DEKU_LIMB_LEFT_FOOT,
+    LINK_DEKU_LIMB_RIGHT_THIGH,
+    LINK_DEKU_LIMB_RIGHT_SHIN,
+    LINK_DEKU_LIMB_RIGHT_FOOT,
+    LINK_DEKU_LIMB_TORSO,
+    LINK_DEKU_LIMB_LEFT_UPPER_ARM,
+    LINK_DEKU_LIMB_LEFT_FOREARM,
+    LINK_DEKU_LIMB_LEFT_HAND,
+    LINK_DEKU_LIMB_RIGHT_UPPER_ARM,
+    LINK_DEKU_LIMB_RIGHT_FOREARM,
+    LINK_DEKU_LIMB_RIGHT_HAND,
+    LINK_DEKU_LIMB_HEAD,
+    LINK_DEKU_LIMB_HAT,
+    LINK_DEKU_LIMB_COLLAR,
+    LINK_DEKU_LIMB_MAX
+} LinkDekuLimb;
+
+#endif // MM_OBJECT_LINK_NUTS_H

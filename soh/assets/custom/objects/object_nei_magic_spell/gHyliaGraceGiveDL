@@ -1,0 +1,6 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_magic_spell/sMagicSpellDiamondDL"/>
+	<CallDisplayList Path="objects/object_nei_magic_spell/sHyliaGraceColorDL"/>
+	<CallDisplayList Path="objects/object_nei_magic_spell/sMagicSpellOrbDL"/>
+	<EndDisplayList/>
+</DisplayList>

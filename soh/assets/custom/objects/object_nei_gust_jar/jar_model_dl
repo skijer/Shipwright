@@ -1,0 +1,7 @@
+<DisplayList Version="0">
+	<ClearGeometryMode G_LIGHTING="1" />
+	<SetGeometryMode G_LIGHTING="1" />
+	<CallDisplayList Path="objects/object_nei_gust_jar/jar_decoration_dl"/>
+	<CallDisplayList Path="objects/object_nei_gust_jar/jar_body_dl"/>
+	<EndDisplayList/>
+</DisplayList>

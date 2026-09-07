@@ -253,9 +253,22 @@ void ObjSyokudai_Update(Actor* thisx, PlayState* play2) {
             lightRadius = (this->litTimer * 200.0f) / 20.0f;
         }
         brightness = (u8)(Rand_ZeroOne() * 127.0f) + 128;
-        func_8002F974(&this->actor, NA_SE_EV_TORCH - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_TORCH - SFX_FLAG);
     }
-    Lights_PointSetColorAndRadius(&this->lightInfo, brightness, brightness, 0, lightRadius);
+    {
+        // Skijer's NEI — the point light follows the same lantern tint as the flame,
+        // so a blue/green/violet torch does not keep glowing orange.
+        u8 lightPrim[3] = { brightness, brightness, 0 };
+        u8 lightEnv[3] = { 255, 0, 0 };
+        extern u8 Lantern_GetTorchTint(Actor * torch, u8 * prim, u8 * env);
+
+        if (Lantern_GetTorchTint(&this->actor, lightPrim, lightEnv)) {
+            lightPrim[0] = (u8)((lightPrim[0] * brightness) / 255);
+            lightPrim[1] = (u8)((lightPrim[1] * brightness) / 255);
+            lightPrim[2] = (u8)((lightPrim[2] * brightness) / 255);
+        }
+        Lights_PointSetColorAndRadius(&this->lightInfo, lightPrim[0], lightPrim[1], lightPrim[2], lightRadius);
+    }
     this->flameTexScroll++;
 }
 
@@ -290,9 +303,19 @@ void ObjSyokudai_Draw(Actor* thisx, PlayState* play) {
                    Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 0x20, 0x40, 1, 0,
                                       (this->flameTexScroll * -20) & 0x1FF, 0x20, 0x80, 0, 0, 0, -20));
 
-        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, 255, 255, 0, 255);
+        // Skijer's NEI — a torch lit from the Poe lantern keeps burning in that fire's
+        // colour. Lantern_GetTorchTint leaves the vanilla orange untouched otherwise.
+        {
+            u8 flamePrim[3] = { 255, 255, 0 };
+            u8 flameEnv[3] = { 255, 0, 0 };
+            extern u8 Lantern_GetTorchTint(Actor * torch, u8 * prim, u8 * env);
 
-        gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, 0);
+            Lantern_GetTorchTint(&this->actor, flamePrim, flameEnv);
+
+            gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, flamePrim[0], flamePrim[1], flamePrim[2], 255);
+
+            gDPSetEnvColor(POLY_XLU_DISP++, flameEnv[0], flameEnv[1], flameEnv[2], 0);
+        }
 
         Matrix_Translate(0.0f, 52.0f, 0.0f, MTXMODE_APPLY);
         Matrix_RotateY((s16)(Camera_GetCamDirYaw(GET_ACTIVE_CAM(play)) - this->actor.shape.rot.y + 0x8000) *

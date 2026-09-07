@@ -1,0 +1,17 @@
+<DisplayList Version="0">
+	<ClearGeometryMode G_SHADE="1" G_LIGHTING="1" G_SHADING_SMOOTH="1" G_ZBUFFER="1" G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_CULL_BACK="1" G_CULL_FRONT="1" G_FOG="1" G_CLIPPING="1" />
+	<SetGeometryMode G_ZBUFFER="1" G_SHADE="1" G_CULL_BACK="1" G_LIGHTING="1" G_SHADING_SMOOTH="1" />
+	<PipeSync/>
+	<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_PRIMITIVE" A1="G_CCMUX_0" B1="G_CCMUX_0" C1="G_CCMUX_0" D1="G_CCMUX_COMBINED" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_H" Sft="4" Length="20" G_TF_BILERP="1" G_TC_FILT="1" G_CD_MAGICSQ="1" G_TT_NONE="1" G_TL_TILE="1" G_TP_PERSP="1" G_TD_CLAMP="1" G_CYC_2CYCLE="1" G_PM_NPRIMITIVE="1" />
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="0" Length="32" G_AC_NONE="1" G_ZS_PIXEL="1" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_XLU_SURF2="1" />
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<LoadVertices Path="objects/object_nei_shovel_hole_/g_shovelhole_vtx" VertexBufferIndex="0" VertexOffset="0" Count="13"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="2" V12="3" Flag1="0"/>
+	<Triangles2 V00="0" V01="3" V02="4" Flag0="0" V10="0" V11="4" V12="5" Flag1="0"/>
+	<Triangles2 V00="0" V01="5" V02="6" Flag0="0" V10="0" V11="6" V12="7" Flag1="0"/>
+	<Triangles2 V00="0" V01="7" V02="8" Flag0="0" V10="0" V11="8" V12="9" Flag1="0"/>
+	<Triangles2 V00="0" V01="9" V02="10" Flag0="0" V10="0" V11="10" V12="11" Flag1="0"/>
+	<Triangles2 V00="0" V01="11" V02="12" Flag0="0" V10="0" V11="12" V12="1" Flag1="0"/>
+	<EndDisplayList/>
+</DisplayList>

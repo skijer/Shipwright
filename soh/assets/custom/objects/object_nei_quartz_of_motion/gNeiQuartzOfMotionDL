@@ -1,0 +1,7 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_quartz_of_motion/mat_quartz_of_motion_0"/>
+	<CallDisplayList Path="objects/object_nei_quartz_of_motion/quartz_of_motion_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_quartz_of_motion/mat_quartz_of_motion_1"/>
+	<CallDisplayList Path="objects/object_nei_quartz_of_motion/quartz_of_motion_tri_1"/>
+	<EndDisplayList/>
+</DisplayList>

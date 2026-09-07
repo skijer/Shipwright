@@ -1,0 +1,21 @@
+<Skeleton Type="Normal" LimbType="Standard" LimbCount="19" DisplayListCount="19">
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb0"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb1"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb2"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb3"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb4"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb5"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb6"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb7"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb8"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb9"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb10"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb11"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb12"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb13"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb14"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb15"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb16"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb17"/>
+  <SkeletonLimb Path="objects/forms/garo/hybrid/gGaroHybridLimb18"/>
+</Skeleton>

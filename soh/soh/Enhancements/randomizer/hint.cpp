@@ -1,9 +1,9 @@
 #include "hint.h"
-#include "map"
 #include "string"
 #include "SeedContext.h"
 #include <spdlog/spdlog.h>
 #include "static_data.h"
+#include "rng.h"
 
 namespace Rando {
 Hint::Hint() {
@@ -77,12 +77,29 @@ Hint::Hint(RandomizerHint ownKey_, nlohmann::json json_) {
         itemNamesChosen.push_back(json_["itemNameChosen"].get<uint8_t>());
     }
 
+    // Areas come back as NAMES, and a name that belongs to the other game (combo rando) has no
+    // RandomizerArea enum here — areaNameToEnum answers 0, which is RA_NONE, which prints as "an
+    // Isolated Place". That is why a seed whose spoiler correctly said "Odolwa's Lair" still said
+    // "an Isolated Place" on the altar: the string survived the write and died on the read.
+    //
+    // So an unrecognised name is kept verbatim as a foreign area, exactly as generation produced it.
+    // GetAreaName already prefers foreignAreas when present, so nothing downstream changes.
+    auto loadArea = [this](const std::string& name) {
+        auto it = Rando::StaticData::areaNameToEnum.find(name);
+        if (it != Rando::StaticData::areaNameToEnum.end() && it->second != RA_NONE) {
+            areas.push_back((RandomizerArea)it->second);
+            foreignAreas.push_back("");
+            return;
+        }
+        areas.push_back(RA_NONE);
+        foreignAreas.push_back(name); // the other game's zone: it only exists as text
+    };
     if (json_.contains("areas")) {
         for (auto area : json_["areas"]) {
-            areas.push_back((RandomizerArea)Rando::StaticData::areaNameToEnum[area]);
+            loadArea(area.get<std::string>());
         }
     } else if (json_.contains("area")) {
-        areas.push_back((RandomizerArea)Rando::StaticData::areaNameToEnum[json_["area"]]);
+        loadArea(json_["area"].get<std::string>());
     }
 
     if (json_.contains("areaNamesChosen")) {
@@ -154,9 +171,9 @@ uint8_t GetRandomHintTextEntry(const HintText hintText) {
     auto ctx = Rando::Context::GetInstance();
     uint8_t size = 0;
     if (ctx->GetOption(RSK_HINT_CLARITY).Is(RO_HINT_CLARITY_AMBIGUOUS)) {
-        size = hintText.GetAmbiguousSize();
+        size = static_cast<u8>(hintText.GetAmbiguousSize());
     } else if (ctx->GetOption(RSK_HINT_CLARITY).Is(RO_HINT_CLARITY_OBSCURE)) {
-        size = hintText.GetObscureSize();
+        size = static_cast<u8>(hintText.GetObscureSize());
     }
     if (size > 0) {
         return Random(0, size);
@@ -184,7 +201,7 @@ void Hint::NamesChosen() {
         for (size_t c = 0; c < locations.size(); c++) {
             namesTemp = {};
             saveNames = false;
-            uint8_t selection = GetRandomHintTextEntry(GetItemHintText(c));
+            uint8_t selection = GetRandomHintTextEntry(GetItemHintText(static_cast<u8>(c)));
             if (selection > 0) {
                 saveNames = true;
             }
@@ -306,7 +323,7 @@ const CustomMessage Hint::GetHintMessage(MessageFormat format, size_t id) const 
         } else {
             hintText.SetTextBoxType(TEXTBOX_TYPE_BLUE);
         }
-        hintText += GetBridgeReqsText() + GetGanonBossKeyText() +
+        hintText += GetBridgeReqsText() + GetGanonBossKeyText() + GetGanonsSoulText() + GetWinconText() +
                     StaticData::hintTextTable[RHT_ADULT_ALTAR_TEXT_END].GetHintMessage();
     } else {
         hintText = GetHintText(id).GetHintMessage(chosenMessage);
@@ -353,6 +370,10 @@ const CustomMessage Hint::GetHintMessage(MessageFormat format, size_t id) const 
     }
 
     hintText.InsertNames(toInsert);
+    // Safety net: if the template asks for more slots than the list covers (which happens in the
+    // combo when the hinted item lives in the other game and its area did not resolve), the leftover
+    // [[N]] tokens would be printed raw on screen. Skijer's NEI
+    hintText.ReplaceUnfilledNames("an unknown place");
     hintText.SetSingularPlural();
 
     if (num != 0) {
@@ -431,17 +452,23 @@ oJson Hint::toJSON() {
                 log["itemNamesChosen"] = nameNums;
             }
         }
+        // Area name for the spoiler: when the slot points at the other game (combo) the enum is
+        // useless, so we log MM's real string, keeping the .fleet auditable. Skijer's NEI
+        auto areaStringForSlot = [this](size_t c) -> std::string {
+            if (foreignAreas.size() > c && !foreignAreas[c].empty()) {
+                return foreignAreas[c];
+            }
+            return StaticData::hintTextTable[StaticData::areaNames[areas[c]]].GetClear().GetForCurrentLanguage(
+                MF_CLEAN);
+        };
         if (areas.size() == 1) {
-            log["area"] =
-                StaticData::hintTextTable[StaticData::areaNames[areas[0]]].GetClear().GetForCurrentLanguage(MF_CLEAN);
+            log["area"] = areaStringForSlot(0);
         } else if (areas.size() > 0 && !(StaticData::staticHintInfoMap.contains(ownKey) &&
                                          StaticData::staticHintInfoMap[ownKey].targetChecks.size() > 0)) {
             // If we got locations from defaults, areas are derived from them and don't need logging
             std::vector<std::string> areaStrings = {};
             for (size_t c = 0; c < areas.size(); c++) {
-                areaStrings.push_back(
-                    StaticData::hintTextTable[StaticData::areaNames[areas[c]]].GetClear().GetForCurrentLanguage(
-                        MF_CLEAN));
+                areaStrings.push_back(areaStringForSlot(c));
             }
             log["areas"] = areaStrings;
         }
@@ -513,17 +540,13 @@ const HintText Hint::GetItemHintText(uint8_t slot, bool mysterious) const {
     auto ctx = Rando::Context::GetInstance();
     RandomizerCheck hintedCheck = locations[slot];
     RandomizerGet targetRG = ctx->GetItemLocation(hintedCheck)->GetPlacedRandomizerGet();
-    CustomMessage msg;
     if (mysterious) {
         return StaticData::hintTextTable[RHT_MYSTERIOUS_ITEM];
-    } else if (!ctx->GetOption(RSK_HINT_CLARITY).Is(RO_HINT_CLARITY_AMBIGUOUS) &&
-               targetRG == RG_ICE_TRAP) { // RANDOTODO store in item hint instead of item
-        msg = CustomMessage({ ctx->overrides[hintedCheck].GetTrickName() });
+    } else if (targetRG == RG_ICE_TRAP) { // RANDOTODO store in item hint instead of item
+        return HintText(CustomMessage({ ctx->overrides[hintedCheck].GetTrickName() }));
     } else {
-        msg = ctx->GetItemLocation(hintedCheck)->GetPlacedItem().GetName();
+        return ctx->GetItemLocation(hintedCheck)->GetPlacedItem().GetHint();
     }
-    msg = CustomMessage(ctx->GetItemLocation(hintedCheck)->GetPlacedItem().GetArticle()) + msg;
-    return HintText(msg);
 }
 
 const HintText Hint::GetAreaHintText(uint8_t slot) const {
@@ -544,11 +567,24 @@ const CustomMessage Hint::GetItemName(uint8_t slot, bool mysterious) const {
 }
 
 const CustomMessage Hint::GetAreaName(uint8_t slot) const {
+    // Other game's area (combo): there is no RandomizerArea enum for MM's zones, so the name travels
+    // as a string and is returned verbatim. Skijer's NEI
+    if (foreignAreas.size() > slot && !foreignAreas[slot].empty()) {
+        return CustomMessage(foreignAreas[slot]);
+    }
     uint8_t nameNum = 0;
     if (areaNamesChosen.size() > slot) {
         nameNum = areaNamesChosen[slot];
     }
     return GetAreaHintText(slot).GetHintMessage(nameNum);
+}
+
+void Hint::SetForeignAreas(std::vector<std::string> foreignAreas_) {
+    foreignAreas = std::move(foreignAreas_);
+}
+
+const std::vector<std::string>& Hint::GetForeignAreas() const {
+    return foreignAreas;
 }
 
 CustomMessage Hint::GetBridgeReqsText() {
@@ -574,6 +610,9 @@ CustomMessage Hint::GetBridgeReqsText() {
     } else if (ctx->GetOption(RSK_RAINBOW_BRIDGE).Is(RO_BRIDGE_TOKENS)) {
         bridgeMessage = StaticData::hintTextTable[RHT_BRIDGE_TOKENS_HINT].GetHintMessage();
         bridgeMessage.InsertNumber(ctx->GetOption(RSK_RAINBOW_BRIDGE_TOKEN_COUNT).Get());
+    } else if (ctx->GetOption(RSK_RAINBOW_BRIDGE).Is(RO_BRIDGE_TRIFORCE_PIECES)) {
+        bridgeMessage = StaticData::hintTextTable[RHT_BRIDGE_TRIFORCE_PIECES_HINT].GetHintMessage();
+        bridgeMessage.InsertNumber(ctx->GetOption(RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT).Get());
     } else if (ctx->GetOption(RSK_RAINBOW_BRIDGE).Is(RO_BRIDGE_GREG)) {
         return StaticData::hintTextTable[RHT_BRIDGE_GREG_HINT].GetHintMessage();
     }
@@ -583,10 +622,6 @@ CustomMessage Hint::GetBridgeReqsText() {
 CustomMessage Hint::GetGanonBossKeyText() {
     auto ctx = Rando::Context::GetInstance();
     CustomMessage ganonBossKeyMessage;
-
-    if (ctx->GetOption(RSK_TRIFORCE_HUNT).IsNot(RO_TRIFORCE_HUNT_OFF)) {
-        return StaticData::hintTextTable[RHT_GANON_BK_TRIFORCE_HINT].GetHintMessage();
-    }
 
     if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_STARTWITH)) {
         return StaticData::hintTextTable[RHT_GANON_BK_START_WITH_HINT].GetHintMessage();
@@ -600,27 +635,80 @@ CustomMessage Hint::GetGanonBossKeyText() {
         return StaticData::hintTextTable[RHT_GANON_BK_OVERWORLD_HINT].GetHintMessage();
     } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_ANYWHERE)) {
         return StaticData::hintTextTable[RHT_GANON_BK_ANYWHERE_HINT].GetHintMessage();
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_KAK_TOKENS)) {
-        return StaticData::hintTextTable[RHT_GANON_BK_SKULLTULA_HINT].GetHintMessage();
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_VANILLA)) {
-        return StaticData::hintTextTable[RHT_LACS_VANILLA_HINT].GetHintMessage();
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_STONES)) {
-        ganonBossKeyMessage = StaticData::hintTextTable[RHT_LACS_STONES_HINT].GetHintMessage();
-        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_LACS_STONE_COUNT).Get());
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_MEDALLIONS)) {
-        ganonBossKeyMessage = StaticData::hintTextTable[RHT_LACS_MEDALLIONS_HINT].GetHintMessage();
-        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_LACS_MEDALLION_COUNT).Get());
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_REWARDS)) {
-        ganonBossKeyMessage = StaticData::hintTextTable[RHT_LACS_REWARDS_HINT].GetHintMessage();
-        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_LACS_REWARD_COUNT).Get());
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_DUNGEONS)) {
-        ganonBossKeyMessage = StaticData::hintTextTable[RHT_LACS_DUNGEONS_HINT].GetHintMessage();
-        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_LACS_DUNGEON_COUNT).Get());
-    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_LACS_TOKENS)) {
-        ganonBossKeyMessage = StaticData::hintTextTable[RHT_LACS_TOKENS_HINT].GetHintMessage();
-        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_LACS_TOKEN_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_STONES)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_STONES_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_STONE_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_MEDALLIONS)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_MEDALLIONS_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_MEDALLION_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_REWARDS)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_REWARDS_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_REWARD_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_DUNGEONS)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_DUNGEONS_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_DUNGEON_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_TOKENS)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_TOKENS_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_TOKEN_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_BOSS_KEY).Is(RO_GANON_BOSS_KEY_TRIFORCE_PIECES)) {
+        ganonBossKeyMessage = StaticData::hintTextTable[RHT_GBK_TRIFORCE_PIECES_HINT].GetHintMessage();
+        ganonBossKeyMessage.InsertNumber(ctx->GetOption(RSK_GBK_TRIFORCE_COUNT).Get());
     }
     return ganonBossKeyMessage;
+}
+
+CustomMessage Hint::GetGanonsSoulText() {
+    auto ctx = Rando::Context::GetInstance();
+    CustomMessage ganonsSoulMessage;
+
+    if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_STONES)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_STONES_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_STONE_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_MEDALLIONS)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_MEDALLIONS_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_MEDALLION_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_REWARDS)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_REWARDS_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_REWARD_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_DUNGEONS)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_DUNGEONS_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_DUNGEON_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_TOKENS)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_TOKENS_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_TOKEN_COUNT).Get());
+    } else if (ctx->GetOption(RSK_GANONS_SOUL).Is(RO_GANONS_SOUL_TRIFORCE_PIECES)) {
+        ganonsSoulMessage = StaticData::hintTextTable[RHT_GANONS_SOUL_TRIFORCE_PIECES_HINT].GetHintMessage();
+        ganonsSoulMessage.InsertNumber(ctx->GetOption(RSK_GANONS_SOUL_TRIFORCE_COUNT).Get());
+    }
+    return ganonsSoulMessage;
+}
+
+CustomMessage Hint::GetWinconText() {
+    auto ctx = Rando::Context::GetInstance();
+    CustomMessage winconMessage;
+
+    if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_ANYWHERE)) {
+        return StaticData::hintTextTable[RHT_WINCON_ANYWHERE_HINT].GetHintMessage();
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_STONES)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_STONES_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_STONE_COUNT).Get());
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_MEDALLIONS)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_MEDALLIONS_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_MEDALLION_COUNT).Get());
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_REWARDS)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_REWARDS_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_REWARD_COUNT).Get());
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_DUNGEONS)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_DUNGEONS_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_DUNGEON_COUNT).Get());
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_TOKENS)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_TOKENS_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_TOKEN_COUNT).Get());
+    } else if (ctx->GetOption(RSK_WINCON).Is(RO_WINCON_TRIFORCE_PIECES)) {
+        winconMessage = StaticData::hintTextTable[RHT_WINCON_TRIFORCE_PIECES_HINT].GetHintMessage();
+        winconMessage.InsertNumber(ctx->GetOption(RSK_WINCON_TRIFORCE_COUNT).Get());
+    }
+    return winconMessage;
 }
 
 void Hint::AddHintedLocation(RandomizerCheck location) {

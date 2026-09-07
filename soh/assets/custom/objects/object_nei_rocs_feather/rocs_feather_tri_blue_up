@@ -1,0 +1,14 @@
+<DisplayList Version="0">
+	<LoadVertices Path="objects/object_nei_rocs_feather/rocs_feather_vtx_blue_up" VertexBufferIndex="0" VertexOffset="0" Count="32"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="3" V12="1" Flag1="0"/>
+	<Triangles2 V00="0" V01="4" V02="3" Flag0="0" V10="0" V11="5" V12="4" Flag1="0"/>
+	<Triangles2 V00="6" V01="7" V02="8" Flag0="0" V10="6" V11="8" V12="9" Flag1="0"/>
+	<Triangles2 V00="6" V01="9" V02="10" Flag0="0" V10="6" V11="10" V12="11" Flag1="0"/>
+	<Triangles2 V00="12" V01="13" V02="14" Flag0="0" V10="12" V11="15" V12="13" Flag1="0"/>
+	<Triangles2 V00="12" V01="16" V02="15" Flag0="0" V10="12" V11="17" V12="16" Flag1="0"/>
+	<Triangles2 V00="18" V01="19" V02="20" Flag0="0" V10="18" V11="20" V12="21" Flag1="0"/>
+	<Triangles2 V00="18" V01="21" V02="22" Flag0="0" V10="18" V11="22" V12="23" Flag1="0"/>
+	<Triangles2 V00="24" V01="25" V02="26" Flag0="0" V10="26" V11="25" V12="27" Flag1="0"/>
+	<Triangles2 V00="28" V01="29" V02="30" Flag0="0" V10="30" V11="29" V12="31" Flag1="0"/>
+	<EndDisplayList/>
+</DisplayList>

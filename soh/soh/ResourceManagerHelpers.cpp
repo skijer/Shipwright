@@ -2,10 +2,11 @@
 #include "OTRGlobals.h"
 #include "variables.h"
 #include "z64.h"
+#include "macros.h"
 #include "cvar_prefixes.h"
 #include "Enhancements/enhancementTypes.h"
 #include "Enhancements/randomizer/dungeon.h"
-#include <libultraship/libultraship.h>
+#include "soh/Enhancements/randomizer/SeedContext.h"
 #include <soh/GameVersions.h>
 #include "resource/type/SohResourceType.h"
 #include "resource/type/Array.h"
@@ -14,20 +15,126 @@
 #include <fast/Fast3dWindow.h>
 #include <fast/resource/ResourceType.h>
 #include <fast/resource/type/DisplayList.h>
+#include <libultraship/bridge/resourcebridge.h>
+#include <ship/Context.h>
+#include <ship/resource/ResourceManager.h>
+
+#include <stb_image.h>
+
+#include <algorithm>
+#include <map>
+#include <string>
+#include <vector>
 
 extern "C" PlayState* gPlayState;
 
-extern "C" uint32_t ResourceMgr_GetNumGameVersions() {
-    return Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions().size();
+struct LinkTunicDListCacheKey {
+    size_t operator()(const std::pair<std::string, const char*>& key) const {
+        return std::hash<std::string>{}(key.first) ^ std::hash<const char*>{}(key.second);
+    }
+};
+
+static const char* ResourceMgr_ResolveLinkTunicDListPath(const char* path) {
+    if (path == nullptr) {
+        return nullptr;
+    }
+
+    const char* originalPath = path;
+    constexpr std::string_view adultPrefix = "__OTR__objects/object_link_boy/";
+    constexpr std::string_view childPrefix = "__OTR__objects/object_link_child/";
+
+    std::string_view objectPrefix;
+    const char* objectFolder;
+
+    if (std::string_view(originalPath).starts_with(adultPrefix)) {
+        objectPrefix = adultPrefix;
+        objectFolder = "object_link_boy";
+    } else if (std::string_view(originalPath).starts_with(childPrefix)) {
+        objectPrefix = childPrefix;
+        objectFolder = "object_link_child";
+    } else {
+        return path;
+    }
+
+    const char* tunicSuffix = nullptr;
+    switch (TUNIC_EQUIP_TO_PLAYER(CUR_EQUIP_VALUE(EQUIP_TYPE_TUNIC))) {
+        case PLAYER_TUNIC_KOKIRI:
+            tunicSuffix = "kokiri";
+            break;
+        case PLAYER_TUNIC_GORON:
+            tunicSuffix = "goron";
+            break;
+        case PLAYER_TUNIC_ZORA:
+            tunicSuffix = "zora";
+            break;
+        default:
+            return path;
+    }
+
+    static std::unordered_map<std::pair<std::string, const char*>, std::string, LinkTunicDListCacheKey>
+        sResolvedLinkTunicDListPaths;
+    std::pair<std::string, const char*> cacheKey{ originalPath, tunicSuffix };
+    if (auto it = sResolvedLinkTunicDListPaths.find(cacheKey); it != sResolvedLinkTunicDListPaths.end()) {
+        return it->second.c_str();
+    }
+
+    const std::string candidate =
+        fmt::format("__OTR__objects/{}_{}/{}", objectFolder, tunicSuffix, originalPath + objectPrefix.size());
+
+    if (!ResourceMgr_IsAltAssetsEnabled() || !ResourceMgr_FileAltExists(candidate.c_str()) ||
+        !ResourceGetIsCustomByName(candidate.c_str())) {
+        return path;
+    }
+
+    auto it = sResolvedLinkTunicDListPaths.emplace(std::move(cacheKey), candidate).first;
+    return it->second.c_str();
 }
 
+extern "C" uint32_t ResourceMgr_GetNumGameVersions() {
+    return static_cast<u32>(
+        Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions().size());
+}
+
+// Helper: returns true if the version is any recognized OOT (NOT mm.o2r / mods).
+static bool IsOotVersion(uint32_t version) {
+    switch (version) {
+        case OOT_NTSC_US_10:
+        case OOT_NTSC_US_11:
+        case OOT_NTSC_US_12:
+        case OOT_NTSC_JP_GC:
+        case OOT_NTSC_JP_GC_CE:
+        case OOT_NTSC_US_GC:
+        case OOT_NTSC_JP_MQ:
+        case OOT_NTSC_US_MQ:
+        case OOT_PAL_10:
+        case OOT_PAL_11:
+        case OOT_PAL_GC:
+        case OOT_PAL_MQ:
+        case OOT_PAL_GC_DBG1:
+        case OOT_PAL_GC_DBG2:
+        case OOT_PAL_GC_MQ_DBG:
+            return true;
+        default:
+            return false;
+    }
+}
+
+// Returns the version of the index-th OOT archive, skipping non-OOT (mm.o2r, mods).
 extern "C" uint32_t ResourceMgr_GetGameVersion(int index) {
-    return Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions()[index];
+    auto versions = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions();
+    int ootIndex = 0;
+    for (uint32_t version : versions) {
+        if (IsOotVersion(version)) {
+            if (ootIndex == index)
+                return version;
+            ootIndex++;
+        }
+    }
+    return 0;
 }
 
 extern "C" uint32_t ResourceMgr_GetGamePlatform(int index) {
-    uint32_t version =
-        Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions()[index];
+    uint32_t version = ResourceMgr_GetGameVersion(index);
 
     switch (version) {
         case OOT_NTSC_US_10:
@@ -48,11 +155,12 @@ extern "C" uint32_t ResourceMgr_GetGamePlatform(int index) {
         case OOT_PAL_GC_MQ_DBG:
             return GAME_PLATFORM_GC;
     }
+    // No OOT found at this index — default to N64 for backwards compat
+    return GAME_PLATFORM_N64;
 }
 
 extern "C" uint32_t ResourceMgr_GetGameRegion(int index) {
-    uint32_t version =
-        Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetGameVersions()[index];
+    uint32_t version = ResourceMgr_GetGameVersion(index);
 
     switch (version) {
         case OOT_NTSC_US_10:
@@ -73,6 +181,7 @@ extern "C" uint32_t ResourceMgr_GetGameRegion(int index) {
         case OOT_PAL_GC_MQ_DBG:
             return GAME_REGION_PAL;
     }
+    return GAME_REGION_NTSC;
 }
 
 extern "C" char* _message_0xFFFC_nes;
@@ -127,11 +236,11 @@ extern "C" uint32_t ResourceMgr_IsGameMasterQuest() {
 }
 
 extern "C" void ResourceMgr_LoadDirectory(const char* resName) {
-    Ship::Context::GetInstance()->GetResourceManager()->LoadResources(resName);
+    Ship::Context::GetRawInstance()->GetResourceManager()->LoadResources(resName);
 }
 
 extern "C" void ResourceMgr_DirtyDirectory(const char* resName) {
-    Ship::Context::GetInstance()->GetResourceManager()->DirtyResources(resName);
+    Ship::Context::GetRawInstance()->GetResourceManager()->DirtyResources(resName);
 }
 
 extern "C" void ResourceMgr_UnloadResource(const char* resName) {
@@ -139,13 +248,13 @@ extern "C" void ResourceMgr_UnloadResource(const char* resName) {
     if (path.substr(0, 7) == "__OTR__") {
         path = path.substr(7);
     }
-    auto res = Ship::Context::GetInstance()->GetResourceManager()->UnloadResource(path);
+    auto res = Ship::Context::GetRawInstance()->GetResourceManager()->UnloadResource(path);
 }
 
 // OTRTODO: There is probably a more elegant way to go about this...
 // Caller must free each string and the array itself when done.
 extern "C" char** ResourceMgr_ListFiles(const char* searchMask, int* resultSize) {
-    auto lst = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(searchMask);
+    auto lst = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(searchMask);
     char** result = (char**)malloc(lst->size() * sizeof(char*));
 
     for (size_t i = 0; i < lst->size(); i++) {
@@ -154,7 +263,7 @@ extern "C" char** ResourceMgr_ListFiles(const char* searchMask, int* resultSize)
         str[lst.get()[0][i].size()] = '\0';
         result[i] = str;
     }
-    *resultSize = lst->size();
+    *resultSize = static_cast<int>(lst->size());
 
     return result;
 }
@@ -182,7 +291,7 @@ extern "C" uint8_t ResourceMgr_FileAltExists(const char* filePath) {
 }
 
 extern "C" bool ResourceMgr_IsAltAssetsEnabled() {
-    return Ship::Context::GetInstance()->GetResourceManager()->IsAltAssetsEnabled();
+    return Ship::Context::GetRawInstance()->GetResourceManager()->IsAltAssetsEnabled();
 }
 
 // Unloads a resource if an alternate version exists when alt assets are enabled
@@ -201,7 +310,7 @@ std::shared_ptr<Ship::IResource> ResourceMgr_GetResourceByNameHandlingMQ(const c
             Path.replace(pos, 7, "/mq/");
         }
     }
-    return Ship::Context::GetInstance()->GetResourceManager()->LoadResource(Path.c_str());
+    return Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(Path.c_str());
 }
 
 extern "C" char* ResourceMgr_GetResourceDataByNameHandlingMQ(const char* path) {
@@ -265,6 +374,19 @@ extern "C" char* ResourceMgr_LoadJPEG(char* data, size_t dataSize) {
 extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
     auto res = ResourceMgr_GetResourceByNameHandlingMQ(filePath);
 
+    // Defensive null guard. Mirrors the pattern already used in
+    // ResourceMgr_LoadIfDListByName below (line 318). When pak_loader hot-
+    // swaps equipment textures during a kaleido draw, the OTR lookup can
+    // race-return nullptr while the prior cached pointer is still in flight,
+    // causing the next `res->GetInitData()` deref to AV inside
+    // gSPInvalidateTexCache / KaleidoScope_DrawEquipment. Returning nullptr
+    // lets the caller skip the texture invalidation and keep its current
+    // texAddr — the RSP will pick up the new resource on the next draw once
+    // the cache settles.
+    if (res == nullptr) {
+        return nullptr;
+    }
+
     if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
         return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);
     }
@@ -279,6 +401,10 @@ extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
 extern "C" char* ResourceMgr_LoadIfDListByName(const char* filePath) {
     auto res = ResourceMgr_GetResourceByNameHandlingMQ(filePath);
 
+    if (res == nullptr) {
+        return nullptr;
+    }
+
     if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
         return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);
     }
@@ -292,17 +418,163 @@ extern "C" char* ResourceMgr_LoadPlayerAnimByName(const char* animPath) {
     return (char*)&anim->limbRotData[0];
 }
 
+// Wrap a raw PlayerAnimation resource (the kind in misc/link_animetion/, which
+// is a raw s16 payload with no LinkAnimationHeader struct attached) in a
+// LinkAnimationHeader so it can be passed to Player_AnimPlayLoop/PlayOnce.
+// Mirrors the animation viewer's wrapping logic at animationViewer.cpp:131-138.
+// Cached by path so repeated calls return the same pointer.
+extern "C" LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath) {
+    if (animPath == nullptr)
+        return nullptr;
+    auto res = ResourceMgr_GetResourceByNameHandlingMQ(animPath);
+    if (res == nullptr)
+        return nullptr;
+    if (res->GetInitData()->Type != static_cast<uint32_t>(SOH::ResourceType::SOH_PlayerAnimation)) {
+        return nullptr;
+    }
+    auto playerAnim = std::static_pointer_cast<SOH::PlayerAnimation>(res);
+
+    constexpr size_t kS16PerFrame = 67; // matches animationViewer.cpp::PLAYER_ANIM_S16_PER_FRAME
+
+    static std::map<std::string, LinkAnimationHeader> sPlayerAnimWrappers;
+    LinkAnimationHeader& wrapper = sPlayerAnimWrappers[animPath];
+    size_t totalS16 = playerAnim->GetPointerSize() / sizeof(int16_t);
+    wrapper.common.frameCount = (s16)(totalS16 / kS16PerFrame);
+    wrapper.segment = (void*)playerAnim->GetPointer();
+    return &wrapper;
+}
+
+// Same as above, but the returned clip is IN PLACE: every frame keeps frame 0's
+// root translation, so the animation no longer walks the body across the floor.
+//
+// Needed because the MHR dual-blade clips carry huge baked root motion (a run
+// cycle nets ~20000 units, a dash ~22000). That is harmless while a form drives
+// the clip by hand, but the moment such a clip is installed into OOT's own
+// animation tables, OOT integrates the root delta through
+// Player_StartAnimMovement/AnimationContext_SetMoveActor ON TOP of linearVelocity
+// and the player double-moves — Link skates forward while running in place.
+// Stripping the delta (not the offset — zeroing it would yank the body to the
+// skeleton origin) leaves the pose intact and hands all travel back to OOT.
+//
+// stripY additionally pins the vertical root, which is what makes an otherwise
+// grounded clip float or sink once OOT owns floor height.
+// firstFrame/lastFrame (inclusive, -1 = the clip's own bounds) cut a SUB-RANGE out
+// before the resample, so one packed clip can serve several engine slots. That is
+// how Gerudo's guard works: DemonModeActivationFlourish is a single 46-frame
+// flourish and OOT wants three separate animations for a shield (defense,
+// defense_wait, defense_end), so the same file is sliced 1-20 / 21-30 / 31-45.
+//
+// Combined with targetFrames this is also the playback-speed knob: OOT plays these
+// slots at a fixed 1.0, so a 20-frame range asked for as 10 frames simply runs at
+// double speed. Doing it here instead of at the LinkAnimation_Change callsite keeps
+// every engine path (raise, loop, release, and the interrupt path in
+// Player_Action_808435C4) at the same speed without touching any of them.
+extern "C" LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(const char* animPath, uint8_t stripY,
+                                                                               int16_t firstFrame, int16_t lastFrame,
+                                                                               int16_t targetFrames) {
+    if (animPath == nullptr)
+        return nullptr;
+    auto res = ResourceMgr_GetResourceByNameHandlingMQ(animPath);
+    if (res == nullptr)
+        return nullptr;
+    if (res->GetInitData()->Type != static_cast<uint32_t>(SOH::ResourceType::SOH_PlayerAnimation)) {
+        return nullptr;
+    }
+    auto playerAnim = std::static_pointer_cast<SOH::PlayerAnimation>(res);
+
+    constexpr size_t kS16PerFrame = 67; // 3 root translation + 64 limb rotation values
+
+    // Keyed by path AND flag: the same clip can legitimately be wanted both with
+    // and without its vertical root.
+    struct InPlaceAnim {
+        LinkAnimationHeader header;
+        std::vector<int16_t> data;
+    };
+    static std::map<std::string, InPlaceAnim> sInPlaceAnims;
+
+    const std::string key = std::string(animPath) + (stripY ? "#xyz" : "#xz") + "#" + std::to_string(targetFrames) +
+                            "#" + std::to_string(firstFrame) + "-" + std::to_string(lastFrame);
+    auto it = sInPlaceAnims.find(key);
+    if (it != sInPlaceAnims.end()) {
+        return &it->second.header;
+    }
+
+    const size_t totalS16 = playerAnim->GetPointerSize() / sizeof(int16_t);
+    const size_t clipFrames = totalS16 / kS16PerFrame;
+    if (clipFrames == 0)
+        return nullptr;
+
+    // Clamp the requested range into the clip. A range that lands entirely past the
+    // end collapses to the last frame rather than returning null, so a mis-typed
+    // window shows a frozen pose instead of silently reverting the slot to vanilla.
+    size_t rangeBegin = (firstFrame > 0) ? (size_t)firstFrame : 0;
+    if (rangeBegin >= clipFrames)
+        rangeBegin = clipFrames - 1;
+    size_t rangeEnd = ((lastFrame >= 0) && ((size_t)lastFrame < clipFrames)) ? (size_t)lastFrame : (clipFrames - 1);
+    if (rangeEnd < rangeBegin)
+        rangeEnd = rangeBegin;
+    const size_t frameCount = rangeEnd - rangeBegin + 1;
+
+    InPlaceAnim& entry = sInPlaceAnims[key];
+    const int16_t* src = (const int16_t*)playerAnim->GetPointer() + rangeBegin * kS16PerFrame;
+
+    // Resample to a fixed length when asked. OOT's locomotion is not a plain
+    // playback: Player_Action_80840DE4 hard-sets animLength to 29 and the walk/run
+    // blend rigs sample both clips at fixed frame RATIOS (16/29). Feed them clips
+    // of 31 and 39 frames and the two are sampled out of phase with each other,
+    // which is what throws a limb to a completely wrong angle mid-stride.
+    // Nearest-frame resampling on purpose: these are packed s16 angles, and
+    // interpolating them would smear any value that crosses the +-180 wrap.
+    const size_t outFrames = (targetFrames > 0) ? (size_t)targetFrames : frameCount;
+    entry.data.resize(outFrames * kS16PerFrame);
+    for (size_t f = 0; f < outFrames; ++f) {
+        size_t srcFrame = (outFrames == frameCount) ? f : (f * frameCount) / outFrames;
+        if (srcFrame >= frameCount)
+            srcFrame = frameCount - 1;
+        std::copy(src + srcFrame * kS16PerFrame, src + (srcFrame + 1) * kS16PerFrame,
+                  entry.data.begin() + f * kS16PerFrame);
+    }
+
+    const int16_t baseX = entry.data[0];
+    const int16_t baseY = entry.data[1];
+    const int16_t baseZ = entry.data[2];
+    for (size_t f = 0; f < outFrames; ++f) {
+        int16_t* frame = &entry.data[f * kS16PerFrame];
+        frame[0] = baseX;
+        frame[2] = baseZ;
+        if (stripY) {
+            frame[1] = baseY;
+        }
+    }
+
+    entry.header.common.frameCount = (s16)outFrames;
+    entry.header.segment = (void*)entry.data.data();
+    return &entry.header;
+}
+
+extern "C" LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeaderInPlaceResampled(const char* animPath, uint8_t stripY,
+                                                                                   int16_t targetFrames) {
+    return ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(animPath, stripY, -1, -1, targetFrames);
+}
+
+extern "C" LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeaderInPlace(const char* animPath, uint8_t stripY) {
+    return ResourceMgr_LoadPlayerAnimAsHeaderInPlaceRange(animPath, stripY, -1, -1, 0);
+}
+
 extern "C" void ResourceMgr_PushCurrentDirectory(char* path) {
     Fast::gfx_push_current_dir(path);
 }
 
 extern "C" Gfx* ResourceMgr_LoadGfxByName(const char* path) {
+    path = ResourceMgr_ResolveLinkTunicDListPath(path);
     // When an alt resource exists for the DL, we need to unload the original asset
     // to clear the cache so the alt asset will be loaded instead
     // OTRTODO: If Alt loading over original cache is fixed, this line can most likely be removed
     ResourceMgr_UnloadOriginalWhenAltExists(path);
 
     auto res = std::static_pointer_cast<Fast::DisplayList>(ResourceMgr_GetResourceByNameHandlingMQ(path));
+    if (!res)
+        return nullptr;
     return (Gfx*)&res->Instructions[0];
 }
 
@@ -325,7 +597,7 @@ std::unordered_map<std::string, std::unordered_map<std::string, GfxPatch>> origi
 // using OTRs instead (When that is available). Index can be found using the commented out section below.
 extern "C" void ResourceMgr_PatchGfxByName(const char* path, const char* patchName, int index, Gfx instruction) {
     auto res = std::static_pointer_cast<Fast::DisplayList>(
-        Ship::Context::GetInstance()->GetResourceManager()->LoadResource(path));
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 
     if (res == nullptr || static_cast<size_t>(index) >= res->Instructions.size()) {
         return;
@@ -368,7 +640,7 @@ extern "C" void ResourceMgr_PatchGfxByName(const char* path, const char* patchNa
 extern "C" void ResourceMgr_PatchGfxCopyCommandByName(const char* path, const char* patchName, int destinationIndex,
                                                       int sourceIndex) {
     auto res = std::static_pointer_cast<Fast::DisplayList>(
-        Ship::Context::GetInstance()->GetResourceManager()->LoadResource(path));
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 
     if (res == nullptr || static_cast<size_t>(destinationIndex) >= res->Instructions.size() ||
         static_cast<size_t>(sourceIndex) >= res->Instructions.size()) {
@@ -393,7 +665,7 @@ extern "C" void ResourceMgr_PatchGfxCopyCommandByName(const char* path, const ch
 
 extern "C" void ResourceMgr_PatchCustomGfxByName(const char* path, const char* patchName, int index, Gfx instruction) {
     auto res = std::static_pointer_cast<Fast::DisplayList>(
-        Ship::Context::GetInstance()->GetResourceManager()->LoadResource(path));
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 
     if (res == nullptr || static_cast<size_t>(index) >= res->Instructions.size()) {
         return;
@@ -412,7 +684,7 @@ extern "C" void ResourceMgr_PatchCustomGfxByName(const char* path, const char* p
 extern "C" void ResourceMgr_UnpatchGfxByName(const char* path, const char* patchName) {
     if (originalGfx.contains(path) && originalGfx[path].contains(patchName)) {
         auto res = std::static_pointer_cast<Fast::DisplayList>(
-            Ship::Context::GetInstance()->GetResourceManager()->LoadResource(path));
+            Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 
         // If the resource is unavailable (e.g. swapped out when toggling alt assets), clean up the record and bail.
         if (res == nullptr) {
@@ -524,33 +796,36 @@ extern "C" AnimationHeaderCommon* ResourceMgr_LoadAnimByName(const char* path) {
     bool isAlt = ResourceMgr_IsAltAssetsEnabled();
 
     if (isAlt) {
-        std::string pathStr = std::string(path);
-        static const std::string sOtr = "__OTR__";
+        if (ResourceMgr_FileAltExists(path)) {
+            std::string pathStr = std::string(path);
+            static const std::string sOtr = "__OTR__";
 
-        if (pathStr.starts_with(sOtr)) {
-            pathStr = pathStr.substr(sOtr.length());
-        }
-
-        // Try alt/ first
-        pathStr = Ship::IResource::gAltAssetPrefix + pathStr;
-        AnimationHeaderCommon* animHeader = (AnimationHeaderCommon*)ResourceGetDataByName(pathStr.c_str());
-
-        // If alt loaded successfully, verify it has valid data
-        if (animHeader != NULL) {
-            // Check for valid frame count (> 0)
-            if (animHeader->frameCount > 0) {
-                // For Normal animations: check frameData (comes after frameCount in AnimationHeader)
-                // For Link animations: check segment (comes after frameCount in LinkAnimationHeader)
-                // We check both to be safe - if either is valid, the animation is usable
-                AnimationHeader* normalAnim = (AnimationHeader*)animHeader;
-                LinkAnimationHeader* linkAnim = (LinkAnimationHeader*)animHeader;
-
-                // Valid if Normal animation has frameData OR Link animation has segment
-                if (normalAnim->frameData != NULL || linkAnim->segment != NULL) {
-                    return animHeader;
-                }
+            if (pathStr.starts_with(sOtr)) {
+                pathStr = pathStr.substr(sOtr.length());
             }
-            // Alt loaded but is invalid (broken), fall through to original path
+
+            // Try alt/ first
+            pathStr = Ship::IResource::gAltAssetPrefix + pathStr;
+
+            AnimationHeaderCommon* animHeader = (AnimationHeaderCommon*)ResourceGetDataByName(pathStr.c_str());
+
+            // If alt loaded successfully, verify it has valid data
+            if (animHeader != NULL) {
+                // Check for valid frame count (> 0)
+                if (animHeader->frameCount > 0) {
+                    // For Normal animations: check frameData (comes after frameCount in AnimationHeader)
+                    // For Link animations: check segment (comes after frameCount in LinkAnimationHeader)
+                    // We check both to be safe - if either is valid, the animation is usable
+                    AnimationHeader* normalAnim = (AnimationHeader*)animHeader;
+                    LinkAnimationHeader* linkAnim = (LinkAnimationHeader*)animHeader;
+
+                    // Valid if Normal animation has frameData OR Link animation has segment
+                    if (normalAnim->frameData != NULL || linkAnim->segment != NULL) {
+                        return animHeader;
+                    }
+                }
+                // Alt loaded but is invalid (broken), fall through to original path
+            }
         }
 
         // Fall back to original path

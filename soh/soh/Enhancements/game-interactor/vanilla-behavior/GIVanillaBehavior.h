@@ -22,7 +22,7 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // sBgPoEventPuzzleState == 0xF
+    // sPuzzleState == 0xF
     // ```
     // #### `args`
     // - None
@@ -229,6 +229,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->timer > 0 && this->timer <= 100
+    // ```
+    // #### `args`
+    // - `*BgSpot06Objects`
+    VB_BG_SPOT06_OBJECTS_GATE_SKIP,
+
+    // #### `result`
+    // ```c
     // gSaveContext.bgsFlag
     // ```
     // #### `args`
@@ -261,12 +269,29 @@ typedef enum {
     VB_BOTTLE_ACTOR,
 
     // #### `result`
+    // Actor is ACTOR_OBJ_BOMBIWA, or ACTOR_OBJ_HAMISHI
+    // ```c
+    // Flags_GetSwitch(play, this->actor.params & 0x3F)
+    // ```
+    // #### `args`
+    // - `*Actor` (interactRangeActor)
+    VB_BOULDER_BREAK_FLAG,
+
+    // #### `result`
     // ```c
     // true
     // ```
     // #### `args`
     // - `*EnPoField`
     VB_BOTTLE_BIG_POE,
+
+    // #### `result`
+    // ```c
+    // this->currentShield == PLAYER_SHIELD_DEKU
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_BURN_SHIELD,
 
     // #### `result`
     // ```c
@@ -344,11 +369,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_AFTER_PROCESS_SCENE_COLLISION,
+
+    // #### `result`
+    // ```c
     // CHECK_BTN_ALL(input->press.button, BTN_START)
     // ```
     // #### `args`
     // - None
     VB_CLOSE_PAUSE_MENU,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnHorse`
+    VB_CONSUME_EPONA_BOOST,
 
     // #### `result`
     // ```c
@@ -556,11 +597,21 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // (this->heldItemAction == PLAYER_IA_HOOKSHOT) ||
+    // (this->heldItemAction == PLAYER_IA_LONGSHOT)
+    // ```
+    // #### `args`
+    // - '*Player'
+    VB_DRAW_ADDITIONAL_RETICLES,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
-    // - None
-    VB_DRAW_ADDITIONAL_RETICLES,
+    // - `PlayerMask currentMask`
+    // - `*PlayState play`
+    VB_DRAW_PLAYER_MASK,
 
     // #### `result`
     // In `Interface_DrawAmmoCount`:
@@ -590,16 +641,32 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - None
+    VB_DRAW_EPONA_BOOST_CARROTS,
+
+    // #### `args`
+    // - `Player*` player
+    // - `PlayState*` play
+    VB_DRAW_HOOKSHOT_CHAIN,
+    VB_DRAW_HOOKSHOT_TIP,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - Player*
     VB_EMPTYING_BOTTLE,
 
     // #### `result`
     // ```c
-    // (Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT) && Message_ShouldAdvance(play)
+    // (gSaveContext.inventory.items[gSaveContext.equips.cButtonSlots[button - 1]] == ITEM_MILK_BOTTLE) &&
+    //     (item == ITEM_BOTTLE)
     // ```
     // #### `args`
-    // - None
-    VB_END_GERUDO_MEMBERSHIP_TALK,
+    // - `int32_t` (button - promoted from `u8`)
+    // - `int32_t` (item - promoted from `u8`)
+    VB_EMPTY_BOTTLE_TO_HALF_MILK,
 
     // #### `result`
     // ```c
@@ -608,6 +675,25 @@ typedef enum {
     // #### `args`
     // - `*EnArrow`
     VB_EN_ARROW_MAGIC_CONSUMPTION,
+
+    // #### `result`
+    // ```c
+    // i + 1 == msgCtx->textDrawPos &&
+    // (msgCtx->msgMode == MSGMODE_TEXT_DISPLAYING ||
+    //  (msgCtx->msgMode >= MSGMODE_OCARINA_STARTING &&
+    //   msgCtx->msgMode < MSGMODE_SCARECROW_LONG_RECORDING_START))
+    // ```
+    // #### `args`
+    // - `u16` (text position)
+    VB_ENABLE_QUICKTEXT,
+
+    // #### `result`
+    // ```c
+    // (Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT) && Message_ShouldAdvance(play)
+    // ```
+    // #### `args`
+    // - None
+    VB_END_GERUDO_MEMBERSHIP_TALK,
 
     // #### `result`
     // ```c
@@ -649,6 +735,12 @@ typedef enum {
     // #### `args`
     // - `*EnElf`
     VB_FAIRY_HEAL,
+
+    // #### `result`
+    // True if the next text position must be beyond the current position; false otherwise
+    // #### `args`
+    // - `u16` (next text position)
+    VB_FIX_TEXT_SPEED_SOFTLOCK,
 
     // #### `result`
     // ```c
@@ -706,6 +798,14 @@ typedef enum {
     // #### `args`
     // - `*EnFr`
     VB_FROGS_GO_TO_IDLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_FROGS_OCARINA_GAME_TIMER_TICK,
 
     // #### `result`
     // ```c
@@ -898,6 +998,39 @@ typedef enum {
     // #### `args`
     // - `*EnGe1`
     VB_GIVE_ITEM_FROM_HORSEBACK_ARCHERY,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnGe1`
+    // - `*PlayState`
+    VB_PLAY_HORSEBACK_ARCHERY,
+
+    // #### `result`
+    // ```c
+    // play->sceneNum == SCENE_KOKIRI_FOREST
+    // ```
+    // #### `args`
+    // - `*EnSa`
+    VB_SARIA_GESTURE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*s32` (scoreIndex: 0=30pts, 1=60pts, 2=100pts)
+    VB_SCORE_HORSEBACK_ARCHERY_TARGET,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*InterfaceContext`
+    VB_SET_HORSEBACK_ARCHERY_AMMO,
 
     // #### `result`
     // ```c
@@ -1269,6 +1402,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_ICICLE_SETUP_DRAW,
+
+    // #### `result`
+    // ```c
     // (respawnFlag == 1) || (respawnFlag == -1)
     // ```
     // #### `args`
@@ -1301,11 +1442,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->unk_15A > 0
+    // ```
+    // #### `args`
+    // - `*EnItem00`
+    VB_ITEM00_TIMER_TICK,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
     // - None
     VB_JABU_WOBBLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_HOT_ROOM_DISTORTION,
 
     // #### `result`
     // ```c
@@ -1357,6 +1514,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false if in Jabu, carrying Ruto, abducted flag set, door is id 21 or 3
+    // ```
+    // #### `args`
+    // - `*Actor` (shutter door)
+    VB_JABU_PREVENT_RUTO_REENTER_BIGOCTO,
+
+    // #### `result`
+    // ```c
     // varies
     // ```
     // #### `args`
@@ -1373,11 +1538,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // gSaveContext.eventInf[0] & 0x40
+    // ```
+    // #### `args`
+    // - None
+    VB_LINK_WIN_EPONA,
+
+    // #### `result`
+    // ```c
     // !Flags_GetSwitch(play, this->dyna.actor.params & 0x3F)
     // ```
     // #### `args`
     // - `*DoorShutter`
     VB_LOCK_BOSS_DOOR,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_LOST_WOODS_OCARINA_GAME_TIMER_TICK,
 
     // #### `result`
     // ```c
@@ -1426,6 +1607,14 @@ typedef enum {
     // #### `args`
     // - `*EnMd`
     VB_MIDO_SPAWN,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `s32` (note append position)
+    VB_MODIFY_LOST_WOODS_OCARINA_GAME_NOTE_SPEED,
 
     // #### `result`
     // ```c
@@ -1515,7 +1704,7 @@ typedef enum {
     // this->getItemId != GI_NONE
     // ```
     // #### `args`
-    // - `None`
+    // - `*EnBox`
     VB_OPEN_CHEST,
 
     // #### `result`
@@ -1536,6 +1725,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `None`
+    VB_OWL_CHOOSE_BETTER,
+
+    // #### `result`
+    // ```c
     // this->actor.xzDistToPlayer < targetDist
     // ```
     // #### `args`
@@ -1547,8 +1744,24 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*Actor`
+    VB_PERFORM_WALL_COLLISION_CHECK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*BossGanondrof`
     VB_PHANTOM_GANON_DEATH_SCENE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_PLAY_BEAN_PLANTING_CS,
 
     // #### `result`
     // ##### In `DoorWarp1_ChildWarpOut` - `SCENE_DODONGOS_CAVERN_BOSS`
@@ -1602,6 +1815,14 @@ typedef enum {
     // #### `args`
     // - `*EnDaiku`
     VB_PLAY_CARPENTER_FREE_CS,
+
+    // #### `result`
+    // ```c
+    // true if one point cutscene skip not enabled, or not randomizer
+    // ```
+    // #### `args`
+    // - none
+    VB_PLAY_TIMEBLOCK_CS,
 
     // #### `result`
     // Close enough & various cutscene checks
@@ -1708,6 +1929,14 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnFr`
+    VB_PLAY_FROG_OCARINA_GAME,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnHeishi2`
     // - `bool` (clearCamera - true if the code clears a sub-camera, false otherwise)
     VB_PLAY_GATE_OPENING_OR_CLOSING_CS,
@@ -1719,6 +1948,14 @@ typedef enum {
     // #### `args`
     // - None
     VB_PLAY_GORON_FREE_CS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnSkj`
+    VB_PLAY_LOST_WOODS_OCARINA_GAME,
 
     // #### `result`
     // ```c
@@ -1839,6 +2076,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnSyatekiItm`
+    VB_PLAY_SHOOTING_GALLERY,
+
+    // #### `result`
+    // ```c
     // (giEntry.itemId != ITEM_NONE) && (giEntry.gi >= 0) && (Item_CheckObtainability(giEntry.itemId) == ITEM_NONE)
     // ```
     // #### `args`
@@ -1897,6 +2142,118 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_DRAW_BOTTLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_LIMIT_DIVE_XZ_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_LIMIT_JUMP_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `f32*` speedTarget
+    VB_PLAYER_MODIFY_RUN_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `f32*` swimSpeed
+    // - `s32` sControlInput != NULL
+    VB_PLAYER_MODIFY_SWIM_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` limbIndex
+    // - `Gfx**` dList (write to *dList to replace the resolved display list)
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_OVERRIDE_LIMB_DRAW,
+
+    // Fired from Player_OverrideLimbDrawPause (pause/equipment screen character only).
+    // #### `args`
+    // - `s32` limbIndex
+    // - `Gfx**` dList (write to *dList to replace the resolved display list)
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_OVERRIDE_LIMB_DRAW_PAUSE,
+
+    // Fired from Player_OverrideLimbDrawGameplayDefault (gameplay, L_HAND). Lets a custom item
+    // request that Link's held-weapon DL be hidden because it draws its own model. Skijer's NEI
+    // #### `args`
+    // - `void*` player (Player*)
+    // #### `result`
+    // - default false; set true to hide the held-weapon DL
+    VB_PLAYER_SHOULD_HIDE_HELD_WEAPON,
+
+    // Fired from Player_HoldsTwoHandedWeapon. A custom item/form can mark the held item two-handed
+    // (disables shield, enables two-handed attack patterns). Skijer's NEI
+    // #### `args`
+    // - `void*` player (Player*)
+    // #### `result`
+    // - default = vanilla two-handed check (Biggoron..Hammer); set true to force two-handed
+    VB_PLAYER_HOLDS_TWO_HANDED_WEAPON,
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    VB_PLAYER_UPDATE_BOTTLE_HELD,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    // - `*Input` (sControlInput)
+    // - `s32` (sFloorType)
+    VB_PLAYER_ROLL_CHAIN,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    // - `s16 yawTarget` (stick world-space yaw, promoted to int in va_list)
+    VB_PLAYER_ROLL_STEER,
+
+    // #### `result`
+    // ```c
+    // this->ageProperties->unk_24 <= ySurface
+    // ```
+    // #### `args`
+    // - `Player*`
+    VB_PLAYER_SPAWN_SWIMMING,
+
+    // #### `result`
+    // ```c
     // item == ITEM_SAW
     // ```
     // #### `args`
@@ -1940,10 +2297,41 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `s32` (entrance index)
+    VB_RACE_INGO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnRd`
     VB_REDEAD_GIBDO_FREEZE_LINK,
 
     // #### `result`
+    // ```c
+    // this->alpha <= 0
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_RED_ICE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // !((this->dyna.actor.params >> 6) & 1) && (Flags_GetSwitch(play, this->dyna.actor.params & 0x3F))
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_RED_ICE_MELTED_FLAG,
+
+    // #### `result`
+    // ```c
+    // camera->xzSpeed > 0.001f || <any release button pressed> || params->interfaceFlags & 0x8
+    // ```
+    // #### `args`
+    // - `Camera*` (`camera`)
+    VB_RELEASE_DOORC_CAMERA,
+
     // #### `result`
     // ```c
     // true
@@ -1973,8 +2361,27 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*PlayState`
+    // - `*Player`
+    // - `*u32`
+    // - `*s16`
+    VB_REVALIDATE_CLIMBED_WALL,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - None
     VB_REVERT_SPOILING_ITEMS,
+
+    // #### `result`
+    // ```c
+    // varies
+    // ```
+    // #### `args`
+    // - `*EnIshi`, `*ObjBombiwa`, or `*ObjHamishi`
+    VB_ROCK_DROP_ITEM,
 
     // #### `result`
     // ```c
@@ -2017,6 +2424,14 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `None`
+    VB_SET_BOMBCHU_BOWLING_AMMO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `int32_t` (button - promoted from `s16`)
     VB_SET_BUTTON_ITEM_FROM_C_BUTTON_SLOT,
 
@@ -2030,7 +2445,49 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // SurfaceType_GetSlope(&play->colCtx, poly, bgId) == 2
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SET_DIVING_GAME_TIME_LIMIT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnFr`
+    // - `s16` (default time limit)
+    VB_SET_FROG_OCARINA_GAME_TIME_LIMIT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` (round number, zero-based)
+    // - `*u8` (note end position)
+    VB_SET_LOST_WOODS_OCARINA_GAME_NOTES,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SET_LOST_WOODS_OCARINA_GAME_STARTING_NOTES,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*s32` (ammo count)
+    VB_SET_SHOOTING_GALLERY_AMMO,
+
+    // #### `result`
+    // ```c
+    // SurfaceType_GetFloorEffect(&play->colCtx, poly, bgId) == 2
     // ```
     // #### `args`
     // - `*int16_t` - original next entrance index (`play->setupExitList[exitIndex - 1]`)
@@ -2053,6 +2510,14 @@ typedef enum {
     // #### `args`
     // - None
     VB_SHIEK_PREPARE_TO_GIVE_SERENADE_OF_WATER,
+
+    // #### `result`
+    // ```c
+    // LINK_IS_ADULT
+    // ```
+    // #### `args`
+    // - None
+    VB_SHOOTING_GALLERY_SHUFFLE_ADULT_RUPEES,
 
     // #### `result`
     // ```c
@@ -2082,6 +2547,14 @@ typedef enum {
     // #### `args`
     // - `*VBFishingData`
     VB_SHOULD_GIVE_VANILLA_FISHING_PRIZE,
+
+    // #### `result`
+    // ```c
+    // CHECK_BTN_ALL(input->press.button, BTN_B)
+    // ```
+    // #### `args`
+    // - `*Input`
+    VB_SHOULD_OSSAN_CANCEL,
 
     // #### `result`
     // ```c
@@ -2123,6 +2596,14 @@ typedef enum {
     // #### `args`
     // - None
     VB_SKIP_TALKING,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SLAY_GANON,
 
     // #### `result`
     // ```c
@@ -2196,11 +2677,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` (Cucco index; 0 = small, 1 = big)
+    VB_SPAWN_BOMBCHU_BOWLING_CUCCOS,
+
+    // #### `result`
+    // ```c
     // this->timer == 4
     // ```
     // #### `args`
     // - `*EnButte`
     VB_SPAWN_BUTTERFLY_FAIRY,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnButte`
+    VB_SPAWN_BUTTERFLY_FAIRY_EASY,
 
     // #### `result`
     // ```c
@@ -2265,6 +2762,46 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->dyna.actor.params == TURARA_STALACTITE_REGROW
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_STALACTITE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // this->collider.base.acFlags & AC_HIT
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_STALAGMITE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // ABS(wallPoly->normal.y) < 600
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_ANGLE_IS_CLIMBABLE,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_IS_CLIMBABLE,
+
+    // #### `result`
+    // ```c
+    // SurfaceType_GetData(colCtx, poly, bgId, 1) >> 17 & 1
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_IS_HOOKSHOT,
+
+    // #### `result`
+    // ```c
     // varies, never set should to true
     // ```
     // #### `args`
@@ -2280,6 +2817,14 @@ typedef enum {
     // - `*CollisionPoly
     // - s32 - background id`
     VB_TARGETABLE_HOOKSHOT_RETICLE,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `u16` (text position)
+    VB_TEXT_CRAWL_FASTER,
 
     // #### `result`
     // ```c
@@ -2545,7 +3090,17 @@ typedef enum {
     // ```
     // #### `args`
     // - `*DoorShutter`
+    // - `*Vec3f` (relPlayerPos)
+    // - `*f32` (maxDistSides)
     VB_BE_NEAR_DOOR_SHUTTER,
+
+    // #### `result`
+    // ```c
+    // arg3 < fabsf(sp1C.x) || arg4 < fabsf(sp1C.y)
+    // ```
+    // #### `args`
+    // - `*Vec3f` (playerPosRelToDoor)
+    VB_EN_DOOR_OFFER_OPEN,
 
     // #### `result`
     // ```c
@@ -2587,6 +3142,15 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false
+    // ```
+    // #### `args`
+    // - *EnGirlACanBuyResult
+    // - `RAND_INF`
+    VB_CAN_BUY_SHOP_SHIELD_OR_TUNIC,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
@@ -2607,14 +3171,6 @@ typedef enum {
     // #### `args`
     // - `*BgHidanDalm`
     VB_HAMMER_TOTEM_BREAK,
-
-    // #### `result`
-    // ```c
-    // Actor_GetCollidedExplosive(play, &this->collider.base) != NULL
-    // ```
-    // #### `args`
-    // - `*BgHidanKowarerukabe`
-    VB_FIRE_TEMPLE_BOMBABLE_WALL_BREAK,
 
     // #### `result`
     // ```c
@@ -2649,6 +3205,22 @@ typedef enum {
     // #### `args`
     // - `*FileChooseContext`
     VB_FILE_SELECT_DRAW_FILE_INFO_BOX,
+
+    // #### `result`
+    // ```c
+    // Actor_GetCollidedExplosive(play, &this->collider.base) != NULL
+    // ```
+    // #### `args`
+    // - `*BgHidanKowarerukabe`
+    VB_FIRE_TEMPLE_BOMBABLE_WALL_BREAK,
+
+    // #### `result`
+    // ```c
+    // this->timer > 0
+    // ```
+    // #### `args`
+    // - None
+    VB_FISH_TIMER_TICK,
 
     // #### `result`
     // ```c
@@ -2843,7 +3415,436 @@ typedef enum {
     // ```
     // #### `args`
     // - `*int32_t (camId)`
-    VB_SHOULD_LOAD_BG_IMAGE
+    VB_SHOULD_LOAD_BG_IMAGE,
+
+    // #### `result`
+    // ```c
+    // this->actor.floorHeight <= -10000.0f
+    // ```
+    // #### `args`
+    // - `*EnItem00`
+    VB_ITEM00_KILL,
+
+    // #### `result`
+    // ```c
+    // interruptResult == PLAYER_INTERRUPT_NEW_ACTION
+    // ```
+    // #### `args`
+    // - `*u8 (&player->unk_6AD)`
+    VB_INTERRUPT_LADDER_DISMOUNT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - none
+    VB_ITEMSHIELD_DRAW,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_INIT_HOOKSHOT_IA,
+
+    // #### `result`
+    // ```c
+    // !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && Player_HoldsHookshot(this)
+    // ```
+    // #### `args`
+    // - `s16* (&this->actor.parent->id)`
+    VB_PREVENT_HOOKSHOT_PARENT_SOFTLOCK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - none
+    VB_PUTAWAY_BECAUSE_DISABLED_ITEM_BUTTONS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32* i` (button index)
+    // - `Player*`
+    // - `s32* item`
+    VB_OVERRIDE_BUTTON_ITEM_USED,
+
+    // #### `result`
+    // ```c
+    // true if Goron Link is talking
+    // ```
+    // #### `args`
+    // - `*EnGo2` (Goron Link)
+    VB_PREVENT_GORON_LINK_SOFTLOCK,
+
+    // #### `result`
+    // ```c
+    // play->interfaceCtx.hbaAmmo == 0
+    // ```
+    // Prevent custom fanfares set to loop from softlocking Horseback Archery by
+    // letting players escape the cutscene with A/B/start after a normal number of playframes.
+    // #### `args`
+    // - none
+    VB_PREVENT_HBA_FANFARE_SOFTLOCK_TIMER,
+
+    // #### `result`
+    // ```c
+    // (isFanfarePlaying != 1 && gSaveContext.minigameState != 3)
+    // ```
+    // Prevent custom fanfares set to loop from softlocking Horseback Archery by
+    // letting players escape the cutscene with A/B/start after a normal number of playframes.
+    // #### `args`
+    // - `EnHorse*`
+    VB_PREVENT_HBA_FANFARE_SOFTLOCK_BUTTONS,
+
+    // #### `result`
+    // ```c
+    // sets `camMode` to new mode if applicable
+    // ```
+    // #### `args`
+    // - `s32` player->heldItemAction
+    // - `s32*` camMode
+    VB_CHANGE_AIMING_CAMERA,
+
+    // true
+    // ```
+    // #### `args`
+    // - `*EnPeehat`
+    // - `*PlayState`
+    VB_PEEHAT_SPAWN_LARVAS,
+
+    // #### `result`
+    // ```c
+    // gSaveContext.equips.buttonItems[0] != ITEM_NONE
+    // ```
+    // Whether the B button slot should be treated as holding an item when entering the
+    // horseback/minigame "temporary B" force path. Rando returns `true` for a swordless
+    // player so the swordless-on-Epona item glitch can be blocked.
+    // #### `args`
+    // - `*PlayState`
+    VB_TEMP_B_TREAT_AS_OCCUPIED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Side-effect hook (return value ignored): fired right after the vanilla
+    // `buttonStatus[0] = buttonItems[0]` stash so rando can relocate it to its swordless
+    // sentinel for later restoration.
+    // #### `args`
+    // - `*PlayState`
+    VB_TEMP_B_STASH_SWORDLESS,
+
+    // #### `result`
+    // ```c
+    // (gSaveContext.equips.buttonItems[0] != ITEM_NONE) || (gSaveContext.infTable[29] == 0)
+    // ```
+    // Whether the "temporary B" item should be restored to the B button. Rando also returns
+    // `true` when it had stashed a swordless sentinel.
+    // #### `args`
+    // - None
+    VB_TEMP_B_SHOULD_RESTORE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Side-effect hook (return value ignored): fired right after the vanilla
+    // `buttonItems[0] = buttonStatus[0]` restore so rando can convert its swordless sentinel
+    // back into an empty (swordless) B button.
+    // #### `args`
+    // - None
+    VB_TEMP_B_RESTORE_SWORDLESS,
+
+    // Skijer's NEI: first statement of Player_Draw; false skips the whole vanilla body (custom model).
+    // #### `result`
+    // ```c
+    // true   // run the vanilla Player_Draw body
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`     (this)
+    VB_PLAYER_DRAW_BEGIN,
+
+    // Hook fired around `SkelAnime_DrawFlexLod` inside `Player_DrawImpl`.
+    // Subscribers may render their own visual in place of the vanilla Link
+    // skeleton (e.g. Harpoon's Prop Hunt hider disguise) by returning
+    // `false`. Returning `true` (default) keeps the vanilla draw.
+    //
+    // #### `result`
+    // ```c
+    // true   // draw vanilla Link
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`     (this)
+    VB_PLAYER_DRAW,
+
+    // Skijer's NEI: positioned hook at each anim-override site; write *animOut to override (else vanilla plays).
+    // #### `result`
+    // ```c
+    // true   // play the vanilla animation already stored in *animOut
+    // ```
+    // #### `args`
+    // - `s32` siteId  (VBPlayerAnimOverrideSite)
+    // - `s32` siteArg (site-specific context; 0 when unused)
+    // - `LinkAnimationHeader**` animOut (in: vanilla anim; write to *animOut to override)
+    // - `*Player` (this)
+    VB_PLAYER_ANIM_OVERRIDE,
+
+    // Hook fired at the end of `Actor_Draw` for every actor. Subscribers
+    // can use it to overlay extra visuals on an actor (e.g. Harpoon's
+    // Triforce indicator above the carrier). Has no return value — always
+    // executes — but routed through OnVanillaBehavior so the existing
+    // GameInteractor plumbing handles it.
+    //
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Actor`     (actor)
+    VB_ACTOR_POST_DRAW,
+
+    // Skijer's NEI: SM64-Mario pre-pass, positioned in Player_Update inside the
+    // Player_UpdateNoclip() block. Fires BEFORE any IsActive/IsReady check (right
+    // after the input-filter setup of sp44). Mutates nothing by default; handler
+    // runs Sm64Mario_TickTransitionSuspend + Sm64MarioMask_ForceAndToggle.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`    (this)
+    // - `*Input`     (&sp44)
+    VB_SM64_PLAYER_PRE_ACTION,
+
+    // Skijer's NEI: SM64-Mario pre-pass, positioned in Player_Update immediately
+    // BEFORE Player_UpdateCommon (the same frame UpdateCommon consumes the result).
+    // Handler runs Sm64Mario_InterceptDamage + Pikachu status read + the A<->B
+    // swap on the local sp44 that is passed straight into Player_UpdateCommon.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*PlayState` (play)
+    // - `*Player`    (this)
+    // - `*Input`     (&sp44)
+    VB_SM64_PLAYER_PRE_UPDATE_COMMON,
+    // #### `result`
+    // ```c
+    // true
+    // // ```
+    // Hook to override the save menu for a message box allowing you to
+    // Continue, Reset, and Reset to Spawn after saving (only from the pause menu, not the
+    // game over screen).
+    // #### `args`
+    // - `*PlayState`
+    VB_LOAD_SAVE_MENU,
+
+    // #### `result`
+    // ```c
+    // pauseCtx->state == 7
+    // ```
+    // Hook to override the drawing/loading textures for the save menu so that
+    // a textbox can be rendered instead. Pause screen only, Game Over version left
+    // intact.
+    VB_DRAW_SAVE_MENU,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Allows an enemy to transition into a player-grab state.
+    // #### `args`
+    // - `*Actor`
+    VB_ENEMY_GRAB_PLAYER,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // Allows an aimable item to enter and remain in its aiming state while the player is airborne.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_ALLOW_MIDAIR_AIM,
+
+    // Skijer's NEI: `Player_SetupRoll`, the choke point every roll entry passes through. A
+    // subscriber wanting a different move starts it itself, then returns false.
+    // #### `result`
+    // ```c
+    // true   // run the vanilla roll
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_ROLL,
+
+    // Skijer's NEI: environmental heat — hot rooms, hot floors, lava floors. Asked through
+    // `Player_SuffersHeat`, which supplies the Goron Tunic / SuperTunic default.
+    // #### `result`
+    // ```c
+    // this->currentTunic != PLAYER_TUNIC_GORON && !SuperTunic
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_SUFFER_HEAT,
+
+    // Skijer's NEI: `func_8083821C`, the body catching fire. Distinct from VB_PLAYER_SUFFER_HEAT —
+    // a Fire Keese still ignites a heat-immune player.
+    // #### `result`
+    // ```c
+    // true   // catch fire
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_CATCH_FIRE,
+
+    // Skijer's NEI: child Link's two-handed Hylian stance — own model group, own defense anim, no
+    // shield in the right hand. Anything merely borrowing the Hylian slot must answer false.
+    // #### `result`
+    // ```c
+    // LINK_IS_CHILD && this->currentShield == PLAYER_SHIELD_HYLIAN
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_USE_CHILD_HYLIAN_STANCE,
+
+    // Skijer's NEI: does an elemental status stick — frozen solid, shocked. The damage itself
+    // lands either way.
+    // #### `result`
+    // ```c
+    // true   // the status applies
+    // ```
+    // #### `args`
+    // - `s32`     PLAYER_HIT_RESPONSE_FROZEN or PLAYER_HIT_RESPONSE_ELECTRIFIED
+    // - `*Player` (this)
+    VB_PLAYER_SUFFER_STATUS,
+
+    // Skijer's NEI: standing A with a weapon out — sheathe it.
+    // #### `result`
+    // ```c
+    // putAwayCooldownTimer == 0 && heldItemAction >= PLAYER_IA_SWORD_MASTER
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_PUTAWAY_HELD_ITEM,
+
+    // Skijer's NEI: standing A with nothing to sheathe. Asked only after
+    // VB_PLAYER_PUTAWAY_HELD_ITEM declines, so a mod owning the A press must refuse both.
+    // #### `result`
+    // ```c
+    // true   // toggle Navi
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_TOGGLE_NAVI,
+
+    // Skijer's NEI: what item a button reports. Mirrors 2Ship's flag of the same name — subscribers
+    // write through the pointer; the returned bool is unused.
+    // #### `result`
+    // ```c
+    // item
+    // ```
+    // #### `args`
+    // - `s32`        button index (0 = B, 1-3 = C, 4-7 = D-pad)
+    // - `*s32`       item, to overwrite
+    // - `*PlayState` (play)
+    VB_GET_ITEM_ON_BUTTON,
+
+    // Skijer's NEI: OOT's own two-step combo, where a third swing in a row bumps to the combo
+    // variant. A moveset that sequences its own row must refuse, or the bump walks off the end of
+    // that row into another clip.
+    // #### `result`
+    // ```c
+    // this->unk_845 >= 3
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_ADVANCE_COMBO,
+
+    // Skijer's NEI: the jump slash has just been given vanilla's launch for whichever route started
+    // it. Subscribers scale linearVelocity / velocity.y from there. Mutation only, result unused.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    // - `s32`     PLAYER_MWA_* being started
+    VB_PLAYER_JUMP_SLASH_LAUNCH,
+
+    // Skijer's NEI: should Link's own voice answer for this grunt? A form, a voice pack or a mask
+    // that plays its own sound returns false.
+    // #### `result`
+    // ```c
+    // true   // play Link's voice
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    // - `u16`     sfxId, before the age offset
+    VB_PLAYER_VOICE_SFX,
+
+    // Skijer's NEI: can the player take hold of a ledge — the vault and the jump-grab both ask.
+    // #### `result`
+    // ```c
+    // true   // grabbing is allowed
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_GRAB_LEDGE,
+
+    // Skijer's NEI: vanilla's reaction to reaching an edge — the auto-hop down and the slip. A
+    // momentum move already carrying the player off must refuse, or vanilla steals the exit.
+    // #### `result`
+    // ```c
+    // true   // vanilla reacts
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_EDGE_REACTION,
+
+    // Skijer's NEI: something other than the Hover Boots is holding the player up, so the boots'
+    // physics, footstep sfx and ring effect all apply. Asked through `Player_IsHovering`.
+    // #### `result`
+    // ```c
+    // IvanCoopModeEnabled || gIvanPossessActive
+    // ```
+    // #### `args`
+    // - `*Player` (this)
+    VB_PLAYER_HOVERS_WITHOUT_BOOTS,
+
+    // Skijer's NEI: a guard that is an animation rather than a raised shield ate the hit. The
+    // shieldQuad never bounces for those, so VB_PLAYER_SHIELD_BLOCKED never fires for them either.
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_PARRY_HIT,
+
+    // Skijer's NEI: the shieldQuad just bounced an attack. Fired while AC_BOUNCED is still live —
+    // Player_UpdateShape clears it before any per-frame mod dispatch runs, so a subscriber that
+    // waits until then can no longer read the attacker. Mutation only, result unused.
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`    (this)
+    // - `*PlayState` (play)
+    VB_PLAYER_SHIELD_BLOCKED,
 } GIVanillaBehavior;
 
 #endif

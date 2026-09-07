@@ -10,6 +10,7 @@ enum GameInteractionEffectQueryResult { Possible = 0x00, TemporarilyNotPossible 
 
 class GameInteractionEffectBase {
   public:
+    virtual ~GameInteractionEffectBase() = default;
     virtual GameInteractionEffectQueryResult CanBeApplied() = 0;
     GameInteractionEffectQueryResult Apply();
 
@@ -53,6 +54,11 @@ class UnsetFlag : public GameInteractionEffectBase, public ParameterizedGameInte
 };
 
 class ModifyHeartContainers : public GameInteractionEffectBase, public ParameterizedGameInteractionEffect {
+    GameInteractionEffectQueryResult CanBeApplied() override;
+    void _Apply() override;
+};
+
+class GiveItem : public GameInteractionEffectBase, public ParameterizedGameInteractionEffect {
     GameInteractionEffectQueryResult CanBeApplied() override;
     void _Apply() override;
 };
@@ -162,6 +168,12 @@ class ModifyMovementSpeedMultiplier : public RemovableGameInteractionEffect, pub
     void _Remove() override;
 };
 
+class ModifyRunSpeedModifier : public RemovableGameInteractionEffect, public ParameterizedGameInteractionEffect {
+    GameInteractionEffectQueryResult CanBeApplied() override;
+    void _Apply() override;
+    void _Remove() override;
+};
+
 class OneHitKO : public RemovableGameInteractionEffect {
     GameInteractionEffectQueryResult CanBeApplied() override;
     void _Apply() override;
@@ -198,6 +210,11 @@ class SetCollisionViewer : public RemovableGameInteractionEffect {
     GameInteractionEffectQueryResult CanBeApplied() override;
     void _Apply() override;
     void _Remove() override;
+};
+
+class SetCosmeticsColor : public GameInteractionEffectBase, public ParameterizedGameInteractionEffect {
+    GameInteractionEffectQueryResult CanBeApplied() override;
+    void _Apply() override;
 };
 
 class RandomizeCosmetics : public GameInteractionEffectBase {

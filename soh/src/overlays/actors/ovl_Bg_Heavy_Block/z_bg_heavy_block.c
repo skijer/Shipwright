@@ -8,6 +8,7 @@
 #include "objects/object_heavy_object/object_heavy_object.h"
 #include "vt.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "mods/items/logic/weapon_upgrades.h" // Skijer's NEI: Iron Knuckle's Axe prop-smash
 
 #define FLAGS 0
 
@@ -192,7 +193,7 @@ void BgHeavyBlock_MovePiece(BgHeavyBlock* this, PlayState* play) {
             thisx->velocity.z = Rand_CenteredFloat(8.0f);
             BgHeavyBlock_SetPieceRandRot(this, 1.0f);
             Audio_PlayActorSound2(thisx, NA_SE_EV_ROCK_BROKEN);
-            func_800AA000(thisx->xzDistToPlayer, 0x96, 0xA, 8);
+            Rumble_Request(thisx->xzDistToPlayer, 0x96, 0xA, 8);
         }
     }
 
@@ -324,13 +325,13 @@ void BgHeavyBlock_Wait(BgHeavyBlock* this, PlayState* play) {
 
         switch (this->dyna.actor.params & 0xFF) {
             case HEAVYBLOCK_BREAKABLE:
-                OnePointCutscene_Init(play, 4020, 270, &this->dyna.actor, MAIN_CAM);
+                OnePointCutscene_Init(play, 4020, 270, &this->dyna.actor, CAM_ID_MAIN);
                 break;
             case HEAVYBLOCK_UNBREAKABLE:
-                OnePointCutscene_Init(play, 4021, 220, &this->dyna.actor, MAIN_CAM);
+                OnePointCutscene_Init(play, 4021, 220, &this->dyna.actor, CAM_ID_MAIN);
                 break;
             case HEAVYBLOCK_UNBREAKABLE_OUTSIDE_CASTLE:
-                OnePointCutscene_Init(play, 4022, 210, &this->dyna.actor, MAIN_CAM);
+                OnePointCutscene_Init(play, 4022, 210, &this->dyna.actor, CAM_ID_MAIN);
                 break;
         }
 
@@ -351,7 +352,7 @@ void BgHeavyBlock_LiftedUp(BgHeavyBlock* this, PlayState* play) {
     f32 xOffset;
 
     if (this->timer == 11) {
-        func_800AA000(0.0f, 0xFF, 0x14, 0x14);
+        Rumble_Request(0.0f, 0xFF, 0x14, 0x14);
         Player_PlaySfx(&player->actor, NA_SE_PL_PULL_UP_BIGROCK);
         LOG_STRING("NA_SE_PL_PULL_UP_BIGROCK");
     }
@@ -395,7 +396,7 @@ void BgHeavyBlock_Fly(BgHeavyBlock* this, PlayState* play) {
     this->dyna.actor.floorHeight = raycastResult;
 
     if (this->dyna.actor.home.pos.y <= raycastResult) {
-        func_800AA000(0.0f, 0xFF, 0x3C, 4);
+        Rumble_Request(0.0f, 0xFF, 0x3C, 4);
 
         switch (this->dyna.actor.params & 0xFF) {
             case HEAVYBLOCK_BREAKABLE:
@@ -481,6 +482,45 @@ void BgHeavyBlock_Land(BgHeavyBlock* this, PlayState* play) {
 
 void BgHeavyBlock_Update(Actor* thisx, PlayState* play) {
     BgHeavyBlock* this = (BgHeavyBlock*)thisx;
+    s32 type = thisx->params & 0xFF;
+
+    // NEI: the Iron Knuckle's Axe smashes the heavy (Golden Gauntlets) block after 5 hits, with a
+    // reward and a quake — only the resting full block, never the flying debris pieces.
+    if (type != HEAVYBLOCK_BIG_PIECE && type != HEAVYBLOCK_SMALL_PIECE && this->actionFunc == BgHeavyBlock_Wait &&
+        WeaponUpgrade_IKAxeStrike(thisx, play, 5, 130.0f)) {
+        s32 quakeIndex;
+        BgHeavyBlock_SpawnPieces(this, play);
+        Item_DropCollectibleRandom(play, thisx, &thisx->world.pos, 0);
+        if (type == HEAVYBLOCK_BREAKABLE) {
+            Flags_SetSwitch(play, (thisx->params >> 8) & 0x3F);
+        }
+        quakeIndex = Quake_Add(GET_ACTIVE_CAM(play), 3);
+        Quake_SetSpeed(quakeIndex, 28000);
+        Quake_SetQuakeValues(quakeIndex, 14, 2, 100, 0);
+        Quake_SetCountdown(quakeIndex, 30);
+        Audio_PlayActorSound2(thisx, NA_SE_EV_ROCK_BROKEN);
+
+        // NEI: take out the rest of the nearby cluster too (the blocks that keep appearing "behind"
+        // this one) — Actor_Kill directly, NEVER their 12-piece SpawnPieces, which overflows the
+        // actor pool when a whole field goes at once (same fix the Power Keg uses).
+        {
+            Actor* a = play->actorCtx.actorLists[ACTORCAT_BG].head;
+            while (a != NULL) {
+                Actor* next = a->next;
+                if (a != thisx && a->id == ACTOR_BG_HEAVY_BLOCK && a->update != NULL) {
+                    s32 t = a->params & 0xFF;
+                    if (t != HEAVYBLOCK_BIG_PIECE && t != HEAVYBLOCK_SMALL_PIECE &&
+                        Actor_WorldDistXYZToActor(thisx, a) <= 600.0f) {
+                        Actor_Kill(a);
+                    }
+                }
+                a = next;
+            }
+        }
+
+        Actor_Kill(thisx);
+        return;
+    }
 
     this->actionFunc(this, play);
 }

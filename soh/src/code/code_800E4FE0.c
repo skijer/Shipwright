@@ -38,6 +38,23 @@ AudioTask* func_800E4FE0(void) {
 extern u64 rspAspMainDataStart[];
 extern u64 rspAspMainDataEnd[];
 
+// MM Direct Audio hook: mix MM sounds into output after OOT audio generation
+extern void MmDirectAudio_MixInto(s16* outBuf, u32 numSamples);
+// Pikachu voice sample mixer
+extern void PikaSfx_MixInto(s16* outBuf, u32 numSamples);
+// Custom Link voice pack mixer (Z64Online-style .pak voice packs)
+extern void VoicePack_MixInto(s16* outBuf, u32 numSamples);
+// Gerudo Mask voice samples (auto-loaded from soh.o2r)
+extern void GerudoVoice_MixInto(s16* outBuf, u32 numSamples);
+// SM64 Mario audio: libsm64's generated PCM (produced by sm64_audio_tick
+// on the game thread, drained here on the audio thread via a ring buffer).
+extern void Sm64Audio_MixInto(int16_t* outBuf, uint32_t numSamples);
+// Sheikah Slate Stasis rune cue (mods/actors/stasis_sfx.inc.c). One voice, no-op when idle.
+extern void StasisSfx_MixInto(s16* outBuf, u32 numSamples);
+// Phantom Hourglass Recall cues (mods/items/logic/hourglass_sfx.inc.c). Two voices: one-shots plus
+// the looping rewind bed. Silent unless the item's own tick is refreshing it.
+extern void HourglassSfx_MixInto(s16* outBuf, u32 numSamples);
+
 void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples) {
     OSMesg sp4C;
 
@@ -68,6 +85,22 @@ void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples) {
     }
     s32 writtenCmds;
     AudioSynth_Update(gAudioContext.curAbiCmdBuf, &writtenCmds, samples, num_samples);
+
+    // Mix MM direct audio sounds into the output buffer
+    MmDirectAudio_MixInto(samples, num_samples);
+    // Mix Pikachu voice samples
+    PikaSfx_MixInto(samples, num_samples);
+    // Mix custom Link voice pack samples (replaces NA_SE_VO_LI_* when active)
+    VoicePack_MixInto(samples, num_samples);
+    // Mix Gerudo Mask voice samples (auto-loaded from soh.o2r)
+    GerudoVoice_MixInto(samples, num_samples);
+    // Mix libsm64 Mario audio (jumps, punches, coins, death, etc.)
+    Sm64Audio_MixInto(samples, num_samples);
+    // Mix the Stasis rune cue
+    StasisSfx_MixInto(samples, num_samples);
+    // Mix the Phantom Hourglass Recall cues
+    HourglassSfx_MixInto(samples, num_samples);
+
     gAudioContext.audioRandom = (gAudioContext.audioRandom + gAudioContext.totalTaskCnt) * osGetCount();
 }
 
@@ -247,11 +280,12 @@ void func_800E5584(AudioCmd* cmd) {
             AudioLoad_SyncLoadSeqParts(cmd->arg1, cmd->arg2);
             return;
         case 0x82:
-            AudioLoad_SyncInitSeqPlayer(cmd->arg0, cmd->arg1, cmd->arg2);
+            // 16-bit seqId packed in opArgs bits 0-15. See Audio_StartSequence().
+            AudioLoad_SyncInitSeqPlayer(cmd->arg0, cmd->opArgs & 0xFFFF, 0);
             func_800E59AC(cmd->arg0, cmd->data);
             return;
         case 0x85:
-            AudioLoad_SyncInitSeqPlayerSkipTicks(cmd->arg0, cmd->arg1, cmd->data);
+            AudioLoad_SyncInitSeqPlayerSkipTicks(cmd->arg0, cmd->opArgs & 0xFFFF, cmd->data);
             return;
         case 0x83:
             if (gAudioContext.seqPlayers[cmd->arg0].enabled) {

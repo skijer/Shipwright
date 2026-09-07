@@ -1,10 +1,7 @@
 #ifndef SOHMENU_H
 #define SOHMENU_H
 
-#include <libultraship/libultraship.h>
 #include "Menu.h"
-#include <fast/backends/gfx_rendering_api.h>
-#include "soh/cvar_prefixes.h"
 
 extern "C" {
 #include "z64.h"
@@ -28,6 +25,11 @@ static std::map<int32_t, const char*> languages = {
 };
 void UpdateMenuTricks();
 void UpdateMenuLocations();
+void MarkRandomizerMenusDirty();
+
+// The Sheikah Sensor rune's five wish slots. Drawn from both the NEI and the Randomizer menus, so
+// it lives on its own instead of being written twice. Skijer's NEI
+void DrawSensorDesirePicker();
 
 class SohMenu : public Ship::Menu {
   public:

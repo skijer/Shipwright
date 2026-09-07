@@ -6,9 +6,18 @@
 #include "3drando/item_pool.hpp"
 #include "z64item.h"
 #include "variables.h"
-#include "macros.h"
 #include "functions.h"
 #include "../../OTRGlobals.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
+
+// Extended Inventory for Custom Items (Page 2)
+extern "C" {
+#include "mods/items/custom_items.h"
+#include "mods/items/logic/weapon_upgrades.h" // NEI chains: which upgrade level is owned
+#include "mods/nei_save.h"                    // ultrashotOwned (hookshot chain level 3)
+#include "mods/extended_inventory.h"          // ExtInv_GetSlotItem (Roc's chain reads the REAL slot)
+u8 Cane_HasSkill(u8 skill);                   // item_cane_of_somaria.h (cane chain resolution)
+}
 
 namespace Rando {
 Item::Item()
@@ -77,6 +86,12 @@ const std::string& Item::GetColor() const {
 }
 
 bool Item::IsAdvancement() const {
+    // With the shop shield/tunic gate on, a found Deku/Hylian Shield unlocks its shop copy, so it must
+    // be treated as progression. Tunics already are.
+    if (!advancement && (randomizerGet == RG_DEKU_SHIELD || randomizerGet == RG_HYLIAN_SHIELD) &&
+        Context::GetInstance()->GetOption(RSK_SHOP_SHIELDS_AND_TUNICS_ONLY_REFILL).Is(RO_GENERIC_ON)) {
+        return true;
+    }
     return advancement;
 }
 
@@ -100,8 +115,45 @@ uint16_t Item::GetPrice() const {
     return price;
 }
 
+// Rows whose GI entry depends on SAVE STATE: the switch in GetGIEntry is what turns one pool item
+// into the level actually being received, so these must never be served from the cached giEntry.
+//
+// This used to read `giEntry->itemId != RG_PROGRESSIVE_BOMBCHU_BAG` — an ItemID compared against a
+// RandomizerGet — so every row built with the full constructor (i.e. every row that HAS a cached
+// entry) skipped resolution entirely. The chains that still worked were the ones built with the
+// short constructor (no giEntry: hookshot, strength, scale, agony...); the ones that carry their own
+// item/object/icon (Cane of Somaria, Progressive Roc) always presented as level 1 no matter how many
+// copies you received. Skijer's NEI
+static bool ItemResolvesFromState(RandomizerGet rg) {
+    switch (rg) {
+        case RG_PROGRESSIVE_STICK_UPGRADE:
+        case RG_PROGRESSIVE_NUT_UPGRADE:
+        case RG_PROGRESSIVE_BOMB_BAG:
+        case RG_PROGRESSIVE_BOW:
+        case RG_PROGRESSIVE_SLINGSHOT:
+        case RG_PROGRESSIVE_OCARINA:
+        case RG_PROGRESSIVE_HOOKSHOT:
+        case RG_PROGRESSIVE_ROCS:
+        case RG_PROGRESSIVE_STRENGTH:
+        case RG_PROGRESSIVE_WALLET:
+        case RG_PROGRESSIVE_SCALE:
+        case RG_PROGRESSIVE_MAGIC_METER:
+        case RG_PROGRESSIVE_GORONSWORD:
+        case RG_PROGRESSIVE_KOKIRI_SWORD:
+        case RG_PROGRESSIVE_MASTER_SWORD:
+        case RG_PROGRESSIVE_BGS:
+        case RG_PROGRESSIVE_HAMMER:
+        case RG_PROGRESSIVE_BOMBCHU_BAG:
+        case RG_STONE_OF_AGONY:
+        case RG_CANE_OF_SOMARIA:
+            return true;
+        default:
+            return false;
+    }
+}
+
 std::shared_ptr<GetItemEntry> Item::GetGIEntry() const { // NOLINT(*-no-recursion)
-    if (giEntry != nullptr && giEntry->itemId != RG_PROGRESSIVE_BOMBCHU_BAG) {
+    if (giEntry != nullptr && !ItemResolvesFromState(randomizerGet)) {
         return giEntry;
     }
     std::shared_ptr<Rando::Context> ctx = Rando::Context::GetInstance();
@@ -270,8 +322,30 @@ std::shared_ptr<GetItemEntry> Item::GetGIEntry() const { // NOLINT(*-no-recursio
                     actual = RG_HOOKSHOT;
                     break;
                 case ITEM_HOOKSHOT:
-                case ITEM_LONGSHOT:
                     actual = RG_LONGSHOT;
+                    break;
+                case ITEM_LONGSHOT:
+                    // NEI chain level 3: Longshot in hand -> the next copy is the Ultrashot.
+                    actual = RG_ULTRASHOT;
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case RG_PROGRESSIVE_ROCS:
+            // Read the REAL NEI slot: logic->CurrentInventory only sees the vanilla inventory
+            // array, so a custom id (0x9E) always came back ITEM_NONE and the SECOND copy still
+            // presented as the feather ("me da el item pero el textbox no se muestra bien") even
+            // though the give case stepped to the cape correctly.
+            switch (ExtInv_GetSlotItem(SLOT_ROCS)) {
+                case ITEM_NONE:
+                    // First copy is Skijer's feather — resolve to the progressive entry itself.
+                    // RG_ROCS_FEATHER is the separate vanilla rando feather (Nayru's Love slot).
+                    actual = RG_PROGRESSIVE_ROCS;
+                    break;
+                case ITEM_ROCS_FEATHER_SKIJER:
+                case ITEM_ROCS_CAPE:
+                    actual = RG_ROCS_CAPE;
                     break;
                 default:
                     break;
@@ -367,6 +441,68 @@ std::shared_ptr<GetItemEntry> Item::GetGIEntry() const { // NOLINT(*-no-recursio
         case RG_PROGRESSIVE_GORONSWORD: // todo progressive?
             actual = RG_BIGGORON_SWORD;
             break;
+        // NEI weapon chains — these used to fall to `default` (actual = RG_NONE), so every copy
+        // presented as the generic "Progressive X" entry and never showed the level being received.
+        // Level 1 resolves to the vanilla weapon's own row (full vanilla presentation); the upper
+        // levels resolve to their per-level rows. Equip ownership comes from the logic save context
+        // (bits 0-2 of inventory.equipment = Kokiri/Master/Biggoron — EQUIP_TYPE_SWORD is nibble 0);
+        // upgrade bits live in the NEI save (process-global). Skijer's NEI
+        case RG_PROGRESSIVE_KOKIRI_SWORD:
+            if (!(logic->GetSaveContext()->inventory.equipment & (1 << EQUIP_INV_SWORD_KOKIRI))) {
+                actual = RG_KOKIRI_SWORD;
+            } else if (!WeaponUpgrade_HasRazor()) {
+                actual = RG_RAZOR_SWORD;
+            } else {
+                actual = RG_GILDED_SWORD;
+            }
+            break;
+        case RG_PROGRESSIVE_MASTER_SWORD:
+            if (!(logic->GetSaveContext()->inventory.equipment & (1 << EQUIP_INV_SWORD_MASTER))) {
+                actual = RG_MASTER_SWORD;
+            } else {
+                actual = RG_TRUE_MASTER_SWORD;
+            }
+            break;
+        case RG_PROGRESSIVE_BGS:
+            if (!(logic->GetSaveContext()->inventory.equipment & (1 << EQUIP_INV_SWORD_BIGGORON))) {
+                actual = RG_BIGGORON_SWORD;
+            } else {
+                actual = RG_GREAT_FAIRY_SWORD;
+            }
+            break;
+        case RG_PROGRESSIVE_HAMMER:
+            if (logic->CurrentInventory(ITEM_HAMMER) == ITEM_NONE) {
+                actual = RG_MEGATON_HAMMER;
+            } else {
+                actual = RG_IRON_KNUCKLE_AXE;
+            }
+            break;
+        case RG_STONE_OF_AGONY:
+            // NEI 2-level chain: the vanilla stone, then the Quartz of Motion. The stone copy keeps
+            // resolving to this row's own entry (vanilla presentation); the second copy presents as
+            // the Quartz with its own textbox/icon/model.
+            if (logic->GetSaveContext()->inventory.questItems & gBitFlags[QUEST_STONE_OF_AGONY]) {
+                actual = RG_QUARTZ_OF_MOTION;
+            }
+            break;
+        case RG_CANE_OF_SOMARIA: {
+            // Dual Cane: the give order is fixed (kCaneOrder in randomizer.cpp — Statue, Flip,
+            // Block, Stone, Platform, Ultrahand), so the number of owned skills says exactly which
+            // per-skill identity THIS copy presents as. Reads the real NEI state (Cane_HasSkill),
+            // never logic->CurrentInventory (it cannot see NEI slots).
+            static const RandomizerGet kCaneLevels[6] = {
+                RG_CANE_OF_SOMARIA,  RG_CANE_PACCI_FLIP,       RG_CANE_SOMARIA_BLOCK,
+                RG_CANE_PACCI_STONE, RG_CANE_SOMARIA_PLATFORM, RG_CANE_PACCI_ULTRAHAND,
+            };
+            int owned = 0;
+            for (u8 s = 0; s < 6; s++) {
+                owned += Cane_HasSkill(s) ? 1 : 0;
+            }
+            if (owned > 0 && owned <= 5) {
+                actual = kCaneLevels[owned];
+            }
+            break;
+        }
         case RG_PROGRESSIVE_BOMBCHU_BAG:
             if (OTRGlobals::Instance->gRandoContext->GetOption(RSK_BOMBCHU_BAG).Is(RO_BOMBCHU_BAG_SINGLE)) {
                 if (logic->CurrentInventory(ITEM_BOMBCHU) != ITEM_NONE) {
@@ -392,7 +528,11 @@ std::shared_ptr<GetItemEntry> Item::GetGIEntry() const { // NOLINT(*-no-recursio
             actual = RG_NONE;
             break;
     }
-    if (giEntry != nullptr && actual == RG_NONE) {
+    // `actual == randomizerGet` is a row resolving to ITSELF (level 1 of a chain, e.g. Progressive
+    // Roc with an empty slot). Now that the cache no longer short-circuits these rows, recursing
+    // into RetrieveItem(actual) would call straight back into this function forever — stack
+    // overflow. Serve the row's own entry instead.
+    if (giEntry != nullptr && (actual == RG_NONE || actual == randomizerGet)) {
         return giEntry;
     }
     return StaticData::RetrieveItem(actual).GetGIEntry();
@@ -427,7 +567,8 @@ bool Item::IsBottleItem() const {
 bool Item::IsMajorItem() const {
     const auto ctx = Context::GetInstance();
     if (type == ITEMTYPE_TOKEN) {
-        return ctx->GetOption(RSK_RAINBOW_BRIDGE).Is(RO_BRIDGE_TOKENS) || ctx->LACSCondition() == RO_LACS_TOKENS;
+        return ctx->GetOption(RSK_RAINBOW_BRIDGE).Is(RO_BRIDGE_TOKENS) ||
+               ctx->GBKCondition() == RO_CHECK_TRIGGER_TOKENS;
     }
 
     if (type == ITEMTYPE_DROP || type == ITEMTYPE_EVENT || type == ITEMTYPE_SHOP || type == ITEMTYPE_MAP ||
@@ -475,6 +616,23 @@ bool Item::IsMajorItem() const {
     }
 
     return IsAdvancement();
+}
+
+bool Item::IsShieldOrTunic() const {
+    switch (randomizerGet) {
+        case RG_DEKU_SHIELD:
+        case RG_HYLIAN_SHIELD:
+        case RG_MIRROR_SHIELD:
+        case RG_GORON_TUNIC:
+        case RG_ZORA_TUNIC:
+        case RG_BUY_DEKU_SHIELD:
+        case RG_BUY_HYLIAN_SHIELD:
+        case RG_BUY_GORON_TUNIC:
+        case RG_BUY_ZORA_TUNIC:
+            return true;
+        default:
+            return false;
+    }
 }
 
 RandomizerHintTextKey Item::GetHintKey() const {

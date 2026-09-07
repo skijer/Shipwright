@@ -146,9 +146,32 @@ typedef enum {
     /* 0x1B */ SLOT_BOOTS_KOKIRI,
     /* 0x1C */ SLOT_BOOTS_IRON,
     /* 0x1D */ SLOT_BOOTS_HOVER,
-    /* 0x1E */ SLOT_SHIELD_DEKU,
-    /* 0x1F */ SLOT_SHIELD_HYLIAN,
-    /* 0x20 */ SLOT_SHIELD_MIRROR,
+    // Custom item slots (Page 2 of inventory menu)
+    /* 0x1E */ SLOT_ROCS_FEATHER_SKIJER,
+    /* 0x1F */ SLOT_ROCS_CAPE,
+    /* 0x20 */ SLOT_HYLIAS_GRACE,
+    /* 0x21 */ SLOT_ZONAI_PERMAFROST,
+    /* 0x22 */ SLOT_DEMISE_DESTRUCTION,
+    /* 0x23 */ SLOT_DEKU_LEAF,
+    /* 0x24 */ SLOT_SWITCH_HOOK,
+    /* 0x25 */ SLOT_MOGMA_MITTS,
+    /* 0x26 */ SLOT_GUST_JAR,
+    /* 0x27 */ SLOT_BALL_AND_CHAIN,
+    /* 0x28 */ SLOT_WHIP,
+    /* 0x29 */ SLOT_SPINNER,
+    /* 0x2A */ SLOT_CANE_OF_SOMARIA,
+    /* 0x2B */ SLOT_DOMINION_ROD,
+    /* 0x2C */ SLOT_TIME_GATE,
+    /* 0x2D */ SLOT_BOW_AND_BOMBS,
+    /* 0x2E */ SLOT_ROD_FIRE,
+    /* 0x2F */ SLOT_ROD_ICE,
+    /* 0x30 */ SLOT_ROD_LIGHT,
+    /* 0x31 */ SLOT_BEETLE,
+    /* 0x32 */ SLOT_SHOVEL,
+    // AssignableTunicsAndBoots enhancement slots (moved after custom items to avoid conflicts)
+    /* 0x33 */ SLOT_SHIELD_DEKU,
+    /* 0x34 */ SLOT_SHIELD_HYLIAN,
+    /* 0x35 */ SLOT_SHIELD_MIRROR,
     /* 0xFF */ SLOT_NONE = 0xFF
 } InventorySlot;
 
@@ -281,8 +304,11 @@ typedef enum {
     /* 0x7D */ ITEM_DOUBLE_DEFENSE,
     /* 0x7E */ ITEM_INVALID_4,
     /* 0x7F */ ITEM_INVALID_5,
-    /* 0x80 */ ITEM_INVALID_6,
-    /* 0x81 */ ITEM_INVALID_7,
+    // Skijer's NEI boss_remains: the four boss remains repurpose the only free C-button-visible u8
+    // ids (0x80/0x81 were ITEM_INVALID_6/7, 0x89 was ITEM_INVALID_8, 0x9C was ITEM_CUSTOM). The set
+    // is NON-contiguous — use BossRemains_ItemIndex/IndexItem, never range tests.
+    /* 0x80 */ ITEM_MM_REMAINS_ODOLWA = 0x80,
+    /* 0x81 */ ITEM_MM_REMAINS_GOHT = 0x81,
     /* 0x82 */ ITEM_MILK,
     /* 0x83 */ ITEM_HEART,
     /* 0x84 */ ITEM_RUPEE_GREEN,
@@ -290,7 +316,9 @@ typedef enum {
     /* 0x86 */ ITEM_RUPEE_RED,
     /* 0x87 */ ITEM_RUPEE_PURPLE,
     /* 0x88 */ ITEM_RUPEE_GOLD,
-    /* 0x89 */ ITEM_INVALID_8,
+    // Skijer's NEI boss_remains (was ITEM_INVALID_8; the z_parameter.c rupee-drop range tests now
+    // end at ITEM_RUPEE_GOLD so 0x89 is no longer treated as a consumable drop).
+    /* 0x89 */ ITEM_MM_REMAINS_TWINMOLD = 0x89,
     /* 0x8A */ ITEM_STICKS_5,
     /* 0x8B */ ITEM_STICKS_10,
     /* 0x8C */ ITEM_NUTS_5,
@@ -309,8 +337,146 @@ typedef enum {
     /* 0x99 */ ITEM_STICK_UPGRADE_30,
     /* 0x9A */ ITEM_NUT_UPGRADE_30,
     /* 0x9B */ ITEM_NUT_UPGRADE_40,
-    /* 0x9C */ ITEM_CUSTOM,
+    // Skijer's NEI boss_remains (was ITEM_CUSTOM, which only had a blank name-table row; the old
+    // "custom message icon" sentinel value 0x9C is unchanged — see CustomMessageManager).
+    /* 0x9C */ ITEM_MM_REMAINS_GYORG = 0x9C,
+    // Legacy alias: CustomMessageManager/ItemMessages still use ITEM_CUSTOM as the 0x9C sentinel
+    // (duplicate enumerator values are legal C — this adds the old name back without a new slot).
+    /* 0x9C */ ITEM_CUSTOM = 0x9C,
     /* 0x9D */ ITEM_ROCS_FEATHER,
+    // Custom items (for second inventory page) - start at 0x9E
+    /* 0x9E */ ITEM_ROCS_FEATHER_SKIJER = 0x9E,
+    /* 0x9F */ ITEM_ROCS_CAPE,
+    /* 0xA0 */ ITEM_DESIRE_SENSOR,
+    /* 0xA1 */ ITEM_HYLIAS_GRACE,
+    /* 0xA2 */ ITEM_ZONAI_PERMAFROST,
+    /* 0xA3 */ ITEM_DEMISE_DESTRUCTION,
+    /* 0xA4 */ ITEM_DEKU_LEAF,
+    /* 0xA5 */ ITEM_SWITCH_HOOK,
+    /* 0xA6 */ ITEM_MOGMA_MITTS,
+    /* 0xA7 */ ITEM_GUST_JAR,
+    /* 0xA8 */ ITEM_BALL_AND_CHAIN,
+    /* 0xA9 */ ITEM_WHIP,
+    /* 0xAA */ ITEM_SPINNER,
+    /* 0xAB */ ITEM_CANE_OF_SOMARIA,
+    /* 0xAC */ ITEM_DOMINION_ROD,
+    /* 0xAD */ ITEM_TIME_GATE,
+    /* 0xAE */ ITEM_BOMB_ARROWS,
+    /* 0xAF */ ITEM_ROD_FIRE,
+    /* 0xB0 */ ITEM_ROD_ICE,
+    /* 0xB1 */ ITEM_ROD_LIGHT,
+    /* 0xB2 */ ITEM_BEETLE,
+    /* 0xB3 */ ITEM_SHOVEL,
+    /* 0xB4 */ ITEM_MINISH_CAP,
+    /* 0xB5 */ ITEM_LANTERN,
+    /* 0xB6 */ ITEM_CHATEAU_ROMANI,
+    /* 0xB7 */ ITEM_POKEBALL,
+    // MM Mask items (for 3rd inventory page)
+    /* 0xB8 */ ITEM_MM_MASK_POSTMAN = 0xB8,
+    /* 0xB9 */ ITEM_MM_MASK_ALL_NIGHT,
+    /* 0xBA */ ITEM_MM_MASK_BLAST,
+    /* 0xBB */ ITEM_MM_MASK_STONE,
+    /* 0xBC */ ITEM_MM_MASK_GREAT_FAIRY,
+    /* 0xBD */ ITEM_MM_MASK_DEKU,
+    /* 0xBE */ ITEM_MM_MASK_KEATON,
+    /* 0xBF */ ITEM_MM_MASK_BREMEN,
+    /* 0xC0 */ ITEM_MM_MASK_BUNNY,
+    /* 0xC1 */ ITEM_MM_MASK_DON_GERO,
+    /* 0xC2 */ ITEM_MM_MASK_SCENTS,
+    /* 0xC3 */ ITEM_MM_MASK_GORON,
+    /* 0xC4 */ ITEM_MM_MASK_ROMANI,
+    /* 0xC5 */ ITEM_MM_MASK_CIRCUS_LEADER,
+    /* 0xC6 */ ITEM_MM_MASK_KAFEI,
+    /* 0xC7 */ ITEM_MM_MASK_COUPLE,
+    /* 0xC8 */ ITEM_MM_MASK_TRUTH,
+    /* 0xC9 */ ITEM_MM_MASK_ZORA,
+    /* 0xCA */ ITEM_MM_MASK_KAMARO,
+    /* 0xCB */ ITEM_MM_MASK_GIBDO,
+    /* 0xCC */ ITEM_MM_MASK_GARO,
+    /* 0xCD */ ITEM_MM_MASK_CAPTAIN,
+    /* 0xCE */ ITEM_MM_MASK_GIANT,
+    /* 0xCF */ ITEM_MM_MASK_FIERCE_DEITY,
+    // Elemental Wand — six rods (Sand / Tornado / Water / Meteor / Storm / Shadow Scepter) in ONE
+    // page-2 cell, selected by a kaleido wheel that shows the matching medallion. Takes 0xD0, which
+    // the six ITEM_SW97_ARROW_* used to occupy: the primed element is a flag now (NeiSaveData
+    // .sw97BowElement / .sw97SlingElement), so those ids are gone. 0xD1-0xD5 are free.
+    /* 0xD0 */ ITEM_ELEMENTAL_WAND = 0xD0,
+    // Extended-button infrastructure. `equips.buttonItems[]` is u8 and the u8 ItemID space is
+    // essentially exhausted, so custom items whose real id is u16 (>= 0x0200) cannot be stored there.
+    // One reserved u8 acts as a MARKER: when a button slot holds ITEM_EXT_BUTTON, the REAL (u16) id
+    // lives in the parallel array gSaveContext.ship.extButtons.items[button] (EXT_BUTTON_ITEM,
+    // z64save.h). Vanilla code that reads the u8 sees an inert id — ExtPlayer_GetItemAction returns
+    // PLAYER_IA_NONE for it (not in the NEI registry, past VANILLA_SITEMACTIONS_SIZE) and it is in no
+    // usability/restriction table. Only the icon sites and owner-mod code resolve the real u16
+    // (see ExtButton_GetItem / z_parameter.c).
+    // 0xD1 is from the free 0xD1-0xD5 gap left by the removed ITEM_SW97_ARROW_*. It is deliberately
+    // below ITEM_LAST_USED (0xFC) so the existing `buttonItems[n] < ITEM_LAST_USED` HUD gates admit it
+    // with no change.
+    /* 0xD1 */ ITEM_EXT_BUTTON = 0xD1,
+    // Rito form trigger (Skijer's NEI). Lives in the FARORE'S WIND cell and cycles
+    // with the spell the way Roc's Feather cycles with Nayru's Love. Behaves as a
+    // wearable mask so far as the player code is concerned — ExtPlayer_GetItemAction
+    // aliases it to a vanilla mask action, which lands it in the z_player.c mask
+    // branch where CustomForms_TrySkinItem already toggles skin forms.
+    // Takes 0xD2 from the free 0xD1-0xD5 gap; below ITEM_LAST_USED (0xFC) so the
+    // C-button HUD draws it.
+    /* 0xD2 */ ITEM_RITO_MASK = 0xD2,
+    // SM64 Mario mode toggle item — locked to C-Down via gSm64MarioMaskForce
+    // CVar; pressing C-Down with this item equipped toggles gSm64Mario.
+    /* 0xD6 */ ITEM_MARIO_MASK = 0xD6,
+    // Prop Hunt button icons (Harpoon multiplayer mode). Slotted into the
+    // C-buttons + D-pad while a hider is in "prop mode" so they show the
+    // cycling controls instead of vanilla item icons. No gameplay action
+    // — used purely as render hints. Texture paths resolved in
+    // ExtInv_GetItemIcon → gItemIconPropHunt*Tex.
+    /* 0xD7 */ ITEM_PH_ICON_POT,
+    /* 0xD8 */ ITEM_PH_ICON_ENEMY,
+    /* 0xD9 */ ITEM_PH_ICON_NPC,
+    /* 0xDA */ ITEM_PH_ICON_CHANGE,
+    /* 0xDB */ ITEM_PH_ICON_PREV,
+    /* 0xDC */ ITEM_PH_ICON_NEXT,
+    // Magic Mushroom — caught from Mask of Scents spots in Lost Woods.
+    // ITEM_MAGIC_MUSHROOM is the bottle-contents id (analogous to ITEM_BUG),
+    // ITEM_BOTTLE_WITH_MAGIC_MUSHROOM is the filled bottle id stored in SLOT_BOTTLE_*.
+    /* 0xDD */ ITEM_MAGIC_MUSHROOM,
+    /* 0xDE */ ITEM_BOTTLE_WITH_MAGIC_MUSHROOM,
+    // MM bottle-content custom items (Bottle Randomizer, Skijer's NEI). Each is a STANDALONE custom
+    // item = 1 row in sNeiItems[] (own icon + own behavior), stored directly in SLOT_BOTTLE_* by the
+    // wheel; NO _BOTTLE_WITH_ id, NO vanilla bottle behavior. Icons are mm.o2r placeholders (TODO:
+    // exact names). NOTE: Chateau Romani (0xB6) + Magic Mushroom (0xDD) already exist — reused here.
+    // Placed at 0xEC+ to CLEAR the extended-equipment #defines (ITEM_EXT_* = 0xE0-0xEB in
+    // extended_equipment.h). If these raw values change, update custom_bottles.cpp + mm_bottles_behavior.cpp.
+    /* 0xEC */ ITEM_GOLD_DUST = 0xEC,
+    /* 0xED */ ITEM_HOT_SPRING_WATER,
+    /* 0xEE */ ITEM_DEKU_PRINCESS,
+    /* 0xEF */ ITEM_SEAHORSE,
+    /* 0xF0 */ ITEM_SPRING_WATER,
+    /* 0xF1 */ ITEM_ZORA_EGG,
+    /* 0xF2 */ ITEM_HYLIAN_LOACH,
+    /* 0xF3 */ ITEM_OBABA_DRINK,
+    // Bottle Randomizer extra slots (Skijer's NEI): Net + Bottomless Bottle, occupy SLOT_BOTTLE_3/4.
+    // Behavior DEFERRED; placeholder icons (textures/icon_item_custom/gItemIconPending2/4Tex).
+    /* 0xF4 */ ITEM_NET,
+    /* 0xF5 */ ITEM_BOTTOMLESS_BOTTLE,
+    // Power Keg (MM Goron's big bomb, Skijer's NEI): shares the Bomb slot via a kaleido wheel
+    // (A opens, stick cycles Bomb <-> Power Keg). Usable only as Fierce Deity / Goron, or
+    // Human/Gerudo with Silver Gauntlets+ (UPG_STRENGTH >= 2). Behavior TBD.
+    /* 0xF6 */ ITEM_POWER_KEG = 0xF6,
+    // MM adult trade-quest items (Skijer's NEI) — shown in the SLOT_TRADE_ADULT 2D-grid wheel. The u8
+    // inventory-id space is nearly full, so these reuse the remaining gaps (0xDF, 0xF7-0xFB) plus two
+    // unreferenced INVALID slots (0x7E, 0x7F). (0xFD is avoided: the C-button HUD draw gates on
+    // `item < ITEM_LAST_USED (0xFC)`, so an id >= 0xFC is invisible on a C-button.) The Pendant is NOT
+    // listed here — it IS the combat
+    // ITEM_EXT_BOOTS_2 (0xEA, equip_pendant.c), so the trade entry and the C-equippable moveset are the
+    // SAME item (granting the Pendant sets both the trade bit and the Ext Boots 2 ownership bit).
+    /* 0xDF */ ITEM_MM_MOONS_TEAR = 0xDF,
+    /* 0xF7 */ ITEM_MM_DEED_LAND = 0xF7,
+    /* 0xF8 */ ITEM_MM_DEED_SWAMP = 0xF8,
+    /* 0xF9 */ ITEM_MM_DEED_MOUNTAIN = 0xF9,
+    /* 0xFA */ ITEM_MM_DEED_OCEAN = 0xFA,
+    /* 0xFB */ ITEM_MM_ROOM_KEY = 0xFB,
+    /* 0x7F */ ITEM_MM_LETTER_KAFEI = 0x7F, // INVALID_5 slot; 0xFD would be hidden on C-buttons (see note above)
+    /* 0x7E */ ITEM_MM_SPECIAL_DELIVERY = 0x7E, // reuses the unreferenced ITEM_INVALID_4 slot
     /* 0xFC */ ITEM_LAST_USED = 0xFC,
     /* 0xFE */ ITEM_NONE_FE = 0xFE,
     /* 0xFF */ ITEM_NONE = 0xFF
@@ -462,7 +628,7 @@ typedef enum {
     /* 0x7B */ GI_BULLET_BAG_50,
     /* 0x7C */ GI_ICE_TRAP, // freezes link when opened from a chest
     /* 0x7D */ GI_TEXT_0,   // no model appears over Link, shows text id 0 (pocket egg)
-    /* 0x84 */ GI_MAX
+    /* 0x7E */ GI_MAX
 } GetItemID;
 
 typedef enum {
@@ -594,9 +760,8 @@ typedef enum {
     /* 0x7A */ GID_SONG_TIME,
     /* 0x7B */ GID_SONG_STORM,
     /* 0x7C */ GID_TRIFORCE_PIECE,
-    /* 0x7D */ GID_ROCS_FEATHER,
-    /* 0x7E */ GID_FISHING_POLE,
-    /* 0x7F */ GID_MAXIMUM
+    /* 0x7D */ GID_FISHING_POLE,
+    /* 0x7E */ GID_MAXIMUM
 
 } GetItemDrawID;
 

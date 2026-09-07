@@ -47,6 +47,17 @@ typedef struct {
     /* 0x07 */ u8 shape;   // JntSph, Cylinder, Tris, or Quad
 } ColliderInitToActor; // size = 0x08
 
+typedef enum HitSpecialEffect {
+    HIT_SPECIAL_EFFECT_NONE,
+    HIT_SPECIAL_EFFECT_FIRE,
+    HIT_SPECIAL_EFFECT_ICE,
+    HIT_SPECIAL_EFFECT_ELECTRIC,
+    HIT_SPECIAL_EFFECT_KNOCKBACK,
+    HIT_SPECIAL_EFFECT_7 = 7, // Same effect as `HIT_SPECIAL_EFFECT_NONE`
+    HIT_SPECIAL_EFFECT_8, // Same effect as `HIT_SPECIAL_EFFECT_NONE`
+    HIT_SPECIAL_EFFECT_9 // Same effect as `HIT_SPECIAL_EFFECT_NONE`
+} HitSpecialEffect;
+
 typedef struct {
     /* 0x00 */ u32 dmgFlags; // Toucher damage type flags.
     /* 0x04 */ u8 effect; // Damage Effect (Knockback, Fire, etc.)
@@ -376,6 +387,17 @@ typedef enum {
 #define DMG_UNBLOCKABLE  (1 << 0x1D)
 #define DMG_HAMMER_JUMP  (1 << 0x1E)
 #define DMG_UNKNOWN_2    (1 << 0x1F)
+
+// NEI: repurposes the unused bit 0x1F. When an AT toucher carries this flag,
+// CollisionCheck_ApplyDamage uses `toucher.damage` VERBATIM and discards the
+// enemy's damage-table result — a CONSTANT damage value independent of the
+// enemy's per-flag table AND of Link's equipped weapon class. Used by
+// transformation forms (e.g. Garo) whose attacks must deal a fixed amount
+// regardless of what sword the player has equipped. Distinct from
+// DMG_UNBLOCKABLE (which only sets a damage FLOOR and is owned by Pikachu
+// Gigantamax) so the two don't interfere. Always pair it with a real weapon
+// bit (e.g. DMG_SLASH_MASTER) so the AT/AC vulnerability match still passes.
+#define DMG_FIXED_DAMAGE (1 << 0x1F)
 
 #define DMG_SLASH (DMG_SLASH_KOKIRI | DMG_SLASH_MASTER | DMG_SLASH_GIANT)
 #define DMG_SPIN_ATTACK (DMG_SPIN_KOKIRI | DMG_SPIN_MASTER | DMG_SPIN_GIANT)

@@ -22,10 +22,21 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     if(NOT CMAKE_VS_PLATFORM_NAME)
         set(CMAKE_VS_PLATFORM_NAME "x64")
     endif()
+    if("${CMAKE_VS_PLATFORM_NAME}" MATCHES "^[Aa][Rr][Mm]64$")
+        set(SOH_WINDOWS_ARM64 TRUE)
+    else()
+        set(SOH_WINDOWS_ARM64 FALSE)
+    endif()
+    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64" OR SOH_WINDOWS_ARM64)
+        set(SOH_WINDOWS_64BIT TRUE)
+    else()
+        set(SOH_WINDOWS_64BIT FALSE)
+    endif()
     message("${CMAKE_VS_PLATFORM_NAME} architecture in use")
 
     if(NOT ("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64"
-        OR "${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32"))
+        OR "${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32"
+        OR SOH_WINDOWS_ARM64))
         message(FATAL_ERROR "${CMAKE_VS_PLATFORM_NAME} arch is not supported!")
     endif()
 endif()
@@ -123,8 +134,15 @@ source_group("include" FILES ${Header_Files__include})
 # soh (root)
 file(GLOB_RECURSE soh__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "soh/*.c" "soh/*.cpp" "soh/*.h" "soh/*.hpp")
 
+# mods (only .cpp files - .c files are included via #include pattern)
+file(GLOB_RECURSE mods__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "mods/*.cpp" "mods/*.h" "mods/*.hpp")
+list(APPEND soh__ ${mods__})
+
+# expansions (only .cpp files - .c files are included via #include pattern)
+file(GLOB_RECURSE expansions__ RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "expansions/*.cpp" "expansions/*.h" "expansions/*.hpp")
+list(APPEND soh__ ${expansions__})
+
 # Add specific files that don't match the pattern
-list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/savestates_extern.inc)
 list(APPEND soh__ ${CMAKE_CURRENT_SOURCE_DIR}/soh/Enhancements/speechsynthesizer/DarwinSpeechSynthesizer.mm)
 
 # Create source groups that match the real file directory paths
@@ -140,11 +158,6 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
     set_source_files_properties(soh/Enhancements/tts/tts.cpp PROPERTIES COMPILE_FLAGS "/utf-8")
     set_source_files_properties(soh/Enhancements/custom-message/CustomMessageManager.cpp PROPERTIES COMPILE_FLAGS "/utf-8")
     set_source_files_properties(soh/Enhancements/custom-message/CustomMessageManager.h PROPERTIES COMPILE_FLAGS "/utf-8")
-endif()
-
-# handle Network removals
-if (!BUILD_REMOTE_CONTROL)
-    list(FILTER soh__ EXCLUDE REGEX "soh/Enhancements/crowd-control/")
 endif()
 
 # handle speechsynthesizer removals
@@ -235,7 +248,7 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         VS_GLOBAL_KEYWORD "Win32Proj"
     )
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         set_target_properties(${PROJECT_NAME} PROPERTIES
             INTERPROCEDURAL_OPTIMIZATION_RELEASE "TRUE"
         )
@@ -259,7 +272,7 @@ endif()
 ################################################################################
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     get_property(MSVC_RUNTIME_LIBRARY_DEFAULT TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         string(CONCAT "MSVC_RUNTIME_LIBRARY_STR"
             $<$<CONFIG:Debug>:
                 MultiThreadedDebug
@@ -297,15 +310,12 @@ FetchContent_MakeAvailable(dr_libs)
 find_package(SDL2)
 set(SDL2-INCLUDE ${SDL2_INCLUDE_DIRS})
 
-if (BUILD_REMOTE_CONTROL)
-    find_package(SDL2_net)
+find_package(SDL2_net)
 
-    if(NOT SDL2_net_FOUND)
-        message(STATUS "SDL2_net not found (it's possible the version installed is too old). Disabling BUILD_REMOTE_CONTROL.")
-        set(BUILD_REMOTE_CONTROL 0)
-    else()
-        set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
-    endif()
+if(NOT SDL2_net_FOUND)
+    message(STATUS "SDL2_net not found (it's possible the version installed is too old).")
+else()
+    set(SDL2-NET-INCLUDE ${SDL_NET_INCLUDE_DIRS})
 endif()
 
 if (ESPEAK)
@@ -319,6 +329,7 @@ endif()
 target_include_directories(${PROJECT_NAME} PRIVATE assets
     ${CMAKE_CURRENT_SOURCE_DIR}/include/
     ${CMAKE_CURRENT_SOURCE_DIR}/src/
+    ${CMAKE_CURRENT_SOURCE_DIR}/mods/
     ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD/resource/type
     ${SDL2-INCLUDE}
@@ -329,7 +340,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE assets
 )
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_compile_definitions(${PROJECT_NAME} PRIVATE
             "$<$<CONFIG:Debug>:"
                 "_DEBUG;"
@@ -339,7 +350,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
             "$<$<CONFIG:Release>:"
                 "NDEBUG;"
             ">"
-            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:ENABLE_REMOTE_CONTROL>"
             "INCLUDE_GAME_PRINTF;"
             "F3DEX_GBI_2"
             "UNICODE;"
@@ -396,7 +406,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|Clang|AppleClang")
             "NDEBUG;"
         ">"
         "F3DEX_GBI_2;"
-        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:ENABLE_REMOTE_CONTROL>;"
         "_CONSOLE;"
         "_CRT_SECURE_NO_WARNINGS;"
         "ENABLE_OPENGL;"
@@ -410,21 +419,24 @@ endif()
 # Compile and link options
 ################################################################################
 if(MSVC)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_compile_options(${PROJECT_NAME} PRIVATE
             $<$<CONFIG:Debug>:
-                /w;
                 /Od
             >
             $<$<CONFIG:Release>:
                 /Oi;
                 /Gy;
-                /W3
             >
+            /W3;
+            # /WX (upstream) is deliberately off here: upstream's tree is warning-clean, this fork
+            # carries hundreds of extra files that are not, and turning every warning into an error
+            # buries the real build breaks under noise from unrelated code.
             /bigobj;
             /sdl-;
             /permissive-;
             /MP;
+            /guard:cf;
             ${DEFAULT_CXX_DEBUG_INFORMATION_FORMAT};
             ${DEFAULT_CXX_EXCEPTION_HANDLING}
         )
@@ -442,12 +454,13 @@ if(MSVC)
             /permissive-;
             /MP;
             /sdl-;
-            /w;
+            /W3;
+            /guard:cf;
             ${DEFAULT_CXX_DEBUG_INFORMATION_FORMAT};
             ${DEFAULT_CXX_EXCEPTION_HANDLING}
         )
     endif()
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         target_link_options(${PROJECT_NAME} PRIVATE
             $<$<CONFIG:Debug>:
                 /INCREMENTAL
@@ -460,7 +473,8 @@ if(MSVC)
             >
             /MANIFEST:NO;
             /DEBUG;
-            /SUBSYSTEM:WINDOWS
+            /SUBSYSTEM:WINDOWS;
+            /GUARD:CF
         )
     elseif("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32")
         target_link_options(${PROJECT_NAME} PRIVATE
@@ -475,7 +489,8 @@ if(MSVC)
             >
             /MANIFEST:NO;
             /DEBUG;
-            /SUBSYSTEM:WINDOWS
+            /SUBSYSTEM:WINDOWS;
+            /GUARD:CF
         )
     endif()
 endif()
@@ -635,14 +650,14 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     link_libraries(Opus::opus)
     find_package(OpusFile CONFIG REQUIRED)
     link_libraries(OpusFile::opusfile CONFIG REQUIRED)
-    if("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "x64")
+    if(SOH_WINDOWS_64BIT)
         set(ADDITIONAL_LIBRARY_DEPENDENCIES
             "libultraship;"
             "ZAPDLib;"
             "glu32;"
             "SDL2::SDL2;"
             "SDL2::SDL2main;"
-            "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net-static>"
+            "SDL2_net::SDL2_net-static"
             "glfw;"
             "winmm;"
             "imm32;"
@@ -708,7 +723,7 @@ else()
         "Vorbis::vorbisfile"
         "Opus::opus"
         "Opusfile::Opusfile"
-        "$<$<BOOL:${BUILD_REMOTE_CONTROL}>:SDL2_net::SDL2_net>"
+        "SDL2_net::SDL2_net"
         ${CMAKE_DL_LIBS}
         Threads::Threads
     )

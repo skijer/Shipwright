@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_tornado/mat_tornado_f3dlite_tornado"/>
+	<CallDisplayList Path="objects/object_nei_tornado/tornado_mesh_tri_0"/>
+	<EndDisplayList/>
+</DisplayList>
