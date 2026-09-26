@@ -21,6 +21,8 @@
 #include "overlays/misc/ovl_kaleido_scope/z_kaleido_scope.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/object_link_child/object_link_child.h"
+#include "objects/object_horse_link_child/rideable_young_epona.h"
+#include "young_epona.h"
 #include <soh/Enhancements/custom-message/CustomMessageTypes.h>
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -8578,8 +8580,14 @@ static struct_80854578 D_80854578[] = {
     { &gPlayerAnim_link_uma_right_up, -34.16f, 7.91f },
 };
 
+static struct_80854578 sYoungEponaMountInfo[] = {
+    { (LinkAnimationHeader*)gYoungEponaMountLeftAnim, 22.718237f, 2.3294117f },
+    { (LinkAnimationHeader*)gYoungEponaMountRightAnim, -22.0f, 1.9800001f },
+};
+
 s32 Player_ActionHandler_3(Player* this, PlayState* play) {
     EnHorse* rideActor = (EnHorse*)this->rideActor;
+    struct_80854578* mountInfo;
     f32 unk_04;
     f32 unk_08;
     f32 sp38;
@@ -8587,6 +8595,11 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
     s32 temp;
 
     if ((rideActor != NULL) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+        if ((rideActor->type == HORSE_YOUNG_EPONA) && !Horse_CanUseYoungEpona()) {
+            return 0;
+        }
+
+        mountInfo = (rideActor->type == HORSE_YOUNG_EPONA) ? sYoungEponaMountInfo : D_80854578;
         sp38 = Math_CosS(rideActor->actor.shape.rot.y);
         sp34 = Math_SinS(rideActor->actor.shape.rot.y);
 
@@ -8601,8 +8614,8 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
             temp = 1;
         }
 
-        unk_04 = D_80854578[temp].unk_04;
-        unk_08 = D_80854578[temp].unk_08;
+        unk_04 = mountInfo[temp].unk_04;
+        unk_08 = mountInfo[temp].unk_08;
         this->actor.world.pos.x =
             rideActor->actor.world.pos.x + rideActor->riderPos.x + ((unk_04 * sp38) + (unk_08 * sp34));
         this->actor.world.pos.z =
@@ -8612,7 +8625,7 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
         this->yaw = this->actor.shape.rot.y = MasterCycle_RideYaw(&rideActor->actor);
 
         Actor_MountHorse(play, this, &rideActor->actor);
-        Player_AnimPlayOnce(play, this, D_80854578[temp].anim);
+        Player_AnimPlayOnce(play, this, mountInfo[temp].anim);
         Player_StartAnimMovement(play, this, 0x9B);
         this->actor.parent = this->rideActor;
         func_80832224(this);
@@ -13924,6 +13937,24 @@ static Vec3f D_80854838 = { 0.0f, 0.0f, -30.0f };
 
 s32 Player_UpdateNoclip(Player* this, PlayState* play);
 
+static void Player_DetachYoungEponaOnAgeChange(Player* this, PlayState* play) {
+    Actor* rideActor = this->rideActor;
+
+    if (LINK_IS_ADULT && (rideActor != NULL) && (rideActor->id == ACTOR_EN_HORSE) &&
+        (((EnHorse*)rideActor)->type == HORSE_YOUNG_EPONA)) {
+        if (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) {
+            func_8083C0E8(this, play);
+            this->stateFlags1 &= ~PLAYER_STATE1_ON_HORSE;
+            this->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
+            this->actor.parent = NULL;
+            AREG(6) = 0;
+            Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), CAM_SET_NORMAL0);
+        }
+        rideActor->child = NULL;
+        this->rideActor = NULL;
+    }
+}
+
 void Player_Update(Actor* thisx, PlayState* play) {
     static Vec3f sDogSpawnPos;
     Player* this = (Player*)thisx;
@@ -13931,6 +13962,9 @@ void Player_Update(Actor* thisx, PlayState* play) {
     s32 pad;
     Input sp44;
     Actor* dog;
+
+    // Leave the horse action before the young actor is removed after a live age change.
+    Player_DetachYoungEponaOnAgeChange(this, play);
 
     // Skijer's NEI "Pause Play": after the MM quest page closes itself for a song, this pulls out
     // the ocarina and instant-plays it in-world (machine in z_kaleido_collect.c; idle no-op).
@@ -15721,6 +15755,11 @@ void Player_Action_8084CC98(Player* this, PlayState* play) {
 
     if (this->av2.actionVar2 == 0) {
         if (LinkAnimation_Update(play, &this->skelAnime)) {
+            // The young mount clips have 38 frames, before the adult sit cues at 42/58.
+            if (rideActor->type == HORSE_YOUNG_EPONA) {
+                Actor_RequestHorseCameraSetting(play, this);
+                Player_PlaySfx(this, NA_SE_PL_SIT_ON_HORSE);
+            }
             this->skelAnime.animation = &gPlayerAnim_link_uma_wait_1;
             this->av2.actionVar2 = 99;
             return;
@@ -15902,7 +15941,9 @@ void Player_Action_8084D3E4(Player* this, PlayState* play) {
         this->actor.parent = NULL;
         AREG(6) = 0;
 
-        if (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) || (DREG(1) != 0)) {
+        if (rideActor->type == HORSE_YOUNG_EPONA) {
+            Horse_SaveYoungEpona(play, &rideActor->actor);
+        } else if (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) || (DREG(1) != 0)) {
             gSaveContext.horseData.pos.x = rideActor->actor.world.pos.x;
             gSaveContext.horseData.pos.y = rideActor->actor.world.pos.y;
             gSaveContext.horseData.pos.z = rideActor->actor.world.pos.z;

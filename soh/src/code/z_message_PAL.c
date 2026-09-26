@@ -1,4 +1,5 @@
 #include "global.h"
+#include "young_epona.h"
 #include "message_data_static.h"
 #include "vt.h"
 
@@ -3906,6 +3907,7 @@ void Message_DrawMain(PlayState* play, Gfx** p) {
                     } else {
                         Message_CloseTextbox(play);
                         if (msgCtx->lastPlayedSong == OCARINA_SONG_EPONAS) {
+                            Horse_TrySummonYoungEpona(play);
                             DREG(53) = 1;
                         }
                         osSyncPrintf(VT_FGCOL(YELLOW));

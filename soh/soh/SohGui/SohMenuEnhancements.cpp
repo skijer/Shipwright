@@ -165,6 +165,16 @@ void SohMenu::AddMenuEnhancements() {
     AddSidebarEntry("Enhancements", path.sidebarName, 3);
     path.column = SECTION_COLUMN_1;
 
+    AddWidget(path, "Ride Young Epona as Child", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("RideYoungEpona"))
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Ride Young Epona as Child Link after learning Epona's Song.\n"
+            "Summon her in Hyrule Field, Lake Hylia, Gerudo Valley, Gerudo's Fortress, or Lon Lon Ranch.\n"
+            "Mounted entry is also enabled in other outdoor areas; native horse-blocked collision and fence jumping "
+            "apply.\n"
+            "Requires Young_Epona_SoH_POC1_Assets.o2r. Reload the area after changing this option.\n"
+            "Young Epona's saved location is separate from adult Epona."));
+
     AddWidget(path, "Saving", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Autosave", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Autosave"))

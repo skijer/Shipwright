@@ -266,6 +266,8 @@ typedef struct ShipSaveContextData {
     // APPEND-ONLY past this point: members are serialized by name but the struct is also snapshotted
     // wholesale (SaveContext copies), so inserting above shifts existing offsets.
     ExtButtonSaveInfo extButtons;
+    HorseData youngHorseData;
+    u8 youngHorseDataValid;
 } ShipSaveContextData;
 
 #pragma endregion

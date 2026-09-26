@@ -302,6 +302,21 @@ extern "C" void ResourceMgr_UnloadOriginalWhenAltExists(const char* resName) {
     }
 }
 
+static void ResourceMgr_PreloadAltWhenItExists(const char* resName) {
+    if (!ResourceMgr_IsAltAssetsEnabled() || !ResourceMgr_FileAltExists(resName)) {
+        return;
+    }
+    std::string path = resName;
+    if (path.starts_with("__OTR__")) {
+        path = path.substr(7);
+    }
+    if (!path.starts_with(Ship::IResource::gAltAssetPrefix)) {
+        path = Ship::IResource::gAltAssetPrefix + path;
+    }
+    // Preload the exact Alt entry without evicting a native resource still used by submitted frames.
+    Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path, true);
+}
+
 std::shared_ptr<Ship::IResource> ResourceMgr_GetResourceByNameHandlingMQ(const char* path) {
     std::string Path = path;
     if (ResourceMgr_IsGameMasterQuest()) {
@@ -399,17 +414,17 @@ extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
 }
 
 extern "C" char* ResourceMgr_LoadIfDListByName(const char* filePath) {
-    auto res = ResourceMgr_GetResourceByNameHandlingMQ(filePath);
-
-    if (res == nullptr) {
+    if (filePath == nullptr) {
         return nullptr;
     }
-
-    if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
-        return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);
+    // A cold Alt material DL can replace a cached native texture at this path.
+    // Resolve it before the regular lookup can return that texture from cache.
+    ResourceMgr_PreloadAltWhenItExists(filePath);
+    auto res = std::dynamic_pointer_cast<Fast::DisplayList>(ResourceMgr_GetResourceByNameHandlingMQ(filePath));
+    if (res == nullptr || res->Instructions.empty()) {
+        return nullptr;
     }
-
-    return nullptr;
+    return reinterpret_cast<char*>(res->Instructions.data());
 }
 
 extern "C" char* ResourceMgr_LoadPlayerAnimByName(const char* animPath) {

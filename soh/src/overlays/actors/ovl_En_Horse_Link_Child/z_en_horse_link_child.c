@@ -5,6 +5,8 @@
  */
 
 #include "z_en_horse_link_child.h"
+#include "young_epona.h"
+#include "overlays/actors/ovl_En_Horse/z_en_horse.h"
 #include "objects/object_horse_link_child/object_horse_link_child.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
@@ -553,6 +555,21 @@ static u8 sEyeIndexOrder[] = { 0, 1, 2, 1 };
 void EnHorseLinkChild_Update(Actor* thisx, PlayState* play) {
     EnHorseLinkChild* this = (EnHorseLinkChild*)thisx;
     s32 pad;
+
+    if (play->sceneNum == SCENE_LON_LON_RANCH && gSaveContext.sceneLayer < 4) {
+        Actor* rideable = Horse_FindYoungEpona(play);
+        if (rideable != NULL) {
+            if (((EnHorse*)rideable)->action != ENHORSE_ACT_INACTIVE) {
+                Actor_Kill(thisx);
+                return;
+            }
+            // Let the riding actor consume the song first. Keep the native NPC
+            // if no valid horse spawn point is available in this scene setup.
+            if (DREG(53) != 0) {
+                return;
+            }
+        }
+    }
 
     sActionFuncs[this->action](this, play);
     Actor_MoveXZGravity(&this->actor);

@@ -3,6 +3,10 @@
 #include <assert.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ResourceManagerHelpers.h"
+#include "young_epona.h"
+#include "overlays/actors/ovl_En_Horse/z_en_horse.h"
+#include "objects/object_horse_link_child/rideable_young_epona.h"
 
 s32 Horse_CanSpawn(s32 scene) {
     s32 validScenes[] = { SCENE_HYRULE_FIELD, SCENE_LAKE_HYLIA, SCENE_GERUDO_VALLEY, SCENE_GERUDOS_FORTRESS,
@@ -16,6 +20,146 @@ s32 Horse_CanSpawn(s32 scene) {
     }
 
     return 0;
+}
+
+s32 Horse_CanSpawnYoung(s32 scene) {
+    // Child riding has its own outdoor gate; adult Epona keeps the original scene list.
+    switch (scene) {
+        case SCENE_HYRULE_FIELD:
+        case SCENE_LAKE_HYLIA:
+        case SCENE_GERUDO_VALLEY:
+        case SCENE_GERUDOS_FORTRESS:
+        case SCENE_LON_LON_RANCH:
+        case SCENE_KAKARIKO_VILLAGE:
+        case SCENE_GRAVEYARD:
+        case SCENE_ZORAS_RIVER:
+        case SCENE_KOKIRI_FOREST:
+        case SCENE_SACRED_FOREST_MEADOW:
+        case SCENE_ZORAS_FOUNTAIN:
+        case SCENE_LOST_WOODS:
+        case SCENE_DESERT_COLOSSUS:
+        case SCENE_HAUNTED_WASTELAND:
+        case SCENE_HYRULE_CASTLE:
+        case SCENE_DEATH_MOUNTAIN_TRAIL:
+        case SCENE_DEATH_MOUNTAIN_CRATER:
+        case SCENE_OUTSIDE_GANONS_CASTLE:
+        case SCENE_MARKET_ENTRANCE_DAY:
+        case SCENE_MARKET_ENTRANCE_NIGHT:
+        case SCENE_MARKET_ENTRANCE_RUINS:
+        case SCENE_MARKET_DAY:
+        case SCENE_MARKET_NIGHT:
+        case SCENE_MARKET_RUINS:
+        case SCENE_BACK_ALLEY_DAY:
+        case SCENE_BACK_ALLEY_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+s32 Horse_YoungEponaAssetsAvailable(void) {
+    const char* resources[] = { gYoungEponaStopAnim,          gYoungEponaRearAnim,          gYoungEponaLowJumpAnim,
+                                gYoungEponaHighJumpAnim,      gYoungEponaMountLeftAnim,     gYoungEponaMountRightAnim,
+                                gYoungEponaMountLeftAnimData, gYoungEponaMountRightAnimData };
+    for (s32 i = 0; i < ARRAY_COUNT(resources); i++) {
+        if (!ResourceMgr_FileExists(resources[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+s32 Horse_CanUseYoungEpona(void) {
+    return !LINK_IS_ADULT && CVarGetInteger(CVAR_ENHANCEMENT("RideYoungEpona"), 0) &&
+           CHECK_QUEST_ITEM(QUEST_SONG_EPONA) && INV_CONTENT(ITEM_OCARINA_FAIRY) != ITEM_NONE &&
+           (!IS_RANDO || (GameInteractor_Should(VB_HAVE_OCARINA_NOTE_D5, true) &&
+                          GameInteractor_Should(VB_HAVE_OCARINA_NOTE_B4, true) &&
+                          GameInteractor_Should(VB_HAVE_OCARINA_NOTE_A4, true))) &&
+           Horse_YoungEponaAssetsAvailable();
+}
+
+Actor* Horse_FindYoungEpona(PlayState* play) {
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
+        if (actor->id == ACTOR_EN_HORSE && actor->update != NULL && ((EnHorse*)actor)->type == HORSE_YOUNG_EPONA) {
+            return actor;
+        }
+    }
+    return NULL;
+}
+
+HorseData* Horse_GetActorSaveData(Actor* actor) {
+    if (actor != NULL && actor->id == ACTOR_EN_HORSE && ((EnHorse*)actor)->type == HORSE_YOUNG_EPONA) {
+        return &gSaveContext.ship.youngHorseData;
+    }
+    return &gSaveContext.horseData;
+}
+
+void Horse_SaveYoungEpona(PlayState* play, Actor* actor) {
+    if (LINK_IS_ADULT || actor == NULL || actor->id != ACTOR_EN_HORSE || ((EnHorse*)actor)->type != HORSE_YOUNG_EPONA ||
+        ((EnHorse*)actor)->action == ENHORSE_ACT_INACTIVE || !Horse_CanSpawnYoung(play->sceneNum)) {
+        return;
+    }
+    HorseData* data = &gSaveContext.ship.youngHorseData;
+    data->scene = play->sceneNum;
+    data->pos.x = actor->world.pos.x;
+    data->pos.y = actor->world.pos.y;
+    data->pos.z = actor->world.pos.z;
+    data->angle = actor->shape.rot.y;
+    gSaveContext.ship.youngHorseDataValid = true;
+}
+
+static Actor* Horse_SpawnYoungEpona(PlayState* play, Player* player, s32 mounted) {
+    if (!Horse_CanUseYoungEpona() || !Horse_CanSpawnYoung(play->sceneNum) || gSaveContext.sceneLayer > 3) {
+        return NULL;
+    }
+    Actor* actor = Horse_FindYoungEpona(play);
+    if (actor != NULL) {
+        return actor;
+    }
+    Vec3f pos = player->actor.world.pos;
+    s16 angle = player->actor.shape.rot.y;
+    s16 params = 2;
+    HorseData* saved = &gSaveContext.ship.youngHorseData;
+    if (mounted) {
+        params = 9;
+    } else if (gSaveContext.ship.youngHorseDataValid && saved->scene == play->sceneNum) {
+        pos.x = saved->pos.x;
+        pos.y = saved->pos.y;
+        pos.z = saved->pos.z;
+        angle = saved->angle;
+        params = 1;
+    }
+    actor = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_HORSE, pos.x, pos.y, pos.z, 0, angle, 0,
+                        params | ENHORSE_YOUNG_PARAM);
+    if (actor == NULL || actor->update == NULL) {
+        return NULL;
+    }
+    if (play->sceneNum == SCENE_GERUDOS_FORTRESS) {
+        actor->room = -1;
+    }
+    if (mounted) {
+        player->rideActor = actor;
+        Actor_MountHorse(play, player, actor);
+        Actor_RequestHorseCameraSetting(play, player);
+        Horse_SaveYoungEpona(play, actor);
+    }
+    return actor;
+}
+
+s32 Horse_TrySummonYoungEpona(PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    if (player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_DEAD)) {
+        return false;
+    }
+    if (Horse_SpawnYoungEpona(play, player, false) == NULL) {
+        return false;
+    }
+    // Horse initialization clears this register; signal only after spawning.
+    DREG(53) = 1;
+    return true;
 }
 
 void Horse_ResetHorseData(PlayState* play) {
@@ -248,7 +392,16 @@ void Horse_SetupInCutscene(PlayState* play, Player* player) {
 }
 
 void Horse_InitPlayerHorse(PlayState* play, Player* player) {
-    if (LINK_IS_ADULT) {
+    if (!LINK_IS_ADULT) {
+        s32 mounted = AREG(6) != 0;
+        Actor* horse = Horse_SpawnYoungEpona(play, player, mounted);
+        AREG(6) = 0;
+        if (mounted && horse == NULL) {
+            player->stateFlags1 &= ~PLAYER_STATE1_ON_HORSE;
+            player->actor.parent = NULL;
+            player->rideActor = NULL;
+        }
+    } else {
         if (!Horse_CanSpawn(gSaveContext.horseData.scene)) {
             osSyncPrintf(VT_COL(RED, WHITE));
             // "Horse_Set_Check():%d set spot is no good."

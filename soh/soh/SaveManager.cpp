@@ -30,6 +30,12 @@
 extern "C" SaveContext gSaveContext;
 using namespace std::string_literals;
 
+static void ResetYoungHorseSaveData() {
+    gSaveContext.ship.youngHorseData = {};
+    gSaveContext.ship.youngHorseData.scene = -1;
+    gSaveContext.ship.youngHorseDataValid = false;
+}
+
 void SaveManager::WriteSaveFile(const std::filesystem::path& savePath, const uintptr_t addr, void* dramAddr,
                                 const size_t size) {
     std::ofstream saveFile = std::ofstream(savePath, std::fstream::in | std::fstream::out | std::fstream::binary);
@@ -688,6 +694,7 @@ void SaveManager::InitFileImpl(bool isDebug) {
 }
 
 void SaveManager::InitFileNormal() {
+    ResetYoungHorseSaveData();
     gSaveContext.totalDays = 0;
     gSaveContext.bgsDayCount = 0;
 
@@ -1559,6 +1566,7 @@ void SaveManager::CreateDefaultGlobal() {
 }
 
 void SaveManager::LoadBaseVersion1() {
+    ResetYoungHorseSaveData();
     SaveManager::Instance->LoadData("entranceIndex", gSaveContext.entranceIndex);
     SaveManager::Instance->LoadData("linkAge", gSaveContext.linkAge);
     SaveManager::Instance->LoadData("cutsceneIndex", gSaveContext.cutsceneIndex);
@@ -1698,6 +1706,7 @@ void SaveManager::LoadBaseVersion1() {
 }
 
 void SaveManager::LoadBaseVersion2() {
+    ResetYoungHorseSaveData();
     SaveManager::Instance->LoadData("entranceIndex", gSaveContext.entranceIndex);
     SaveManager::Instance->LoadData("linkAge", gSaveContext.linkAge);
     SaveManager::Instance->LoadData("cutsceneIndex", gSaveContext.cutsceneIndex);
@@ -1907,6 +1916,7 @@ void SaveManager::LoadBaseVersion2() {
 }
 
 void SaveManager::LoadBaseVersion3() {
+    ResetYoungHorseSaveData();
     SaveManager::Instance->LoadData("entranceIndex", gSaveContext.entranceIndex);
     SaveManager::Instance->LoadData("linkAge", gSaveContext.linkAge);
     SaveManager::Instance->LoadData("cutsceneIndex", gSaveContext.cutsceneIndex);
@@ -2121,6 +2131,7 @@ void SaveManager::LoadBaseVersion3() {
 }
 
 void SaveManager::LoadBaseVersion4() {
+    ResetYoungHorseSaveData();
     SaveManager::Instance->LoadData("entranceIndex", gSaveContext.entranceIndex);
     SaveManager::Instance->LoadData("linkAge", gSaveContext.linkAge);
     SaveManager::Instance->LoadData("cutsceneIndex", gSaveContext.cutsceneIndex);
@@ -2299,6 +2310,16 @@ void SaveManager::LoadBaseVersion4() {
     SaveManager::Instance->LoadData("dogParams", gSaveContext.dogParams);
     SaveManager::Instance->LoadData("filenameLanguage", gSaveContext.ship.filenameLanguage);
     SaveManager::Instance->LoadData("maskMemory", gSaveContext.ship.maskMemory);
+    SaveManager::Instance->LoadStruct("youngHorseData", []() {
+        SaveManager::Instance->LoadData("valid", gSaveContext.ship.youngHorseDataValid);
+        SaveManager::Instance->LoadData("scene", gSaveContext.ship.youngHorseData.scene, static_cast<s16>(-1));
+        SaveManager::Instance->LoadStruct("pos", []() {
+            SaveManager::Instance->LoadData("x", gSaveContext.ship.youngHorseData.pos.x);
+            SaveManager::Instance->LoadData("y", gSaveContext.ship.youngHorseData.pos.y);
+            SaveManager::Instance->LoadData("z", gSaveContext.ship.youngHorseData.pos.z);
+        });
+        SaveManager::Instance->LoadData("angle", gSaveContext.ship.youngHorseData.angle);
+    });
 }
 
 void SaveManager::SaveBase(SaveContext* saveContext, int sectionID, bool fullSave) {
@@ -2469,6 +2490,16 @@ void SaveManager::SaveBase(SaveContext* saveContext, int sectionID, bool fullSav
     SaveManager::Instance->SaveData("dogParams", saveContext->dogParams);
     SaveManager::Instance->SaveData("filenameLanguage", saveContext->ship.filenameLanguage);
     SaveManager::Instance->SaveData("maskMemory", saveContext->ship.maskMemory);
+    SaveManager::Instance->SaveStruct("youngHorseData", [&]() {
+        SaveManager::Instance->SaveData("valid", saveContext->ship.youngHorseDataValid);
+        SaveManager::Instance->SaveData("scene", saveContext->ship.youngHorseData.scene);
+        SaveManager::Instance->SaveStruct("pos", [&]() {
+            SaveManager::Instance->SaveData("x", saveContext->ship.youngHorseData.pos.x);
+            SaveManager::Instance->SaveData("y", saveContext->ship.youngHorseData.pos.y);
+            SaveManager::Instance->SaveData("z", saveContext->ship.youngHorseData.pos.z);
+        });
+        SaveManager::Instance->SaveData("angle", saveContext->ship.youngHorseData.angle);
+    });
 }
 
 // Load a string into a char array based on size and ensuring it is null terminated when overflowed

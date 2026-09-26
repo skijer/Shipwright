@@ -1,0 +1,38 @@
+name: young-epona
+on:
+  pull_request:
+    paths:
+      - 'soh/**'
+      - 'scripts/diagnostics/**'
+      - 'libultraship'
+      - '.github/workflows/young-epona.yml'
+  push:
+    paths:
+      - 'soh/**'
+      - 'scripts/diagnostics/**'
+      - 'libultraship'
+      - '.github/workflows/young-epona.yml'
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential nlohmann-json3-dev
+      - name: Run child Epona and Alt material regressions
+        run: |
+          python3 -B scripts/diagnostics/run_young_epona_tests.py
+          python3 -B scripts/diagnostics/run_young_epona_actor_tests.py
+          python3 -B scripts/diagnostics/run_young_epona_player_tests.py
+          python3 -B scripts/diagnostics/run_young_epona_save_tests.py
+          python3 -B scripts/diagnostics/run_alt_segment_binding_tests.py
+          python3 -B scripts/diagnostics/test_young_epona_assets.py
