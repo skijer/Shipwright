@@ -467,6 +467,11 @@ bool SceneDB::RegisterScene(const std::string& id, const nlohmann::json& def) {
     scene.displayName = def.contains(K::kName) && def[K::kName].is_string() ? def[K::kName].get<std::string>() : id;
     scene.scenePath = SOH::Unbound::PathField(def, K::kScene);
     scene.titleCardTexture = SOH::Unbound::PathField(def, K::kTitleCardTexture);
+    // SOH [Unbound] the card is drawn from a texture pointer, which the renderer reads as a resource path only with
+    // the __OTR__ prefix (as an intro's cutscene, below); SPEC.md §7.1 writes the path without it
+    if (!scene.titleCardTexture.empty() && !scene.titleCardTexture.starts_with("__OTR__")) {
+        scene.titleCardTexture = "__OTR__" + scene.titleCardTexture;
+    }
     int64_t drawConfig = Field(def, K::kDrawConfig);
     if (scene.scenePath.empty()) {
         SPDLOG_ERROR("[Unbound] {}: scene '{}' has no \"{}\" path", K::kRegistryPath, id, K::kScene);

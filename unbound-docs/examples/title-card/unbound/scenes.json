@@ -1,0 +1,10 @@
+{
+  "example/forest_copy": {
+    "name": "Forest Copy",
+    "scene": "scenes/spot04/scene.json",
+    "titleCardTexture": "textures/g_pn_27/gHyruleFieldTitleCardENGTex",
+    "entrances": {
+      "main": { "spawn": 0, "showTitleCard": true }
+    }
+  }
+}

@@ -1087,13 +1087,20 @@ void TitleCard_InitPlaceName(PlayState* play, TitleCardContext* titleCtx, void* 
             texture = gLonLonRanchTitleCardENGTex;
             break;
         default:
-            titleCtx->texture = NULL;
-            return;
+            // SOH [Unbound] a custom scene's own card (SPEC.md §7.1 `titleCardTexture`). It has no case above, so it
+            // is read here; checked after this switch, it never showed.
+            texture = (void*)SceneDB_GetTitleCardTexture(play->sceneNum);
+            if (texture == NULL) {
+                titleCtx->texture = NULL;
+                return;
+            }
+            break;
     }
 
     static char newName[512];
 
-    if (gSaveContext.language != LANGUAGE_ENG) {
+    // SOH [Unbound] a custom scene's card is one texture for every language
+    if (gSaveContext.language != LANGUAGE_ENG && SceneDB_GetTitleCardTexture(play->sceneNum) == NULL) {
         size_t length = strlen(texture);
         strcpy(newName, texture);
         if (gSaveContext.language == LANGUAGE_FRA) {
@@ -1110,14 +1117,6 @@ void TitleCard_InitPlaceName(PlayState* play, TitleCardContext* titleCtx, void* 
             newName[length - 4] = 'N';
         }
         texture = newName;
-    }
-
-    // SOH [Unbound] custom scenes may register their own title card texture
-    {
-        const char* customTexture = SceneDB_GetTitleCardTexture(play->sceneNum);
-        if (customTexture != NULL) {
-            texture = (void*)customTexture;
-        }
     }
 
     titleCtx->texture = texture;

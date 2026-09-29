@@ -188,7 +188,10 @@ re-anchored on it, since the screen only scrolls to follow a line that starts in
 - MQ selection (`SceneDB::GetScenePath`) and the world-map-area / dungeon-mode range checks
   treat custom ids as "other". Correct for now.
 - Title cards for vanilla scenes still come from the 66-case `switch` in `TitleCard_InitPlaceName`;
-  custom scenes use the registry's `titleCardTexture`.
+  custom scenes use the registry's `titleCardTexture`, read in the switch's `default` and stored with the
+  `__OTR__` prefix. (It used to be read after the switch, whose `default` had already returned, so no custom
+  scene showed its card; fixture
+  [`examples/title-card`](./examples/title-card/README.md).) A custom card is one texture for every language.
 - Randomizer entrance shuffle still copies exactly `ENTR_MAX` entries; custom entrances are never
   shuffled. Randomizer is out of scope for Unbound.
 - Per-layer entrance overrides (`layers`, SPEC §7) are reserved but not read.

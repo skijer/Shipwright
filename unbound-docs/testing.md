@@ -24,6 +24,7 @@ pointer-level version of this class at compile time. Then play:
 | Walk the far edge of the Lake Hylia test mod | s32 mesh vertices, f32 matrices, grid scaling | draws, collides, no wrap |
 | Mount `examples/lake-hylia-reversed-water`, visit Lake Hylia as child and adult, then unmount it | `materialAnims` list, command 0x1A dispatch, segment bind after the draw config, `OTRPlay_InitScene` reset | water flows backwards and faster with the mod (a slightly lighter surface in the drained adult lake is expected, see the example README), vanilla without; smooth at high fps |
 | Mount `examples/lake-hylia-slow-water` alone, visit Lake Hylia, stay a few minutes | scroll-layer `xSpeed`/`ySpeed` (fractional rate, stateless offset; the wrap is hours away at this rate and is not covered) | the water drifts at a tenth of vanilla speed, evenly, with no jump; smooth at high fps |
+| Mount `examples/title-card` alone; arrive through `example/forest_copy/main` | `titleCardTexture` in `TitleCard_InitPlaceName`'s `default`, its `__OTR__` prefix in `SceneDB::RegisterScene` | as its README's Expected |
 
 Anything that "stops but doesn't react" (blocks but no bonk, water but no swim) is the signature:
 one half of the pair reads the widened bytes correctly and the other half does not.
