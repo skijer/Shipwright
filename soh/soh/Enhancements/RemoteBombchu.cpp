@@ -179,6 +179,13 @@ static void OnActorUpdate(void* refActor) {
     if (sState.activeChu->actionFunc != EnBomChu_Move)
         return;
 
+    // Code that moves this Bombchu itself would be fought by steering: release it
+    if (!GameInteractor_Should(VB_CONTROL_BOMBCHU, true, sState.activeChu)) {
+        StopControl(gPlayState);
+        sState.activeChu = nullptr;
+        return;
+    }
+
     // Start control when bombchu begins moving
     if (!sState.isActive) {
         StartControl(gPlayState);

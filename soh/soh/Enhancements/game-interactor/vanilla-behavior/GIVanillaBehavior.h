@@ -2552,6 +2552,16 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnBomChu`
+    // Whether Controllable Bombchus steers this moving Bombchu. False releases it to its own movement, for code that
+    // moves a Bombchu itself (a rail, a conveyor), which steering would fight.
+    VB_CONTROL_BOMBCHU,
+
+    // #### `result`
+    // ```c
     // false
     // ```
     // #### `args`
