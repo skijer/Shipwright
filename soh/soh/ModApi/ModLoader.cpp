@@ -5,13 +5,16 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include <SDL2/SDL_messagebox.h>
 
 #include <ship/Context.h>
 #include <ship/resource/File.h>
@@ -19,6 +22,8 @@
 #include <ship/resource/archive/Archive.h>
 #include <ship/resource/archive/ArchiveManager.h>
 
+#include "ModPermissions/ModPermissions.h"
+#include "ModTrust/ModTrust.h"
 #include "soh/ResourceManagerHelpers.h"
 
 #if defined(_WIN32)
@@ -131,6 +136,18 @@ class ModLibrary {
         return mHandle != nullptr;
     }
 
+    const void* GetBaseAddress() const {
+#if defined(_WIN32)
+        return mHandle;
+#elif defined(__APPLE__) || defined(__linux__)
+        Dl_info info;
+        void* symbol = GetFunction("ModSetApi");
+        return symbol != nullptr && dladdr(symbol, &info) != 0 ? info.dli_fbase : nullptr;
+#else
+        return nullptr;
+#endif
+    }
+
     void* GetFunction(const char* name) const {
         if (mHandle == nullptr) {
             return nullptr;
@@ -215,40 +232,134 @@ struct LoadedMod {
     bool compatibilityCached = false;
 };
 
+struct NativeModPackage {
+    std::string name;
+    std::string archivePath;
+    std::shared_ptr<std::vector<char>> binary;
+    std::vector<std::string> requiredResources;
+    std::vector<std::string> permissions;
+    ModProvenance provenance;
+};
+
 std::vector<std::unique_ptr<LoadedMod>> sLoadedMods;
+std::unordered_map<std::string, std::string> sTrustLabels;
+std::vector<std::string> sRefusedMods;
 
 std::filesystem::path GetCachePath() {
-    std::string modsPath = Ship::Context::LocateFileAcrossAppDirs("mods", AppShortName);
-    if (modsPath.empty()) {
-        modsPath = Ship::Context::GetPathRelativeToAppDirectory("mods", AppShortName);
-    }
-    return std::filesystem::path(modsPath) / ".unbound-modapi-cache.json";
+    return ModLoader_GetModsDirectory() / ".unbound-modapi-cache.json";
 }
 
-Json LoadCache(const std::filesystem::path& path) {
+Json LoadJsonObject(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {
         return Json::object();
     }
 
     try {
-        Json cache = Json::parse(input);
-        return cache.is_object() ? cache : Json::object();
+        Json object = Json::parse(input);
+        return object.is_object() ? object : Json::object();
     } catch (const std::exception& exception) {
-        SPDLOG_WARN("[ModApi] Ignoring compatibility cache '{}': {}", path.string(), exception.what());
+        SPDLOG_WARN("[ModApi] Ignoring '{}': {}", path.string(), exception.what());
         return Json::object();
     }
 }
 
-void SaveCache(const std::filesystem::path& path, const Json& cache) {
+void SaveJsonObject(const std::filesystem::path& path, const Json& object) {
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     std::ofstream output(path, std::ios::trunc);
     if (!output) {
-        SPDLOG_WARN("[ModApi] Could not write compatibility cache '{}'", path.string());
+        SPDLOG_WARN("[ModApi] Could not write '{}'", path.string());
         return;
     }
-    output << cache.dump(2) << '\n';
+    output << object.dump(2) << '\n';
+}
+
+#if defined(UNBOUND_MOD_POLICY_ASK)
+enum class UnverifiedModChoice : int {
+    Refuse,
+    LoadOnce,
+    LoadAlways,
+};
+
+std::filesystem::path GetApprovalsPath() {
+    return ModLoader_GetModsDirectory() / ".unbound-mod-approvals.json";
+}
+
+std::string DescribeUnverifiedMod(const NativeModPackage& package) {
+    std::string message = "'" + package.name + "' wants to run native code on this computer, and Unbound's " +
+                          "sign-mod workflow did not sign it (" + package.provenance.problem + ").\n\n";
+    const std::vector<std::string> imports = ModTrust_ListUnusualImports(*package.binary);
+    if (!imports.empty()) {
+        message += "It also calls into the system beyond what mods need:\n";
+        for (const std::string& import : imports) {
+            message += "  " + import + "\n";
+        }
+        message += "\n";
+    }
+    return message + "Content hash " + package.provenance.contentHash.substr(0, 16) +
+           "\n\nOnly load it if you trust whoever gave it to you.";
+}
+
+UnverifiedModChoice AskAboutUnverifiedMod(const NativeModPackage& package) {
+    const std::string message = DescribeUnverifiedMod(package);
+    const SDL_MessageBoxButtonData buttons[] = {
+        { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,
+          static_cast<int>(UnverifiedModChoice::Refuse), "Don't load" },
+        { 0, static_cast<int>(UnverifiedModChoice::LoadOnce), "Load once" },
+        { 0, static_cast<int>(UnverifiedModChoice::LoadAlways), "Always load this version" },
+    };
+    const SDL_MessageBoxData box = {
+        SDL_MESSAGEBOX_WARNING, nullptr, "Unsigned mod", message.c_str(), SDL_arraysize(buttons), buttons, nullptr,
+    };
+    int choice = static_cast<int>(UnverifiedModChoice::Refuse);
+    if (SDL_ShowMessageBox(&box, &choice) != 0 || choice < 0) {
+        return UnverifiedModChoice::Refuse;
+    }
+    return static_cast<UnverifiedModChoice>(choice);
+}
+
+bool CanRunUnverifiedMod(const NativeModPackage& package) {
+    static Json approvals = LoadJsonObject(GetApprovalsPath());
+    if (approvals.contains(package.provenance.contentHash)) {
+        return true;
+    }
+
+    const UnverifiedModChoice choice = AskAboutUnverifiedMod(package);
+    if (choice == UnverifiedModChoice::LoadAlways) {
+        approvals[package.provenance.contentHash] = package.name;
+        SaveJsonObject(GetApprovalsPath(), approvals);
+    }
+    return choice != UnverifiedModChoice::Refuse;
+}
+
+bool CanRunMod(const NativeModPackage& package) {
+    return package.provenance.state == ModTrustState::Verified || CanRunUnverifiedMod(package);
+}
+#elif defined(UNBOUND_MOD_POLICY_SIGNED)
+bool CanRunMod(const NativeModPackage& package) {
+    if (package.provenance.state == ModTrustState::Verified) {
+        return true;
+    }
+    sRefusedMods.push_back(package.name + ": " + ModTrust_Describe(package.provenance));
+    return false;
+}
+#else
+bool CanRunMod(const NativeModPackage&) {
+    return true;
+}
+#endif
+
+void ReportRefusedMods() {
+    if (sRefusedMods.empty()) {
+        return;
+    }
+    std::string message = "This build of Unbound only runs native mods signed by its sign-mod workflow. "
+                          "These were not loaded:\n\n";
+    for (const std::string& refused : sRefusedMods) {
+        message += "- " + refused + "\n";
+    }
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "Mods not loaded", message.c_str(), nullptr);
 }
 
 bool ReadManifest(const std::shared_ptr<Ship::Archive>& archive, Json& manifest) {
@@ -261,53 +372,78 @@ bool ReadManifest(const std::shared_ptr<Ship::Archive>& archive, Json& manifest)
     return manifest.is_object();
 }
 
-std::unique_ptr<LoadedMod> LoadLibraryFromArchive(const std::shared_ptr<Ship::Archive>& archive,
-                                                  const std::string& platform) {
+std::vector<std::string> ReadStringArray(const Json& manifest, const char* key) {
+    std::vector<std::string> values;
+    const auto array = manifest.find(key);
+    if (array == manifest.end() || !array->is_array()) {
+        return values;
+    }
+    for (const Json& value : *array) {
+        if (value.is_string()) {
+            values.push_back(value.get<std::string>());
+        }
+    }
+    return values;
+}
+
+std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship::Archive>& archive,
+                                                     const std::string& platform) {
     Json manifest;
     if (!ReadManifest(archive, manifest) || !manifest.contains("binaries") || !manifest["binaries"].is_object()) {
-        return nullptr;
+        return std::nullopt;
     }
 
     auto binaryEntry = manifest["binaries"].find(platform);
     if (binaryEntry == manifest["binaries"].end() || !binaryEntry->is_string()) {
-        return nullptr;
+        return std::nullopt;
     }
 
+    NativeModPackage package;
     const std::string binaryPath = binaryEntry->get<std::string>();
     const std::string fallbackName = std::filesystem::path(archive->GetPath()).stem().string();
-    const std::string name = manifest.value("name", fallbackName);
+    package.name = manifest.value("name", fallbackName);
+    package.archivePath = archive->GetPath();
     auto file = archive->LoadFile(binaryPath);
     if (file == nullptr || !file->IsLoaded || file->Buffer == nullptr) {
-        SPDLOG_ERROR("[ModApi] Could not read '{}' from mod '{}'", binaryPath, name);
-        return nullptr;
+        SPDLOG_ERROR("[ModApi] Could not read '{}' from mod '{}'", binaryPath, package.name);
+        return std::nullopt;
     }
+    package.binary = file->Buffer;
+    package.requiredResources = ReadStringArray(manifest, "requires");
+    package.permissions = ReadStringArray(manifest, "permissions");
+    package.provenance = ModTrust_Verify(*archive);
+    return package;
+}
 
+std::string GetTrustKey(const ModProvenance& provenance) {
+    return provenance.state == ModTrustState::Verified ? "repo:" + provenance.repository
+                                                       : "hash:" + provenance.contentHash;
+}
+
+std::unique_ptr<LoadedMod> LoadNativeMod(const NativeModPackage& package) {
     auto mod = std::make_unique<LoadedMod>();
-    mod->name = name;
-    mod->archivePath = archive->GetPath();
-    if (manifest.contains("requires") && manifest["requires"].is_array()) {
-        for (const Json& required : manifest["requires"]) {
-            if (required.is_string()) {
-                mod->requiredResources.push_back(required.get<std::string>());
-            }
-        }
-    }
-    mod->binaryHash = Hex(HashBytes(*file->Buffer));
-    if (!mod->library.Load(*file->Buffer)) {
-        SPDLOG_ERROR("[ModApi] Native library for mod '{}' could not be loaded", name);
+    mod->name = package.name;
+    mod->archivePath = package.archivePath;
+    mod->requiredResources = package.requiredResources;
+    mod->binaryHash = Hex(HashBytes(*package.binary));
+    if (!mod->library.Load(*package.binary)) {
+        SPDLOG_ERROR("[ModApi] Native library for mod '{}' could not be loaded", package.name);
         return nullptr;
     }
+    ModPermissions_RegisterMod({ package.name, ModTrust_Describe(package.provenance), GetTrustKey(package.provenance),
+                                 ModPermissions_Parse(package.permissions, package.name),
+                                 mod->library.GetBaseAddress() });
 
     auto setApi = reinterpret_cast<SOHModSetApiFunc>(mod->library.GetFunction("ModSetApi"));
     if (setApi == nullptr) {
-        SPDLOG_ERROR("[ModApi] Mod '{}' exports no ModSetApi", name);
+        SPDLOG_ERROR("[ModApi] Mod '{}' exports no ModSetApi", package.name);
         return nullptr;
     }
 
     mod->getRequirements = reinterpret_cast<SOHModGetRequirementsFunc>(mod->library.GetFunction("ModGetRequirements"));
     mod->init = reinterpret_cast<SOHModInitFunc>(mod->library.GetFunction("ModInit"));
 
-    CurrentModScope currentMod(name);
+    CurrentModScope currentMod(package.name);
     setApi(ModApi_Get());
     return mod;
 }
@@ -377,17 +513,12 @@ void ModLoader_LoadMods() {
     }
 
     auto archives = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
-    std::unordered_set<std::string> modNames;
+    std::vector<NativeModPackage> packages;
     for (const auto& archive : *archives) {
         try {
-            auto mod = LoadLibraryFromArchive(archive, platform);
-            if (mod != nullptr) {
-                if (!modNames.insert(mod->name).second) {
-                    SPDLOG_ERROR("[ModApi] Native mod name '{}' is duplicated; ignoring '{}'", mod->name,
-                                 mod->archivePath);
-                    continue;
-                }
-                sLoadedMods.push_back(std::move(mod));
+            auto package = ReadNativeModPackage(archive, platform);
+            if (package) {
+                packages.push_back(std::move(*package));
             }
         } catch (const std::exception& exception) {
             std::string message =
@@ -396,9 +527,37 @@ void ModLoader_LoadMods() {
         }
     }
 
+    std::unordered_set<std::string> modNames;
+    for (const NativeModPackage& package : packages) {
+        if (!modNames.insert(package.name).second) {
+            SPDLOG_ERROR("[ModApi] Native mod name '{}' is duplicated; ignoring '{}'", package.name,
+                         package.archivePath);
+            continue;
+        }
+
+        const bool allowed = CanRunMod(package);
+        const std::string trust = ModTrust_Describe(package.provenance);
+        sTrustLabels[package.archivePath] = allowed ? trust : trust + ", not loaded";
+        if (!allowed) {
+            SPDLOG_WARN("[ModApi] Not loading mod '{}' ({})", package.name, trust);
+            continue;
+        }
+
+        SPDLOG_INFO("[ModApi] Mod '{}' is {}", package.name, trust);
+        try {
+            auto mod = LoadNativeMod(package);
+            if (mod != nullptr) {
+                sLoadedMods.push_back(std::move(mod));
+            }
+        } catch (const std::exception& exception) {
+            SPDLOG_ERROR("[ModApi] Mod '{}' failed to load: {}", package.name, exception.what());
+        }
+    }
+    ReportRefusedMods();
+
     const std::string environment = GetEnvironmentFingerprint();
     const std::filesystem::path cachePath = GetCachePath();
-    const Json previousCache = LoadCache(cachePath);
+    const Json previousCache = LoadJsonObject(cachePath);
     Json nextCache = Json::object();
 
     for (const auto& mod : sLoadedMods) {
@@ -456,5 +615,18 @@ void ModLoader_LoadMods() {
         }
     }
 
-    SaveCache(cachePath, nextCache);
+    SaveJsonObject(cachePath, nextCache);
+}
+
+std::filesystem::path ModLoader_GetModsDirectory() {
+    std::string modsPath = Ship::Context::LocateFileAcrossAppDirs("mods", AppShortName);
+    if (modsPath.empty()) {
+        modsPath = Ship::Context::GetPathRelativeToAppDirectory("mods", AppShortName);
+    }
+    return std::filesystem::path(modsPath);
+}
+
+std::string ModLoader_DescribeTrust(const std::string& archivePath) {
+    auto label = sTrustLabels.find(archivePath);
+    return label == sTrustLabels.end() ? std::string() : label->second;
 }

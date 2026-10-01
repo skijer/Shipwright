@@ -6,6 +6,7 @@
 #include <ship/utils/StringHelper.h>
 
 #include "mod_menu.h"
+#include "soh/ModApi/ModApi.h"
 #include "soh/OTRGlobals.h"
 #include "soh/resource/type/Skeleton.h"
 #include "soh/SohGui/MenuTypes.h"
@@ -182,6 +183,9 @@ void UpdateModFiles(bool init = false, bool reset = false) {
     bool changed = false;
     std::string modsPath = ModsFolder();
     if (!modsPath.empty()) {
+        if (init) {
+            UserFiles_ApplyPending(modsPath);
+        }
         changed = ScanModsFolder(modsPath);
         // Only a scan can tell a deleted mod from one this install never had. Pruning used to
         // happen only while loading archives; it happens before the list is drawn too, since
@@ -227,8 +231,13 @@ void DrawModInfo(const std::string& mod) {
     auto path = filePaths.find(mod);
     if (path == filePaths.end()) {
         ImGui::Text("%s (missing)", mod.c_str());
-    } else {
-        ImGui::Text("%s", path->second.filename().generic_string().c_str());
+        return;
+    }
+    ImGui::Text("%s", path->second.filename().generic_string().c_str());
+    const std::string trust = ModLoader_DescribeTrust(path->second.generic_string());
+    if (!trust.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("(%s)", trust.c_str());
     }
 }
 

@@ -27,6 +27,21 @@ bool O2rExtractor_Run(const SOHO2rExtractRequest* request);
 
 #ifdef __cplusplus
 }
+
+#include <filesystem>
+#include <string>
+
+struct O2rZapdJob {
+    std::filesystem::path romPath;
+    std::filesystem::path assetsDir;
+    std::string xmlDir;
+    std::string configPath;
+    std::string filelistDir;
+    std::filesystem::path outputPath;
+};
+
+uint32_t O2rExtractor_ExportMatching(const std::string& searchMask, const std::filesystem::path& destination);
+bool O2rExtractor_RunZapd(const O2rZapdJob& job);
 #endif
 
 #endif

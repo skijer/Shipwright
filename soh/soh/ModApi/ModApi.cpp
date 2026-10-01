@@ -293,6 +293,16 @@ SOHModApi BuildTable() {
     api.FindService = FindService;
     api.RegisterMessage = ModMessages_Register;
     api.GetMessageId = ModMessages_GetId;
+    api.OpenMicrophone = Microphone_Open;
+    api.ReadMicrophone = Microphone_Read;
+    api.CloseMicrophone = Microphone_Close;
+    api.PickUserFile = UserFiles_Pick;
+    api.FreeUserFile = UserFiles_Free;
+    api.SaveToModsFolder = UserFiles_SaveToMods;
+    api.ExtractRomToModsFolder = UserFiles_ExtractRomToMods;
+    api.AskPlayer = ModDialogs_Ask;
+    api.TellPlayer = ModDialogs_Tell;
+    api.RequestRestart = ModDialogs_RequestRestart;
     return api;
 }
 
@@ -313,6 +323,7 @@ void ModApi_Init() {
     VanillaItems_Init();
     TimeControl_Init();
     Timers_Init();
+    Microphone_Init();
     ModLoader_LoadMods();
 }
 

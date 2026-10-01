@@ -12,6 +12,8 @@
 #include <spdlog/spdlog.h>
 #include <libultraship/libultraship.h>
 
+#include "soh/ModApi/ModPermissions/ModPermissions.h"
+
 extern "C" {
 #include "z64.h"
 #include "macros.h"
@@ -21,6 +23,27 @@ extern "C" {
 extern "C" int zapd_report(int argc, char** argv, std::atomic<size_t>* extractCount, std::atomic<size_t>* totalExtract);
 
 namespace {
+
+// Mods reach these writers through the API table, which no binary scan can see, so the host confines them.
+bool IsInsideGameDirectories(const std::filesystem::path& path) {
+    std::error_code error;
+    const std::filesystem::path target = std::filesystem::weakly_canonical(std::filesystem::absolute(path), error);
+    if (error) {
+        return false;
+    }
+    for (const std::string& root : { Ship::Context::GetAppBundlePath(), Ship::Context::GetAppDirectoryPath("soh") }) {
+        const std::filesystem::path base = std::filesystem::weakly_canonical(root, error);
+        if (error || base.empty()) {
+            continue;
+        }
+        const std::filesystem::path relative = target.lexically_relative(base);
+        if (!relative.empty() && *relative.begin() != "..") {
+            return true;
+        }
+    }
+    SPDLOG_ERROR("[O2rExtractor] Refusing to write outside the game folders: '{}'", path.string());
+    return false;
+}
 
 bool WriteFile(const std::filesystem::path& path, const std::vector<char>& data) {
     std::error_code error;
@@ -49,25 +72,31 @@ int RunZapdWithoutThrowing(int argc, const char** argv) {
     return -1;
 }
 
+bool CanModWriteFiles(const ModIdentity* mod, const std::string& message) {
+    if (mod == nullptr || !ModPermissions_HasDeclared(*mod, ModPermission::Files)) {
+        return false;
+    }
+    return ModPermissions_ConfirmNow(*mod, "Write files", message);
+}
+
 } // namespace
 
-uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinationDir) {
-    if (searchMask == nullptr || destinationDir == nullptr) {
-        return 0;
-    }
+uint32_t O2rExtractor_ExportMatching(const std::string& searchMask, const std::filesystem::path& destination) {
     auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
     auto paths = archiveManager->ListFiles(searchMask);
-    const std::filesystem::path destination(destinationDir);
     uint32_t written = 0;
 
     for (const std::string& path : *paths) {
+        if (!IsInsideGameDirectories(destination / path)) {
+            continue;
+        }
         auto file = archiveManager->LoadFile(path);
         if (file == nullptr || !file->IsLoaded || file->Buffer == nullptr) {
             SPDLOG_WARN("[O2rExtractor] Could not read '{}' from the mounted archives", path);
             continue;
         }
         if (!WriteFile(destination / path, *file->Buffer)) {
-            SPDLOG_ERROR("[O2rExtractor] Could not write '{}' under '{}'", path, destinationDir);
+            SPDLOG_ERROR("[O2rExtractor] Could not write '{}' under '{}'", path, destination.string());
             continue;
         }
         written++;
@@ -75,15 +104,13 @@ uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinatio
     return written;
 }
 
-bool O2rExtractor_Run(const SOHO2rExtractRequest* request) {
-    if (!IsValidRequest(request)) {
-        SPDLOG_ERROR("[O2rExtractor] Invalid extraction request");
+bool O2rExtractor_RunZapd(const O2rZapdJob& job) {
+    const std::filesystem::path romPath = std::filesystem::absolute(job.romPath);
+    const std::filesystem::path outputPath = std::filesystem::absolute(job.outputPath);
+    const std::filesystem::path assetsDir = std::filesystem::absolute(job.assetsDir);
+    if (!IsInsideGameDirectories(outputPath) || !IsInsideGameDirectories(assetsDir)) {
         return false;
     }
-
-    const std::filesystem::path romPath = std::filesystem::absolute(request->romPath);
-    const std::filesystem::path outputPath = std::filesystem::absolute(request->outputPath);
-    const std::filesystem::path assetsDir = std::filesystem::absolute(request->assetsDir);
     if (!std::filesystem::exists(romPath) || !std::filesystem::is_directory(assetsDir)) {
         SPDLOG_ERROR("[O2rExtractor] '{}' or '{}' is missing", romPath.string(), assetsDir.string());
         return false;
@@ -103,11 +130,11 @@ bool O2rExtractor_Run(const SOHO2rExtractRequest* request) {
                                     "." + std::to_string(gBuildVersionPatch);
     const char* argv[] = {
         "ZAPD",      "ed",
-        "-i",        request->xmlDir,
+        "-i",        job.xmlDir.c_str(),
         "-b",        romArgument.c_str(),
-        "-fl",       request->filelistDir,
+        "-fl",       job.filelistDir.c_str(),
         "-gsf",      "0",
-        "-rconf",    request->configPath,
+        "-rconf",    job.configPath.c_str(),
         "-se",       "OTR",
         "--otrfile", archiveName.c_str(),
         "--portVer", portVersion.c_str(),
@@ -132,4 +159,29 @@ bool O2rExtractor_Run(const SOHO2rExtractRequest* request) {
 
     std::filesystem::current_path(previousDir, error);
     return extracted;
+}
+
+uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinationDir) {
+    const ModIdentity* mod = ModPermissions_FindCaller(MOD_CALLER_ADDRESS());
+    if (searchMask == nullptr || destinationDir == nullptr) {
+        return 0;
+    }
+    if (!CanModWriteFiles(mod, std::string("wants to copy files out of its archive into '") + destinationDir + "'.")) {
+        return 0;
+    }
+    return O2rExtractor_ExportMatching(searchMask, destinationDir);
+}
+
+bool O2rExtractor_Run(const SOHO2rExtractRequest* request) {
+    const ModIdentity* mod = ModPermissions_FindCaller(MOD_CALLER_ADDRESS());
+    if (!IsValidRequest(request)) {
+        SPDLOG_ERROR("[O2rExtractor] Invalid extraction request");
+        return false;
+    }
+    if (!CanModWriteFiles(mod, std::string("wants to build '") + request->outputPath + "' out of the ROM '" +
+                                   request->romPath + "'.")) {
+        return false;
+    }
+    return O2rExtractor_RunZapd({ request->romPath, request->assetsDir, request->xmlDir, request->configPath,
+                                  request->filelistDir, request->outputPath });
 }
