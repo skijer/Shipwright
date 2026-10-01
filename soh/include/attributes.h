@@ -9,4 +9,10 @@
 #define FALLTHROUGH __attribute__((fallthrough))
 #define NORETURN    __attribute__((noreturn))
 
+#if defined(_WIN32) && defined(UNBOUND_MOD)
+#define HOST_DATA __declspec(dllimport)
+#else
+#define HOST_DATA
+#endif
+
 #endif

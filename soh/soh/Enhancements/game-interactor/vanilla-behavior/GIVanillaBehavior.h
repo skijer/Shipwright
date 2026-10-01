@@ -453,7 +453,7 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // true
+    // !LINK_IS_ADULT
     // ```
     // #### `args`
     // - None
@@ -2011,6 +2011,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_OPEN_PAUSE_MENU,
+
+    // #### `result`
+    // ```c
     // false
     // ```
     // #### `args`
@@ -2467,6 +2475,15 @@ typedef enum {
     // #### `args`
     // - `*DemoIm`
     VB_PLAY_ZELDAS_LULLABY_CS,
+
+    // #### `result`
+    // ```c
+    // (player->actor.scale.y >= 0.0f) && !(player->stateFlags1 & PLAYER_STATE1_DEAD) &&
+    //     (Player_ActionToMagicSpell(player, player->itemAction) < 0)
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_ADJUST_LEGS_TO_FLOOR,
 
     // #### `result`
     // ```c
@@ -4150,4 +4167,29 @@ typedef enum {
     // - none
     VB_EMPTY_BOTTLE_OI,
 
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*int32_t (strength)`
+    VB_USE_STRENGTH_UPGRADE,
+
+    // #### `result`
+    // ```c
+    // Flags_GetRandomizerInf(RAND_INF_CAN_SWIM)
+    // ```
+    // #### `args`
+    // - None
+    VB_SWIM,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_ALLOW_MIDAIR_AIM,
+
+    VB_MOD_BASE = 10000
 } GIVanillaBehavior;

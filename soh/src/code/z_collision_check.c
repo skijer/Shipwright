@@ -2,6 +2,7 @@
 #include "vt.h"
 #include "overlays/effects/ovl_Effect_Ss_HitMark/z_eff_ss_hitmark.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 
@@ -1276,6 +1277,7 @@ s32 CollisionCheck_SetAC(PlayState* play, CollisionCheckContext* colChkCtx, Coll
     }
     index = colChkCtx->colACCount;
     colChkCtx->colAC[colChkCtx->colACCount++] = collider;
+    GameInteractor_ExecuteOnCollisionRegisterAC(collider);
     return index;
 }
 
@@ -3024,6 +3026,7 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         damage = tbl->table[i] & 0xF;
         collider->actor->colChkInfo.damageEffect = tbl->table[i] >> 4 & 0xF;
     }
+    GameInteractor_ExecuteOnCollisionResolveDamage(collider->actor, info->acHitInfo, &damage);
     if (!(collider->acFlags & AC_HARD)) {
         collider->actor->colChkInfo.damage += damage;
     }
@@ -3654,6 +3657,8 @@ u8 CollisionCheck_GetSwordDamage(s32 dmgFlags, PlayState* play) {
     if (CVarGetInteger(CVAR_ENHANCEMENT("IvanCoopModeEnabled"), 0)) {
         damage *= GET_PLAYER(play)->ivanDamageMultiplier;
     }
+
+    GameInteractor_ExecuteOnResolveSwordDamage(play, dmgFlags, &damage);
 
     KREG(7) = damage;
     return damage;

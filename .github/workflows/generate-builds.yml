@@ -18,6 +18,9 @@ on:
     tags:
       - '*celshade*'
       - '*unbound*'
+  pull_request:
+    paths-ignore:
+      - 'mod-sdk/mods/**'
   workflow_dispatch:
     inputs:
       tag:
@@ -53,7 +56,7 @@ jobs:
 
   generate-soh-otr:
     # The build jobs below need this one, so skipping it on a tag push skips them too.
-    if: github.ref_type == 'branch'
+    if: github.ref_type != 'tag'
     runs-on: ubuntu-22.04
     steps:
     - name: Git Checkout
@@ -135,7 +138,7 @@ jobs:
     - name: Build SoH
       run: |
         cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DBUILD_REMOTE_CONTROL=1
-        cmake --build build-cmake -j
+        cmake --build build-cmake --parallel 3
         # Spotlight indexing the disk image CPack just made keeps hdiutil from
         # unmounting it, failing the build with "Resource busy"
         sudo mdutil -a -i off || true
@@ -299,8 +302,16 @@ jobs:
         (cd build-windows && cpack)
         cd ..
         mv _packages/*.zip _packages/soh-windows.zip
+    - name: Upload mod SDK import library
+      uses: actions/upload-artifact@v7
+      with:
+        name: unbound-mod-sdk-windows
+        if-no-files-found: error
+        path: x64/Release/soh.lib
     - name: Unzip package
       run: Expand-Archive -Path _packages/soh-windows.zip -DestinationPath soh-windows
+    - name: Ship the mod import library next to soh.exe
+      run: Copy-Item -Path x64/Release/soh.lib -Destination soh-windows/soh.lib
     - name: Upload build
       uses: actions/upload-artifact@v7
       with:
@@ -360,6 +371,7 @@ jobs:
         cp "rel/mac/SoH.dmg" "dist/SoH-${TAG}-Mac.dmg"
         cp "rel/linux/soh.appimage" "dist/SoH-${TAG}-Linux.appimage"
         (cd rel/windows && zip -r "../../dist/SoH-${TAG}-Win64.zip" .)
+        cp "rel/windows/soh.lib" "dist/soh.lib"
     - name: Publish GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}

@@ -14,6 +14,8 @@
 #include "soh/SohGui/SohMenu.h"
 #include "soh/ShipInit.hpp"
 #include "z64scene.h"
+#include "soh/SohGui/SohGui.hpp"
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 
 extern "C" {
 #include <z64.h>
@@ -47,6 +49,8 @@ typedef struct EnemyEntry {
     const char* name;
     s16 id;
     s16 params;
+    u32 customFlags;
+    s16 spawnHeight;
 } EnemyEntry;
 
 // clang-format off
@@ -308,12 +312,16 @@ static bool IsTimedRoom(bool mq, s16 sceneNum, s16 roomNum) {
 
 static bool IsEnemyAllowedToSpawn(s16 sceneNum, s16 roomNum, EnemyEntry enemy, s16 posY, bool fromBari) {
     bool mq = ResourceMgr_IsSceneMasterQuest(sceneNum);
+    bool excludedFromClearRooms = IsExcludedFromClearRooms(enemy.id, enemy.params) ||
+                                  (enemy.customFlags & SOH_ACTOR_ENEMY_NOT_IN_CLEAR_ROOMS);
+    bool excludedFromTimedRooms = excludedFromClearRooms || IsExcludedFromTimedRooms(enemy.id, enemy.params) ||
+                                  (enemy.customFlags & SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS);
 
-    if (IsExcludedFromClearRooms(enemy.id, enemy.params) && IsClearRoom(mq, sceneNum, roomNum)) {
+    if (excludedFromClearRooms && IsClearRoom(mq, sceneNum, roomNum)) {
         return false;
     }
 
-    if (IsExcludedFromTimedRooms(enemy.id, enemy.params) && IsTimedRoom(mq, sceneNum, roomNum)) {
+    if (excludedFromTimedRooms && IsTimedRoom(mq, sceneNum, roomNum)) {
         return false;
     }
 
@@ -370,17 +378,31 @@ static bool IsEnemyAllowedToSpawn(s16 sceneNum, s16 roomNum, EnemyEntry enemy, s
 
 static std::vector<EnemyEntry> selectedEnemyList;
 
+static std::string GetCustomEnemyCvar(const SOHCustomEnemy* enemy) {
+    return std::string(CVAR_ENHANCEMENT("RandomizedEnemyList.Mod.")) + enemy->key;
+}
+
+static void AddSelectedCustomEnemies(bool selectAll) {
+    for (uint32_t i = 0; i < ActorRegistry_GetEnemyCount(); i++) {
+        const SOHCustomEnemy* enemy = ActorRegistry_GetEnemyAt(i);
+
+        if (selectAll || CVarGetInteger(GetCustomEnemyCvar(enemy).c_str(), 1)) {
+            selectedEnemyList.push_back(
+                { nullptr, enemy->name, enemy->actorId, enemy->params, enemy->flags, enemy->spawnHeight });
+        }
+    }
+}
+
 static void UpdateSelectedEnemies() {
     selectedEnemyList.clear();
+    bool selectAll = CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemyList.All"), 0);
 
     for (int i = 0; i < ARRAY_COUNT(randomizedEnemySpawnTable); i++) {
-        if (CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemyList.All"), 0)) {
-            selectedEnemyList.push_back(randomizedEnemySpawnTable[i]);
-        } else if (CVarGetInteger(randomizedEnemySpawnTable[i].cvar, 1)) {
+        if (selectAll || CVarGetInteger(randomizedEnemySpawnTable[i].cvar, 1)) {
             selectedEnemyList.push_back(randomizedEnemySpawnTable[i]);
         }
     }
-
+    AddSelectedCustomEnemies(selectAll);
     if (selectedEnemyList.size() == 0) {
         selectedEnemyList.push_back(randomizedEnemySpawnTable[0]);
     }
@@ -418,6 +440,10 @@ static EnemyEntry GetRandomizedEnemyEntry(u32 seed, PlayState* play, s16 posY, b
 
 static bool IsEnemyFoundToRandomize(s16 sceneNum, s16 roomNum, s16 actorId, s16 params, f32 posX) {
     u32 isMQ = ResourceMgr_IsSceneMasterQuest(sceneNum);
+
+    if (ActorRegistry_FindEnemyById(actorId) != nullptr) {
+        return true;
+    }
 
     for (int i = 0; i < ARRAY_COUNT(enemiesToRandomize); i++) {
         if (actorId != enemiesToRandomize[i]) {
@@ -587,6 +613,7 @@ static u8 GetRandomizedEnemy(PlayState* play, s16* actorId, s16* posX, s16* posY
 
         // Straighten out enemies so they aren't flipped on their sides when the original spawn is.
         *rotX = 0;
+        *posY = *posY + randomEnemy.spawnHeight;
 
         switch (*actorId) {
             // When spawning big jellyfish, spawn it up high.
@@ -1182,6 +1209,23 @@ static const std::map<s32, const char*> enemyRandomizerModes = {
     { ENEMY_RANDOMIZER_RANDOM_SEEDED, "Random (Seeded)" },
 };
 
+static void DrawCustomEnemyCheckboxes(WidgetInfo& info) {
+    if (!CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemies"), 0)) {
+        return;
+    }
+    UIWidgets::CheckboxOptions options = UIWidgets::CheckboxOptions().DefaultValue(true).Color(THEME_COLOR);
+
+    options.disabled = CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemyList.All"), 0);
+    options.disabledTooltip = "These options are disabled because \"Select All Enemies\" is enabled.";
+    for (uint32_t i = 0; i < ActorRegistry_GetEnemyCount(); i++) {
+        const SOHCustomEnemy* enemy = ActorRegistry_GetEnemyAt(i);
+
+        if (UIWidgets::CVarCheckbox(enemy->name, GetCustomEnemyCvar(enemy).c_str(), options)) {
+            UpdateSelectedEnemies();
+        }
+    }
+}
+
 void RegisterEnemyRandomizerWidgets() {
     WidgetPath path = { "Enhancements", "Extra Modes", SECTION_COLUMN_2 };
 
@@ -1242,6 +1286,8 @@ void RegisterEnemyRandomizerWidgets() {
             })
             .Callback([](WidgetInfo& info) { UpdateSelectedEnemies(); });
     }
+
+    SohGui::mSohMenu->AddWidget(path, "Mod Enemies", WIDGET_CUSTOM).CustomFunction(DrawCustomEnemyCheckboxes);
 }
 
 // Remove object dependency for Enemy Randomizer and Crowd Control to allow Like-likes to

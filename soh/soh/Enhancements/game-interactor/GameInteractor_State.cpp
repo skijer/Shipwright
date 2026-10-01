@@ -110,6 +110,10 @@ uint8_t GameInteractor_GetDisableLedgeGrabsActive() {
     return GameInteractor::State::DisableLedgeGrabsActive;
 }
 
+void GameInteractor_SetDisableLedgeGrabsActive(uint8_t state) {
+    GameInteractor::State::DisableLedgeGrabsActive = state;
+}
+
 // MARK: - GameInteractor::State::GetRandomWindActive
 uint8_t GameInteractor_GetRandomWindActive() {
     return GameInteractor::State::RandomWindActive;

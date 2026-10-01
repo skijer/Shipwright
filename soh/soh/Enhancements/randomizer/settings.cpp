@@ -2583,7 +2583,7 @@ void Settings::CreateOptions() {
 
 std::unordered_map<std::string, RandomizerSettingKey> Settings::PopulateOptionNameToEnum() {
     std::unordered_map<std::string, RandomizerSettingKey> output = {};
-    for (size_t count = 0; count < RSK_MAX; count++) {
+    for (size_t count = 0; count < mOptions.size(); count++) {
         // skip unassigned settings (RSK_NONE)
         if (mOptions[count].GetOptionCount() > 0) {
             output[mOptions[count].GetName()] = static_cast<RandomizerSettingKey>(count);
@@ -2614,8 +2614,13 @@ void Context::ResetTrickOptions() {
     };
 }
 
-const std::array<Option, RSK_MAX>& Settings::GetAllOptions() const {
+const std::deque<Option>& Settings::GetAllOptions() const {
     return mOptions;
+}
+
+RandomizerSettingKey Settings::AddModOption(Option&& option) {
+    mOptions.push_back(std::move(option));
+    return static_cast<RandomizerSettingKey>(mOptions.size() - 1);
 }
 
 std::vector<Option*>& Settings::GetExcludeOptionsForArea(const RandomizerCheckArea area) {
@@ -3118,7 +3123,7 @@ void Settings::ClearContext() {
 }
 
 void Settings::SetAllToContext() {
-    for (int i = 0; i < RSK_MAX; i++) {
+    for (size_t i = 0; i < mOptions.size(); i++) {
         mContext->GetOption(static_cast<RandomizerSettingKey>(i)).Set(mOptions[i].GetOptionIndex());
     }
     for (int i = 0; i < RT_MAX; i++) {

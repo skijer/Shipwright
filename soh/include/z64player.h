@@ -167,7 +167,8 @@ typedef enum PlayerItemAction {
     /* 0x40 */ PLAYER_IA_MASK_GERUDO,
     /* 0x41 */ PLAYER_IA_MASK_TRUTH,
     /* 0x42 */ PLAYER_IA_LENS_OF_TRUTH,
-    /* 0x43 */ PLAYER_IA_MAX
+    /* 0x43 */ PLAYER_IA_CUSTOM,
+    /* 0x44 */ PLAYER_IA_MAX
 } PlayerItemAction;
 
 typedef enum PlayerLimb {
@@ -744,6 +745,7 @@ typedef struct PendingFlag {
 
 typedef void (*PlayerActionFunc)(struct Player*, struct PlayState*);
 typedef s32 (*UpperActionFunc)(struct Player*, struct PlayState*);
+typedef void (*PlayerItemActionInitFunc)(struct PlayState*, struct Player*);
 typedef void (*AfterPutAwayFunc)(struct PlayState*, struct Player*);
 
 #define UNK6AE_ROT_FOCUS_X (1 << 0)

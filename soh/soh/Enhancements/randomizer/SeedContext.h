@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <array>
+#include <deque>
 #include <map>
 #include <set>
 #include <nlohmann/json.hpp>
@@ -184,7 +185,7 @@ class Context {
     static std::weak_ptr<Context> mContext;
     std::array<Hint, RH_MAX> hintTable = {};
     std::array<ItemLocation, RC_MAX> itemLocationTable = {};
-    std::array<OptionValue, RSK_MAX> mOptions;
+    std::deque<OptionValue> mOptions = std::deque<OptionValue>(RSK_MAX);
     std::array<OptionValue, RT_MAX> mTrickOptions;
     RandoOptionCheckTrigger mGBKCondition = RO_CHECK_TRIGGER_NONE;
     RandoOptionCheckTrigger mGanonsSoulCondition = RO_CHECK_TRIGGER_NONE;

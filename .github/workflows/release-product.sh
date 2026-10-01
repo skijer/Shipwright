@@ -7,6 +7,7 @@ set -euo pipefail
 
 TAG="$1"
 case "$TAG" in
+  *modapi*)   echo "product=unbound-modapi"; echo "branch=unbound-modapi";          echo "title=SoH: Unbound ModApi ${TAG}" ;;
   *unbound*)  echo "product=unbound";  echo "branch=unbound";                      echo "title=SoH: Unbound ${TAG}" ;;
   *celshade*) echo "product=celshade"; echo "branch=wind-waker-style-cel-shading"; echo "title=SoH (cel-shading fork) ${TAG}" ;;
   *) echo "tag ${TAG} names no product" >&2; exit 1 ;;

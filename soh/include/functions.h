@@ -453,6 +453,7 @@ s32 Actor_OfferTalkExchange(Actor* actor, PlayState* play, f32 arg2, f32 arg3, u
 s32 Actor_OfferTalkExchangeEquiCylinder(Actor* actor, PlayState* play, f32 arg2, u32 arg3);
 s32 Actor_OfferTalk(Actor* actor, PlayState* play, f32 arg2);
 s32 Actor_OfferTalkNearColChkInfoCylinder(Actor* actor, PlayState* play);
+PlayerAgeProperties* Player_ResolveAgeProperties(Player* player);
 u32 Actor_TextboxIsClosing(Actor* actor, PlayState* play);
 s8 Actor_GetPlayerExchangeItemId(PlayState* play);
 void Actor_GetScreenPos(PlayState* play, Actor* actor, s16* x, s16* y);
@@ -1152,6 +1153,7 @@ s32 Player_ActionToExplosive(Player* player, s32 itemAction);
 s32 Player_GetExplosiveHeld(Player* player);
 s32 func_8008F2BC(Player* player, s32 itemAction);
 s32 Player_GetEnvironmentalHazard(PlayState* play);
+Color_RGB8 Player_GetTunicColor(s32 tunic);
 void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount, s32 lod, s32 tunic,
                    s32 boots, s32 face, OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* this);
 s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* data);
@@ -2157,6 +2159,7 @@ void Audio_StopSfxByPos(Vec3f*);
 void Audio_StartSequence(u8 playerIdx, u8 seqId, u8 arg2, u16 fadeTimer);
 void Audio_QueueSeqCmd(u32 bgmID);
 void Audio_QueuePreviewSeqCmd(u16 seqId);
+void Audio_QueueCustomSeqCmd(u8 playerIdx, u8 fadeTimer, u16 seqId);
 void Audio_StopSfxByPosAndId(Vec3f* pos, u16 sfxId);
 void Audio_StopSfxByTokenAndId(u8, u16);
 void Audio_StopSfxById(u32 sfxId);

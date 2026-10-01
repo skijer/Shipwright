@@ -391,6 +391,12 @@ void Audio_QueuePreviewSeqCmd(u16 seqId) {
     sAudioSeqCmds[sSeqCmdWrPos++] = 1;
 }
 
+void Audio_QueueCustomSeqCmd(u8 playerIdx, u8 fadeTimer, u16 seqId) {
+    gAudioContext.seqReplaced[playerIdx] = 1;
+    gAudioContext.seqToPlay[playerIdx] = seqId;
+    sAudioSeqCmds[sSeqCmdWrPos++] = ((u32)playerIdx << 24) | ((u32)fadeTimer << 16) | 1;
+}
+
 void Audio_ProcessSeqCmds(void) {
     while (sSeqCmdWrPos != sSeqCmdRdPos) {
         Audio_ProcessSeqCmd(sAudioSeqCmds[sSeqCmdRdPos++]);

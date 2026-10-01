@@ -149,6 +149,7 @@ typedef enum {
     /* 0x1E */ SLOT_SHIELD_DEKU,
     /* 0x1F */ SLOT_SHIELD_HYLIAN,
     /* 0x20 */ SLOT_SHIELD_MIRROR,
+    /* 0xFE */ SLOT_CUSTOM = 0xFE,
     /* 0xFF */ SLOT_NONE = 0xFF
 } InventorySlot;
 
@@ -462,6 +463,7 @@ typedef enum {
     /* 0x7B */ GI_BULLET_BAG_50,
     /* 0x7C */ GI_ICE_TRAP, // freezes link when opened from a chest
     /* 0x7D */ GI_TEXT_0,   // no model appears over Link, shows text id 0 (pocket egg)
+    /* 0x83 */ GI_CUSTOM = 0x83,
     /* 0x84 */ GI_MAX
 } GetItemID;
 

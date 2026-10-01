@@ -236,6 +236,38 @@ set(ALL_FILES
 ################################################################################
 add_executable(${PROJECT_NAME} ${ALL_FILES})
 
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    ENABLE_EXPORTS ON
+    C_VISIBILITY_PRESET default
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+)
+
+if (MSVC)
+    set(SOH_WINDOWS_EXPORTS "${CMAKE_CURRENT_BINARY_DIR}/WindowsExports.def")
+    if(NOT EXISTS "${SOH_WINDOWS_EXPORTS}")
+        file(WRITE "${SOH_WINDOWS_EXPORTS}" "EXPORTS\n")
+    endif()
+    target_sources(${PROJECT_NAME} PRIVATE "${SOH_WINDOWS_EXPORTS}")
+    find_package(Python3 COMPONENTS Interpreter)
+    if(CMAKE_GENERATOR MATCHES "Visual Studio")
+        set(SOH_OBJECT_DIR "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}.dir/$<CONFIG>")
+        set(LIBULTRASHIP_OBJECT_DIR "${CMAKE_BINARY_DIR}/libultraship/src/libultraship.dir/$<CONFIG>")
+    else()
+        set(SOH_OBJECT_DIR "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/${PROJECT_NAME}.dir")
+        set(LIBULTRASHIP_OBJECT_DIR "${CMAKE_BINARY_DIR}/libultraship/src/CMakeFiles/libultraship.dir")
+    endif()
+    add_custom_command(TARGET ${PROJECT_NAME} PRE_LINK
+        COMMAND ${CMAKE_COMMAND}
+            -DOBJECT_DIR=${SOH_OBJECT_DIR}
+            -DLIBULTRASHIP_OBJECT_DIR=${LIBULTRASHIP_OBJECT_DIR}
+            -DOUTPUT=${SOH_WINDOWS_EXPORTS}
+            -DPYTHON=${Python3_EXECUTABLE}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/soh/ModApi/GenerateWindowsExports.cmake
+        VERBATIM
+    )
+endif()
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 use_props(${PROJECT_NAME} "${CMAKE_CONFIGURATION_TYPES}" "${DEFAULT_CXX_PROPS}")
 endif()
@@ -246,15 +278,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         VS_GLOBAL_KEYWORD "Win32Proj"
     )
-    if(SOH_WINDOWS_64BIT)
-        set_target_properties(${PROJECT_NAME} PROPERTIES
-            INTERPROCEDURAL_OPTIMIZATION_RELEASE "TRUE"
-        )
-    elseif("${CMAKE_VS_PLATFORM_NAME}" STREQUAL "Win32")
-        set_target_properties(${PROJECT_NAME} PROPERTIES
-            INTERPROCEDURAL_OPTIMIZATION_RELEASE "TRUE"
-        )
-    endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
@@ -521,6 +544,7 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
 
         target_link_options(${PROJECT_NAME} PRIVATE
             -pthread
+            -Wl,-export_dynamic
         )
     elseif (CMAKE_SYSTEM_NAME STREQUAL "NintendoSwitch")
         target_compile_options(${PROJECT_NAME} PRIVATE

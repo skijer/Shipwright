@@ -17,6 +17,7 @@
 #include "static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "soh/ModApi/VanillaItems/VanillaItems.h"
 #include "settings.h"
 #include "soh/util.h"
 #include "randomizerTypes.h"
@@ -1191,6 +1192,10 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
 
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
+
+    if (VanillaItems_GrantRandoItem(item)) {
+        return Return_Item_Entry(giEntry, RG_NONE);
+    }
 
     // open chest: not progressive gives both flags at once, progressive gives large only as the second copy
     if (item == RG_OPEN_CHEST &&

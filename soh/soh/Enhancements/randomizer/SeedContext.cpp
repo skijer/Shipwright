@@ -531,6 +531,9 @@ Sprite* Context::GetSeedTexture(const uint8_t index) {
 }
 
 OptionValue& Context::GetOption(const RandomizerSettingKey key) {
+    if (key >= mOptions.size()) {
+        mOptions.resize(key + 1);
+    }
     return mOptions[key];
 }
 

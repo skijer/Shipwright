@@ -2087,6 +2087,7 @@ void AudioOcarina_PlaybackSong(void) {
                     sPlaybackPitch = OCARINA_PITCH_NONE;
                 } else {
                     Audio_StopSfxById(NA_SE_OC_OCARINA);
+                    GameInteractor_ExecuteOnOcarinaPlaybackNote(OCARINA_PITCH_NONE, 1.0f);
                 }
                 return;
             } else {
@@ -2139,8 +2140,10 @@ void AudioOcarina_PlaybackSong(void) {
                     Audio_QueueCmdS8(0x6 << 24 | SEQ_PLAYER_SFX << 16 | 0xD05, sPlaybackPitch & 0x3F);
                     Audio_PlaySfxGeneral(NA_SE_OC_OCARINA, &gSfxDefaultPos, 4, &sRelativeNotePlaybackBend,
                                          &sRelativeNotePlaybackVolume, &gSfxDefaultReverb);
+                    GameInteractor_ExecuteOnOcarinaPlaybackNote(sPlaybackPitch & 0x3F, sRelativeNotePlaybackBend);
                 } else {
                     Audio_StopSfxById(NA_SE_OC_OCARINA);
+                    GameInteractor_ExecuteOnOcarinaPlaybackNote(OCARINA_PITCH_NONE, 1.0f);
                 }
             }
             sPlaybackNotePos++;

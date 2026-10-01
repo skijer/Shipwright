@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "objects/object_gi_key/object_gi_key.h"
 #include "objects/object_gi_jewel/object_gi_jewel.h"
 #include "objects/object_gi_melody/object_gi_melody.h"
@@ -407,11 +408,14 @@ void GetItem_Draw(PlayState* play, s16 drawId) {
  * Uses the Custom Draw Function if it exists, or just calls `GetItem_Draw`
  */
 void GetItemEntry_Draw(PlayState* play, GetItemEntry getItemEntry) {
-    if (getItemEntry.drawFunc != NULL) {
-        getItemEntry.drawFunc(play, &getItemEntry);
-    } else {
-        GetItem_Draw(play, getItemEntry.gid);
+    if (!GameInteractor_ExecuteOnGetItemDraw(play, &getItemEntry)) {
+        if (getItemEntry.drawFunc != NULL) {
+            getItemEntry.drawFunc(play, &getItemEntry);
+        } else {
+            GetItem_Draw(play, getItemEntry.gid);
+        }
     }
+    GameInteractor_ExecuteOnGetItemDrawPost(play, &getItemEntry);
 }
 
 // All remaining functions in this file are draw functions referenced in the table and called by the function above

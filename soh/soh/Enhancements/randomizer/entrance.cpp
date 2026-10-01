@@ -9,6 +9,7 @@
 #include "soh/Enhancements/gameconsole.h"
 #include "soh/util.h"
 #include "soh/ShipInit.hpp"
+#include "soh/ModApi/RandoLogic/RandoLogic.h"
 #include "z64camera.h"
 #include "z64scene.h"
 
@@ -37,7 +38,7 @@ void Entrance::SetCondition(ConditionFn newCondition) {
 bool Entrance::GetConditionsMet() const {
     auto ctx = Rando::Context::GetInstance();
     if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-        return condition_function();
+        return RandoLogic_ResolveEntrance(parentRegion, originalConnectedRegion, condition_function());
     }
     return true;
 }

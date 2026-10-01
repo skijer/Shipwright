@@ -22,6 +22,7 @@
 #include "soh/util.h"
 #include "Enhancements/randomizer/hint.h"
 #include "soh/Enhancements/randomizer/settings.h"
+#include "soh/ModApi/RandoOptions/RandoOptions.h"
 #include "ResourceManagerHelpers.h"
 #include "soh/SohGui/SohGui.hpp"
 
@@ -298,6 +299,8 @@ void SaveManager::LoadRandomizer() {
         randoContext->GetOption(RandomizerSettingKey(i)).Set(value);
     });
 
+    SaveManager::Instance->LoadStruct("modRandoSettings", []() { RandoOptions_LoadAll(); });
+
     SaveManager::Instance->LoadArray("hintLocations", RH_MAX, [&](size_t i) {
         auto hint = RandomizerHint(i);
         nlohmann::json json;
@@ -426,6 +429,8 @@ void SaveManager::SaveRandomizer(const SaveContext& saveContext, int sectionID, 
     SaveManager::Instance->SaveArray("randoSettings", RSK_MAX, [&](size_t i) {
         SaveManager::Instance->SaveData("", randoContext->GetOption((RandomizerSettingKey(i))).Get());
     });
+
+    SaveManager::Instance->SaveStruct("modRandoSettings", []() { RandoOptions_SaveAll(); });
 
     SaveManager::Instance->SaveArray("hintLocations", RH_MAX, [&](size_t i) {
         auto hint = randoContext->GetHint(RandomizerHint(i));

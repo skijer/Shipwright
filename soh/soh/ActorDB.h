@@ -19,6 +19,17 @@ typedef struct {
 } ActorDBEntry;
 
 #ifdef __cplusplus
+extern "C" {
+#endif
+
+ActorDBEntry* ActorDB_Retrieve(const int id);
+int ActorDB_RetrieveId(const char* name);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
 
 #include <string>
 #include <unordered_map>
@@ -78,10 +89,5 @@ class ActorDB {
     std::unordered_map<std::string, int> nameTable;
     size_t nextFreeId = ACTOR_ID_EXTRA_MAX;
 };
-
-#else
-
-ActorDBEntry* ActorDB_Retrieve(const int id);
-int ActorDB_RetrieveId(const char* name);
 
 #endif

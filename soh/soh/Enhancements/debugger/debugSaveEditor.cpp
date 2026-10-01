@@ -20,6 +20,13 @@
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SaveManager.h"
 #include "soh/unbound/SceneDB.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
+#include "soh/ModApi/Layout/ModLayout.h"
+#include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+
+#include <unordered_set>
 
 extern "C" {
 #include <soh_assets.h>
@@ -960,6 +967,70 @@ static void SyncButtonItemsForSlot(uint8_t slot) {
     }
 }
 
+static void DrawCustomSaveEditorIcon(const char* category, const char* key, const char* iconPath) {
+    if (iconPath == nullptr || !ResourceMgr_FileExists(iconPath)) {
+        return;
+    }
+    static std::unordered_set<std::string> loadedIcons;
+    const std::string textureKey = "ModAPI.SaveEditor." + std::string(category) + "." + key;
+    auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+    if (loadedIcons.insert(textureKey).second) {
+        gui->LoadGuiTexture(textureKey, iconPath, "", ImVec4(1, 1, 1, 1));
+    }
+    ImGui::Image(gui->GetTextureByName(textureKey), ImVec2(32, 32));
+    ImGui::SameLine();
+}
+
+static bool CustomItemMatchesLayout(const SOHCustomItemDefinition* definition, SOHLayoutKind kind) {
+    SOHCustomItemPlacement placement = {};
+    if (!KaleidoItemManager_GetPlacement(definition->key, &placement)) {
+        return kind == SOH_LAYOUT_ITEMS;
+    }
+    return kind == (CustomItemRegistry_IsQuestPage(placement.page) ? SOH_LAYOUT_COLLECTABLES : SOH_LAYOUT_ITEMS);
+}
+
+static void DrawCustomItemFlags(const char* label, SOHLayoutKind kind) {
+    if (!ImGui::TreeNode(label)) {
+        return;
+    }
+    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetAt(index);
+        if (definition == nullptr || !CustomItemRegistry_IsEditorVisible(definition->key) ||
+            CustomItemRegistry_IsVanillaUpgrade(definition) || !CustomItemMatchesLayout(definition, kind)) {
+            continue;
+        }
+        bool owned = CustomItemRegistry_IsOwned(definition->key);
+        ImGui::PushID((int)index);
+        DrawCustomSaveEditorIcon("Item", definition->key,
+                                 CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_SAVE_EDITOR));
+        if (ImGui::Checkbox(definition->key, &owned)) {
+            CustomItemRegistry_SetOwned(definition->key, owned);
+        }
+        ImGui::PopID();
+    }
+    ImGui::TreePop();
+}
+
+static void DrawCustomEquipmentFlags() {
+    if (!ImGui::TreeNode("Custom Equipment")) {
+        return;
+    }
+    for (uint32_t index = 0; index < CustomEquipRegistry_GetCount(); ++index) {
+        const SOHCustomEquipDefinition* definition = CustomEquipRegistry_GetAt(index);
+        if (definition == nullptr) {
+            continue;
+        }
+        bool owned = CustomEquipRegistry_IsOwned(definition->key);
+        ImGui::PushID((int)index);
+        DrawCustomSaveEditorIcon("Equipment", definition->key, definition->iconPath);
+        if (ImGui::Checkbox(definition->key, &owned)) {
+            CustomEquipRegistry_SetOwned(definition->key, owned);
+        }
+        ImGui::PopID();
+    }
+    ImGui::TreePop();
+}
+
 void DrawInventoryTab() {
     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
@@ -977,6 +1048,7 @@ void DrawInventoryTab() {
     static InventorySlot selectedIndex = SLOT_NONE;
     static const char* itemPopupPicker = "itemPopupPicker";
     static bool restrictToValid = true;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSaveEditorInventory>(&gSaveContext);
 
     // Check if D-pad is enabled for border coloring
     bool dpadEnabled = CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0);
@@ -985,6 +1057,8 @@ void DrawInventoryTab() {
     Checkbox("Keep C/D-pad buttons in sync", &syncButtons,
              checkboxOptionsBase.Tooltip("Refresh a C or D-pad button when its inventory slot is edited. Disable to "
                                          "leave a slot and its button out of sync (e.g. to set up RBA)."));
+
+    DrawCustomItemFlags("Custom Items", SOH_LAYOUT_ITEMS);
 
     for (int y = 0; y < 4; y++) {
         for (int x = 0; x < 6; x++) {
@@ -1109,8 +1183,11 @@ void DrawInventoryTab() {
                                          selectedIndex == SLOT_BOTTLE_3 || selectedIndex == SLOT_BOTTLE_4)
                                             ? SLOT_BOTTLE_1
                                             : selectedIndex;
+                        bool allowed = gItemSlots[slotIndex] == testIndex;
+                        GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSaveEditorItemEligibility>(
+                            selectedIndex, slotIndex, &allowed);
                         if (const auto mappedItem = itemMapping.find(slotIndex);
-                            gItemSlots[slotIndex] == testIndex && mappedItem != itemMapping.end()) {
+                            allowed && mappedItem != itemMapping.end()) {
                             possibleItems.push_back(mappedItem->second);
                         }
                     }
@@ -1159,6 +1236,8 @@ void DrawInventoryTab() {
                     UIWidgets::Tooltip("Roc's Feather");
                 }
 
+                GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSaveEditorItemPicker>(
+                    &gSaveContext, selectedIndex, restrictToValid);
                 ImGui::EndPopup();
             }
             ImGui::PopStyleVar();
@@ -1952,6 +2031,8 @@ void DrawEquipmentTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
     ImGui::BeginChild("equipmentTab", ImVec2(0, 0), true);
 
+    DrawCustomEquipmentFlags();
+
     static const int8_t U8_ZERO = 0;
 
     UIWidgets::BeginCardLayout(
@@ -2300,6 +2381,8 @@ void DrawQuestStatusTab() {
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 3.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(8.0f, 8.0f));
     ImGui::BeginChild("questStatusTab", ImVec2(0, 0), true);
+
+    DrawCustomItemFlags("Custom Collectables", SOH_LAYOUT_COLLECTABLES);
 
     UIWidgets::BeginCardLayout(
         { .columnsPerRow = 2, .minColumnWidth = 350.0f, .fixedColumnWidths = { 450.0f, 450.0f } });
@@ -2763,18 +2846,27 @@ void SaveEditorWindow::DrawElement() {
 
         ResetBaseOptions();
         if (ImGui::BeginTabItem("Inventory")) {
+            if (ImGui::CollapsingHeader("Inventory layout")) {
+                ModLayout_DrawEditor(SOH_LAYOUT_ITEMS);
+            }
             DrawInventoryTab();
             ImGui::EndTabItem();
         }
 
         ResetBaseOptions();
         if (ImGui::BeginTabItem("Equipment")) {
+            if (ImGui::CollapsingHeader("Equipment layout")) {
+                ModLayout_DrawEditor(SOH_LAYOUT_EQUIPMENT);
+            }
             DrawEquipmentTab();
             ImGui::EndTabItem();
         }
 
         ResetBaseOptions();
         if (ImGui::BeginTabItem("Quest Status")) {
+            if (ImGui::CollapsingHeader("Collectables layout")) {
+                ModLayout_DrawEditor(SOH_LAYOUT_COLLECTABLES);
+            }
             DrawQuestStatusTab();
             ImGui::EndTabItem();
         }
@@ -2797,6 +2889,7 @@ void SaveEditorWindow::DrawElement() {
             ImGui::EndTabItem();
         }
 
+        GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSaveEditorTabs>(&gSaveContext);
         ImGui::EndTabBar();
     }
 

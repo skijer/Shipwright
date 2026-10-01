@@ -4,6 +4,12 @@
 #include "bean_patches.h"
 #include "../debugger/performanceTimer.h"
 #include "soh/Enhancements/randomizer/randomizerEnums.h"
+#include "soh/ModApi/RandoLogic/RandoLogic.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
+
+#include <string>
+#include <vector>
+
 #include "soh/OTRGlobals.h"
 #include "randomizer.h"
 #include "randomizerEnumStrings.h"
@@ -21,7 +27,14 @@ extern "C" PlayState* gPlayState;
 
 namespace Rando {
 
+static SOHRandoInfBank ModItemBank(const SaveContext* saveContext) {
+    return saveContext == &gSaveContext ? SOH_RANDO_INF_SAVE : SOH_RANDO_INF_LOGIC;
+}
+
 bool Logic::HasItem(RandomizerGet itemName) {
+    if (RandoItems_IsModItem(itemName)) {
+        return RandoItems_IsOwned(itemName, ModItemBank(mSaveContext));
+    }
     switch (itemName) {
         case RG_FAIRY_OCARINA:
             return CheckInventory(ITEM_OCARINA_FAIRY, false);
@@ -540,6 +553,10 @@ bool Logic::CanUse(RandomizerGet itemName) {
     if (!HasItem(itemName))
         return false;
 
+    if (RandoItems_IsModItem(itemName)) {
+        return true;
+    }
+
     if (!ItemUseAllowed(itemName)) {
         return false;
     }
@@ -709,6 +726,7 @@ bool Logic::CanMiddairGroundJump(bool hasBombflower) {
 }
 
 bool Logic::CanOpenUnderwaterChest() {
+    LOGIC_MOD_GRANTS(CanOpenUnderwaterChest);
     return ctx->GetTrickOption(RT_OPEN_UNDERWATER_CHEST) && CanUse(RG_IRON_BOOTS) && CanUse(RG_HOOKSHOT) &&
            HasItem(RG_OPEN_CHEST);
 }
@@ -1303,23 +1321,28 @@ bool Logic::CanGetEnemyDrop(RandomizerEnemy enemy, EnemyDistance distance, bool 
 }
 
 bool Logic::CanBreakMudWalls() {
+    LOGIC_MOD_GRANTS(CanBreakMudWalls);
     return BlastOrSmash() || (ctx->GetTrickOption(RT_BLUE_FIRE_MUD_WALLS) && BlueFire());
 }
 
 bool Logic::CanGetDekuBabaSticks() {
+    LOGIC_MOD_GRANTS(CanGetDekuBabaSticks);
     return CanUseSword() || CanUse(RG_BOOMERANG);
 }
 
 bool Logic::CanGetDekuBabaNuts() {
+    LOGIC_MOD_GRANTS(CanGetDekuBabaNuts);
     return CanJumpslash() || CanUse(RG_FAIRY_SLINGSHOT) || CanUse(RG_FAIRY_BOW) || HasExplosives() ||
            CanUse(RG_DINS_FIRE);
 }
 
 bool Logic::CanHitEyeTargets() {
+    LOGIC_MOD_GRANTS(CanHitEyeTargets);
     return CanUse(RG_FAIRY_BOW) || CanUse(RG_FAIRY_SLINGSHOT);
 }
 
 bool Logic::CanDetonateBombFlowers() {
+    LOGIC_MOD_GRANTS(CanDetonateBombFlowers);
     return CanUse(RG_FAIRY_BOW) || HasExplosives() || CanUse(RG_DINS_FIRE);
 }
 
@@ -1516,6 +1539,7 @@ bool Logic::HasBottle() {
 }
 
 bool Logic::CanUseSword() {
+    LOGIC_MOD_GRANTS(CanUseSword);
     return CanUse(RG_KOKIRI_SWORD) || CanUse(RG_MASTER_SWORD) || CanUse(RG_BIGGORON_SWORD);
 }
 
@@ -1525,15 +1549,18 @@ bool Logic::CanJumpslashExceptHammer() {
 }
 
 bool Logic::CanJumpslash() {
+    LOGIC_MOD_GRANTS(CanJumpslash);
     return CanJumpslashExceptHammer() || CanUse(RG_MEGATON_HAMMER);
 }
 
 bool Logic::CanClearStalagmite() {
+    LOGIC_MOD_GRANTS(CanClearStalagmite);
     return CanJumpslash() || HasExplosives() || CanUse(RG_GIANTS_KNIFE) ||
            (ctx->GetTrickOption(RT_ICE_STALAGMITE_HOOKSHOT) && CanUse(RG_HOOKSHOT));
 }
 
 bool Logic::CanHitSwitch(EnemyDistance distance, bool inWater) {
+    LOGIC_MOD_GRANTS(CanHitSwitch);
     bool hit = false;
     switch (distance) {
         case ED_CLOSE:
@@ -1567,11 +1594,13 @@ bool Logic::CanHitSwitch(EnemyDistance distance, bool inWater) {
 }
 
 bool Logic::CanDamage() {
+    LOGIC_MOD_GRANTS(CanDamage);
     return CanUse(RG_FAIRY_SLINGSHOT) || CanJumpslash() || HasExplosives() || CanUse(RG_DINS_FIRE) ||
            CanUse(RG_FAIRY_BOW);
 }
 
 bool Logic::CanAttack() {
+    LOGIC_MOD_GRANTS(CanAttack);
     return CanDamage() || CanUse(RG_BOOMERANG) || CanUse(RG_HOOKSHOT);
 }
 
@@ -1609,19 +1638,23 @@ bool Logic::BombchuRefill() {
 }
 
 bool Logic::HookshotOrBoomerang() {
+    LOGIC_MOD_GRANTS(HookshotOrBoomerang);
     return CanUse(RG_HOOKSHOT) || CanUse(RG_BOOMERANG);
 }
 
 bool Logic::ScarecrowsSong() {
+    LOGIC_MOD_GRANTS(ScarecrowsSong);
     return (HasItem(RG_SCARECROWS_SONG) && HasItem(RG_FAIRY_OCARINA) && OcarinaButtons() >= 2) ||
            (!ctx->GetOption(RSK_SHUFFLE_SCARECROWS_SONG) && Get(LOGIC_CHILD_SCARECROW) && Get(LOGIC_ADULT_SCARECROW));
 }
 
 bool Logic::BlueFire() {
+    LOGIC_MOD_GRANTS(BlueFire);
     return CanUse(RG_BOTTLE_WITH_BLUE_FIRE) || (ctx->GetOption(RSK_BLUE_FIRE_ARROWS) && CanUse(RG_ICE_ARROWS));
 }
 
 bool Logic::CanBreakPots(EnemyDistance distance, bool wallOrFloor, bool inWater) {
+    LOGIC_MOD_GRANTS(CanBreakPots);
     bool hit = false;
     switch (distance) {
         case ED_CLOSE:
@@ -1656,10 +1689,12 @@ bool Logic::CanBreakPots(EnemyDistance distance, bool wallOrFloor, bool inWater)
 }
 
 bool Logic::CanBreakCrates() {
+    LOGIC_MOD_GRANTS(CanBreakCrates);
     return true;
 }
 
 bool Logic::CanBreakSmallCrates() {
+    LOGIC_MOD_GRANTS(CanBreakSmallCrates);
     return CanJumpslash() || HasExplosives() || HasItem(RG_POWER_BRACELET);
 }
 
@@ -1668,6 +1703,7 @@ bool Logic::CanBreakRocks() {
 }
 
 bool Logic::CanBonkTrees() {
+    LOGIC_MOD_GRANTS(CanBonkTrees);
     return true;
 }
 
@@ -1676,10 +1712,12 @@ bool Logic::CanRead() {
 }
 
 bool Logic::HasExplosives() {
+    LOGIC_MOD_GRANTS(HasExplosives);
     return CanUse(RG_BOMB_BAG) || CanUse(RG_BOMBCHU_5);
 }
 
 bool Logic::BlastOrSmash() {
+    LOGIC_MOD_GRANTS(BlastOrSmash);
     return HasExplosives() || CanUse(RG_MEGATON_HAMMER);
 }
 
@@ -1688,16 +1726,19 @@ bool Logic::CanSpawnSoilSkull(RandomizerGet bean) {
 }
 
 bool Logic::CanReflectNuts() {
+    LOGIC_MOD_GRANTS(CanReflectNuts);
     return CanUse(RG_DEKU_SHIELD) || (IsAdult && HasItem(RG_HYLIAN_SHIELD));
 }
 
 bool Logic::CanCutShrubs() {
+    LOGIC_MOD_GRANTS(CanCutShrubs);
     return CanUse(RG_KOKIRI_SWORD) || CanUse(RG_BOOMERANG) || HasExplosives() || CanUse(RG_MASTER_SWORD) ||
            CanUse(RG_MEGATON_HAMMER) || CanUse(RG_BIGGORON_SWORD) || CanUse(RG_GIANTS_KNIFE) ||
            HasItem(RG_GORONS_BRACELET);
 }
 
 bool Logic::CanStunDeku() {
+    LOGIC_MOD_GRANTS(CanStunDeku);
     return CanAttack() || CanUse(RG_NUTS) || CanReflectNuts();
 }
 
@@ -1706,6 +1747,7 @@ bool Logic::CallGossipFairyExceptSuns() {
 }
 
 bool Logic::CallGossipFairy() {
+    LOGIC_MOD_GRANTS(CallGossipFairy);
     return CallGossipFairyExceptSuns() || CanUse(RG_SUNS_SONG);
 }
 
@@ -1788,31 +1830,38 @@ bool Logic::CanVoid() {
 }
 
 bool Logic::CanOpenBombGrotto() {
+    LOGIC_MOD_GRANTS(CanOpenBombGrotto);
     return BlastOrSmash() && (HasItem(RG_STONE_OF_AGONY) || ctx->GetTrickOption(RT_GROTTOS_WITHOUT_AGONY));
 }
 
 bool Logic::CanOpenStormsGrotto() {
+    LOGIC_MOD_GRANTS(CanOpenStormsGrotto);
     return CanUse(RG_SONG_OF_STORMS) && (HasItem(RG_STONE_OF_AGONY) || ctx->GetTrickOption(RT_GROTTOS_WITHOUT_AGONY));
 }
 
 bool Logic::CanGetNightTimeGS() {
+    LOGIC_MOD_GRANTS(CanGetNightTimeGS);
     return AtNight && (CanUse(RG_SUNS_SONG) || !ctx->GetOption(RSK_SKULLS_SUNS_SONG));
 }
 
 bool Logic::CanBreakUpperBeehives() {
+    LOGIC_MOD_GRANTS(CanBreakUpperBeehives);
     return HookshotOrBoomerang() || (ctx->GetTrickOption(RT_BOMBCHU_BEEHIVES) && CanUse(RG_BOMBCHU_5)) ||
            (ctx->GetOption(RSK_SLINGBOW_BREAK_BEEHIVES) && (CanUse(RG_FAIRY_BOW) || CanUse(RG_FAIRY_SLINGSHOT)));
 }
 
 bool Logic::CanBreakLowerBeehives() {
+    LOGIC_MOD_GRANTS(CanBreakLowerBeehives);
     return CanBreakUpperBeehives() || CanUse(RG_BOMB_BAG);
 }
 
 bool Logic::HasFireSource() {
+    LOGIC_MOD_GRANTS(HasFireSource);
     return CanUse(RG_DINS_FIRE) || CanUse(RG_FIRE_ARROWS);
 }
 
 bool Logic::HasFireSourceWithTorch() {
+    LOGIC_MOD_GRANTS(HasFireSourceWithTorch);
     return HasFireSource() || CanUse(RG_STICKS);
 }
 
@@ -1831,14 +1880,17 @@ bool Logic::BunnyHovers() {
 }
 
 bool Logic::CanStandingShield() {
+    LOGIC_MOD_GRANTS(CanStandingShield);
     return CanUse(RG_MIRROR_SHIELD) || (IsAdult && HasItem(RG_HYLIAN_SHIELD)) || CanUse(RG_DEKU_SHIELD);
 }
 
 bool Logic::CanShield() {
+    LOGIC_MOD_GRANTS(CanShield);
     return CanUse(RG_MIRROR_SHIELD) || HasItem(RG_HYLIAN_SHIELD) || CanUse(RG_DEKU_SHIELD);
 }
 
 bool Logic::CanUseProjectile() {
+    LOGIC_MOD_GRANTS(CanUseProjectile);
     return HasExplosives() || CanUse(RG_FAIRY_BOW) || CanUse(RG_HOOKSHOT) || CanUse(RG_FAIRY_SLINGSHOT) ||
            CanUse(RG_BOOMERANG);
 }
@@ -2204,6 +2256,10 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
+    if (RandoItems_IsModItem(randoGet)) {
+        RandoItems_SetOwned(randoGet, ModItemBank(mSaveContext), state);
+        return;
+    }
     if (item.GetGIEntry()->objectId == OBJECT_GI_STICK) {
         SetInventory(ITEM_STICK, (!state ? ITEM_NONE : ITEM_STICK));
     }
@@ -2969,14 +3025,17 @@ bool Logic::ReachDistantScarecrow() {
 }
 
 bool Logic::CanClimbLadder() {
+    LOGIC_MOD_GRANTS(CanClimbLadder);
     return HasItem(RG_CLIMB) || (ctx->GetTrickOption(RT_HOOKSHOT_LADDERS) && CanUse(RG_HOOKSHOT));
 }
 
 bool Logic::CanClimbHighLadder() {
+    LOGIC_MOD_GRANTS(CanClimbHighLadder);
     return HasItem(RG_CLIMB) || (ctx->GetTrickOption(RT_HOOKSHOT_LADDERS) && CanUse(RG_LONGSHOT));
 }
 
 bool Logic::SummonEpona() {
+    LOGIC_MOD_GRANTS(SummonEpona);
     return IsAdult && Get(LOGIC_FREED_EPONA) && CanUse(RG_EPONAS_SONG);
 }
 
@@ -3108,6 +3167,7 @@ bool Logic::StatueRoomMQKeyLogic() {
 void Logic::Reset(bool resetSaveContext /*= true*/) {
     if (resetSaveContext) {
         NewSaveContext();
+        RandoInfCustom_ClearBank(SOH_RANDO_INF_LOGIC);
     }
     StartPerformanceTimer(PT_LOGIC_RESET);
     memset(inLogic, false, sizeof(inLogic));

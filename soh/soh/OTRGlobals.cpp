@@ -97,6 +97,7 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include "Enhancements/game-interactor/GameInteractor.h"
 #include "EmbedderBridge.h"
+#include "ModApi/ModApi.h"
 #include "Enhancements/randomizer/draw.h"
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <fast/resource/ResourceType.h>
@@ -919,6 +920,50 @@ void InitGfxDebugger() {
 
     if (dbg != nullptr) {
         SPDLOG_ERROR("Failed to initialize gfx debugger");
+    }
+}
+
+static bool IsOcarinaOfTimeArchive(const std::shared_ptr<Ship::Archive>& archive) {
+    return archive->HasGameVersion() && ResourceMgr_IsOcarinaOfTimeVersion(archive->GetGameVersion());
+}
+
+static bool IsForeignGameArchive(const std::shared_ptr<Ship::Archive>& archive) {
+    return archive->HasGameVersion() && !ResourceMgr_IsOcarinaOfTimeVersion(archive->GetGameVersion());
+}
+
+static void SinkForeignGameArchives() {
+    auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    auto mounted = archiveManager->GetArchives();
+    auto ordered = std::make_shared<std::vector<std::shared_ptr<Ship::Archive>>>();
+    std::vector<std::shared_ptr<Ship::Archive>> foreign;
+    for (const auto& archive : *mounted) {
+        if (IsForeignGameArchive(archive)) {
+            foreign.push_back(archive);
+        } else {
+            ordered->push_back(archive);
+        }
+    }
+    if (foreign.empty()) {
+        return;
+    }
+
+    size_t topGameIndex = 0;
+    size_t gameArchiveCount = 0;
+    for (size_t i = 0; i < ordered->size(); i++) {
+        if (IsOcarinaOfTimeArchive((*ordered)[i])) {
+            topGameIndex = i;
+            gameArchiveCount++;
+        }
+    }
+    if (gameArchiveCount < 2) {
+        SPDLOG_WARN("[Unbound] no converted base to put {} foreign game archive(s) under; they cover OoT's files",
+                    foreign.size());
+        return;
+    }
+    ordered->insert(ordered->begin() + topGameIndex, foreign.begin(), foreign.end());
+    archiveManager->SetArchives(ordered);
+    for (const auto& archive : foreign) {
+        SPDLOG_INFO("[Unbound] {} mounted under Ocarina of Time's archives", archive->GetPath());
     }
 }
 
@@ -1793,6 +1838,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 
     Unbound_ExportFromCommandLine(argc, argv); // SOH [Unbound] exits the process when the flag is present
 
+    SinkForeignGameArchives();
     SOH::Unbound::LoadCustomActors(); // SOH [Unbound] mod actor types, at their own ids from 0x1000
 
     // #region SOH [Randomizer] TODO: Remove these and refactor spoiler file handling for randomizer
@@ -1826,6 +1872,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     // Restores settings left over from a run that never exited cleanly, so it must come after other setup.
     Speedrun_Register();
     ShipInit::InitAll();
+    ModApi_Init();
     Rando::StaticData::InitHashMaps();
     OTRGlobals::Instance->gRandoContext->AddExcludedOptions();
 }

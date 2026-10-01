@@ -7726,6 +7726,7 @@ Vec3s Camera_Update(Camera* camera) {
         View_SetScale(&camera->play->view, 1.0f);
     }
     camera->play->view.fovy = viewFov;
+    GameInteractor_ExecuteOnCameraResolveView(camera, &viewEye, &viewAt, &viewUp);
     func_800AA358(&camera->play->view, &viewEye, &viewAt, &viewUp);
     camera->camDir.x = eyeAtAngle.pitch;
     camera->camDir.y = eyeAtAngle.yaw;

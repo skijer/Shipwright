@@ -8,6 +8,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/logic.h"
+#include "soh/ModApi/RandoLogic/RandoLogic.h"
 
 #define TIME_PASSES true
 #define TIME_DOESNT_PASS false
@@ -34,7 +35,7 @@ class EventAccess {
     bool ConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return condition_function();
+            return RandoLogic_ResolveEvent(event, condition_function());
         }
         return true;
     }
@@ -47,6 +48,10 @@ class EventAccess {
 
     bool GetEvent() const {
         return logic->Get(event);
+    }
+
+    LogicVal GetEventKey() const {
+        return event;
     }
 
     const std::string& GetEventStr() const {
@@ -85,7 +90,7 @@ class LocationAccess {
     bool GetConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return condition_function();
+            return RandoLogic_ResolveLocation(location, condition_function());
         }
         return true;
     }

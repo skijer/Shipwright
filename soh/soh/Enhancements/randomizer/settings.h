@@ -4,6 +4,7 @@
 #include "option.h"
 
 #include <array>
+#include <deque>
 #include <unordered_map>
 
 namespace Rando {
@@ -68,11 +69,19 @@ class Settings {
     int GetRandomizerTrickByName(const std::string& name);
 
     /**
-     * @brief Returns a reference to the entire array of options.
+     * @brief Returns a reference to the entire list of options.
      *
-     * @return const std::array<Option, RSK_MAX>&
+     * @return const std::deque<Option>&
      */
-    const std::array<Option, RSK_MAX>& GetAllOptions() const;
+    const std::deque<Option>& GetAllOptions() const;
+
+    /**
+     * @brief Appends an option registered by a mod.
+     *
+     * @param option
+     * @return RandomizerSettingKey
+     */
+    RandomizerSettingKey AddModOption(Option&& option);
 
     /**
      * @brief Get a list of Location Exclude `Option`s for the given
@@ -146,7 +155,7 @@ class Settings {
   private:
     static std::shared_ptr<Settings> mInstance;
     std::shared_ptr<Context> mContext = nullptr;
-    std::array<Option, RSK_MAX> mOptions = {};
+    std::deque<Option> mOptions = std::deque<Option>(RSK_MAX);
     std::array<OptionGroup, RSG_MAX> mOptionGroups = {};
     std::array<TrickSetting, RT_MAX> mTrickSettings = {};
     std::array<std::vector<Option*>, RCAREA_INVALID> mExcludeLocationsOptionsAreas = {};
