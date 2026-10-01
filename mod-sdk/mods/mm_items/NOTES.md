@@ -147,7 +147,7 @@ README describe para `HasResource`/`ResourceMgr_FileExists`.
 
 ### Lo que el extractor de MM todavía no saca
 
-`sync_zapd_assets.py` deja fuera `interface`, así que `parameter_static` **no** está en el árbol de XML de
+`mod-sdk/tools/sync_mm_zapd_assets.py` deja fuera `interface`, así que `parameter_static` **no** está en el árbol de XML de
 `mm_assets`. Faltan por eso:
 
 - `parameter_static/gPictoBoxFocusBorderTex` (IA4 16×16, esquina del visor, espejada 4 veces)

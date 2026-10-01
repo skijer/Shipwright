@@ -127,7 +127,7 @@ y el reconocimiento funciona; lo que falta es de ti:
    puede sonar la Song of Healing con la melodía de MM: hoy sólo suena la campanita de confirmación.
    Con ello, `Audio_QueueCustomSeqCmd(playerIdx, fade, id)` ya vale tal cual.
 
-3. **Que el extractor de MM no se salte `interface`.** `mm_assets/sync_zapd_assets.py:19`
+3. **Que el extractor de MM no se salte `interface`.** `mod-sdk/tools/sync_mm_zapd_assets.py`
    (`SKIPPED = ("interface", "archives")`) deja fuera `icon_item_static_yar` y `item_name_static`, que
    son los iconos y los nombres de verdad de los cuatro restos. El mod trae marcadores generados
    mientras tanto. Si el problema es que ZAPD revienta con `interface` entero (lo dice el README del
