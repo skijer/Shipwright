@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_wand_tornado_rod/mat_wand_tornado_rod_4"/>
+	<CallDisplayList Path="objects/object_nei_wand_tornado_rod/wand_tornado_rod_tri_4"/>
+	<EndDisplayList/>
+</DisplayList>

@@ -1,0 +1,15 @@
+<DisplayList Version="0">
+	<Matrix Path="&gt;0x01000000" Param="G_MTX_MODELVIEW"/>
+	<Texture S="65535" T="65535" Level="0" Tile="0" On="1"/>
+	<SetTextureImage Path="objects/forms/kafei/object_link_boy/gLinkAdultSkel_slot_5160_tex_0" Format="G_IM_FMT_I" Size="G_IM_SIZ_16b" Width="1"/>
+	<SetTile Format="G_IM_FMT_I" Size="G_IM_SIZ_16b" Line="0" TMem="0" Tile="7" Palette="0" Cmt0="G_TX_CLAMP" Cmt1="G_TX_NOMIRROR" MaskT="6" ShiftT="0" Cms0="G_TX_CLAMP" Cms1="G_TX_NOMIRROR" MaskS="6" ShiftS="0"/>
+	<LoadSync/>
+	<LoadBlock Tile="7" Uls="0" Ult="0" Lrs="2047" Dxt="256"/>
+	<PipeSync/>
+	<SetTile Format="G_IM_FMT_I" Size="G_IM_SIZ_8b" Line="8" TMem="0" Tile="0" Palette="0" Cmt0="G_TX_CLAMP" Cmt1="G_TX_NOMIRROR" MaskT="6" ShiftT="0" Cms0="G_TX_CLAMP" Cms1="G_TX_NOMIRROR" MaskS="6" ShiftS="0"/>
+	<SetTileSize T="0" Uls="0" Ult="0" Lrs="252" Lrt="252"/>
+	<SetPrimColor M="0" L="0" R="255" G="0" B="0" A="255"/>
+	<LoadVertices Path="objects/forms/kafei/object_link_boy/gLinkAdultSkel_slot_5160_vtx_0" VertexBufferIndex="0" VertexOffset="0" Count="3"/>
+	<Triangle1 V00="0" V01="1" V02="2" Flag0="0"/>
+	<EndDisplayList/>
+</DisplayList>

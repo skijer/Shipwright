@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/forms/kafei/object_link_boy/gLinkAdultSkel_slot_53e0"/>
+	<CallDisplayList Path="objects/forms/kafei/object_link_boy/gLinkAdultSkel_slot_53f0"/>
+	<EndDisplayList/>
+</DisplayList>

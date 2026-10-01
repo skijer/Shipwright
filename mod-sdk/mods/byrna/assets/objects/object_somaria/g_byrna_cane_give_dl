@@ -1,0 +1,10 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<ClearGeometryMode G_CULL_BACK="1" G_FOG="1" G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" />
+	<SetGeometryMode G_ZBUFFER="1" G_SHADE="1" G_SHADING_SMOOTH="1" G_LIGHTING="1" />
+	<CallDisplayList Path="objects/object_somaria/gfx_byrna_cane_mat_body"/>
+	<CallDisplayList Path="objects/object_somaria/gfx_somaria_cane_tri_give_0"/>
+	<CallDisplayList Path="objects/object_somaria/gfx_byrna_cane_mat_color"/>
+	<CallDisplayList Path="objects/object_somaria/gfx_somaria_cane_tri_give_1"/>
+	<EndDisplayList/>
+</DisplayList>

@@ -1,0 +1,27 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_0"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_1"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_2"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_2"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_3"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_3"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_4"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_4"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_5"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_5"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_6"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_6"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_7"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_7"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_8"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_8"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_9"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_9"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_10"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_10"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/mat_gNeiRodOfSeasons_11"/>
+	<CallDisplayList Path="objects/object_nei_rod_of_seasons/gNeiRodOfSeasons_tri_11"/>
+	<EndDisplayList/>
+</DisplayList>

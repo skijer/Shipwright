@@ -1,0 +1,9 @@
+<DisplayList Version="0">
+	<LoadVertices Path="objects/forms/gerudo/object_link_boy/gLinkAdultLeftArmOutNearDL_vtx_2" VertexBufferIndex="0" VertexOffset="0" Count="6"/>
+	<Triangle1 V00="0" V01="1" V02="2"/>
+	<Triangle1 V00="2" V01="1" V02="3"/>
+	<Triangle1 V00="1" V01="4" V02="3"/>
+	<Triangle1 V00="3" V01="4" V02="5"/>
+	<EndDisplayList/>
+</DisplayList>
+

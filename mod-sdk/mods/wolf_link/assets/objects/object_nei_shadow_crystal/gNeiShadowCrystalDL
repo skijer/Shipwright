@@ -1,0 +1,9 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/mat_shadow_crystal_0"/>
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/shadow_crystal_tri_0"/>
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/mat_shadow_crystal_1"/>
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/shadow_crystal_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/mat_shadow_crystal_2"/>
+	<CallDisplayList Path="objects/object_nei_shadow_crystal/shadow_crystal_tri_2"/>
+	<EndDisplayList/>
+</DisplayList>
