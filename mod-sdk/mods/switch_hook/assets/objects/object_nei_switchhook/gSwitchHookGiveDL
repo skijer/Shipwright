@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_switchhook/gSwitchHookGive_Opaque_DL"/>
+	<CallDisplayList Path="objects/object_nei_switchhook/gSwitchHookGive_Transparent_DL"/>
+	<EndDisplayList/>
+</DisplayList>

@@ -1,0 +1,29 @@
+{
+    "name": "mm_wearables",
+    "author": "Skijer",
+    "version": "1.0",
+    "description": "Seventeen wearable Majora's Mask masks; the remaining seven masks have their own mods.",
+    "requires": [
+        "objects/object_mask_posthat/object_mask_posthat_DL_000290",
+        "objects/object_mask_yofukasi/object_mask_yofukasi_DL_000490",
+        "objects/object_mask_bakuretu/object_mask_bakuretu_DL_0005C0",
+        "objects/object_mask_stone/object_mask_stone_DL_000820",
+        "objects/object_mask_bigelf/object_mask_bigelf_DL_0016F0",
+        "objects/object_mask_bree/object_mask_bree_DL_0003C0",
+        "objects/object_mask_gero/gDonGeroMaskDL",
+        "objects/object_mask_bu_san/object_mask_bu_san_DL_000710",
+        "objects/object_mask_romerny/object_mask_romerny_DL_0007A0",
+        "objects/object_mask_zacho/object_mask_zacho_DL_000700",
+        "objects/object_mask_meoto/object_mask_meoto_DL_0005A0",
+        "objects/object_mask_dancer/object_mask_dancer_DL_000EF0",
+        "objects/object_mask_gibudo/object_mask_gibudo_DL_000250",
+        "objects/object_mask_skj/object_mask_skj_DL_0009F0",
+        "objects/object_mask_kyojin/object_mask_kyojin_DL_000380",
+        "misc/link_animetion/gPlayerAnim_clink_normal_okarina_walkB_Data",
+        "misc/link_animetion/gPlayerAnim_alink_dance_loop_Data",
+        "misc/link_animetion/gPlayerAnim_cl_msbowait_Data",
+        "misc/link_animetion/gPlayerAnim_cl_setmask_Data",
+        "misc/link_animetion/gPlayerAnim_cl_setmaskend_Data",
+        "objects/object_pst/gPostboxFrameDL"
+    ]
+}

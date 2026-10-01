@@ -1,0 +1,11 @@
+{
+    "name": "keaton",
+    "author": "Skijer",
+    "version": "1.0",
+    "description": "The Keaton Mask takes the place of OoT's: wearing it turns Link into Keaton, three tails and all.",
+    "requires": [
+        "misc/link_animetion/gPlayerAnim_pg_punchA_Data",
+        "misc/link_animetion/gPlayerAnim_pg_punchB_Data",
+        "objects/object_link_goron/gLinkGoronGoronPunchEffectDL"
+    ]
+}

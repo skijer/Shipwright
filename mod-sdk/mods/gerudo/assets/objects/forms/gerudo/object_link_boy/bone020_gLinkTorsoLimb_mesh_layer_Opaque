@@ -1,0 +1,12 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/mat_gLinkAdultSkel_Armor_f3d_layerOpaque"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/bone020_gLinkTorsoLimb_mesh_layer_Opaque_tri_0"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/mat_gLinkAdultSkel_Headtexture_f3d_layerOpaque"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/bone020_gLinkTorsoLimb_mesh_layer_Opaque_tri_1"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/mat_gLinkAdultSkel_Tunic_Color_f3d_layerOpaque"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/bone020_gLinkTorsoLimb_mesh_layer_Opaque_tri_2"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/mat_gLinkAdultSkel_Body_skin_f3d_layerOpaque"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_boy/bone020_gLinkTorsoLimb_mesh_layer_Opaque_tri_3"/>
+	<EndDisplayList/>
+</DisplayList>
+

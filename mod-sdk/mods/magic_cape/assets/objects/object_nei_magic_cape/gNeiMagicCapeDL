@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_magic_cape/mat_gNeiMagicCape"/>
+	<CallDisplayList Path="objects/object_nei_magic_cape/gNeiMagicCapeDL_tri_0"/>
+	<EndDisplayList/>
+</DisplayList>
