@@ -1,6 +1,6 @@
-// Humming to ocarina songs: YIN pitch detection on a worker thread. A phrase is scored against every song
-// the game currently accepts, with the transposition fitted out, and the winner is handed to the native
-// recogniser as already played. Port of NEI's MicOcarina.cpp; the DSP is kept identical.
+// Humming to ocarina songs: YIN pitch detection on the game's microphone service. A phrase is scored against
+// every song the game currently accepts, with the transposition fitted out, and the winner is handed to the
+// native recogniser as already played. Port of NEI's MicOcarina.cpp; the DSP is kept identical.
 
 #include "soh/ModApi/ModApi.h"
 #include "functions.h"
@@ -11,15 +11,6 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
-#include <mutex>
-#include <thread>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <mmsystem.h>
-#pragma comment(lib, "winmm.lib")
-#endif
 
 extern "C" {
 // OPEN_DISPS redeclares these inside its body, which would give them C++ linkage here.
@@ -130,6 +121,8 @@ constexpr int kMeterBarHalfHeight = 1;
 constexpr int kOcarinaOutGraceFrames = 4;
 constexpr int kMicGraceFrames = 60;
 constexpr int kOpenRetryFrames = 300;
+constexpr uint32_t kCaptureChunkSamples = 2048;
+constexpr int kMaxChunksPerFrame = 16;
 
 struct MeterSegment {
     float startSeconds;
@@ -138,7 +131,7 @@ struct MeterSegment {
     bool accepted;
 };
 
-// Piano roll of the recent notes, written by the worker and copied out whole by the draw.
+// Piano roll of the recent notes.
 struct MeterHistory {
     MeterSegment segments[kMeterSegmentMax];
     int count;
@@ -159,8 +152,7 @@ std::atomic<int> sLastSongIndex{ 0 };
 
 std::atomic<int> sMatchedSong{ -1 };
 std::atomic<uint32_t> sMatchSequence{ 0 };
-std::atomic<bool> sMeterSignalPresent{ false };
-std::mutex sMeterMutex;
+bool sMeterSignalPresent = false;
 MeterHistory sMeterHistory;
 
 struct PitchEstimate {
@@ -280,13 +272,11 @@ struct NoteTracker {
 NoteTracker sTracker;
 
 void ClearMeter() {
-    std::lock_guard<std::mutex> lock(sMeterMutex);
     sMeterHistory.count = 0;
     sMeterHistory.hasAnchor = false;
 }
 
 void BeginMeterSegment(float cents) {
-    std::lock_guard<std::mutex> lock(sMeterMutex);
     if (sMeterHistory.count >= kMeterSegmentMax) {
         memmove(sMeterHistory.segments, &sMeterHistory.segments[1], (kMeterSegmentMax - 1) * sizeof(MeterSegment));
         sMeterHistory.count = kMeterSegmentMax - 1;
@@ -296,7 +286,6 @@ void BeginMeterSegment(float cents) {
 }
 
 void AcceptMeterSegment(float cents, float anchorCents) {
-    std::lock_guard<std::mutex> lock(sMeterMutex);
     if (sMeterHistory.count == 0) {
         return;
     }
@@ -310,7 +299,6 @@ void AcceptMeterSegment(float cents, float anchorCents) {
 // Once per hop, silence included, so the roll keeps scrolling and the held
 // note's bar keeps stretching.
 void AdvanceMeter(bool noteHeld) {
-    std::lock_guard<std::mutex> lock(sMeterMutex);
     sMeterHistory.nowSeconds += kHopSeconds;
     if (noteHeld && (sMeterHistory.count > 0)) {
         sMeterHistory.segments[sMeterHistory.count - 1].endSeconds = sMeterHistory.nowSeconds;
@@ -527,7 +515,7 @@ void ProcessWindow(const float* window) {
     if (rms > level) {
         estimate = EstimatePitch(window);
     }
-    sMeterSignalPresent.store(rms > 1.0e-6f, std::memory_order_relaxed);
+    sMeterSignalPresent = rms > 1.0e-6f;
 
     bool voiced = (estimate.clarity > kClarityMin) && (estimate.hz > 0.0f);
     if (!voiced) {
@@ -593,9 +581,9 @@ void ProcessWindow(const float* window) {
     }
 }
 
-void PushSamples(const int16_t* samples, int count) {
-    for (int i = 0; i < count; i++) {
-        sRing[(sRingWritePos + i) & (kRingSize - 1)] = samples[i] / 32768.0f;
+void PushSamples(const float* samples, uint32_t count) {
+    for (uint32_t i = 0; i < count; i++) {
+        sRing[(sRingWritePos + i) & (kRingSize - 1)] = samples[i];
     }
     sRingWritePos += count;
 }
@@ -614,111 +602,44 @@ void ProcessPendingHops() {
     }
 }
 
-std::thread sWorker;
-std::atomic<bool> sWorkerRunning{ false };
+const SOHModApi* sApi = nullptr;
+bool sCaptureOpen = false;
 
-#ifdef _WIN32
-// The game's SDL is not exported to mods, so capture goes through winmm; WAVE_MAPPER
-// converts whatever the device offers to mono 16-bit at kSampleRate.
-constexpr int kCaptureBufferCount = 8;
+// The game asks the player the first time and shows a microphone icon for as long as this records.
+SOHMicrophoneStatus OpenCaptureDevice() {
+    if (!SOH_MOD_API_HAS(sApi, CloseMicrophone)) {
+        return SOH_MICROPHONE_UNAVAILABLE;
+    }
+    const SOHMicrophoneStatus status = sApi->OpenMicrophone(kSampleRate);
+    if (status == SOH_MICROPHONE_OPEN) {
+        ResetTracker();
+        sRingReadPos = sRingWritePos;
+        sCaptureOpen = true;
+    }
+    return status;
+}
 
-HWAVEIN sCaptureDevice = nullptr;
-HANDLE sCaptureEvent = nullptr;
-WAVEHDR sCaptureHeaders[kCaptureBufferCount];
-int16_t sCaptureBuffers[kCaptureBufferCount][kHopSize];
-
-// The only thread that requeues buffers or touches the ring, so neither needs a lock.
-void RunWorker() {
-    int nextBuffer = 0;
-    while (sWorkerRunning.load(std::memory_order_acquire)) {
-        WaitForSingleObject(sCaptureEvent, 20);
-        while (sCaptureHeaders[nextBuffer].dwFlags & WHDR_DONE) {
-            WAVEHDR* header = &sCaptureHeaders[nextBuffer];
-            PushSamples(reinterpret_cast<const int16_t*>(header->lpData),
-                        static_cast<int>(header->dwBytesRecorded / sizeof(int16_t)));
-            waveInAddBuffer(sCaptureDevice, header, sizeof(WAVEHDR));
-            nextBuffer = (nextBuffer + 1) % kCaptureBufferCount;
+// A chunk at a time, each analysed before the next lands, so a long frame cannot overrun the ring.
+void PumpCapture() {
+    float chunk[kCaptureChunkSamples];
+    for (int i = 0; i < kMaxChunksPerFrame; i++) {
+        const uint32_t count = sApi->ReadMicrophone(chunk, kCaptureChunkSamples);
+        if (count == 0) {
+            return;
         }
+        PushSamples(chunk, count);
         ProcessPendingHops();
     }
 }
 
-bool IsCaptureOpen() {
-    return sCaptureDevice != nullptr;
-}
-
-void ReleaseCaptureDevice() {
-    waveInReset(sCaptureDevice);
-    for (WAVEHDR& header : sCaptureHeaders) {
-        waveInUnprepareHeader(sCaptureDevice, &header, sizeof(WAVEHDR));
-    }
-    waveInClose(sCaptureDevice);
-    CloseHandle(sCaptureEvent);
-    sCaptureDevice = nullptr;
-    sCaptureEvent = nullptr;
-}
-
-bool OpenCaptureDevice() {
-    WAVEFORMATEX format = {};
-    format.wFormatTag = WAVE_FORMAT_PCM;
-    format.nChannels = 1;
-    format.nSamplesPerSec = kSampleRate;
-    format.wBitsPerSample = 16;
-    format.nBlockAlign = format.nChannels * format.wBitsPerSample / 8;
-    format.nAvgBytesPerSec = format.nSamplesPerSec * format.nBlockAlign;
-
-    sCaptureEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    MMRESULT result = waveInOpen(&sCaptureDevice, WAVE_MAPPER, &format, reinterpret_cast<DWORD_PTR>(sCaptureEvent),
-                                 0, CALLBACK_EVENT);
-    if (result != MMSYSERR_NOERROR) {
-        LUSLOG_WARN("MicOcarina: could not open capture device (MMRESULT %u)", result);
-        CloseHandle(sCaptureEvent);
-        sCaptureEvent = nullptr;
-        sCaptureDevice = nullptr;
-        return false;
-    }
-
-    for (int i = 0; i < kCaptureBufferCount; i++) {
-        WAVEHDR& header = sCaptureHeaders[i];
-        memset(&header, 0, sizeof(header));
-        header.lpData = reinterpret_cast<LPSTR>(sCaptureBuffers[i]);
-        header.dwBufferLength = sizeof(sCaptureBuffers[i]);
-        waveInPrepareHeader(sCaptureDevice, &header, sizeof(WAVEHDR));
-        waveInAddBuffer(sCaptureDevice, &header, sizeof(WAVEHDR));
-    }
-
-    ResetTracker();
-    sRingReadPos = sRingWritePos;
-    sWorkerRunning.store(true, std::memory_order_release);
-    sWorker = std::thread(RunWorker);
-    waveInStart(sCaptureDevice);
-    return true;
-}
-
 void CloseCaptureDevice() {
-    if (!IsCaptureOpen()) {
+    if (!sCaptureOpen) {
         return;
     }
-    sWorkerRunning.store(false, std::memory_order_release);
-    if (sWorker.joinable()) {
-        sWorker.join();
-    }
-    ReleaseCaptureDevice();
+    sApi->CloseMicrophone();
+    sCaptureOpen = false;
     ResetTracker();
 }
-#else
-bool IsCaptureOpen() {
-    return false;
-}
-
-bool OpenCaptureDevice() {
-    LUSLOG_WARN("MicOcarina: microphone capture is only implemented on %s", "Windows");
-    return false;
-}
-
-void CloseCaptureDevice() {
-}
-#endif
 
 std::atomic<bool> sRequested{ false };
 int sIdleFrames = kMicGraceFrames;
@@ -741,15 +662,21 @@ void TickMicOcarina() {
     }
 
     bool wanted = CVarGetInteger(kEnabledCvar, 1) && (sIdleFrames < kMicGraceFrames);
-    if (wanted && !IsCaptureOpen()) {
-        if ((sOpenRetryFrames == 0) && !OpenCaptureDevice()) {
+    if (wanted && !sCaptureOpen) {
+        if (sOpenRetryFrames > 0) {
+            return;
+        }
+        const SOHMicrophoneStatus status = OpenCaptureDevice();
+        if (status == SOH_MICROPHONE_DENIED || status == SOH_MICROPHONE_UNAVAILABLE) {
             sOpenRetryFrames = kOpenRetryFrames;
         }
         return;
     }
-    if (!wanted && IsCaptureOpen()) {
+    if (!wanted) {
         CloseCaptureDevice();
+        return;
     }
+    PumpCapture();
 }
 
 // Fires on the audio thread every tick the ocarina takes input: the thread that owns the globals below.
@@ -819,15 +746,11 @@ void DrawHint(PlayState* play, const char* hint) {
 // Bars are born at the left edge and stream right as they age, so a held note
 // draws itself left to right. White until it counts, green once it does.
 void DrawMeter(PlayState* play) {
-    if (!IsCaptureOpen() || !sOcarinaOut) {
+    if (!sCaptureOpen || !sOcarinaOut) {
         return;
     }
 
-    MeterHistory history;
-    {
-        std::lock_guard<std::mutex> lock(sMeterMutex);
-        history = sMeterHistory;
-    }
+    const MeterHistory& history = sMeterHistory;
 
     int16_t left = OTRGetRectDimensionFromLeftEdge(0);
     int16_t right = OTRGetRectDimensionFromRightEdge(SCREEN_WIDTH);
@@ -858,8 +781,7 @@ void DrawMeter(PlayState* play) {
     }
 
     if (!history.hasAnchor) {
-        DrawHint(play, sMeterSignalPresent.load(std::memory_order_relaxed) ? "hold a note to set the key"
-                                                                           : "no mic signal");
+        DrawHint(play, sMeterSignalPresent ? "hold a note to set the key" : "no mic signal");
     }
 }
 
@@ -884,8 +806,6 @@ void RegisterMenuToggle(const SOHModApi* api) {
 const char* const kRequiredHooks[] = { "OnOcarinaNote", "OnGameFrameUpdate", "OnInterfaceDrawEnd" };
 const SOHModRequirements kRequirements = { sizeof(SOHModRequirements), kRequiredHooks,
                                            static_cast<uint32_t>(sizeof(kRequiredHooks) / sizeof(kRequiredHooks[0])) };
-
-const SOHModApi* sApi = nullptr;
 
 } // namespace
 

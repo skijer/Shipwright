@@ -1,5 +1,5 @@
-"""Trae al mod el árbol de descripción de assets de Majora's Mask, que es lo que ZAPD necesita para saber
-qué hay en cada offset de la ROM. Los nombres se copian tal cual: los recursos de MM salen con las mismas
+"""Trae al mod mm_assets el árbol de descripción de assets de Majora's Mask, que es lo que ZAPD necesita para
+saber qué hay en cada offset de la ROM. Los nombres se copian tal cual: los recursos de MM salen con las mismas
 rutas que en un mm.o2r de 2ship, para que un mod escrito contra ese archivo valga aquí sin tocar nada.
 """
 
@@ -9,12 +9,13 @@ from pathlib import Path
 
 VERBATIM = ("filelists", "symbols", "Config_GC_US.xml", "Config_N64_US.xml", "EnumData.xml")
 XML_VERSIONS = ("GC_US", "N64_US")
+DEFAULT_DESTINATION = Path(__file__).resolve().parents[1] / "mods" / "mm_assets" / "assets" / "mm_zapd" / "assets"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", type=Path, required=True, help="carpeta mm/assets de 2ship")
-    parser.add_argument("--destination", type=Path, default=Path(__file__).parent / "assets" / "mm_zapd" / "assets")
+    parser.add_argument("--destination", type=Path, default=DEFAULT_DESTINATION)
     arguments = parser.parse_args()
 
     if arguments.destination.exists():

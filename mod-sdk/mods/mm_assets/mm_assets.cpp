@@ -1,23 +1,15 @@
 // Los recursos de Majora's Mask para Unbound. Al arrancar, si ningún archivo cargado los trae, pide la ROM
 // y la extrae entera con el ZAPD que ya va dentro del exe, el mismo que saca oot.o2r. El mod solo pone lo
-// que a ZAPD le falta: el árbol de XML que describe la ROM, que viaja dentro de su propio .o2r.
+// que a ZAPD le falta: el árbol de XML que describe la ROM, que viaja dentro de su propio .o2r. Leer la ROM,
+// escribir mm.o2r y reiniciar lo hace el juego, que se lo pregunta antes al jugador.
 #include "soh/ModApi/ModApi.h"
-#include "soh/Extractor/portable-file-dialogs.h"
 #include "sfx/mm_sfx_service.h"
 
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <string>
-#include <system_error>
 #include <utility>
 #include <vector>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
 
 // An archive extracted before the icons were is missing them, so it has to prove it has both kinds.
 static const char* const kMarkerResources[] = {
@@ -25,13 +17,10 @@ static const char* const kMarkerResources[] = {
     "icon_item_static_yar/gItemIconKafeisMaskTex",
 };
 #define INSTALLED_ARCHIVE_NAME "mm.o2r"
-// The installed archive is mounted while the game runs, so the new one waits beside it until the restart.
-#define PENDING_ARCHIVE_NAME "mm.o2r.new"
-// Los XML que el mod trae dentro, y el sitio donde hay que dejarlos para que ZAPD los lea del disco.
+#define DIALOG_TITLE "Majora's Mask assets"
+// Los XML que el mod trae dentro; el juego los deja en disco bajo ZAPD_ASSET_ROOT para que ZAPD los lea.
 #define ZAPD_ASSET_MASK "mm_zapd/*"
 #define ZAPD_ASSET_ROOT "mm_zapd"
-#define ZAPD_ROM_NAME "mm.z64"
-#define EXTRACT_DIRECTORY ".mm-extract"
 
 // Palabra 4 de la cabecera de la ROM: la que distingue las versiones que ZAPD sabe leer.
 #define MM_VERSION_US_10 0x5354631C
@@ -100,9 +89,8 @@ bool NormalizeByteOrder(std::vector<uint8_t>& rom) {
     }
 }
 
-std::vector<uint8_t> LoadRom(const std::filesystem::path& path) {
-    std::ifstream file(path, std::ios::binary);
-    std::vector<uint8_t> rom((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+std::vector<uint8_t> ReadRom(const SOHUserFile& file) {
+    std::vector<uint8_t> rom(file.data, file.data + file.size);
 
     if (!NormalizeByteOrder(rom)) {
         rom.clear();
@@ -214,13 +202,6 @@ bool UnpackYarArchives(std::vector<uint8_t>& rom, const RomLayout& layout) {
     return true;
 }
 
-bool WriteRom(const std::filesystem::path& path, const std::vector<uint8_t>& rom) {
-    std::ofstream file(path, std::ios_base::openmode(std::ios_base::binary | std::ios_base::trunc));
-
-    file.write((const char*)rom.data(), (std::streamsize)rom.size());
-    return file.good();
-}
-
 bool HasExtractedAssets() {
     for (const char* marker : kMarkerResources) {
         if (!sApi->HasResource(marker)) {
@@ -230,142 +211,55 @@ bool HasExtractedAssets() {
     return true;
 }
 
-std::filesystem::path GameDirectory() {
-#ifdef _WIN32
-    wchar_t executable[MAX_PATH];
-    if (GetModuleFileNameW(nullptr, executable, MAX_PATH) != 0) {
-        return std::filesystem::path(executable).parent_path();
-    }
-#endif
-    return std::filesystem::current_path();
-}
-
-void Complain(const std::string& message) {
-    pfd::message("Majora's Mask assets", message, pfd::choice::ok, pfd::icon::error).result();
-}
-
-#ifdef _WIN32
-// Los argumentos con los que arrancó el juego, sin el ejecutable: relanzarlo sin ellos perdería cosas como
-// el modo hijo de Fleet Ship.
-std::wstring OriginalArguments() {
-    const wchar_t* line = GetCommandLineW();
-
-    if (*line == L'"') {
-        line = wcschr(line + 1, L'"');
-        line = line == nullptr ? L"" : line + 1;
-    } else {
-        const wchar_t* space = wcschr(line, L' ');
-        line = space == nullptr ? L"" : space;
-    }
-    return std::wstring(line);
-}
-#endif
-
-// El archivo recién escrito solo se monta al arrancar, y los mods que lo esperaban ya se comprobaron. El
-// relanzado espera un momento antes de abrir el juego nuevo: si los dos procesos se solapan, el segundo se
-// encuentra el log y los archivos en manos del primero.
-void RestartGame(const std::filesystem::path& pendingArchive, const std::filesystem::path& installedArchive) {
-#ifdef _WIN32
-    wchar_t executable[MAX_PATH];
-
-    if (GetModuleFileNameW(nullptr, executable, MAX_PATH) != 0) {
-        std::wstring command = L"cmd.exe /c ping -n 3 127.0.0.1 >nul & move /y \"" + pendingArchive.wstring() +
-                               L"\" \"" + installedArchive.wstring() + L"\" >nul & start \"\" \"" +
-                               std::wstring(executable) + L"\"" + OriginalArguments();
-        STARTUPINFOW startup = {};
-        PROCESS_INFORMATION process = {};
-
-        startup.cb = sizeof(startup);
-        if (CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS,
-                           nullptr, GameDirectory().wstring().c_str(), &startup, &process)) {
-            CloseHandle(process.hProcess);
-            CloseHandle(process.hThread);
-        }
-    }
-#endif
-    exit(0);
-}
-
-bool ExtractRom(std::vector<uint8_t>& rom, const RomLayout& layout, const std::filesystem::path& archivePath) {
-    const std::filesystem::path workspace = GameDirectory() / EXTRACT_DIRECTORY;
-    std::error_code error;
-
-    std::filesystem::remove_all(workspace, error);
-    if (sApi->ExportArchiveFiles(ZAPD_ASSET_MASK, workspace.string().c_str()) == 0) {
-        Complain("This mod's copy of the Majora's Mask asset descriptions is missing.");
-        return false;
-    }
-    const std::filesystem::path zapdRom = workspace / ZAPD_ROM_NAME;
-    if (!UnpackYarArchives(rom, layout) || !WriteRom(zapdRom, rom)) {
-        Complain("Could not unpack the icon archives of that ROM.");
-        std::filesystem::remove_all(workspace, error);
+// El juego deja los XML en disco, escribe la ROM, corre ZAPD y pone mm.o2r en mods/ (al lado, si el viejo
+// está montado, y lo cambia al siguiente arranque).
+bool BuildArchiveFromRom(std::vector<uint8_t>& rom, const RomLayout& layout) {
+    if (!UnpackYarArchives(rom, layout)) {
+        sApi->TellPlayer(DIALOG_TITLE, "Could not unpack the icon archives of that ROM.");
         return false;
     }
 
     const std::string xmlDirectory = std::string("assets/xml/") + layout.xmlVersion;
     const std::string configPath = std::string("assets/Config_") + layout.xmlVersion + ".xml";
-    const std::string assetsDirectory = (workspace / ZAPD_ASSET_ROOT).string();
-    const std::string outputPath = archivePath.string();
-    const std::string romArgument = zapdRom.string();
-    SOHO2rExtractRequest request = {};
+    SOHRomExtractRequest request = {};
 
     request.structSize = sizeof(request);
-    request.romPath = romArgument.c_str();
-    request.assetsDir = assetsDirectory.c_str();
+    request.rom = rom.data();
+    request.romSize = rom.size();
+    request.zapdAssetMask = ZAPD_ASSET_MASK;
+    request.zapdAssetRoot = ZAPD_ASSET_ROOT;
     request.xmlDir = xmlDirectory.c_str();
     request.configPath = configPath.c_str();
     request.filelistDir = "assets/filelists";
-    request.outputPath = outputPath.c_str();
-
-    const bool extracted = sApi->ExtractRom(&request);
-    std::filesystem::remove_all(workspace, error);
-    return extracted;
+    request.outputFileName = INSTALLED_ARCHIVE_NAME;
+    return sApi->ExtractRomToModsFolder(&request);
 }
 
 void ExtractFromRom() {
-    const pfd::button answer = pfd::message("Majora's Mask assets",
-                                            "Some installed mods need assets from Majora's Mask, and they are not "
-                                            "here yet.\n\nRead them out of your Majora's Mask ROM now?",
-                                            pfd::choice::yes_no, pfd::icon::question)
-                                   .result();
-    if (answer != pfd::button::yes) {
+    if (!sApi->AskPlayer(DIALOG_TITLE, "Some installed mods need assets from Majora's Mask, and they are not here "
+                                       "yet.\n\nRead them out of your Majora's Mask ROM now?")) {
         return;
     }
 
-    const std::vector<std::string> chosen =
-        pfd::open_file("Select your Majora's Mask ROM", ".",
-                       { "Nintendo 64 ROM", "*.z64 *.n64 *.v64", "All files", "*" })
-            .result();
-    if (chosen.empty()) {
+    SOHUserFile file = {};
+    file.structSize = sizeof(file);
+    if (!sApi->PickUserFile("Select your Majora's Mask ROM", "Nintendo 64 ROM", "*.z64 *.n64 *.v64", &file)) {
         return;
     }
+    std::vector<uint8_t> rom = ReadRom(file);
+    sApi->FreeUserFile(&file);
 
-    std::vector<uint8_t> rom = LoadRom(chosen[0]);
     const RomLayout* layout = rom.empty() ? nullptr : FindLayout(rom);
     if (layout == nullptr) {
-        Complain("That is not a Majora's Mask US 1.0 or US GameCube ROM, which are the two this mod can read.");
+        sApi->TellPlayer(DIALOG_TITLE,
+                         "That is not a Majora's Mask US 1.0 or US GameCube ROM, which are the two this mod can read.");
         return;
     }
-
-    pfd::message("Majora's Mask assets",
-                 "Extraction will run now and takes a few minutes. The game will look frozen; do not close it.",
-                 pfd::choice::ok, pfd::icon::info)
-        .result();
-
-    std::error_code error;
-    const std::filesystem::path mods = GameDirectory() / "mods";
-    const std::filesystem::path pendingArchive = mods / PENDING_ARCHIVE_NAME;
-    std::filesystem::create_directories(mods, error);
-    if (!ExtractRom(rom, *layout, pendingArchive)) {
-        Complain("Could not extract that ROM. The log has what ZAPD complained about.");
+    if (!BuildArchiveFromRom(rom, *layout)) {
+        sApi->TellPlayer(DIALOG_TITLE, INSTALLED_ARCHIVE_NAME " was not created. The log says why.");
         return;
     }
-
-    pfd::message("Majora's Mask assets",
-                 INSTALLED_ARCHIVE_NAME " is ready. Unbound will restart now so the mods waiting for it can load.",
-                 pfd::choice::ok, pfd::icon::info)
-        .result();
-    RestartGame(pendingArchive, mods / INSTALLED_ARCHIVE_NAME);
+    sApi->RequestRestart(INSTALLED_ARCHIVE_NAME " is ready, and the mods waiting for it load after a restart");
 }
 
 } // namespace
@@ -377,6 +271,10 @@ extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
 extern "C" SOH_MOD_EXPORT void ModInit(void) {
     MmSfxService_Init(sApi);
     if (HasExtractedAssets()) {
+        return;
+    }
+    if (!SOH_MOD_API_HAS(sApi, RequestRestart)) {
+        sApi->Log("mm_assets: this Unbound is too old to extract Majora's Mask assets");
         return;
     }
     ExtractFromRom();
