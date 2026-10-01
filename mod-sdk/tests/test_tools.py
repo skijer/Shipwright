@@ -288,6 +288,15 @@ class ScanModSourcesTests(unittest.TestCase):
         problems, _ = scan_mod_sources.scan_tokens(preprocessed, root, self.mods.resolve())
         self.assertEqual(problems, {f"{Path('mods/probe/probe.c')}: uses 'system'"})
 
+    def test_variables_and_members_named_like_forbidden_calls_pass(self):
+        root = Path(self.workspace.name).resolve()
+        preprocessed = (f'# 1 "{root / "mods" / "probe" / "probe.c"}"\n'
+                        's32 remove; remove = 1; if (remove) { list.remove(2); queue->rename (3); }\n'
+                        'std::remove(items.begin(), items.end(), 0); unlink ("file"); __asm__ volatile;\n')
+        problems, _ = scan_mod_sources.scan_tokens(preprocessed, root, self.mods.resolve())
+        self.assertEqual(problems, {f"{Path('mods/probe/probe.c')}: uses 'unlink'",
+                                    f"{Path('mods/probe/probe.c')}: uses '__asm__'"})
+
     def test_services_are_traced_to_the_permission_they_need(self):
         root = Path(self.workspace.name).resolve()
         preprocessed = (f'# 1 "{root / "mods" / "probe" / "probe.c"}"\n'

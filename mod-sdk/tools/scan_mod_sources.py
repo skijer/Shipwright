@@ -18,8 +18,8 @@ FORBIDDEN_HEADERS = re.compile(
     r"libloaderapi|memoryapi|tlhelp32|psapi|dbghelp|intrin|process|io|direct|unistd|fcntl|dlfcn|spawn|"
     r"netdb|pthread|thread|future|filesystem|fstream|curl/.*|sys/.*|netinet/.*|arpa/.*|.*portable-file-dialogs)"
     r"(\.h|\.hpp)?$")
-FORBIDDEN_IDENTIFIERS = {
-    "asm", "__asm", "__asm__", "_asm",
+ASSEMBLY_KEYWORDS = {"asm", "__asm", "__asm__", "_asm"}
+FORBIDDEN_IDENTIFIERS = ASSEMBLY_KEYWORDS | {
     "__readgsqword", "__readgsdword", "__readfsqword", "__readfsdword", "__getReg", "NtCurrentTeb", "NtCurrentPeb",
     "LoadLibraryA", "LoadLibraryW", "LoadLibraryExA", "LoadLibraryExW", "GetProcAddress", "GetModuleHandleA",
     "GetModuleHandleW", "dlopen", "dlsym", "dlmopen", "VirtualProtect", "VirtualAlloc", "mprotect", "syscall",
@@ -147,6 +147,16 @@ def check_manifests(mods_directory):
     return problems
 
 
+def is_forbidden_use(code, match):
+    """Inline assembly anywhere; any other name only when called as a free function, so a variable or member
+    that shares the name passes. A call reached some other way still shows up in the binary's imports."""
+    if match.group(0) in ASSEMBLY_KEYWORDS:
+        return True
+    if code[:match.start()].rstrip().endswith((".", "->", "std::")):
+        return False
+    return code[match.end():].lstrip().startswith("(")
+
+
 def scan_tokens(preprocessed, submitted_root, mods_directory):
     """Forbidden identifiers, and which permissions each mod's services need, in the code the mod itself wrote."""
     problems = set()
@@ -159,8 +169,10 @@ def scan_tokens(preprocessed, submitted_root, mods_directory):
             continue
         if current_file is None or not current_file.is_relative_to(submitted_root):
             continue
-        for identifier in IDENTIFIER.findall(LITERAL.sub(" ", line)):
-            if identifier in FORBIDDEN_IDENTIFIERS:
+        code = LITERAL.sub(" ", line)
+        for match in IDENTIFIER.finditer(code):
+            identifier = match.group(0)
+            if identifier in FORBIDDEN_IDENTIFIERS and is_forbidden_use(code, match):
                 problems.add(f"{current_file.relative_to(submitted_root)}: uses '{identifier}'")
             permission = SERVICE_PERMISSIONS.get(identifier)
             if permission and current_file.is_relative_to(mods_directory):
