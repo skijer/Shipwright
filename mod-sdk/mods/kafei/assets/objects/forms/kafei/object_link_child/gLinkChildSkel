@@ -1,0 +1,23 @@
+<Skeleton Version="0" Type="Flex" LimbCount="21" DisplayListCount="18">
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_000"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_001"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_002"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_003"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_004"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_005"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_006"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_007"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_008"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_009"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_010"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_011"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_012"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_013"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_014"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_015"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_016"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_017"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_018"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_019"/>
+	<SkeletonLimb Path="objects/forms/kafei/object_link_child/gLinkChildSkelLimb_020"/>
+</Skeleton>

@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_wand_shadow_scepter/mat_wand_shadow_scepter_4"/>
+	<CallDisplayList Path="objects/object_nei_wand_shadow_scepter/wand_shadow_scepter_tri_4"/>
+	<EndDisplayList/>
+</DisplayList>

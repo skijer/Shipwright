@@ -1,0 +1,10 @@
+<DisplayList Version="0">
+	<Matrix Path=">0x0d0002c0" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/forms/gerudo/object_link_boy/bone014_gLinkAdultLeftArmLimb_mesh_layer_Opaque_vtx_2" VertexBufferIndex="0" VertexOffset="0" Count="6"/>
+	<Triangle1 V00="0" V01="1" V02="2"/>
+	<Triangle1 V00="3" V01="1" V02="0"/>
+	<Triangle1 V00="4" V01="3" V02="0"/>
+	<Triangle1 V00="5" V01="3" V02="4"/>
+	<EndDisplayList/>
+</DisplayList>
+

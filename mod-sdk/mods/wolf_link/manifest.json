@@ -1,0 +1,9 @@
+{
+    "name": "wolf_link",
+    "author": "Skijer",
+    "version": "1.0",
+    "description": "The Shadow Crystal turns Link into Twilight Princess' wolf: bites, lunges, spins, A-dash and lock-on hops.",
+    "requires": [
+        "misc/link_animetion/gPlayerAnim_pg_maru_change_Data"
+    ]
+}
