@@ -18,8 +18,9 @@ on:
       - '*celshade*'
       - '*unbound*'
   pull_request:
-    paths-ignore:
-      - 'mod-sdk/mods/**'
+    branches:
+      - wind-waker-style-cel-shading
+      - unbound
   workflow_dispatch:
     inputs:
       tag:
