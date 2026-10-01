@@ -149,13 +149,24 @@ jobs:
         python-version: '3.12'
     - name: Install Python dependencies
       run: python -m pip install pillow
-    - name: Download soh.lib from the release
+    - name: Get soh.lib
       if: runner.os == 'Windows'
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         UNBOUND_REF: ${{ needs.request.outputs.unbound_ref }}
-      run: gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern soh.lib --dir external/soh-lib
+      run: |
+        if gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern soh.lib --dir external/soh-lib; then
+          exit 0
+        fi
+        RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=20" \
+              --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+        if [ -z "$RUN" ]; then
+          echo "::error::$GITHUB_REPOSITORY has neither a release with soh.lib nor a Windows build artifact"
+          exit 1
+        fi
+        echo "No release with soh.lib: using the unbound-mod-sdk-windows artifact of run $RUN"
+        gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name unbound-mod-sdk-windows --dir external/soh-lib
     - name: Build
       shell: bash
       env:

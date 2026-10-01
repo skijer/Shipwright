@@ -18,7 +18,7 @@ LABEL_FAILED = "sign-failed"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TRUSTED_AUTHORS = REPOSITORY_ROOT / ".github" / "mod-signing" / "trusted-authors.txt"
 REVOKED_MODS = REPOSITORY_ROOT / "soh" / "soh" / "ModApi" / "ModTrust" / "RevokedMods.h"
-UNBOUND_REF = re.compile(r"^[A-Za-z0-9._-]+$")
+UNBOUND_REF = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 WORKFLOW_FILE = "sign-mod.yml"
 AWAITING_MESSAGE = ("Thanks! This is your first signature request, so a maintainer reviews it before anything is "
                     "built. Signing starts as soon as they add the `approved` label.")
@@ -101,7 +101,16 @@ def apply_triage(repository, issue, action):
         close_as(repository, issue, LABEL_FAILED, REVOKED_MESSAGE)
 
 
+def is_reference_of(repository, reference):
+    try:
+        gh("api", f"repos/{repository}/commits/{reference}", "--jq", ".sha")
+        return True
+    except subprocess.CalledProcessError:
+        return False
+
+
 def pick_unbound_ref(repository, request):
+    """The mods' UNBOUND_REF, else the newest Unbound release, else the commit this workflow runs from."""
     try:
         reference = gh("api", "-H", "Accept: application/vnd.github.raw",
                        f"repos/{request['repository']}/contents/UNBOUND_REF?ref={request['commit']}").strip()
@@ -110,12 +119,10 @@ def pick_unbound_ref(repository, request):
     if not reference:
         releases = json.loads(gh("release", "list", "--repo", repository, "--limit", "50", "--json", "tagName"))
         reference = next((release["tagName"] for release in releases if "unbound" in release["tagName"]), "")
-    if not UNBOUND_REF.match(reference):
-        raise ValueError(f"'{reference}' is not a usable Unbound release tag")
-    try:
-        gh("release", "view", reference, "--repo", repository, "--json", "tagName")
-    except subprocess.CalledProcessError as error:
-        raise ValueError(f"'{reference}' is not an Unbound release of {repository}") from error
+    if not reference:
+        return os.environ["GITHUB_SHA"]
+    if not UNBOUND_REF.match(reference) or not is_reference_of(repository, reference):
+        raise ValueError(f"'{reference}' is not a tag, branch or commit of {repository}")
     return reference
 
 

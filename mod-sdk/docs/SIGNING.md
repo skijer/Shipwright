@@ -22,7 +22,9 @@ remembered by that hash in `mods/.unbound-mod-approvals.json`; changing a single
 ## Getting a mod signed
 
 1. Push your mods to a **public** repository you own, laid out as in [Publishing](PUBLISHING.md): one folder
-   per mod with `manifest.json`, its sources and `assets/`. Add `UNBOUND_REF` to pin the Unbound release.
+   per mod with `manifest.json`, its sources and `assets/`. Add `UNBOUND_REF` to pin the Unbound release (or
+   tag, branch or commit) to build against; without it the newest Unbound release is used, or the current
+   Unbound commit while there is none.
 2. Open a **Sign a mod** issue in the Unbound repository with the repository, the full commit hash and the
    mods folder.
 3. The workflow answers the issue: either a release with your signed `.o2r` files, or the step that failed.
