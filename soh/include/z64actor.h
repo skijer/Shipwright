@@ -370,7 +370,8 @@ typedef enum {
     /* 0x1B */ ITEM00_SOH_DUMMY,
     /* 0x1C */ ITEM00_SOH_GIVE_ITEM_ENTRY,
     /* 0x1D */ ITEM00_SOH_GIVE_ITEM_ENTRY_GI,
-    /* 0x1E */ ITEM00_MAX,
+    /* 0x1E */ ITEM00_SOH_CUSTOM,
+    /* 0x1F */ ITEM00_MAX,
     /* 0xFF */ ITEM00_NONE = 0xFF
 } Item00Type;
 

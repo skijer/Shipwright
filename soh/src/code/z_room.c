@@ -638,7 +638,30 @@ void Room_Draw(PlayState* play, Room* room, u32 flags) {
     if (room->segment != NULL) {
         gSegments[3] = VIRTUAL_TO_PHYSICAL(room->segment);
         assert(room->meshHeader->base.type < ARRAY_COUNTU(sRoomDrawHandlers));
+
+        Color_RGBA8 grayscale = { 0, 0, 0, 0 };
+        GameInteractor_ExecuteOnRoomResolveGrayscale(play, room, &grayscale);
+        bool isGrayscale = grayscale.a != 0;
+
+        OPEN_DISPS(play->state.gfxCtx);
+        if (isGrayscale) {
+            gDPPipeSync(POLY_OPA_DISP++);
+            gDPSetGrayscaleColor(POLY_OPA_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+            gSPGrayscale(POLY_OPA_DISP++, true);
+            gDPPipeSync(POLY_XLU_DISP++);
+            gDPSetGrayscaleColor(POLY_XLU_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+            gSPGrayscale(POLY_XLU_DISP++, true);
+        }
+        CLOSE_DISPS(play->state.gfxCtx);
+
         sRoomDrawHandlers[room->meshHeader->base.type](play, room, flags);
+
+        OPEN_DISPS(play->state.gfxCtx);
+        if (isGrayscale) {
+            gSPGrayscale(POLY_OPA_DISP++, false);
+            gSPGrayscale(POLY_XLU_DISP++, false);
+        }
+        CLOSE_DISPS(play->state.gfxCtx);
     }
 }
 

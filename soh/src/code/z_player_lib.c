@@ -9,6 +9,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ResourceManagerHelpers.h"
 
 #include <stdlib.h>
@@ -530,7 +531,17 @@ s32 Player_IsChildWithHylianShield(Player* this) {
 }
 
 s32 Player_ActionToModelGroup(Player* this, s32 actionParam) {
-    s32 modelGroup = sActionModelGroups[actionParam];
+    s32 modelGroup = PLAYER_MODELGROUP_DEFAULT;
+
+    if (actionParam == PLAYER_IA_CUSTOM) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetActive();
+        if (definition != NULL) {
+            modelGroup = definition->modelGroup;
+        }
+    } else if ((actionParam >= 0) && (actionParam < ARRAY_COUNT(sActionModelGroups))) {
+        modelGroup = sActionModelGroups[actionParam];
+    }
+    GameInteractor_ExecuteOnPlayerResolveModelGroup(this, actionParam, &modelGroup);
 
     if ((modelGroup == PLAYER_MODELGROUP_SWORD_AND_SHIELD) && Player_IsChildWithHylianShield(this)) {
         // child, using kokiri sword with hylian shield equipped
@@ -780,6 +791,11 @@ s32 Player_GetStrength(void) {
         return PLAYER_STR_NONE;
     }
 
+    s32 bodyStrength = PLAYER_STR_NONE;
+    if (!GameInteractor_Should(VB_USE_STRENGTH_UPGRADE, true, &bodyStrength)) {
+        return bodyStrength;
+    }
+
     if (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || LINK_IS_ADULT) {
         return strengthUpgrade;
     } else if (strengthUpgrade != 0) {
@@ -851,6 +867,10 @@ s32 func_8008F128(Player* this) {
 
 s32 Player_ActionToMeleeWeapon(s32 actionParam) {
     s32 sword = actionParam - PLAYER_IA_FISHING_POLE;
+
+    if (actionParam == PLAYER_IA_CUSTOM) {
+        return CustomItemRegistry_GetActiveMeleeWeapon();
+    }
 
     if ((sword > 0) && (sword < 6)) {
         return sword;
@@ -1016,6 +1036,19 @@ Color_RGB8 sTunicColors[] = {
     { 0, 60, 100 },
 };
 
+Color_RGB8 Player_GetTunicColor(s32 tunic) {
+    if (tunic == PLAYER_TUNIC_KOKIRI && CVarGetInteger(CVAR_COSMETIC("Link.KokiriTunic.Changed"), 0)) {
+        return CVarGetColor24(CVAR_COSMETIC("Link.KokiriTunic.Value"), sTunicColors[PLAYER_TUNIC_KOKIRI]);
+    }
+    if (tunic == PLAYER_TUNIC_GORON && CVarGetInteger(CVAR_COSMETIC("Link.GoronTunic.Changed"), 0)) {
+        return CVarGetColor24(CVAR_COSMETIC("Link.GoronTunic.Value"), sTunicColors[PLAYER_TUNIC_GORON]);
+    }
+    if (tunic == PLAYER_TUNIC_ZORA && CVarGetInteger(CVAR_COSMETIC("Link.ZoraTunic.Changed"), 0)) {
+        return CVarGetColor24(CVAR_COSMETIC("Link.ZoraTunic.Value"), sTunicColors[PLAYER_TUNIC_ZORA]);
+    }
+    return sTunicColors[tunic];
+}
+
 Color_RGB8 sGauntletColors[] = {
     { 255, 255, 255 },
     { 254, 207, 15 },
@@ -1047,10 +1080,6 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
         eyeIndex = 7;
 
 #if defined(MODDING) || defined(_MSC_VER) || defined(__GNUC__)
-    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyeTextures[gSaveContext.linkAge][eyeIndex]));
-#else
-    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyeTextures[eyeIndex]));
-#endif
     if (mouthIndex < 0) {
         mouthIndex = sEyeMouthIndexes[face][1];
     }
@@ -1058,24 +1087,25 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
     if (mouthIndex > 3)
         mouthIndex = 3;
 
-#if defined(MODDING) || defined(_MSC_VER) || defined(__GNUC__)
-    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sMouthTextures[gSaveContext.linkAge][mouthIndex]));
+    const char* eyes = sEyeTextures[gSaveContext.linkAge][eyeIndex];
+    const char* mouth = sMouthTextures[gSaveContext.linkAge][mouthIndex];
+    GameInteractor_ExecuteOnPlayerResolveFaceTextures(&eyes, &mouth);
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eyes));
+    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(mouth));
 #else
+    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(sEyeTextures[eyeIndex]));
+    if (mouthIndex < 0) {
+        mouthIndex = sEyeMouthIndexes[face][1];
+    }
+
+    if (mouthIndex > 3)
+        mouthIndex = 3;
+
     gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(sMouthTextures[eyeIndex]));
 #endif
 
-    Color_RGB8 sTemp;
-    color = &sTunicColors[tunic];
-    if (tunic == PLAYER_TUNIC_KOKIRI && CVarGetInteger(CVAR_COSMETIC("Link.KokiriTunic.Changed"), 0)) {
-        sTemp = CVarGetColor24(CVAR_COSMETIC("Link.KokiriTunic.Value"), sTunicColors[PLAYER_TUNIC_KOKIRI]);
-        color = &sTemp;
-    } else if (tunic == PLAYER_TUNIC_GORON && CVarGetInteger(CVAR_COSMETIC("Link.GoronTunic.Changed"), 0)) {
-        sTemp = CVarGetColor24(CVAR_COSMETIC("Link.GoronTunic.Value"), sTunicColors[PLAYER_TUNIC_GORON]);
-        color = &sTemp;
-    } else if (tunic == PLAYER_TUNIC_ZORA && CVarGetInteger(CVAR_COSMETIC("Link.ZoraTunic.Changed"), 0)) {
-        sTemp = CVarGetColor24(CVAR_COSMETIC("Link.ZoraTunic.Value"), sTunicColors[PLAYER_TUNIC_ZORA]);
-        color = &sTemp;
-    }
+    Color_RGB8 sTemp = Player_GetTunicColor(tunic);
+    color = &sTemp;
 
     if (GameInteractor_Should(VB_APPLY_TUNIC_COLOR, true, data, color)) {
         gDPSetEnvColor(POLY_OPA_DISP++, color->r, color->g, color->b, 0);
@@ -1176,8 +1206,10 @@ void func_8008F87C(PlayState* play, Player* this, SkelAnime* skelAnime, Vec3f* p
     s16 temp2;
     s32 temp3;
 
-    if ((this->actor.scale.y >= 0.0f) && !(this->stateFlags1 & PLAYER_STATE1_DEAD) &&
-        (Player_ActionToMagicSpell(this, this->itemAction) < 0)) {
+    if (GameInteractor_Should(VB_PLAYER_ADJUST_LEGS_TO_FLOOR,
+                              (this->actor.scale.y >= 0.0f) && !(this->stateFlags1 & PLAYER_STATE1_DEAD) &&
+                                  (Player_ActionToMagicSpell(this, this->itemAction) < 0),
+                              this)) {
         s32 pad;
 
         sp7C = D_80126058[gSaveContext.linkAge];
@@ -1366,6 +1398,7 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
 s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                            void* thisx) {
     Player* this = (Player*)thisx;
+    Gfx* limbDList = *dList;
 
     if (!Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, thisx)) {
         if (limbIndex == PLAYER_LIMB_L_HAND) {
@@ -1383,7 +1416,7 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
                 sLeftHandType = PLAYER_MODELTYPE_LH_CLOSED;
             }
 
-            *dList = ResourceMgr_LoadGfxByName(dLists[sDListsLodOffset]);
+            *dList = dLists[sDListsLodOffset];
         } else if (limbIndex == PLAYER_LIMB_R_HAND) {
             Gfx** dLists = this->rightHandDLists;
 
@@ -1395,7 +1428,7 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
                 sRightHandType = PLAYER_MODELTYPE_RH_CLOSED;
             }
 
-            *dList = ResourceMgr_LoadGfxByName(dLists[sDListsLodOffset]);
+            *dList = dLists[sDListsLodOffset];
         } else if (limbIndex == PLAYER_LIMB_SHEATH) {
             Gfx** dLists = this->sheathDLists;
 
@@ -1418,11 +1451,7 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
                 }
             }
 
-            if (dLists[sDListsLodOffset] != NULL) {
-                *dList = ResourceMgr_LoadGfxByName(dLists[sDListsLodOffset]);
-            } else {
-                *dList = NULL;
-            }
+            *dList = dLists[sDListsLodOffset];
 
         } else if (limbIndex == PLAYER_LIMB_WAIST) {
 
@@ -1439,12 +1468,17 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         *dList = NULL;
     }
 
+    GameInteractor_ExecuteOnPlayerResolveLimbDraw(this, limbIndex, dList, limbDList, pos);
+    if (*dList != NULL && ResourceMgr_OTRSigCheck((char*)*dList)) {
+        *dList = ResourceMgr_LoadGfxByName((const char*)*dList);
+    }
     return false;
 }
 
 s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                                void* thisx) {
     Player* this = (Player*)thisx;
+    Gfx* limbDList = *dList;
 
     if (!Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, thisx)) {
         if (this->unk_6AD != 2) {
@@ -1465,6 +1499,11 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
             *dList = sFirstPersonForearmDLs[gSaveContext.linkAge];
         } else if (limbIndex == PLAYER_LIMB_R_HAND) {
             s32 firstPersonWeaponIndex = gSaveContext.linkAge;
+
+            if (this->heldItemAction == PLAYER_IA_CUSTOM) {
+                *dList = (Gfx*)CustomItemRegistry_GetFirstPersonModel();
+                return false;
+            }
             if (CVarGetInteger(CVAR_ENHANCEMENT("BowSlingshotAmmoFix"), 0) ||
                 CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0)) {
                 if (Player_HoldsBow(this)) {
@@ -1479,15 +1518,19 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
             *dList = NULL;
         }
     }
+    GameInteractor_ExecuteOnPlayerResolveLimbDraw(this, limbIndex, dList, limbDList, pos);
     return false;
 }
 
 s32 Player_OverrideLimbDrawGameplayCrawling(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                             void* thisx) {
+    Gfx* limbDList = *dList;
+
     if (!Player_OverrideLimbDrawGameplayCommon(play, limbIndex, dList, pos, rot, thisx)) {
         *dList = NULL;
     }
 
+    GameInteractor_ExecuteOnPlayerResolveLimbDraw((Player*)thisx, limbIndex, dList, limbDList, pos);
     return false;
 }
 
@@ -1964,6 +2007,11 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
             Actor_SetFeetPos(&this->actor, limbIndex, PLAYER_LIMB_L_FOOT, vec, PLAYER_LIMB_R_FOOT, vec);
         }
     }
+
+    if (limbIndex == PLAYER_LIMB_L_HAND && this->heldItemAction == PLAYER_IA_CUSTOM) {
+        CustomItemRegistry_DrawHeld(this, play);
+    }
+    GameInteractor_ExecuteOnPlayerPostLimbDraw(play, this, limbIndex);
 }
 
 u32 func_80091738(PlayState* play, u8* segment, SkelAnime* skelAnime) {

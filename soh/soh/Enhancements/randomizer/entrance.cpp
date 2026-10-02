@@ -5,6 +5,7 @@
 #include "3drando/item_pool.hpp"
 #include "../debugger/performanceTimer.h"
 #include "soh/Enhancements/gameconsole.h"
+#include "soh/ModApi/RandoLogic/RandoLogic.h"
 #include "z64camera.h"
 #include "z64scene.h"
 
@@ -33,7 +34,7 @@ void Entrance::SetCondition(ConditionFn newCondition) {
 bool Entrance::GetConditionsMet() const {
     auto ctx = Rando::Context::GetInstance();
     if (ctx->GetOption(RSK_LOGIC_RULES).Is(RO_LOGIC_GLITCHLESS)) {
-        return condition_function();
+        return RandoLogic_ResolveEntrance(parentRegion, originalConnectedRegion, condition_function());
     }
     return true;
 }

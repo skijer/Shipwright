@@ -14,6 +14,8 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/Player/PlayerHookTypes.h"
 #include "soh/Enhancements/nametag.h"
 
 #include "soh/ActorDB.h"
@@ -1314,7 +1316,9 @@ void Actor_Destroy(Actor* actor, PlayState* play) {
 }
 
 void Actor_UpdatePos(Actor* actor) {
-    f32 speedRate = R_UPDATE_RATE * 0.5f;
+    f32 motionScale = 1.0f;
+    GameInteractor_ExecuteOnActorResolveMotionScale(actor, &motionScale);
+    f32 speedRate = R_UPDATE_RATE * 0.5f * motionScale;
 
     actor->world.pos.x += (actor->velocity.x * speedRate) + actor->colChkInfo.displacement.x;
     actor->world.pos.y += (actor->velocity.y * speedRate) + actor->colChkInfo.displacement.y;
@@ -1433,12 +1437,14 @@ f32 Actor_HeightDiff(Actor* actorA, Actor* actorB) {
 
 f32 Player_GetHeight(Player* player) {
     f32 offset = (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) ? 32.0f : 0.0f;
+    f32 height = LINK_IS_ADULT ? 68.0f : 44.0f;
 
-    if (LINK_IS_ADULT) {
-        return offset + 68.0f;
-    } else {
-        return offset + 44.0f;
+    GameInteractor_ExecuteOnPlayerResolveHeight(player, &height);
+    if (height <= 0.0f) {
+        height = LINK_IS_ADULT ? 68.0f : 44.0f;
     }
+
+    return offset + height;
 }
 
 f32 func_8002DCE4(Player* player) {
@@ -1718,6 +1724,8 @@ void Actor_UpdateBgCheckInfo(PlayState* play, Actor* actor, f32 wallCheckHeight,
 
     sp74 = actor->world.pos.y - actor->prevPos.y;
 
+    GameInteractor_ExecuteOnActorResolveBgCheckFlags(actor, &flags);
+
     if ((actor->floorBgId != BGCHECK_SCENE) && (actor->bgCheckFlags & 1)) {
         func_800433A4(&play->colCtx, actor->floorBgId, actor);
     }
@@ -1979,7 +1987,7 @@ s32 func_8002F0C8(Actor* actor, Player* player, s32 flag) {
 u32 Actor_ProcessTalkRequest(Actor* actor, PlayState* play) {
     if (actor->flags & ACTOR_FLAG_TALK) {
         actor->flags &= ~ACTOR_FLAG_TALK;
-        return true;
+        return GameInteractor_ExecuteOnActorTalk(actor, play);
     }
 
     return false;
@@ -2007,8 +2015,16 @@ s32 func_8002F298(Actor* actor, PlayState* play, f32 arg2, u32 exchangeItemId) {
     return func_8002F1C4(actor, play, arg2, arg2, exchangeItemId);
 }
 
+s32 Actor_OfferTalkExchange(Actor* actor, PlayState* play, f32 distance, u32 exchangeItemId) {
+    return func_8002F298(actor, play, distance, exchangeItemId);
+}
+
 s32 func_8002F2CC(Actor* actor, PlayState* play, f32 arg2) {
     return func_8002F298(actor, play, arg2, EXCH_ITEM_NONE);
+}
+
+s32 Actor_OfferTalk(Actor* actor, PlayState* play, f32 distance) {
+    return func_8002F2CC(actor, play, distance);
 }
 
 s32 func_8002F2F4(Actor* actor, PlayState* play) {
@@ -2069,6 +2085,9 @@ s32 GiveItemEntryWithoutActor(PlayState* play, GetItemEntry getItemEntry) {
              (IS_RANDO && (getItemEntry.getItemId > RG_NONE) && (getItemEntry.getItemId < RG_MAX))) ||
             (!(player->stateFlags1 & (PLAYER_STATE1_CARRYING_ACTOR | PLAYER_STATE1_IN_CUTSCENE)))) {
             if ((getItemEntry.getItemId != GI_NONE)) {
+                if (!CustomItemRegistry_PrepareGetItem(NULL, play, &getItemEntry)) {
+                    return false;
+                }
                 player->getItemEntry = getItemEntry;
                 player->getItemId = getItemEntry.getItemId;
                 player->interactRangeActor = &player->actor;
@@ -2114,6 +2133,9 @@ s32 GiveItemEntryFromActor(Actor* actor, PlayState* play, GetItemEntry getItemEn
                 s32 absYawDiff = ABS(yawDiff);
 
                 if ((getItemEntry.getItemId != GI_NONE) || (player->getItemDirection < absYawDiff)) {
+                    if (!CustomItemRegistry_PrepareGetItem(actor, play, &getItemEntry)) {
+                        return false;
+                    }
                     iceTrapScale = 0.0f;
                     player->getItemEntry = getItemEntry;
                     player->getItemId = getItemEntry.getItemId;
@@ -2269,6 +2291,10 @@ void func_8002F7A0(PlayState* play, Actor* actor, f32 arg2, s16 arg3, f32 arg4) 
 }
 
 void Player_PlaySfx(Actor* actor, u16 sfxId) {
+    if (GameInteractor_ExecuteOnActorPlaySfx(actor, SOH_ACTOR_SFX_GENERIC, &sfxId)) {
+        return;
+    }
+
     if (actor->id != ACTOR_PLAYER || sfxId < NA_SE_VO_LI_SWORD_N || sfxId > NA_SE_VO_LI_ELECTRIC_SHOCK_LV_KID) {
         Audio_PlaySoundGeneral(sfxId, &actor->projectedPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultReverb);
@@ -2289,6 +2315,10 @@ void Player_PlaySfx(Actor* actor, u16 sfxId) {
 }
 
 void Audio_PlayActorSound2(Actor* actor, u16 sfxId) {
+    if (GameInteractor_ExecuteOnActorPlaySfx(actor, SOH_ACTOR_SFX_GENERIC, &sfxId)) {
+        return;
+    }
+
     Sfx_PlaySfxAtPos(&actor->projectedPos, sfxId);
 }
 
@@ -2698,9 +2728,12 @@ void Actor_UpdateAll(PlayState* play, ActorContext* actorCtx) {
                 Math_Vec3f_Copy(&actor->prevPos, &actor->world.pos);
                 actor->xzDistToPlayer = Actor_WorldDistXZToActor(actor, &player->actor);
                 actor->yDistToPlayer = Actor_HeightDiff(actor, &player->actor);
-                actor->xyzDistToPlayerSq = SQ(actor->xzDistToPlayer) + SQ(actor->yDistToPlayer);
-
                 actor->yawTowardsPlayer = Actor_WorldYawTowardActor(actor, &player->actor);
+
+                GameInteractor_ExecuteOnActorResolvePlayerRelation(actor, &actor->xzDistToPlayer, &actor->yDistToPlayer,
+                                                                   &actor->yawTowardsPlayer);
+
+                actor->xyzDistToPlayerSq = SQ(actor->xzDistToPlayer) + SQ(actor->yDistToPlayer);
                 actor->flags &= ~ACTOR_FLAG_SFX_FOR_PLAYER_BODY_HIT;
 
                 if ((DECR(actor->freezeTimer) == 0) &&
@@ -2828,7 +2861,26 @@ void Actor_Draw(PlayState* play, Actor* actor) {
         }
     }
 
-    actor->draw(actor, play);
+    Color_RGBA8 grayscale = { 0, 0, 0, 0 };
+    GameInteractor_ExecuteOnActorResolveGrayscale(actor, play, &grayscale);
+    bool isGrayscale = grayscale.a != 0;
+    if (isGrayscale) {
+        gDPSetGrayscaleColor(POLY_OPA_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+        gSPGrayscale(POLY_OPA_DISP++, true);
+        gDPSetGrayscaleColor(POLY_XLU_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+        gSPGrayscale(POLY_XLU_DISP++, true);
+    }
+
+    if (GameInteractor_ExecuteOnActorDraw(actor, play)) {
+        actor->draw(actor, play);
+    }
+
+    if (isGrayscale) {
+        gSPGrayscale(POLY_OPA_DISP++, false);
+        gSPGrayscale(POLY_XLU_DISP++, false);
+    }
+
+    GameInteractor_ExecuteOnActorDrawEnd(actor, play);
 
     if (actor->colorFilterTimer != 0) {
         if (actor->colorFilterParams & 0x2000) {
@@ -3108,7 +3160,15 @@ void func_800315AC(PlayState* play, ActorContext* actorCtx) {
 
             if ((HREG(64) != 1) || ((HREG(65) != -1) && (HREG(65) != HREG(66))) || (HREG(69) == 0)) {
                 if (actor->sfx != 0) {
-                    func_80030ED8(actor);
+                    u16 sfxId = actor->sfx;
+
+                    if (!GameInteractor_ExecuteOnActorPlaySfx(actor, SOH_ACTOR_SFX_FLAGGED, &sfxId)) {
+                        u16 vanillaSfxId = actor->sfx;
+
+                        actor->sfx = sfxId;
+                        func_80030ED8(actor);
+                        actor->sfx = vanillaSfxId;
+                    }
                 }
             }
 
@@ -3366,7 +3426,12 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
 
     ActorDBEntry* dbEntry = ActorDB_Retrieve(actorId);
 
-    assert(dbEntry->valid);
+    // SOH [Unbound] An id no actor answers to (a scene's typo, a gap below the custom actor types) spawns nothing.
+    // This was only an assert, which release builds drop: they then allocated a zero-size actor and wrote past it.
+    if (!dbEntry->valid) {
+        LUSLOG_ERROR("Actor_Spawn: no actor has id %#x", (u16)actorId);
+        return NULL;
+    }
 
     if (HREG(20) != 0) {
         // "Actor class addition [%d:%s]"
@@ -3408,8 +3473,8 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     SetActorListIndex(actor, -1);
     // #endregion
 
-    assert(dbEntry->numLoaded < 255);
-
+    // SOH [Unbound] No per-type cap: numLoaded is an s32, and a room may hold hundreds of one prop (unbound-docs
+    // SPEC §9). Vanilla asserted fewer than 255, a count from its 8-bit overlay client counter.
     dbEntry->numLoaded++;
 
     if (HREG(20) != 0) {
@@ -3538,6 +3603,7 @@ Actor* Actor_Delete(ActorContext* actorCtx, Actor* actor, PlayState* play) {
 
     // Execute before actor memory is freed
     GameInteractor_ExecuteOnActorDestroy(actor);
+    CustomItemRegistry_UnbindActor(actor);
 
     if ((player != NULL) && (actor == player->focusActor)) {
         Player_ReleaseLockOn(player);

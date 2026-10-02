@@ -1,4 +1,5 @@
 #include "z_kaleido_scope.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "textures/parameter_static/parameter_static.h"
 #include "textures/icon_item_static/icon_item_static.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
@@ -8,6 +9,9 @@
 extern const char* digitTextures[];
 
 void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
+    if (ModLayout_DrawPage(play, SOH_LAYOUT_COLLECTABLES)) {
+        return;
+    }
 
     static s16 D_8082A070[][4] = {
         { 255, 0, 0, 255 },
@@ -97,6 +101,10 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
         }
         pauseCtx->cursorColorSet = 0;
 
+        if ((pauseCtx->state == 6) && (pauseCtx->unk_1E4 == 0)) {
+            KaleidoQuestManager_EquipPoint(play);
+        }
+
         if (pauseCtx->cursorSpecialPos == 0) {
             pauseCtx->nameColorSet = 0;
             if ((pauseCtx->state != 6) || ((pauseCtx->stickRelX == 0) && (pauseCtx->stickRelY == 0))) {
@@ -185,6 +193,12 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
                                  gSaveContext.inventory.questItems & 0xF0000000);
                 }
 
+                if (KaleidoQuestManager_IsPointClaimed(pauseCtx->cursorPoint[PAUSE_QUEST])) {
+                    phi_s0_2 = ITEM_CUSTOM;
+                } else if (!KaleidoQuestManager_IsVanillaPageShown()) {
+                    phi_s0_2 = PAUSE_ITEM_NONE;
+                }
+
                 sp216 = pauseCtx->cursorPoint[PAUSE_QUEST];
                 pauseCtx->cursorItem[pauseCtx->pageIndex] = phi_s0_2;
                 pauseCtx->cursorSlot[pauseCtx->pageIndex] = sp216;
@@ -245,6 +259,12 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
                 } else {
                     phi_s0_2 = PAUSE_ITEM_NONE;
                 }
+                if (KaleidoQuestManager_IsPointClaimed(pauseCtx->cursorPoint[PAUSE_QUEST])) {
+                    phi_s0_2 = ITEM_CUSTOM;
+                } else if (!KaleidoQuestManager_IsVanillaPageShown()) {
+                    phi_s0_2 = PAUSE_ITEM_NONE;
+                }
+
                 sp216 = pauseCtx->cursorPoint[PAUSE_QUEST];
                 pauseCtx->cursorItem[pauseCtx->pageIndex] = phi_s0_2;
                 pauseCtx->cursorSlot[pauseCtx->pageIndex] = sp216;
@@ -269,6 +289,12 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
                 } else {
                     phi_s0_2 = PAUSE_ITEM_NONE;
                 }
+                if (KaleidoQuestManager_IsPointClaimed(pauseCtx->cursorPoint[PAUSE_QUEST])) {
+                    phi_s0_2 = ITEM_CUSTOM;
+                } else if (!KaleidoQuestManager_IsVanillaPageShown()) {
+                    phi_s0_2 = PAUSE_ITEM_NONE;
+                }
+
                 sp216 = pauseCtx->cursorPoint[PAUSE_QUEST];
                 pauseCtx->cursorItem[pauseCtx->pageIndex] = phi_s0_2;
                 pauseCtx->cursorSlot[pauseCtx->pageIndex] = sp216;
@@ -345,7 +371,7 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
             }
         }
 
-        if (CHECK_QUEST_ITEM(sp218)) {
+        if (KaleidoQuestManager_IsVanillaPageShown() && CHECK_QUEST_ITEM(sp218)) {
             gDPPipeSync(POLY_OPA_DISP++);
             gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
             gDPSetEnvColor(POLY_OPA_DISP++, D_8082A0D8[sp218], D_8082A0E4[sp218], D_8082A0F0[sp218], 0);
@@ -370,7 +396,7 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
                         G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
 
     for (sp218 = 0; sp218 < QUEST_KOKIRI_EMERALD - QUEST_SONG_MINUET; sp218++, sp21A += 4) {
-        if (CHECK_QUEST_ITEM(sp218 + QUEST_SONG_MINUET)) {
+        if (KaleidoQuestManager_IsVanillaPageShown() && CHECK_QUEST_ITEM(sp218 + QUEST_SONG_MINUET)) {
             if ((sp218 + QUEST_SONG_MINUET) == sp216) {
                 pauseCtx->questVtx[sp21A + 0].v.ob[0] = pauseCtx->questVtx[sp21A + 2].v.ob[0] =
                     pauseCtx->questVtx[sp21A + 0].v.ob[0] - 2;
@@ -397,7 +423,7 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
 
     for (sp218 = 0; sp218 < 3; sp218++, sp21A += 4) {
-        if (CHECK_QUEST_ITEM(sp218 + 0x12)) {
+        if (KaleidoQuestManager_IsVanillaPageShown() && CHECK_QUEST_ITEM(sp218 + 0x12)) {
             gSPVertex(POLY_OPA_DISP++, &pauseCtx->questVtx[sp21A], 4, 0);
             KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, gItemIcons[ITEM_KOKIRI_EMERALD + sp218], 24, 24, 0);
         }
@@ -407,12 +433,14 @@ void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx) {
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
 
     for (sp218 = 0; sp218 < 3; sp218++, sp21A += 4) {
-        if (CHECK_QUEST_ITEM(sp218 + 0x15)) {
+        if (KaleidoQuestManager_IsVanillaPageShown() && CHECK_QUEST_ITEM(sp218 + 0x15)) {
             gSPVertex(POLY_OPA_DISP++, &pauseCtx->questVtx[sp21A], 4, 0);
             gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pauseCtx->alpha);
             KaleidoScope_DrawQuadTextureRGBA32(gfxCtx, gItemIcons[ITEM_STONE_OF_AGONY + sp218], 24, 24, 0);
         }
     }
+
+    KaleidoQuestManager_DrawPoints(play);
 
     sp226 = ABS(D_8082A104 - D_8082A070[D_8082A118][0]) / D_8082A114;
     sp224 = ABS(D_8082A108 - D_8082A070[D_8082A118][1]) / D_8082A114;

@@ -4,6 +4,8 @@
 #include <ship/utils/Utils.h>
 #include "savestates.h"
 #include "soh/ActorDB.h"
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
+#include "soh/ModApi/ConsoleArguments.h"
 
 #include <vector>
 #include <string>
@@ -49,8 +51,40 @@ extern PlayState* gPlayState;
         Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow("Console")) \
         ->SendInfoMessage
 
-static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& args,
+static bool IsCustomActorMarker(const std::string& argument) {
+    return argument == "custom_actor" || argument == "custom_enemy";
+}
+
+static bool ResolveCustomActorArgs(std::vector<std::string>& args) {
+    if (args.size() < 2 || !IsCustomActorMarker(args[1])) {
+        return true;
+    }
+    const std::string& kind = args[1];
+
+    if (args.size() < 3) {
+        ERROR_MESSAGE("Usage: spawn %s \"<key>\" <params> [x y z [rx ry rz]]", kind.c_str());
+        return false;
+    }
+    std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    int16_t actorId = ActorRegistry_FindCustomId(key.c_str());
+    bool wantsEnemy = kind == "custom_enemy";
+
+    if (actorId < 0 || (wantsEnemy && ActorRegistry_FindEnemyById(actorId) == nullptr)) {
+        ERROR_MESSAGE("No installed mod registers %s named \"%s\"", wantsEnemy ? "an enemy" : "an actor", key.c_str());
+        return false;
+    }
+    args.erase(args.begin() + 1);
+    args[1] = key;
+    return true;
+}
+
+static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& rawArgs,
                               std::string* output) {
+    std::vector<std::string> args = rawArgs;
+
+    if (!ResolveCustomActorArgs(args)) {
+        return 1;
+    }
     if ((args.size() != 9) && (args.size() != 3) && (args.size() != 6)) {
         ERROR_MESSAGE("Not enough arguments passed to actorspawn");
         return 1;
@@ -1719,19 +1753,18 @@ void DebugConsole_Init(void) {
                                 { "Item ID", Ship::ArgumentType::NUMBER },
                             } });
 
-    CMD_REGISTER("spawn",
-                 { ActorSpawnHandler,
-                   "Spawn an actor.",
-                   {
-                       { "actor name/id", Ship::ArgumentType::NUMBER }, // TODO there should be an actor_id arg type
-                       { "data", Ship::ArgumentType::NUMBER },
-                       { "x", Ship::ArgumentType::NUMBER, true },
-                       { "y", Ship::ArgumentType::NUMBER, true },
-                       { "z", Ship::ArgumentType::NUMBER, true },
-                       { "rx", Ship::ArgumentType::NUMBER, true },
-                       { "ry", Ship::ArgumentType::NUMBER, true },
-                       { "rz", Ship::ArgumentType::NUMBER, true },
-                   } });
+    CMD_REGISTER("spawn", { ActorSpawnHandler,
+                            "Spawn an actor. Mod actors: spawn custom_actor|custom_enemy \"<key>\" <data> ...",
+                            {
+                                { "actor name/id|custom_actor|custom_enemy", Ship::ArgumentType::TEXT },
+                                { "data", Ship::ArgumentType::NUMBER },
+                                { "x", Ship::ArgumentType::NUMBER, true },
+                                { "y", Ship::ArgumentType::NUMBER, true },
+                                { "z", Ship::ArgumentType::NUMBER, true },
+                                { "rx", Ship::ArgumentType::NUMBER, true },
+                                { "ry", Ship::ArgumentType::NUMBER, true },
+                                { "rz", Ship::ArgumentType::NUMBER, true },
+                            } });
 
     CMD_REGISTER("pos", { SetPosHandler,
                           "Sets the position of the player.",

@@ -83,7 +83,7 @@ merged, lowest layer first:
    key that does not exist is ignored. Keys not listed follow the listed ones in *key sort
    order*: keys that are optionally signed decimal integers first, ascending numerically, then
    the rest in byte order. A keyed list without `$order` is entirely in key sort order. `$order`
-   is legal only on keyed lists (`actors`, the registry and its `entrances`; on `messages` it has
+   is legal only on keyed lists (`actors`, the scene registry and its `entrances`; on `messages` it has
    no effect); on a positional list the document is **rejected**.
 6. **`"$schema": "<type>/<version>"`** names the document type. A §4 document is **rejected**
    unless at least one layer provides it; the highest layer that provides it wins, and only a
@@ -108,7 +108,7 @@ scenes/<scene>/paths/<name>.json    $schema unbound/paths/1
 
 `<scene>` for a vanilla scene is the vanilla scene file name without `_scene` (`spot00`, `ydan`);
 Master Quest variants are `<scene>_mq`. A custom scene may use any directory name that does not
-collide with a vanilla one; it is reached only through the registry (§7).
+collide with a vanilla one; it is reached only through the registry (§7.1).
 
 Bulk resources a scene document points at (display lists, textures, cutscenes) keep the paths
 they had in the archive the scene was converted from; this specification does not rename them.
@@ -167,7 +167,7 @@ The vanilla `SetCsCamera` command (0x02) carries no data in SoH and has no JSON 
 
 - a string naming an entrance: a vanilla entrance enum name (`"ENTR_HYRULE_FIELD_0"`, or a
   dynamic return entrance such as `"ENTR_RETURN_GROTTO"`) or a custom entrance
-  `"<scene id>/<entrance id>"` from §7. A string that is not a registered name and not
+  `"<scene id>/<entrance id>"` from §7.1. A string that is not a registered name and not
   an integer in the §2 string form makes the document **rejected**;
 - a non-negative JSON integer (the §2 boolean and fractional forms are not accepted here): an
   index into the entrance table. Only an index that is the same for every player may be written as
@@ -272,9 +272,27 @@ Every key is optional (as in §4.2, an absent key emits no command).
 or 2: point light `{ type, pos: vec, color, glow: int 0–255, radius: int −32768…32767 }`. Any
 other `type` makes the document **rejected**.
 
-**Actor entry** — `{ id: int, pos: vec, rot: vec, params: int }`. Keys are opaque identity
+**Actor entry** — `{ id: int or name, pos: vec, rot: vec, params: int }`. Keys are opaque identity
 strings; the converter uses the vanilla list index as the key. `params` is the vanilla packed word
 for that actor type. The number of actors per room is limited only by the live-actor cap (§9).
+
+`id` is an integer (§2) **or an actor name**: a string that is not an integer in the §2 string form
+names an actor type, either one registered in `unbound/actors/` (§7.2) or an actor the game
+already knows by name (vanilla names such as `En_Kanban`, and actors a build adds in code). An
+entry whose name is not known is skipped with an error, and the rest of the list loads. A name
+changes nothing else about the actor: a vanilla actor placed by name still needs its object in the
+room's `objects`, as when it is placed by number. A declared type (§7.2) needs none.
+
+An integer `id` must be from 0 to `0xFFF`. Numbers from `0x1000` up are assigned to registered
+types at load and change with the mounted mods, and a negative number names no actor, so an entry
+that uses either is skipped with an error; custom types are placed by name.
+
+Names are accepted in room `actors` only; spawns and transition actors keep integer ids. A
+transition actor whose `id` is a name, or a number outside 0–`0xFFF`, does not spawn, with an
+error; it keeps its place in the list, whose indices other data refers to.
+
+`params` as an object is reserved for named arguments in a later version. An entry whose `params`
+is an object is skipped with an error.
 
 **Mesh object**
 
@@ -432,7 +450,12 @@ Manifests are read per layer, not merged. A layer whose `formatVersion` or
 object, is logged as an error and does not count as an Unbound base archive; its files are **not**
 removed from the layer merge.
 
-## 7. Scene and entrance registry — `unbound/scenes.json`
+## 7. Registries
+
+Mods add scenes, entrances and actor types by declaring them in registry documents. The game assigns every
+number; everything else addresses them by name.
+
+### 7.1 Scenes and entrances — `unbound/scenes.json`
 
 One layer-merged document (§3), keyed by scene id:
 
@@ -483,6 +506,118 @@ order. Rejected entries are skipped; the remaining entries still register.
 
 Vanilla scenes are always registered under their enum names (`SCENE_HYRULE_FIELD`); vanilla
 entrances under theirs (`ENTR_HYRULE_FIELD_0`). Both name forms are valid exit values (§4.2).
+
+### 7.2 Actor types — `unbound/actors/<name>.json`
+
+One document per actor type; each document is one registry entry. Every path in any mounted archive
+that starts with `unbound/actors/` and ends with `.json` declares a type, and the part between is
+the type's **name**: `unbound/actors/mymod/old_man.json` declares `mymod/old_man`. Folders are
+allowed at any depth and the name is case-sensitive.
+
+The name must not be empty, must not be an integer in the §2 string form (a room actor's `id`
+would read it as a number), and must not be an actor name the game already knows (vanilla names
+such as `En_Kanban`, and actors SoH or a build adds in code); a name that breaks one of these
+**rejects the entry**. Writers should keep their types in a folder of their own
+(`unbound/actors/mymod/…`) so that two mods cannot declare the same name.
+
+Each path is layer-merged on its own (§3). A later layer patches another mod's type by carrying a
+document at the same path with only the keys it changes, and a layer whose document is `null`
+removes the type. A merged document that is not an object is skipped with an error; a document
+that is not parsable JSON in one layer is skipped as §3.2 says. A problem in one type's document
+never affects another type. Like §7.1, the documents carry no `$schema`.
+
+| Key | Required | Type / meaning |
+|---|---|---|
+| `name` | no | display name; default = the type's name |
+| `model` | yes | object (below). An entry without one is **rejected**. |
+| `collision` | no | object (below); absent = the actor has no collision and can be walked through |
+| `talk` | no | object (below); absent = the actor cannot be targeted or talked to |
+| `look` | no | object (below): the head turns to follow the player. Needs a `model.skeleton`; on a static model it **rejects the entry**. |
+| any other key | — | **rejects the entry**. Keys this version does not define are reserved for later versions (`base`, `params`, `script`). A build that predates a key therefore rejects the type, and its placements are skipped as unknown names, instead of spawning an actor without the behavior. The same rule holds inside `model`, `collision`, `talk` and `look`: a key none of the tables below lists rejects the entry. |
+
+**`model`** — exactly one of `skeleton` (an animated model) or `displayList` (a static model);
+both, or neither, **rejects the entry**.
+
+| Key | Type / meaning |
+|---|---|
+| `skeleton` | path of a skeleton resource, normal or flex, with standard or LOD limbs. A curve skeleton, or one with skin limbs (Epona's), is not supported: actors of the type do not spawn and an error is logged. |
+| `animation` | path of an animation for `skeleton`, with the skeleton's limb count. Required with `skeleton`: absent **rejects the entry**, because an OoT skeleton has no usable rest pose (with every joint angle zero it folds up). An animation for fewer limbs than the skeleton has, or one with no frames, stops actors of the type from spawning, with an error. For a still model, hold one frame with `frame`. Ignored with `displayList`. |
+| `frame` | number: when present, the animation is held on this frame (a pose), clamped to the animation's first and last frames; absent, the animation loops |
+| `speed` | number: playback rate for a looping animation, in frames per update; default 1. Clamped to the animation's length either way (negative plays backwards). |
+| `displayList` | path of a display list: the whole model, drawn as it is |
+| `translucent` | boolean: draw in the translucent pass instead of the opaque one, for models with real transparency (glass, ghosts, water). Default false. Cut-out transparency such as leaves and fences does not need it: the display list's own render mode handles that in the opaque pass. The model's own render mode decides whether it blends: a vanilla character model, which sets an opaque mode, is only sorted with the translucent pass and does not turn see-through. |
+| `scale` | positive number; default 0.01 (the scale of most vanilla NPCs). Zero or a negative number **rejects the entry**. |
+| `yOffset` | number: model-space vertical offset, applied before scale; default 0 |
+| `segments` | object: key a segment number 8–12 as a §2 integer string, value a texture path, bound before the model draws (NPC eye and mouth textures). Any other key, and a value that is not a non-empty string, is ignored with an error. A path that is not a texture stops actors of the type from spawning, as any other path does. A segment 8–12 the type does not name is bound to an empty display list, which is what vanilla binds on the segment many character models call to set their render mode. The environment colour is opaque black while the model draws. |
+| `hideLimbs` | array of integers: limbs, numbered as `look.limb` is, whose own mesh is not drawn; their child limbs still draw. Vanilla character code hides spare hands and props it swaps in (Malon's limbs 2 and 5, child Zelda's 3–6). Entries below 1, or past the skeleton's last limb, are ignored with an error. |
+| `shadow` | number: size of a round ground shadow, on the scale vanilla NPCs give theirs (child Malon 18, the carpenter 42); default 0 = none. It does not change with `scale`: the same value draws the same shadow on any model. The shadow is drawn on the floor under the actor's position when it spawns, when that floor is scene collision (not a moving platform) and at most 50 units above or 500 below it. |
+| `cullRadius` | number, world units: how far the model reaches from the actor's position. The game stops drawing an actor whose position is off screen by more than about 350 units, which cuts off larger models at the screen edge; a larger `cullRadius` widens that margin. Default 0 = the game's default; a negative value reads as 0. |
+| `drawDistance` | number, world units: the actor stops drawing (and updating) beyond about this distance in front of the camera, plus `cullRadius`. Default 1000, the game's default; 0 or a negative value reads as the default. |
+
+Asset paths are resolved when the first actor of the type spawns, not when the registry loads. A
+path that does not resolve stops every actor of the type from spawning, with one error; it does not
+reject the type, so its placements are not unknown names.
+
+A path may name a vanilla asset or one the mod ships itself, at any path in its archive (§1.4).
+Mod-supplied display lists, vertex arrays, textures, skeletons and animations are ordinary SoH
+resources of the same types vanilla objects use, as room meshes already are (§4.3). Writers
+should keep them under a path of their own (`objects/<mod>/…`) and never under `alt/`. For a
+model the mod ships:
+
+- Vertices are in **model space** around the actor's origin, and `scale` converts them to world
+  units. A room mesh is exported in world units, so the same geometry placed as an actor needs
+  `scale` 1, or coordinates exported larger to match a smaller `scale`.
+- The display list sets up its own render state (render mode, combiner, geometry mode, textures),
+  as a room mesh's does. The actor sets only the matrix and the segments in `segments`.
+- Whether the model is lit is the display list's choice: with normals and lighting enabled it is
+  lit like vanilla actors; with vertex colours and lighting off it is shaded like room geometry,
+  which matches the scene around it.
+
+**`collision`** — a solid cylinder the player cannot pass through.
+
+| Key | Type / meaning |
+|---|---|
+| `radius`, `height` | integers, world units; default 0 (a zero radius or height means no collision) |
+| `yShift` | integer: vertical offset of the cylinder's base; default 0 |
+
+**`talk`**
+
+| Key | Type / meaning |
+|---|---|
+| `message` | integer message id 0–65534 (§5): the default text. Default 0 = none, in which case only placements that set `params` talk. A value outside the range reads as 0, with an error. |
+| `range` | number: talk range in world units; default 50 + `collision.radius` (vanilla's default). A negative value reads as 0. |
+
+The message shown is `params` (read as unsigned 16-bit) when it is non-zero and not `0xFFFF`,
+otherwise `talk.message`. When both are zero the actor cannot be talked to. A message that does
+not exist shows whatever the game shows for a missing id, as with any actor.
+
+**`look`** — the head turns toward the player, within the neck's limits, as vanilla NPCs do.
+
+| Key | Type / meaning |
+|---|---|
+| `limb` | integer: the head limb, numbered as vanilla limb-draw code numbers limbs (the root limb is 1; vanilla NPC heads are usually 15). Required: absent, or not a limb of the skeleton, the actor spawns without head tracking and an error is logged. |
+| `pivot` | number: distance along `turnAxis`, in model units, from the limb's origin to the point the head turns about. Default 0, the limb's origin, which is the neck on vanilla rigs. |
+| `range` | number: the head follows the player within this distance, in world units, and while talking; outside it the head returns to rest. Default 200. A negative value reads as 0. |
+| `turnAxis` | `[x, y, z]`: the axis, in the head limb's own space, the head turns about to follow the player left and right; a positive turn rotates by the right-hand rule about it. Default `[1, 0, 0]`, the limb's X axis. |
+| `nodAxis` | `[x, y, z]`: the axis, in the same space, the head nods about to follow the player up and down. Default `[0, 0, 1]`, the limb's Z axis. |
+
+The head turns, then nods, about axes of the limb's own space, around the point `pivot` along
+`turnAxis`. The defaults are how vanilla character rigs are built (turning about the limb's X axis,
+which runs up the neck, and nodding about its Z axis); a skeleton made another way, such as one
+imported from another game whose head X axis points forward, sets the axes it was built with. Each
+axis is normalized, so only its direction counts. An axis that is not an array of three numbers or
+has zero length, or two axes that are parallel (less than about 0.06° apart, after the defaults
+apply), leaves the actor without head tracking and log an error, as a bad `limb` does; the type
+still registers. Writers should omit an axis equal to its default, since a reader without these
+keys rejects the type (the "any other key" row above).
+
+When `look` is present, the actor's focus point (where the targeting arrow sits and the camera
+looks while talking) is its head. Otherwise it is the top of the collision cylinder, or the
+actor's position when it has no collision.
+
+A registered type gets an actor id assigned by the game, in byte order of the type names. The number
+depends on which mods are mounted and must never be written by a tool; types are addressed by
+name only.
 
 ## 8. Vanilla-format resources under Unbound
 
@@ -548,7 +683,7 @@ Limits lifted relative to vanilla (the format imposes none of these):
 
 | Quantity | Vanilla | Unbound |
 |---|---|---|
-| Scenes / entrances | 110 / 1556 fixed tables | registry (§7); ids and indices ≤ 32 767 |
+| Scenes / entrances | 110 / 1556 fixed tables | registry (§7.1); ids and indices ≤ 32 767 |
 | Rooms per scene | 255 (127 addressable, 32 with clear flags) | 32 767 |
 | Objects per room setup | 128 | 1 024 bank slots (shared with the keep objects) |
 | Actors per room; live actors | 255 / 255 (wrapping) | 65 535 / 8 192 |
@@ -564,6 +699,7 @@ Limits lifted relative to vanilla (the format imposes none of these):
 | Floor "none" sentinel | −32 000 | −2 147 483 648 |
 | Fog start / far plane | ~2 500 / 12 800 | world units, unbounded (lighting entry) |
 | Message ids | fixed table | unbounded; message ≤ 8 192 bytes |
+| Actor types | fixed table | registry (§7.2) |
 
 Limits that remain (validation targets for tools):
 
@@ -578,6 +714,7 @@ Limits that remain (validation targets for tools):
 | Water boxes per collision header | ≤ 65 535 | count is 16-bit |
 | Scene ids; entrance indices | ≤ 32 767 | entrance table and exit list are signed 16-bit |
 | Transition actors per scene | ≤ 32 767 | the actor's list index is signed 16-bit |
+| Custom actor types | ≤ 28 672 per mounted set | actor ids are signed 16-bit and custom types are numbered from 0x1000 |
 | Mesh type-2 entries per room | ≤ 1 024 | sort buffer |
 | Mesh type-1 images per room | ≤ 255 | count is a byte |
 | Rooms with a minimap "visited" bit | < 32 | vanilla save layout |
@@ -600,7 +737,13 @@ Limits that remain (validation targets for tools):
   calls accepted be rejected, is a breaking change and requires version 3.
 - Adding an optional key with a zero default is not breaking and is recorded here under version 2.
   Version-2 additions so far: `sound.song` (§4.2, 2026-09-02); `materialAnims` (§4.2, 2026-09-05);
-  `horse` (§7, 2026-09-16); scroll-layer `xSpeed`/`ySpeed` (§4.2, 2026-09-17).
+  `horse` (§7.1, 2026-09-16); scroll-layer `xSpeed`/`ySpeed` (§4.2, 2026-09-17); the actor
+  registry `unbound/actors/<name>.json` and actor names in a room actor's `id` (§7.2, §4.3, 2026-09-26);
+  `look.turnAxis` and `look.nodAxis` (§7.2, 2026-09-26; a reader without them rejects a type that
+  sets them, so they are written only when they differ from the defaults).
+  With the registry, a room or transition actor's integer `id` outside 0–`0xFFF` is skipped
+  (§4.3): numbers from `0x1000` up named no actor before, and a negative one never did, so no
+  valid document changes meaning.
 - Version-2 clarifications (2026-09-06, `materialAnims`): the per-entry **rejected** rules for
   `length`, `keyFrames`, `primColors`, `textures` and `frames` are now stated in §4.2; each guards
   the reader's storage (a modulus, fixed arrays, 16-bit indices). No document within the ranges
@@ -614,3 +757,18 @@ Limits that remain (validation targets for tools):
 - Version-2 clarification (2026-09-20, `sound`): `seq` and `natureAmbience` have stated ranges
   (§4.2) and an out-of-range value reads as "none" instead of wrapping, since the wrapped byte
   crashed the audio thread. No document within the ranges changes meaning and none is rejected.
+- Version-2 note (2026-09-26, actor names): a reader older than the actor registry reads a string
+  `id` as the wrong type, which §2 treats as missing: id 0, the player actor. A scene that places an
+  actor by name therefore spawns an extra Link on those readers instead of being refused, and
+  `requires.formatVersion` cannot prevent it, because a layer that fails the version check is still
+  merged (§6). Tools should state the minimum reader when they write a name. A reader with the
+  registry skips any name it does not know, so later additions do not repeat this.
+- Version-2 clarification (2026-09-26, actor types, before any release): §7.2 now states that a
+  negative `model.cullRadius`, `talk.range` or `look.range` reads as 0, and a zero or negative
+  `model.drawDistance` as its default. A negative `look.range` previously acted as its absolute
+  value. A `hideLimbs` entry past the skeleton's last limb, which never hid anything, now also logs
+  an error. No document with non-negative distances changes meaning and none is rejected.
+- Version-2 change (2026-09-28, actor types, before any release): each type is its own document,
+  `unbound/actors/<name>.json`, named by its path (§7.2), instead of a key of one layer-merged
+  `unbound/actors.json`. The single document was never released and is no longer read; types
+  register in name order, so `$order` no longer applies to them.

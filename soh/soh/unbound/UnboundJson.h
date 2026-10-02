@@ -1,6 +1,7 @@
 #pragma once
 // SOH [Unbound] Layer-merged JSON documents and the shared readers of the Unbound schema.
 // Merge rules: unbound-docs/SPEC.md §3. Key names: UnboundSchema.h.
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
@@ -26,6 +27,20 @@ void MergeJson(Json& base, const Json& overlay);
 // directives and every null (a null is a deletion, also in a single layer, §3.2). Returns a null
 // Json when no archive has the path or nothing parses.
 Json LoadMergedJson(const std::string& path);
+
+// Loads the layer-merged registry at `path` (§7) and calls `add` on each entry that is an object, in registry order
+// (§3.5). A JSON error inside one entry is logged against `what` and skips only that entry. Returns how many
+// entries `add` accepted.
+size_t ForEachRegistryEntry(const std::string& path, const char* what,
+                            const std::function<bool(const std::string& key, const Json& entry)>& add);
+
+// Calls `add` on each registry file under `dir` (§7), one entry per file: every mounted `<dir><name>.json`, in any
+// subfolder, is layer-merged on its own path (§3) and passed as `add(name, entry)`, in sorted name order. A file
+// whose merged document is not an object is skipped (a JSON error in one layer is logged by LoadMergedJson; a
+// `null` document is a deletion, §3.2), as is one with a JSON error inside it, logged against `what`. Returns how
+// many files `add` accepted. `dir` is matched as a glob prefix, so it must not contain `*`, `?`, `[` or `\`.
+size_t ForEachRegistryFile(const std::string& dir, const char* what,
+                           const std::function<bool(const std::string& name, const Json& entry)>& add);
 
 // Keys of a keyed/positional list in engine order: "$order" first (those that exist, each once),
 // then the remaining keys with integer keys ascending numerically before non-integer keys

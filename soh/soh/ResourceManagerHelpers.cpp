@@ -159,6 +159,55 @@ extern "C" char** ResourceMgr_ListFiles(const char* searchMask, int* resultSize)
     return result;
 }
 
+extern "C" bool ResourceMgr_IsOcarinaOfTimeVersion(uint32_t version) {
+    switch (version) {
+        case OOT_NTSC_US_10:
+        case OOT_NTSC_US_11:
+        case OOT_NTSC_US_12:
+        case OOT_PAL_10:
+        case OOT_PAL_11:
+        case OOT_NTSC_JP_GC:
+        case OOT_NTSC_JP_GC_CE:
+        case OOT_NTSC_US_GC:
+        case OOT_PAL_GC:
+        case OOT_NTSC_JP_MQ:
+        case OOT_NTSC_US_MQ:
+        case OOT_PAL_MQ:
+        case OOT_PAL_GC_DBG1:
+        case OOT_PAL_GC_DBG2:
+        case OOT_PAL_GC_MQ_DBG:
+            return true;
+        default:
+            return false;
+    }
+}
+
+extern "C" uint8_t ResourceMgr_IsBaseGameFile(const char* filePath) {
+    auto archives = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
+    for (const auto& archive : *archives) {
+        if (archive->HasGameVersion() && ResourceMgr_IsOcarinaOfTimeVersion(archive->GetGameVersion()) &&
+            archive->HasFile(filePath)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+extern "C" int32_t ResourceMgr_GetFileArchiveIndex(const char* filePath) {
+    auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    if (!archiveManager->HasFile(filePath)) {
+        return -1;
+    }
+    auto owner = archiveManager->GetArchiveFromFile(filePath);
+    auto archives = archiveManager->GetArchives();
+    for (size_t i = 0; i < archives->size(); i++) {
+        if ((*archives)[i] == owner) {
+            return static_cast<int32_t>(i);
+        }
+    }
+    return -1;
+}
+
 extern "C" uint8_t ResourceMgr_FileExists(const char* filePath) {
     std::string path = filePath;
     if (path.substr(0, 7) == "__OTR__") {
@@ -286,6 +335,23 @@ extern "C" char* ResourceMgr_LoadPlayerAnimByName(const char* animPath) {
     auto anim = std::static_pointer_cast<SOH::PlayerAnimation>(ResourceMgr_GetResourceByNameHandlingMQ(animPath));
 
     return (char*)&anim->limbRotData[0];
+}
+
+extern "C" LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath) {
+    if (animPath == nullptr || !ResourceMgr_FileExists(animPath)) {
+        return nullptr;
+    }
+    auto res = ResourceMgr_GetResourceByNameHandlingMQ(animPath);
+    if (res == nullptr || res->GetInitData()->Type != static_cast<uint32_t>(SOH::ResourceType::SOH_PlayerAnimation)) {
+        return nullptr;
+    }
+    auto playerAnim = std::static_pointer_cast<SOH::PlayerAnimation>(res);
+    constexpr size_t valuesPerFrame = 67;
+    static std::unordered_map<std::string, LinkAnimationHeader> sHeaders;
+    LinkAnimationHeader& header = sHeaders[animPath];
+    header.common.frameCount = static_cast<s16>(playerAnim->GetPointerSize() / sizeof(int16_t) / valuesPerFrame);
+    header.segment = playerAnim->GetPointer();
+    return &header;
 }
 
 extern "C" void ResourceMgr_PushCurrentDirectory(char* path) {

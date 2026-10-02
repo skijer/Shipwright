@@ -806,7 +806,10 @@ std::vector<u16> GetActorsWithDescriptionContainingString(std::string s) {
 
     std::vector<u16> actors;
     for (int i = 0; i < ActorDB::Instance->GetEntryCount(); i += 1) {
-        ActorDB::Entry actorEntry = ActorDB::Instance->RetrieveEntry(i);
+        const ActorDB::Entry& actorEntry = ActorDB::Instance->RetrieveEntry(i);
+        if (!actorEntry.entry.valid) { // SOH [Unbound] the unused ids below the custom actor types
+            continue;
+        }
         std::string desc = actorEntry.desc;
         for (size_t j = 0; j < desc.length(); j += 1) {
             desc[j] = std::tolower(desc[j], loc);
@@ -1083,9 +1086,9 @@ void ActorViewerWindow::DrawElement() {
                         : ActorDB::Instance->RetrieveEntry(actorSearchResults[currentSelectedInDropdown]).desc;
                 PushStyleCombobox(THEME_COLOR);
                 if (ImGui::BeginCombo("Results", preview.c_str())) {
-                    for (u8 i = 0; i < actorSearchResults.size(); i++) {
+                    for (size_t i = 0; i < actorSearchResults.size(); i++) { // SOH [Unbound] a u8 never ended at 256+
                         if (ImGui::Selectable(ActorDB::Instance->RetrieveEntry(actorSearchResults[i]).desc.c_str(),
-                                              i == currentSelectedInDropdown)) {
+                                              (s16)i == currentSelectedInDropdown)) {
                             currentSelectedInDropdown = i;
                             newActor.id = actorSearchResults[i];
                         }
@@ -1171,8 +1174,8 @@ void ActorViewerWindow::DrawElement() {
             if (Button("Spawn as Child", ButtonOptions().Color(THEME_COLOR))) {
                 Actor* parent = display;
                 if (parent != NULL) {
-                    if (newActor.id >= 0 && newActor.id < ACTOR_ID_MAX &&
-                        ActorDB::Instance->RetrieveEntry(newActor.id).entry.valid) {
+                    // SOH [Unbound] no ACTOR_ID_MAX bound: En_Partner and custom actor types live past it
+                    if (ActorDB::Instance->RetrieveEntry(newActor.id).entry.valid) {
                         Actor_SpawnAsChild(&gPlayState->actorCtx, parent, gPlayState, newActor.id, newActor.pos.x,
                                            newActor.pos.y, newActor.pos.z, newActor.rot.x, newActor.rot.y,
                                            newActor.rot.z, newActor.params);

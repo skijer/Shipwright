@@ -460,3 +460,5 @@ soh/properties.h
 /clang-format
 /clang-format.exe
 *.o2r
+
+/soh/tools/mods-api

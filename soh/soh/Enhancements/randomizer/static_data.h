@@ -3,6 +3,7 @@
 #include <array>
 #include <map>
 #include <unordered_map>
+#include <vector>
 #include "randomizerTypes.h"
 #include "item.h"
 #include "location.h"
@@ -17,7 +18,7 @@ namespace Rando {
  */
 class StaticData {
   private:
-    static std::array<Item, RG_MAX> itemTable;
+    static std::vector<Item> itemTable;
     static std::array<Location, RC_MAX> locationTable;
 
   public:
@@ -28,8 +29,7 @@ class StaticData {
     static void HintTable_Init_Exclude_Dungeon();
     static Item& RetrieveItem(const RandomizerGet rgid);
     static Item& ItemFromGIID(const int giid);
-    static std::array<Item, RG_MAX>&
-    GetItemTable(); // is there a reason this is a function and not just an exposed table?
+    static std::vector<Item>& GetItemTable(); // is there a reason this is a function and not just an exposed table?
     static void InitLocationTable();
     static Location* GetLocation(RandomizerCheck locKey);
     static std::array<Rando::Location, RC_MAX>& GetLocationTable();

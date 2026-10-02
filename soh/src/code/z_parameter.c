@@ -22,6 +22,8 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/gameplaystats.h"
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/Layout/ModLayout.h"
 
 #include "message_data_static.h"
 extern MessageTableEntry* sNesMessageEntryTablePtr;
@@ -1280,6 +1282,15 @@ void func_80083108(PlayState* play) {
 
                 if (interfaceCtx->restrictions.all != 0) {
                     for (i = 1; i < ARRAY_COUNT(gSaveContext.equips.buttonItems); i++) {
+                        const SOHCustomItemDefinition* custom =
+                            CustomItemRegistry_Find(CustomItemRegistry_GetEquippedKey(i));
+                        if (gSaveContext.equips.buttonItems[i] == ITEM_CUSTOM && custom != NULL &&
+                            (custom->flags & SOH_CUSTOM_ITEM_WEARABLE)) {
+                            if (gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(i)] != BTN_ENABLED)
+                                sp28 = 1;
+                            gSaveContext.buttonStatus[BUTTON_STATUS_INDEX(i)] = BTN_ENABLED;
+                            continue;
+                        }
                         if ((gSaveContext.equips.buttonItems[i] != ITEM_OCARINA_FAIRY) &&
                             (gSaveContext.equips.buttonItems[i] != ITEM_OCARINA_TIME) &&
                             !((gSaveContext.equips.buttonItems[i] >= ITEM_BOTTLE) &&
@@ -1730,6 +1741,10 @@ void func_800849EC(PlayState* play) {
 void Interface_LoadItemIcon1(PlayState* play, u16 button) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
 
+    if (button < 8 && gSaveContext.equips.buttonItems[button] == ITEM_CUSTOM) {
+        return;
+    }
+
     osCreateMesgQueue(&interfaceCtx->loadQueue, &interfaceCtx->loadMsg, OS_MESG_BLOCK);
     DmaMgr_SendRequest2(&interfaceCtx->dmaRequest_160, interfaceCtx->iconItemSegment + button * 0x1000,
                         (uintptr_t)_icon_item_staticSegmentRomStart +
@@ -1740,6 +1755,10 @@ void Interface_LoadItemIcon1(PlayState* play, u16 button) {
 
 void Interface_LoadItemIcon2(PlayState* play, u16 button) {
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
+
+    if (button < 8 && gSaveContext.equips.buttonItems[button] == ITEM_CUSTOM) {
+        return;
+    }
 
     osCreateMesgQueue(&interfaceCtx->loadQueue, &interfaceCtx->loadMsg, OS_MESG_BLOCK);
     DmaMgr_SendRequest2(&interfaceCtx->dmaRequest_180, interfaceCtx->iconItemSegment + button * 0x1000,
@@ -1870,6 +1889,10 @@ u8 Return_Item(u8 itemID, ModIndex modId, ItemID returnItem) {
  * @return u8
  */
 u8 Item_Give(PlayState* play, u8 item) {
+    if (GameInteractor_ExecuteOnResolveItemGive(play, &item)) {
+        return ITEM_NONE;
+    }
+
     // prevents getting sticks without the bag in case something got missed
     if (IS_RANDO && (item == ITEM_STICK || item == ITEM_STICKS_5 || item == ITEM_STICKS_10) &&
         Randomizer_GetSettingValue(RSK_SHUFFLE_DEKU_STICK_BAG) && CUR_UPG_VALUE(UPG_STICKS) == 0) {
@@ -2477,9 +2500,14 @@ u8 Item_Give(PlayState* play, u8 item) {
 
 u8 Item_CheckObtainability(u8 item) {
     s16 i;
-    s16 slot = SLOT(item);
+    s16 slot;
     s32 temp;
 
+    if (item == ITEM_CUSTOM) {
+        return ITEM_NONE;
+    }
+
+    slot = SLOT(item);
     if (item >= ITEM_STICKS_5) {
         slot = SLOT(sExtraItemBases[item - ITEM_STICKS_5]);
     }
@@ -3066,6 +3094,10 @@ void Magic_Reset(PlayState* play) {
 s32 Magic_RequestChange(PlayState* play, s16 amount, s16 type) {
     if (!gSaveContext.isMagicAcquired) {
         return false;
+    }
+
+    if (type != MAGIC_ADD) {
+        GameInteractor_ExecuteOnMagicResolveCost(&amount);
     }
 
     if ((type != 5) && (gSaveContext.magic - amount) < 0) {
@@ -4409,6 +4441,24 @@ void Interface_DrawItemButtons(PlayState* play) {
 int16_t gItemIconWidth[] = { 30, 24, 24, 24, 16, 16, 16, 16 };
 int16_t gItemIconDD[] = { 550, 680, 680, 680, 1024, 1024, 1024, 1024 };
 
+const char* Interface_ResolveButtonIconPath(PlayState* play, u8 button) {
+    u16 item = button < 8 ? gSaveContext.equips.buttonItems[button] : ITEM_NONE;
+    const char* iconPath = NULL;
+    if (item == ITEM_CUSTOM) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(CustomItemRegistry_GetEquippedKey(button));
+        if (definition != NULL) {
+            SOHItemIconSurface surface = button == 0  ? SOH_ITEM_ICON_B_BUTTON
+                                         : button < 4 ? SOH_ITEM_ICON_C_BUTTON
+                                                      : SOH_ITEM_ICON_DPAD;
+            iconPath = CustomItemRegistry_ResolveTexture(definition->key, surface);
+        }
+    } else if (item < ITEM_CUSTOM) {
+        iconPath = gItemIcons[item];
+    }
+    GameInteractor_ExecuteOnInterfaceResolveButtonIcon(play, button, item, &iconPath);
+    return iconPath;
+}
+
 void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
     OPEN_DISPS(play->state.gfxCtx);
     GraphicsContext* gfxCtx = play->state.gfxCtx;
@@ -4647,6 +4697,13 @@ void Interface_DrawItemIconTexture(PlayState* play, void* texture, s16 button) {
                             gItemIconDD[button] << 1, gItemIconDD[button] << 1);
 
     CLOSE_DISPS(play->state.gfxCtx);
+}
+
+void Interface_DrawButtonItemIcon(PlayState* play, u8 button) {
+    const char* iconPath = Interface_ResolveButtonIconPath(play, button);
+    if (iconPath != NULL) {
+        Interface_DrawItemIconTexture(play, (void*)iconPath, button);
+    }
 }
 
 const char* _gAmmoDigit0Tex[] = { gAmmoDigit0Tex, gAmmoDigit1Tex, gAmmoDigit2Tex,         gAmmoDigit3Tex,
@@ -5442,14 +5499,14 @@ void Interface_Draw(PlayState* play) {
             // B Button Icon & Ammo Count
             if (gSaveContext.equips.buttonItems[0] != ITEM_NONE) {
                 if (fullUi) {
-                    Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[0]], 0);
+                    Interface_DrawButtonItemIcon(play, 0);
                 }
 
                 if ((player->stateFlags1 & PLAYER_STATE1_ON_HORSE) || (play->shootingGalleryStatus > 1) ||
                     ((play->sceneNum == SCENE_BOMBCHU_BOWLING_ALLEY) && Flags_GetSwitch(play, 0x38))) {
 
                     if (!fullUi) {
-                        Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[0]], 0);
+                        Interface_DrawButtonItemIcon(play, 0);
                     }
 
                     gDPPipeSync(OVERLAY_DISP++);
@@ -5457,6 +5514,8 @@ void Interface_Draw(PlayState* play) {
                                       0, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
                     Interface_DrawAmmoCount(play, 0, interfaceCtx->bAlpha);
                 }
+            } else if (fullUi) {
+                Interface_DrawButtonItemIcon(play, 0);
             }
         } else {
             // B Button Do Action Label
@@ -5530,7 +5589,7 @@ void Interface_Draw(PlayState* play) {
         if (gSaveContext.equips.buttonItems[1] < 0xF0) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cLeftAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[1]], 1);
+            Interface_DrawButtonItemIcon(play, 1);
             gDPPipeSync(OVERLAY_DISP++);
             gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                               PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5543,7 +5602,7 @@ void Interface_Draw(PlayState* play) {
         if (gSaveContext.equips.buttonItems[2] < 0xF0) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cDownAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[2]], 2);
+            Interface_DrawButtonItemIcon(play, 2);
             gDPPipeSync(OVERLAY_DISP++);
             gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                               PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5556,7 +5615,7 @@ void Interface_Draw(PlayState* play) {
         if (gSaveContext.equips.buttonItems[3] < 0xF0) {
             gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->cRightAlpha);
             gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-            Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[3]], 3);
+            Interface_DrawButtonItemIcon(play, 3);
             gDPPipeSync(OVERLAY_DISP++);
             gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                               PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5622,7 +5681,7 @@ void Interface_Draw(PlayState* play) {
             if (gSaveContext.equips.buttonItems[4] < 0xF0) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadUpAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[4]], 4);
+                Interface_DrawButtonItemIcon(play, 4);
                 gDPPipeSync(OVERLAY_DISP++);
                 gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                                   PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5633,7 +5692,7 @@ void Interface_Draw(PlayState* play) {
             if (gSaveContext.equips.buttonItems[5] < 0xF0) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadDownAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[5]], 5);
+                Interface_DrawButtonItemIcon(play, 5);
                 gDPPipeSync(OVERLAY_DISP++);
                 gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                                   PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5644,7 +5703,7 @@ void Interface_Draw(PlayState* play) {
             if (gSaveContext.equips.buttonItems[6] < 0xF0) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadLeftAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[6]], 6);
+                Interface_DrawButtonItemIcon(play, 6);
                 gDPPipeSync(OVERLAY_DISP++);
                 gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                                   PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5655,7 +5714,7 @@ void Interface_Draw(PlayState* play) {
             if (gSaveContext.equips.buttonItems[7] < 0xF0) {
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, interfaceCtx->dpadRightAlpha);
                 gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATERGBA_PRIM, G_CC_MODULATERGBA_PRIM);
-                Interface_DrawItemIconTexture(play, gItemIcons[gSaveContext.equips.buttonItems[7]], 7);
+                Interface_DrawButtonItemIcon(play, 7);
                 gDPPipeSync(OVERLAY_DISP++);
                 gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                                   PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
@@ -5757,14 +5816,17 @@ void Interface_Draw(PlayState* play) {
             pauseCtx->cursorVtx[18].v.ob[1] = pauseCtx->cursorVtx[19].v.ob[1] = svar2 =
                 pauseCtx->cursorVtx[svar3].v.ob[1] - WREG(90) / 10;
 
-            if (pauseCtx->equipTargetItem < 0xBF) {
+            if (pauseCtx->equipTargetItem < 0xBF || pauseCtx->equipTargetItem == ITEM_CUSTOM) {
                 // Normal Equip (icon goes from the inventory slot to the C button when equipping it)
                 gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, pauseCtx->equipAnimAlpha);
                 gSPVertex(OVERLAY_DISP++, &pauseCtx->cursorVtx[16], 4, 0);
 
-                gDPLoadTextureBlock(OVERLAY_DISP++, gItemIcons[pauseCtx->equipTargetItem], G_IM_FMT_RGBA, G_IM_SIZ_32b,
-                                    32, 32, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK,
-                                    G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+                const void* equipIcon = pauseCtx->equipTargetItem == ITEM_CUSTOM
+                                            ? ModLayout_GetEquipIcon()
+                                            : gItemIcons[pauseCtx->equipTargetItem];
+                gDPLoadTextureBlock(OVERLAY_DISP++, equipIcon, G_IM_FMT_RGBA, G_IM_SIZ_32b, 32, 32, 0,
+                                    G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK,
+                                    G_TX_NOLOD, G_TX_NOLOD);
             } else {
                 // Magic Arrow Equip Effect
                 svar1 = pauseCtx->equipTargetItem - 0xBF;
@@ -6381,6 +6443,8 @@ void Interface_Draw(PlayState* play) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+
+    GameInteractor_ExecuteOnInterfaceDrawEnd(play);
 }
 
 void Interface_DrawTotalGameplayTimer(PlayState* play) {
@@ -6672,6 +6736,8 @@ void Interface_Update(PlayState* play) {
             sEnvHazard = PLAYER_ENV_HAZARD_NONE;
         }
     }
+
+    GameInteractor_ExecuteOnResolveEnvHazard(play, &sEnvHazard);
 
     HealthMeter_Update(play);
 

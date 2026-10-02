@@ -8,6 +8,7 @@
 
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/controls/Mouse.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 s16 Camera_ChangeSettingFlags(Camera* camera, s16 setting, s16 flags);
 s32 Camera_ChangeModeFlags(Camera* camera, s16 mode, u8 flags);
@@ -7698,6 +7699,7 @@ Vec3s Camera_Update(Camera* camera) {
         View_SetScale(&camera->play->view, 1.0f);
     }
     camera->play->view.fovy = viewFov;
+    GameInteractor_ExecuteOnCameraResolveView(camera, &viewEye, &viewAt, &viewUp);
     func_800AA358(&camera->play->view, &viewEye, &viewAt, &viewUp);
     camera->camDir.x = eyeAtAngle.pitch;
     camera->camDir.y = eyeAtAngle.yaw;

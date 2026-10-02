@@ -23,6 +23,7 @@
 #include "static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
+#include "soh/ModApi/VanillaItems/VanillaItems.h"
 #include "trial.h"
 #include "settings.h"
 #include "soh/util.h"
@@ -3695,6 +3696,10 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
 
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
+
+    if (VanillaItems_GrantRandoItem(item)) {
+        return Return_Item_Entry(giEntry, RG_NONE);
+    }
 
     // if it's an item that just sets a randomizerInf, set it
     if (randomizerGetToRandInf.find(item) != randomizerGetToRandInf.end()) {

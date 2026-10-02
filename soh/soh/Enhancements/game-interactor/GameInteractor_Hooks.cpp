@@ -102,6 +102,115 @@ void GameInteractor_ExecuteOnPlayerUpdate() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerUpdate>();
 }
 
+void GameInteractor_ExecuteOnPlayerResolveItemAction(int32_t item, int8_t* itemAction) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveItemAction>(item, itemAction);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveItemActionInit(int8_t itemAction, PlayerItemActionInitFunc* init) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveItemActionInit>(itemAction, init);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveItemActionUpdate(int8_t itemAction, UpperActionFunc* update) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveItemActionUpdate>(itemAction, update);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveModelGroup(Player* player, int32_t itemAction, int32_t* modelGroup) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveModelGroup>(player, itemAction, modelGroup);
+}
+
+bool GameInteractor_ExecuteOnPlayerActionHandler(PlayState* play, Player* player, int32_t action, bool* startedAction) {
+    bool consumed = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerActionHandler>(play, player, action, &consumed,
+                                                                                  startedAction);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnPlayerActionHandler>(action, play, player, action,
+                                                                                       &consumed, startedAction);
+    return consumed;
+}
+
+void GameInteractor_ExecuteOnPlayerResolveAnim(int32_t group, int32_t animType, LinkAnimationHeader** anim) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveAnim>(group, animType, anim);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnPlayerResolveAnim>(group, group, animType, anim);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveAnimSite(int32_t site, int32_t index, LinkAnimationHeader** anim) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveAnimSite>(site, index, anim);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnPlayerResolveAnimSite>(site, site, index, anim);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveAgeProperties(Player* player, PlayerAgeProperties** properties) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveAgeProperties>(player, properties);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveMotionScale(Player* player, int32_t kind, float* scale) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveMotionScale>(player, kind, scale);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnPlayerResolveMotionScale>(kind, player, kind, scale);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveHeight(Player* player, float* height) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveHeight>(player, height);
+}
+
+void GameInteractor_ExecuteOnPlayerFilterInput(Player* player, Input* input) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerFilterInput>(player, input);
+}
+
+void GameInteractor_ExecuteOnPlayerPostLimbDraw(PlayState* play, Player* player, int32_t limbIndex) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerPostLimbDraw>(play, player, limbIndex);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveFaceTextures(const char** eyes, const char** mouth) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveFaceTextures>(eyes, mouth);
+}
+
+void GameInteractor_ExecuteOnPlayerResolveLimbDraw(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList,
+                                                   Vec3f* pos) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveLimbDraw>(player, limbIndex, dList, limbDList,
+                                                                                    pos);
+}
+
+bool GameInteractor_ExecuteOnResolveItemGive(PlayState* play, uint8_t* item) {
+    bool handled = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnResolveItemGive>(play, item, &handled);
+    return handled;
+}
+
+bool GameInteractor_ExecuteOnGetItemDraw(PlayState* play, GetItemEntry* entry) {
+    bool handled = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnGetItemDraw>(play, entry, &handled);
+    return handled;
+}
+
+void GameInteractor_ExecuteOnGetItemDrawPost(PlayState* play, GetItemEntry* entry) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnGetItemDrawPost>(play, entry);
+}
+
+void GameInteractor_ExecuteOnBgCheckRaycastFloor(CollisionContext* colCtx, Vec3f* pos, Actor* actor,
+                                                 CollisionPoly** poly, int32_t* bgId, float* floorY) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnBgCheckRaycastFloor>(colCtx, pos, actor, poly, bgId,
+                                                                                  floorY);
+}
+
+void GameInteractor_ExecuteOnBgCheckLineTest(CollisionContext* colCtx, Vec3f* posA, Vec3f* posB, Vec3f* hitPos,
+                                             CollisionPoly** poly, int32_t* bgId, Actor* actor, uint32_t flags,
+                                             bool* result) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnBgCheckLineTest>(colCtx, posA, posB, hitPos, poly, bgId,
+                                                                              actor, flags, result);
+}
+
+void GameInteractor_ExecuteOnBgCheckResolveWallFlags(CollisionContext* colCtx, CollisionPoly* poly, int32_t bgId,
+                                                     uint32_t* flags) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnBgCheckResolveWallFlags>(colCtx, poly, bgId, flags);
+}
+
+void GameInteractor_ExecuteOnActorResolveBgCheckFlags(Actor* actor, int32_t* flags) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorResolveBgCheckFlags>(actor, flags);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorResolveBgCheckFlags>(actor->id, actor, flags);
+}
+
+void GameInteractor_ExecuteOnCameraResolveView(Camera* camera, Vec3f* eye, Vec3f* at, Vec3f* up) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCameraResolveView>(camera, eye, at, up);
+}
+
 void GameInteractor_ExecuteOnSetDoAction(uint16_t action) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnSetDoAction>(action);
 }
@@ -116,6 +225,10 @@ void GameInteractor_ExecuteOnOcarinaSongAction() {
 
 void GameInteractor_ExecuteOnOcarinaNote(uint8_t note, float modulator, int8_t bend) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnOcarinaNote>(note, modulator, bend);
+}
+
+void GameInteractor_ExecuteOnOcarinaPlaybackNote(uint8_t note, float modulator) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnOcarinaPlaybackNote>(note, modulator);
 }
 
 void GameInteractor_ExecuteOnCuccoOrChickenHatch() {
@@ -167,6 +280,78 @@ void GameInteractor_ExecuteOnActorUpdate(void* actor) {
     GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorUpdate>(((Actor*)actor)->id, actor);
     GameInteractor::Instance->ExecuteHooksForPtr<GameInteractor::OnActorUpdate>((uintptr_t)actor, actor);
     GameInteractor::Instance->ExecuteHooksForFilter<GameInteractor::OnActorUpdate>(actor);
+}
+
+bool GameInteractor_ExecuteOnActorTalk(Actor* actor, PlayState* play) {
+    bool continueVanilla = true;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorTalk>(actor, play, &continueVanilla);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorTalk>(actor->id, actor, play, &continueVanilla);
+    GameInteractor::Instance->ExecuteHooksForPtr<GameInteractor::OnActorTalk>((uintptr_t)actor, actor, play,
+                                                                              &continueVanilla);
+    GameInteractor::Instance->ExecuteHooksForFilter<GameInteractor::OnActorTalk>(actor, play, &continueVanilla);
+    return continueVanilla;
+}
+
+bool GameInteractor_ExecuteOnActorPlaySfx(Actor* actor, int32_t kind, uint16_t* sfxId) {
+    bool handled = false;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorPlaySfx>(actor, kind, sfxId, &handled);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorPlaySfx>(actor->id, actor, kind, sfxId,
+                                                                                &handled);
+    return handled;
+}
+
+bool GameInteractor_ExecuteOnActorDraw(Actor* actor, PlayState* play) {
+    bool drawVanilla = true;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorDraw>(actor, play, &drawVanilla);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorDraw>(actor->id, actor, play, &drawVanilla);
+    return drawVanilla;
+}
+
+void GameInteractor_ExecuteOnActorDrawEnd(Actor* actor, PlayState* play) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorDrawEnd>(actor, play);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorDrawEnd>(actor->id, actor, play);
+}
+
+void GameInteractor_ExecuteOnActorResolveGrayscale(Actor* actor, PlayState* play, Color_RGBA8* grayscale) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorResolveGrayscale>(actor, play, grayscale);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorResolveGrayscale>(actor->id, actor, play,
+                                                                                         grayscale);
+}
+
+void GameInteractor_ExecuteOnRoomResolveGrayscale(PlayState* play, Room* room, Color_RGBA8* grayscale) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRoomResolveGrayscale>(play, room, grayscale);
+}
+
+void GameInteractor_ExecuteOnActorResolveMotionScale(Actor* actor, float* scale) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorResolveMotionScale>(actor, scale);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorResolveMotionScale>(actor->id, actor, scale);
+}
+
+void GameInteractor_ExecuteOnActorResolvePlayerRelation(Actor* actor, float* xzDist, float* yDist,
+                                                        int16_t* yawTowards) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorResolvePlayerRelation>(actor, xzDist, yDist,
+                                                                                         yawTowards);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorResolvePlayerRelation>(actor->id, actor, xzDist,
+                                                                                              yDist, yawTowards);
+}
+
+void GameInteractor_ExecuteOnCollisionRegisterAC(Collider* collider) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCollisionRegisterAC>(collider);
+}
+
+void GameInteractor_ExecuteOnResolveSwordDamage(PlayState* play, int32_t dmgFlags, uint8_t* damage) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnResolveSwordDamage>(play, dmgFlags, damage);
+}
+
+void GameInteractor_ExecuteOnCollisionResolveDamage(Actor* victim, ColliderInfo* attack, float* damage) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCollisionResolveDamage>(victim, attack, damage);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnCollisionResolveDamage>(victim->id, victim, attack,
+                                                                                          damage);
+}
+
+void GameInteractor_ExecuteOnResolveCustomGetItem(Actor* actor, PlayState* play, GetItemEntry* entry,
+                                                  const char** key) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnResolveCustomGetItem>(actor, play, entry, key);
 }
 
 void GameInteractor_ExecuteOnActorKill(void* actor) {
@@ -221,6 +406,14 @@ void GameInteractor_ExecuteOnPlayerHoldUpShield() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerHoldUpShield>();
 }
 
+void GameInteractor_ExecuteOnPlayerShieldBlocked(PlayState* play, Player* player, Actor* attacker) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerShieldBlocked>(play, player, attacker);
+}
+
+void GameInteractor_ExecuteOnAudioTablesReady() {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnAudioTablesReady>();
+}
+
 void GameInteractor_ExecuteOnPlayerFirstPersonControl(Player* player) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerFirstPersonControl>(player);
 }
@@ -261,6 +454,7 @@ bool GameInteractor_Should(GIVanillaBehavior flag, u32 result, ...) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnVanillaBehavior>(flag, &boolResult, args);
     GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnVanillaBehavior>(flag, flag, &boolResult, args);
     GameInteractor::Instance->ExecuteHooksForFilter<GameInteractor::OnVanillaBehavior>(flag, &boolResult, args);
+    GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnModVanillaBehavior>(flag, flag, &boolResult, args);
 
     va_end(args);
     return boolResult;
@@ -286,16 +480,65 @@ void GameInteractor_ExecuteOnDialogMessage() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnDialogMessage>();
 }
 
+void GameInteractor_ExecuteOnMessageResolveItemIcon(uint16_t itemId, const char** iconPath) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnMessageResolveItemIcon>(itemId, iconPath);
+}
+
 void GameInteractor_ExecuteOnPresentTitleCard() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPresentTitleCard>();
+}
+
+void GameInteractor_ExecuteOnResolveEnvHazard(PlayState* play, s16* hazard) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnResolveEnvHazard>(play, hazard);
+}
+
+void GameInteractor_ExecuteOnMagicResolveCost(s16* amount) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnMagicResolveCost>(amount);
 }
 
 void GameInteractor_ExecuteOnInterfaceUpdate() {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnInterfaceUpdate>();
 }
 
+void GameInteractor_ExecuteOnInterfaceDrawEnd(PlayState* play) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnInterfaceDrawEnd>(play);
+}
+
+void GameInteractor_ExecuteOnInterfaceResolveButtonIcon(PlayState* play, uint8_t button, uint16_t item,
+                                                        const char** iconPath) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnInterfaceResolveButtonIcon>(play, button, item, iconPath);
+}
+
 void GameInteractor_ExecuteOnKaleidoscopeUpdate(int16_t inDungeonScene) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoscopeUpdate>(inDungeonScene);
+}
+
+void GameInteractor_ExecuteOnKaleidoItemCursor(PlayState* play, uint16_t* item, uint16_t* slot) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoItemCursor>(play, item, slot);
+}
+
+void GameInteractor_ExecuteOnKaleidoItemDraw(PlayState* play, int32_t slot, int32_t item, Vtx* vertices) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoItemDraw>(play, slot, item, vertices);
+}
+
+void GameInteractor_ExecuteOnKaleidoResolveItemIcon(PlayState* play, uint16_t item, const char** iconPath) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoResolveItemIcon>(play, item, iconPath);
+}
+
+void GameInteractor_ExecuteOnKaleidoItemEquip(PlayState* play, uint8_t button, uint16_t item, bool* handled) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoItemEquip>(play, button, item, handled);
+}
+
+void GameInteractor_ExecuteOnKaleidoInput(PlayState* play, Input* input, bool* handled) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoInput>(play, input, handled);
+}
+
+void GameInteractor_ExecuteOnKaleidoResolveName(PlayState* play, uint16_t item, const char** namePath) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoResolveName>(play, item, namePath);
+}
+
+void GameInteractor_ExecuteOnKaleidoDebugEditor(PlayState* play, bool* handled) {
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnKaleidoDebugEditor>(play, handled);
 }
 
 // MARK: - Main Menu

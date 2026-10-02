@@ -450,19 +450,11 @@ void SceneDB::LoadCustomScenes() {
         SPDLOG_INFO("[Unbound] Unbound-format archive mounted; vanilla scenes load from scene.json");
     }
 
-    Json registry = SOH::Unbound::LoadMergedJson(K::kRegistryPath);
-    if (!registry.is_object()) {
+    size_t loaded = SOH::Unbound::ForEachRegistryEntry(
+        K::kRegistryPath, "scene",
+        [this](const std::string& id, const nlohmann::json& def) { return RegisterScene(id, def); });
+    if (loaded == 0 && customEntrances.empty()) {
         return;
-    }
-    size_t loaded = 0;
-    for (const auto& id : SOH::Unbound::ListKeys(registry)) {
-        try {
-            if (registry[id].is_object() && RegisterScene(id, registry[id])) {
-                loaded++;
-            }
-        } catch (const nlohmann::json::exception& e) {
-            SPDLOG_ERROR("[Unbound] {}: scene '{}': {}", K::kRegistryPath, id, e.what());
-        }
     }
     SPDLOG_INFO("[Unbound] {}: registered {} custom scene(s), {} custom entrance(s)", K::kRegistryPath, loaded,
                 customEntrances.size());

@@ -15,6 +15,50 @@ extern std::shared_ptr<SohMenu> mSohMenu;
 
 using namespace UIWidgets;
 
+bool SohMenu::EnsureModSidebar(const std::string& section, const std::string& sidebar, const char* cvar,
+                               uint32_t columns) {
+    if (!menuEntries.contains(section)) {
+        AddMenuEntry(section, cvar);
+    }
+    auto& entry = menuEntries.at(section);
+    if (!entry.sidebars.contains(sidebar)) {
+        AddSidebarEntry(section, sidebar, columns);
+    }
+    return entry.sidebars.at(sidebar).columnCount >= columns;
+}
+
+bool SohMenu::MoveModWidget(const WidgetPath& path, const std::string& label, const std::string& anchor, bool after) {
+    if (!menuEntries.contains(path.sectionName)) {
+        return false;
+    }
+    auto& sidebars = menuEntries.at(path.sectionName).sidebars;
+    if (!sidebars.contains(path.sidebarName) || sidebars.at(path.sidebarName).columnWidgets.size() <= path.column) {
+        return false;
+    }
+    auto& widgets = sidebars.at(path.sidebarName).columnWidgets.at(path.column);
+    auto source =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == label; });
+    auto target =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    if (source == widgets.end() || target == widgets.end() || source == target) {
+        return false;
+    }
+    auto moved = std::move(*source);
+    widgets.erase(source);
+    target = std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    widgets.insert(target + (after ? 1 : 0), std::move(moved));
+    return true;
+}
+
+bool SohMenu::HasModWidgetPath(const WidgetPath& path) const {
+    auto section = menuEntries.find(path.sectionName);
+    if (section == menuEntries.end()) {
+        return false;
+    }
+    auto sidebar = section->second.sidebars.find(path.sidebarName);
+    return sidebar != section->second.sidebars.end() && path.column < sidebar->second.columnCount;
+}
+
 void SohMenu::AddSidebarEntry(std::string sectionName, std::string sidebarName, uint32_t columnCount) {
     assert(!sectionName.empty());
     assert(!sidebarName.empty());

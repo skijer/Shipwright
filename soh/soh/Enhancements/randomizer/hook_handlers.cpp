@@ -2598,7 +2598,8 @@ std::unordered_map<s32, SpecialRespawnInfo> swimSpecialRespawnInfo = {
 f32 triforcePieceScale;
 
 void RandomizerOnPlayerUpdateHandler() {
-    if ((GET_PLAYER(gPlayState)->stateFlags1 & PLAYER_STATE1_IN_WATER) && !Flags_GetRandomizerInf(RAND_INF_CAN_SWIM) &&
+    if ((GET_PLAYER(gPlayState)->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
+        !GameInteractor_Should(VB_SWIM, Flags_GetRandomizerInf(RAND_INF_CAN_SWIM)) &&
         CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) != EQUIP_VALUE_BOOTS_IRON) {
         // if you void out in water temple without swim you get instantly kicked out to prevent softlocks
         if (gPlayState->sceneNum == SCENE_WATER_TEMPLE) {

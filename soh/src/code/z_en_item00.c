@@ -6,6 +6,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 
 #define FLAGS 0
 
@@ -481,6 +482,7 @@ void EnItem00_Init(Actor* thisx, PlayState* play) {
         case ITEM00_SOH_GIVE_ITEM_ENTRY:
         case ITEM00_SOH_GIVE_ITEM_ENTRY_GI:
         case ITEM00_SOH_DUMMY:
+        case ITEM00_SOH_CUSTOM:
             this->unk_158 = 0;
             Actor_SetScale(&this->actor, 0.03f);
             this->scale = 0.03f;
@@ -591,6 +593,7 @@ void EnItem00_Init(Actor* thisx, PlayState* play) {
 void EnItem00_Destroy(Actor* thisx, PlayState* play) {
     EnItem00* this = (EnItem00*)thisx;
 
+    CustomItemRegistry_RemoveDrop(thisx);
     Collider_DestroyCylinder(play, &this->collider);
 }
 
@@ -858,6 +861,10 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         return;
     }
 
+    if (this->actor.params == ITEM00_SOH_CUSTOM && CustomItemRegistry_UpdateDrop(&this->actor, play)) {
+        return;
+    }
+
     if (!GameInteractor_Should(VB_GIVE_ITEM_FROM_ITEM_00, true, this)) {
         return;
     }
@@ -1001,6 +1008,10 @@ void EnItem00_Draw(Actor* thisx, PlayState* play) {
     if (CVarGetInteger(CVAR_ENHANCEMENT("NewDrops"), 0)) {
         func_8002EBCC(&this->actor, play, 0);
         func_8002ED80(&this->actor, play, 0);
+    }
+
+    if (this->actor.params == ITEM00_SOH_CUSTOM && CustomItemRegistry_DrawDrop(&this->actor, play)) {
+        return;
     }
 
     if (!(this->unk_156 & this->unk_158)) {

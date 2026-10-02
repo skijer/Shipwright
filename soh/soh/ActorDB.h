@@ -19,6 +19,17 @@ typedef struct {
 } ActorDBEntry;
 
 #ifdef __cplusplus
+extern "C" {
+#endif
+
+ActorDBEntry* ActorDB_Retrieve(const int id);
+int ActorDB_RetrieveId(const char* name);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
 
 #include <string>
 #include <unordered_map>
@@ -58,6 +69,10 @@ class ActorDB {
         ActorDBEntry entry;
     };
     Entry& AddEntry(const ActorDBInit& init);
+    // SOH [Unbound] Registers at a caller-chosen id instead of the next free one (custom actor types are numbered
+    // from their own base; unbound-docs/actors.md). Adds nothing and returns nullptr when the id or the name is
+    // already taken: unlike AddEntry's asserts, the check holds in release builds.
+    Entry* TryAddEntry(const ActorDBInit& init, size_t id);
 
     Entry& RetrieveEntry(const int id);
     int RetrieveId(const std::string& name);
@@ -69,15 +84,11 @@ class ActorDB {
   private:
     Entry& AddEntry(const std::string& name, const std::string& desc, size_t index);
     Entry& AddEntry(const std::string& name, const std::string& desc, const ActorInit& init);
+    Entry& AddEntry(const ActorDBInit& init, size_t id);
 
     std::vector<Entry> db;
     std::unordered_map<std::string, int> nameTable;
     size_t nextFreeId = 0;
 };
-
-#else
-
-ActorDBEntry* ActorDB_Retrieve(const int id);
-int ActorDB_RetrieveId(const char* name);
 
 #endif

@@ -1,0 +1,310 @@
+name: sign-mod
+
+# A mod author opens a "Sign a mod" issue; requests queue in labels and are signed one at a time. The submitted
+# code is scanned, built by this repository's own CMake and checked with no secret in reach; only the sign job
+# holds the key, and it never runs submitted code: it hashes the finished packages and signs them.
+on:
+  issues:
+    types: [opened, labeled]
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: sign-mod
+  cancel-in-progress: false
+
+jobs:
+
+  request:
+    if: github.event_name != 'issues' || contains(github.event.issue.labels.*.name, 'sign-mod')
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      issue: ${{ steps.next.outputs.issue }}
+      repository: ${{ steps.next.outputs.repository }}
+      commit: ${{ steps.next.outputs.commit }}
+      directory: ${{ steps.next.outputs.directory }}
+      author: ${{ steps.next.outputs.author }}
+      unbound_ref: ${{ steps.next.outputs.unbound_ref }}
+    steps:
+    - name: Checkout the signing tools and the author lists
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: |
+          mod-sdk/tools
+          .github/mod-signing
+          soh/soh/ModApi/ModTrust/RevokedMods.h
+    - name: Triage new requests and take the oldest queued one
+      id: next
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: python3 trusted/mod-sdk/tools/sign_queue.py next
+
+  scan:
+    needs: request
+    if: needs.request.outputs.issue != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk
+    - name: Checkout Unbound at the release
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.request.outputs.unbound_ref }}
+        path: external/Unbound
+        submodules: true
+    - name: Checkout the submitted mods
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ needs.request.outputs.repository }}
+        ref: ${{ needs.request.outputs.commit }}
+        path: submitted
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install the analyzers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
+        python -m pip install semgrep
+    - name: Check layout, includes and pragmas
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: python trusted/mod-sdk/tools/scan_mod_sources.py --mods-directory "submitted/$DIRECTORY" --submitted-root submitted
+    - name: Configure the signing build
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        cmake -S trusted/mod-sdk/ci/signing -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DUNBOUND_ROOT="$GITHUB_WORKSPACE/external/Unbound" \
+              -DUNBOUND_SIGNED_MODS_DIR="$GITHUB_WORKSPACE/submitted/$DIRECTORY"
+    - name: Check the preprocessed sources
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        python trusted/mod-sdk/tools/scan_mod_sources.py --mods-directory "submitted/$DIRECTORY" \
+               --submitted-root submitted --compile-commands build/compile_commands.json
+    - name: Cppcheck
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: cppcheck --error-exitcode=1 --quiet "submitted/$DIRECTORY"
+    - name: Semgrep
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: semgrep scan --config p/c --severity ERROR --error --metrics off "submitted/$DIRECTORY"
+
+  build:
+    needs: [request, scan]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows_x64
+          - os: ubuntu-22.04
+            platform: linux_x64
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk
+    - name: Checkout Unbound at the release
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.request.outputs.unbound_ref }}
+        path: external/Unbound
+        submodules: true
+    - name: Checkout the submitted mods
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ needs.request.outputs.repository }}
+        ref: ${{ needs.request.outputs.commit }}
+        path: submitted
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install pillow
+    - name: Get soh.lib
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UNBOUND_REF: ${{ needs.request.outputs.unbound_ref }}
+      run: |
+        if gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern soh.lib --dir external/soh-lib; then
+          exit 0
+        fi
+        RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=20" \
+              --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+        if [ -z "$RUN" ]; then
+          echo "::error::$GITHUB_REPOSITORY has neither a release with soh.lib nor a Windows build artifact"
+          exit 1
+        fi
+        echo "No release with soh.lib: using the unbound-mod-sdk-windows artifact of run $RUN"
+        gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name unbound-mod-sdk-windows --dir external/soh-lib
+    - name: Build
+      shell: bash
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        IMPORT_LIBRARY=""
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          IMPORT_LIBRARY="-DUNBOUND_IMPORT_LIBRARY=$GITHUB_WORKSPACE/external/soh-lib/soh.lib"
+        fi
+        cmake -S trusted/mod-sdk/ci/signing -B build -DCMAKE_BUILD_TYPE=Release \
+              -DUNBOUND_ROOT="$GITHUB_WORKSPACE/external/Unbound" \
+              -DUNBOUND_SIGNED_MODS_DIR="$GITHUB_WORKSPACE/submitted/$DIRECTORY" $IMPORT_LIBRARY
+        cmake --build build --config Release --parallel
+    - name: Upload packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: mods-${{ matrix.platform }}
+        if-no-files-found: error
+        path: build/packages/Release/*.o2r
+
+  package:
+    needs: [request, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk/tools
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install lief
+    - name: Download platform packages
+      uses: actions/download-artifact@v7
+      with:
+        pattern: mods-*
+        path: platform-packages
+    - name: Merge into one package per mod
+      run: |
+        mkdir -p universal
+        for mod in $(find platform-packages -name '*.o2r' -exec basename {} \; | sort -u); do
+          python trusted/mod-sdk/tools/merge_mod_packages.py platform-packages/*/"$mod" --output "universal/$mod"
+        done
+    - name: Check what the binaries import
+      run: python trusted/mod-sdk/tools/check_mod_binary.py universal/*.o2r
+    - name: Upload unsigned packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: unsigned-mods
+        path: universal/*.o2r
+
+  sign:
+    needs: [request, package]
+    runs-on: ubuntu-22.04
+    environment: mod-signing
+    permissions:
+      contents: write
+    outputs:
+      release_tag: ${{ steps.publish.outputs.tag }}
+    steps:
+    - name: Checkout the signing tools and the game's public key
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: |
+          mod-sdk/tools
+          soh/soh/ModApi/ModTrust/TrustedModKey.h
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install cryptography
+    - name: Download unsigned packages
+      uses: actions/download-artifact@v7
+      with:
+        name: unsigned-mods
+        path: unsigned
+    - name: Sign and verify against the key compiled into the game
+      env:
+        UNBOUND_MOD_SIGNING_KEY: ${{ secrets.UNBOUND_MOD_SIGNING_KEY }}
+        REPOSITORY: ${{ needs.request.outputs.repository }}
+        COMMIT: ${{ needs.request.outputs.commit }}
+        AUTHOR: ${{ needs.request.outputs.author }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        mkdir -p signed
+        for package in unsigned/*.o2r; do
+          python trusted/mod-sdk/tools/mod_signature.py sign "$package" --output "signed/$(basename "$package")" \
+                 --repository "$REPOSITORY" --commit "$COMMIT" --author "$AUTHOR" --workflow-run "$RUN_URL"
+        done
+        python trusted/mod-sdk/tools/mod_signature.py verify signed/*.o2r \
+               --key-header trusted/soh/soh/ModApi/ModTrust/TrustedModKey.h
+    - name: Publish
+      id: publish
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ISSUE_NUMBER: ${{ needs.request.outputs.issue }}
+        REPOSITORY: ${{ needs.request.outputs.repository }}
+        COMMIT: ${{ needs.request.outputs.commit }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        TAG="signed-mod-${ISSUE_NUMBER}-${COMMIT:0:7}"
+        NOTES="Signed build of https://github.com/$REPOSITORY/tree/$COMMIT. Scan and build logs: $RUN_URL"
+        (cd signed && zip -q -0 ../unbound-mods-all.zip *.o2r)
+        gh release create "$TAG" signed/*.o2r unbound-mods-all.zip --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+           --title "Signed mods: $REPOSITORY@${COMMIT:0:7}" --notes "$NOTES"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+  finish:
+    needs: [request, scan, build, package, sign]
+    if: always() && needs.request.outputs.issue != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk/tools
+    - name: Answer the issue and start the next request
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ISSUE_NUMBER: ${{ needs.request.outputs.issue }}
+        SIGNED: ${{ needs.sign.result == 'success' && '--signed' || '' }}
+        RELEASE_TAG: ${{ needs.sign.outputs.release_tag }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        python3 trusted/mod-sdk/tools/sign_queue.py finish --issue "$ISSUE_NUMBER" $SIGNED \
+                --release-tag "$RELEASE_TAG" --run-url "$RUN_URL"

@@ -3,6 +3,7 @@
 
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <math.h>
@@ -1701,6 +1702,7 @@ f32 BgCheck_RaycastFloorImpl(PlayState* play, CollisionContext* colCtx, u16 xpFl
     if (yIntersect != BGCHECK_Y_MIN && func_80041EC8(colCtx, *outPoly, *outBgId)) {
         yIntersect -= 1.0f;
     }
+    GameInteractor_ExecuteOnBgCheckRaycastFloor(colCtx, pos, actor, outPoly, outBgId, &yIntersect);
     return yIntersect;
 }
 
@@ -2201,7 +2203,10 @@ s32 BgCheck_CheckLineImpl(CollisionContext* colCtx, u16 xpFlags1, u16 xpFlags2, 
             sectorMax.z += colCtx->subdivLength.z;
         }
     } else if (BgCheck_PosInStaticBoundingBox(colCtx, posA) == false) {
-        return false;
+        bool hookResult = result;
+        GameInteractor_ExecuteOnBgCheckLineTest(colCtx, posA, posB, posResult, outPoly, outBgId, actor, bccFlags,
+                                                &hookResult);
+        return hookResult;
     } else {
         result =
             BgCheck_CheckLineInSubdivision(BgCheck_GetNearestStaticLookup(colCtx, lookupTbl, posA), colCtx, xpFlags1,
@@ -2215,7 +2220,10 @@ s32 BgCheck_CheckLineImpl(CollisionContext* colCtx, u16 xpFlags1, u16 xpFlags2, 
                                      chkDist, bccFlags)) {
         result = true;
     }
-    return result;
+    bool hookResult = result;
+    GameInteractor_ExecuteOnBgCheckLineTest(colCtx, posA, posB, posResult, outPoly, outBgId, actor, bccFlags,
+                                            &hookResult);
+    return hookResult;
 }
 
 /**
@@ -4104,11 +4112,13 @@ u32 func_80041D94(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
  * SurfaceType Get Wall Flags
  */
 s32 func_80041DB8(CollisionContext* colCtx, CollisionPoly* poly, s32 bgId) {
+    u32 flags = D_80119D90[func_80041D94(colCtx, poly, bgId)];
+
     if (CVarGetInteger(CVAR_CHEAT("ClimbEverything"), 0) != 0) {
-        return (1 << 3) | D_80119D90[func_80041D94(colCtx, poly, bgId)];
-    } else {
-        return D_80119D90[func_80041D94(colCtx, poly, bgId)];
+        flags |= 1 << 3;
     }
+    GameInteractor_ExecuteOnBgCheckResolveWallFlags(colCtx, poly, bgId, &flags);
+    return flags;
 }
 
 /**

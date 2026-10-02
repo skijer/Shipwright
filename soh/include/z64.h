@@ -42,6 +42,7 @@
 #define SYSTEM_HEAP_SIZE (1024 * 1024 * 4)
 
 #ifdef __cplusplus
+extern "C++" {
 namespace LUS
 {
     class IResource;
@@ -51,6 +52,7 @@ namespace Fast {
     class DisplayList;
 };
 #include <memory>
+}
 #endif
 
 #define SCREEN_WIDTH  320

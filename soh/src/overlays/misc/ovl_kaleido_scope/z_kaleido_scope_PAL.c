@@ -17,6 +17,8 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/SaveManager.h"
@@ -1216,6 +1218,11 @@ void KaleidoScope_DrawQuadTextureRGBA32(GraphicsContext* gfxCtx, void* texture, 
 }
 
 void KaleidoScope_SetDefaultCursor(PlayState* play) {
+    if ((play->pauseCtx.pageIndex == PAUSE_ITEM && ModLayout_IsActive(SOH_LAYOUT_ITEMS)) ||
+        (play->pauseCtx.pageIndex == PAUSE_EQUIP && ModLayout_IsActive(SOH_LAYOUT_EQUIPMENT)) ||
+        (play->pauseCtx.pageIndex == PAUSE_QUEST && ModLayout_IsActive(SOH_LAYOUT_COLLECTABLES))) {
+        return;
+    }
     PauseContext* pauseCtx = &play->pauseCtx;
     s16 s;
     s16 i;
@@ -1223,11 +1230,12 @@ void KaleidoScope_SetDefaultCursor(PlayState* play) {
 
     switch (pauseCtx->pageIndex) {
         case PAUSE_ITEM:
-            s = pauseCtx->cursorSlot[PAUSE_ITEM];
-            if (gSaveContext.inventory.items[s] == ITEM_NONE) {
+            s = pauseCtx->cursorSlot[PAUSE_ITEM] == SLOT_CUSTOM ? pauseCtx->cursorPoint[PAUSE_ITEM]
+                                                                : pauseCtx->cursorSlot[PAUSE_ITEM];
+            if (KaleidoItemManager_GetSlotItem(s) == ITEM_NONE) {
                 i = s + 1;
                 while (true) {
-                    if (gSaveContext.inventory.items[i] != ITEM_NONE) {
+                    if (KaleidoItemManager_GetSlotItem(i) != ITEM_NONE) {
                         break;
                     }
                     i++;
@@ -1239,7 +1247,7 @@ void KaleidoScope_SetDefaultCursor(PlayState* play) {
                         return;
                     }
                 }
-                pauseCtx->cursorItem[PAUSE_ITEM] = gSaveContext.inventory.items[i];
+                pauseCtx->cursorItem[PAUSE_ITEM] = KaleidoItemManager_GetSlotItem(i);
                 pauseCtx->cursorSlot[PAUSE_ITEM] = i;
             }
             break;
@@ -1296,6 +1304,31 @@ void KaleidoScope_HandlePageToggles(PauseContext* pauseCtx, Input* input) {
     if (CVarGetInteger(CVAR_ENHANCEMENT("NGCKaleidoSwitcher"), 0) != 0) {
         Debug_BTN = BTN_Z;
         PageLeft_BTN = BTN_L;
+    }
+
+    if (CHECK_BTN_ALL(input->press.button, Debug_BTN)) {
+        int layout = pauseCtx->pageIndex == PAUSE_ITEM    ? SOH_LAYOUT_ITEMS
+                     : pauseCtx->pageIndex == PAUSE_EQUIP ? SOH_LAYOUT_EQUIPMENT
+                     : pauseCtx->pageIndex == PAUSE_QUEST ? SOH_LAYOUT_COLLECTABLES
+                                                          : -1;
+        if (layout >= 0 && ModLayout_CyclePage(gPlayState, layout)) {
+            return;
+        }
+    }
+
+    if (pauseCtx->pageIndex == PAUSE_ITEM && CHECK_BTN_ALL(input->press.button, Debug_BTN) &&
+        KaleidoItemManager_CycleItemPage(gPlayState)) {
+        return;
+    }
+
+    if (pauseCtx->pageIndex == PAUSE_EQUIP && CHECK_BTN_ALL(input->press.button, Debug_BTN) &&
+        KaleidoEquipManager_CycleEquipPage(gPlayState)) {
+        return;
+    }
+
+    if (pauseCtx->pageIndex == PAUSE_QUEST && CHECK_BTN_ALL(input->press.button, Debug_BTN) &&
+        KaleidoQuestManager_CycleQuestPage(gPlayState)) {
+        return;
     }
 
     if (CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0) && (pauseCtx->debugState == 0) &&
@@ -2163,7 +2196,10 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
     if ((pauseCtx->state == 6) && (pauseCtx->namedItem != PAUSE_ITEM_NONE) && (pauseCtx->nameDisplayTimer < WREG(89)) &&
         (!pauseCtx->unk_1E4 || (pauseCtx->unk_1E4 == 2) || ((pauseCtx->unk_1E4 >= 4) && (pauseCtx->unk_1E4 <= 7)) ||
          (pauseCtx->unk_1E4 == 8)) &&
-        (pauseCtx->cursorSpecialPos == 0)) {
+        (pauseCtx->cursorSpecialPos == 0) &&
+        (pauseCtx->namedItem != ITEM_CUSTOM ||
+         (CustomItemRegistry_GetPauseItem() != NULL &&
+          CustomItemRegistry_ResolveTexture(CustomItemRegistry_GetPauseItem()->key, SOH_ITEM_NAME_TEXTURE) != NULL))) {
         if (!pauseCtx->unk_1E4 || (pauseCtx->unk_1E4 == 2) || ((pauseCtx->unk_1E4 >= 4) && (pauseCtx->unk_1E4 <= 7)) ||
             (pauseCtx->unk_1E4 == 8)) {
             pauseCtx->infoPanelVtx[16].v.ob[0] = pauseCtx->infoPanelVtx[18].v.ob[0] = -63;
@@ -2288,7 +2324,7 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
                 (CVarGetInteger(CVAR_ENHANCEMENT("PauseAnyCursor"), 0) == PAUSE_ANY_CURSOR_RANDO_ONLY && IS_RANDO) ||
                 (CVarGetInteger(CVAR_ENHANCEMENT("PauseAnyCursor"), 0) == PAUSE_ANY_CURSOR_ALWAYS_ON);
             if (!pauseCtx->pageIndex &&
-                (!pauseAnyCursor || (gSaveContext.inventory.items[pauseCtx->cursorPoint[PAUSE_ITEM]] !=
+                (!pauseAnyCursor || (KaleidoItemManager_GetSlotItem(pauseCtx->cursorPoint[PAUSE_ITEM]) !=
                                      ITEM_NONE))) { // pageIndex == PAUSE_ITEM
                 pauseCtx->infoPanelVtx[16].v.ob[0] = pauseCtx->infoPanelVtx[18].v.ob[0] = WREG(49 + languageOffset);
 
@@ -2408,8 +2444,9 @@ void KaleidoScope_DrawInfoPanel(PlayState* play) {
                 pauseCtx->infoPanelVtx[21].v.tc[0] = pauseCtx->infoPanelVtx[23].v.tc[0] =
                     D_8082ADD8[gSaveContext.language] << 5;
 
-                if (!(CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1)) &&
-                    (pauseCtx->pageIndex == PAUSE_EQUIP) && (pauseCtx->cursorX[PAUSE_EQUIP] != 0)) {
+                if (!ModLayout_IsActive(SOH_LAYOUT_EQUIPMENT) && (pauseCtx->pageIndex == PAUSE_EQUIP) &&
+                    (pauseCtx->cursorX[PAUSE_EQUIP] != 0) &&
+                    !(CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1))) {
                     return;
                 }
 
@@ -2448,10 +2485,11 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
         osCreateMesgQueue(&pauseCtx->loadQueue, &pauseCtx->loadMsg, 1);
 
         if (pauseAnyCursor &&
-            ((pauseCtx->pageIndex == PAUSE_EQUIP && pauseCtx->cursorX[PAUSE_EQUIP] != 0 &&
+            ((pauseCtx->pageIndex == PAUSE_EQUIP && !ModLayout_IsActive(SOH_LAYOUT_EQUIPMENT) &&
+              pauseCtx->cursorX[PAUSE_EQUIP] != 0 &&
               !CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1)) ||
-             (pauseCtx->pageIndex == PAUSE_ITEM &&
-              gSaveContext.inventory.items[pauseCtx->cursorPoint[PAUSE_ITEM]] == ITEM_NONE))) {
+             (pauseCtx->pageIndex == PAUSE_ITEM && !ModLayout_IsActive(SOH_LAYOUT_ITEMS) &&
+              KaleidoItemManager_GetSlotItem(pauseCtx->cursorPoint[PAUSE_ITEM]) == ITEM_NONE))) {
             pauseCtx->namedItem = PAUSE_ITEM_NONE;
         }
 
@@ -2492,9 +2530,18 @@ void KaleidoScope_UpdateNamePanel(PlayState* play) {
 
                 osSyncPrintf("J_N=%d  point=%d\n", gSaveContext.language, sp2A);
 
-                const char* textureName = iconNameTextures[sp2A];
+                const char* textureName = pauseCtx->namedItem == ITEM_CUSTOM ? NULL : iconNameTextures[sp2A];
 
-                if (!GameInteractor_Should(VB_DRAW_CUSTOM_ITEM_NAME, false, pauseCtx->namedItem)) {
+                if (pauseCtx->namedItem == ITEM_CUSTOM) {
+                    const SOHCustomItemDefinition* definition = CustomItemRegistry_GetPauseItem();
+                    if (definition != NULL && definition->namePath != NULL) {
+                        textureName = CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_NAME_TEXTURE);
+                    }
+                }
+                GameInteractor_ExecuteOnKaleidoResolveName(play, pauseCtx->namedItem, &textureName);
+
+                if (textureName != NULL &&
+                    !GameInteractor_Should(VB_DRAW_CUSTOM_ITEM_NAME, false, pauseCtx->namedItem)) {
                     memcpy(pauseCtx->nameSegment, textureName, strlen(textureName) + 1);
                 }
             }
@@ -4257,8 +4304,13 @@ void KaleidoScope_Update(PlayState* play) {
 
         case 6:
             switch (pauseCtx->unk_1E4) {
-                case 0:
-                    if (GameInteractor_Should(VB_CLOSE_PAUSE_MENU, CHECK_BTN_ALL(input->press.button, BTN_START))) {
+                case 0: {
+                    bool modInputHandled = false;
+                    GameInteractor_ExecuteOnKaleidoInput(play, input, &modInputHandled);
+                    if (modInputHandled) {
+                        break;
+                    } else if (GameInteractor_Should(VB_CLOSE_PAUSE_MENU,
+                                                     CHECK_BTN_ALL(input->press.button, BTN_START))) {
                         Interface_SetDoAction(play, DO_ACTION_NONE);
                         pauseCtx->state = 0x12;
                         WREG(2) = -6240;
@@ -4284,6 +4336,7 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->randoQuestMode ^= 1;
                     }
                     break;
+                }
 
                 case 1:
                     func_808237B4(play, play->state.input);

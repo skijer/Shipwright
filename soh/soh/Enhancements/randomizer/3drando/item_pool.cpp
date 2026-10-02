@@ -8,6 +8,8 @@
 #include "random.hpp"
 #include "spoiler_log.hpp"
 #include "soh/Enhancements/randomizer/Traps.h"
+#include "soh/ModApi/VanillaItems/VanillaItems.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
 #include "z64item.h"
 #include <spdlog/spdlog.h>
 
@@ -33,6 +35,10 @@ const std::map<RandomizerGet, std::vector<RandomizerGet>*> poolForItem = {
 
 void AddItemToPool(RandomizerGet item, int plentifulCount, size_t balancedCount, size_t scarceCount = 1,
                    size_t minimalCount = 1, bool iceTrapModel = true) {
+    if (VanillaItems_IsRandoItemSuppressed(item)) {
+        return;
+    }
+
     int count = balancedCount;
     switch (ctx->GetOption(RSK_ITEM_POOL).Get()) {
         case RO_ITEM_POOL_SCARCE:
@@ -58,6 +64,9 @@ void AddItemToPool(RandomizerGet item, int plentifulCount, size_t balancedCount,
 }
 
 void AddFixedItemToPool(RandomizerGet item, int count = 1, bool iceTrapModel = true) {
+    if (VanillaItems_IsRandoItemSuppressed(item)) {
+        return;
+    }
     if (!poolForItem.contains(item)) {
         itemPool.insert(itemPool.end(), count, item);
         if (iceTrapModel && count > 0 && item != RG_ICE_TRAP) {
@@ -883,6 +892,8 @@ void GenerateItemPool() {
             }
         }
     }
+
+    RandoItems_AddToPool();
 
     std::erase(junkPool, RG_NONE);
     std::erase(itemPool, RG_NONE);

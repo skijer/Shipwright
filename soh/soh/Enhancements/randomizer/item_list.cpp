@@ -5,15 +5,19 @@
 #include "textures/icon_item_static/icon_item_static.h"
 #include "z64object.h"
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
 #include "draw.h"
 
 using namespace Rando;
 
-std::array<Item, RG_MAX> Rando::StaticData::itemTable;
+std::vector<Item> Rando::StaticData::itemTable;
 std::unordered_map<std::string, RandomizerGet> Rando::StaticData::itemNameToEnum;
 
 void Rando::StaticData::InitItemTable() {
     auto logic = Context::GetInstance()->GetLogic();
+    if (itemTable.size() < RG_MAX) {
+        itemTable.resize(RG_MAX);
+    }
 
     // clang-format off
     itemTable[RG_NONE] =                                Item(RG_NONE,                             Text{ "No Item", "Rien", "Kein Artikel" },                                                                                           ITEMTYPE_EVENT,             GI_RUPEE_GREEN,       false, LOGIC_NONE,                         RHT_NONE,                              ITEM_NONE,                            0,                       0,                   0,                           0,    0,                ITEM_CATEGORY_JUNK,   MOD_NONE);
@@ -459,6 +463,8 @@ void Rando::StaticData::InitItemTable() {
 
     // clang-format on
 
+    RandoItems_BuildItemTable();
+
     // Init itemNameToEnum
     for (auto& item : itemTable) {
         // Easiest way to filter out all the empty values from the array, since we still technically want the 0/RG_NONE
@@ -477,7 +483,7 @@ Item& Rando::StaticData::RetrieveItem(const RandomizerGet rgid) {
 }
 
 Item& Rando::StaticData::ItemFromGIID(const int giid) {
-    uint32_t index = 0;
+    size_t index = 0;
     while (index < RG_MAX) {
         if (itemTable[index].GetItemID() == giid) {
             return itemTable[index];
@@ -491,6 +497,6 @@ Item& Rando::StaticData::ItemFromGIID(const int giid) {
     return itemTable[RG_GREEN_RUPEE];
 }
 
-std::array<Item, RG_MAX>& Rando::StaticData::GetItemTable() {
+std::vector<Item>& Rando::StaticData::GetItemTable() {
     return itemTable;
 }

@@ -11,6 +11,7 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -836,6 +837,18 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
     s32 pad;
     Gfx* gfx = *p;
     MessageContext* msgCtx = &play->msgCtx;
+    const char* customIconPath = NULL;
+
+    if (itemId == ITEM_CUSTOM) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetMessageItem();
+        if (definition != NULL) {
+            customIconPath = CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX);
+        }
+    }
+    GameInteractor_ExecuteOnMessageResolveItemIcon(itemId, &customIconPath);
+    if (itemId == ITEM_CUSTOM && customIconPath == NULL) {
+        return i + 1;
+    }
 
     // clang-format off
     if (msgCtx->msgMode == MSGMODE_TEXT_DISPLAYING) { Audio_PlaySoundGeneral(0, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb); }
@@ -848,8 +861,8 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
     // Invalidate icon texture as it may have changed from the last time a text box had an icon
     gSPInvalidateTexCache(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE);
 
-    if (GameInteractor_Should(VB_DRAW_ITEM_ICON, itemId < ITEM_CUSTOM, &gfx)) {
-        if (itemId >= ITEM_MEDALLION_FOREST) {
+    if (GameInteractor_Should(VB_DRAW_ITEM_ICON, itemId < ITEM_CUSTOM || customIconPath != NULL, &gfx)) {
+        if (itemId >= ITEM_MEDALLION_FOREST && itemId != ITEM_CUSTOM) {
             gDPLoadTextureBlock(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, G_IM_FMT_RGBA,
                                 G_IM_SIZ_32b, 24, 24, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP,
                                 G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
@@ -1634,18 +1647,39 @@ void Message_DrawText(PlayState* play, Gfx** gfxP) {
     *gfxP = gfx;
 }
 
+static bool Message_IsItemIconLoadedByDefault(u8 itemId) {
+    return itemId < ITEM_CUSTOM || (itemId == ITEM_CUSTOM && CustomItemRegistry_HasMessageItemIcon());
+}
+
 void Message_LoadItemIcon(PlayState* play, u16 itemId, s16 y) {
     static s16 sIconItem32XOffsets[] = { 74, 74, 74, 54 };
     static s16 sIconItem24XOffsets[] = { 72, 72, 72, 50 };
     MessageContext* msgCtx = &play->msgCtx;
     InterfaceContext* interfaceCtx = &play->interfaceCtx;
     u8 language = sDisplayNextMessageAsEnglish ? LANGUAGE_ENG : gSaveContext.language;
+    const char* iconPath = NULL;
+
+    if (itemId == ITEM_CUSTOM) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetMessageItem();
+        if (definition != NULL) {
+            iconPath = CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX);
+        }
+    }
+    GameInteractor_ExecuteOnMessageResolveItemIcon(itemId, &iconPath);
+    if (itemId == ITEM_CUSTOM && iconPath == NULL) {
+        return;
+    }
 
     if (itemId == ITEM_DUNGEON_MAP) {
         interfaceCtx->mapPalette[30] = 0xFF;
         interfaceCtx->mapPalette[31] = 0xFF;
     }
-    if (itemId < ITEM_MEDALLION_FOREST) {
+    if (iconPath != NULL && iconPath[0] != '\0') {
+        R_TEXTBOX_ICON_XPOS = R_TEXT_INIT_XPOS - sIconItem32XOffsets[language];
+        R_TEXTBOX_ICON_YPOS = y + 6;
+        R_TEXTBOX_ICON_SIZE = 32;
+        memcpy((uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, iconPath, strlen(iconPath) + 1);
+    } else if (itemId < ITEM_MEDALLION_FOREST) {
         R_TEXTBOX_ICON_XPOS = R_TEXT_INIT_XPOS - sIconItem32XOffsets[language];
         R_TEXTBOX_ICON_YPOS = y + 6;
         R_TEXTBOX_ICON_SIZE = 32;
@@ -2219,7 +2253,8 @@ void Message_DecodeJPN(PlayState* play) {
             }
         } else if (curChar == MESSAGE_ITEM_ICON_JPN) {
             msgCtx->msgBufDecodedWide[++decodedBufPos] = font->msgBufWide[msgCtx->msgBufPos + 1];
-            if (GameInteractor_Should(VB_LOAD_ITEM_ICON, (uint8_t)font->msgBuf[msgCtx->msgBufPos + 1] < ITEM_CUSTOM,
+            if (GameInteractor_Should(VB_LOAD_ITEM_ICON,
+                                      Message_IsItemIconLoadedByDefault(font->msgBuf[msgCtx->msgBufPos + 1]),
                                       sDisplayNextMessageAsEnglish)) {
                 Message_LoadItemIcon(play, font->msgBufWide[msgCtx->msgBufPos + 1], R_TEXTBOX_Y + 10);
             }
@@ -2652,9 +2687,10 @@ void Message_Decode(PlayState* play) {
             msgCtx->msgBufDecoded[++decodedBufPos] = font->msgBuf[msgCtx->msgBufPos + 1];
             osSyncPrintf("ITEM_NO=(%d) (%d)\n", msgCtx->msgBufDecoded[decodedBufPos],
                          font->msgBuf[msgCtx->msgBufPos + 1]);
-            if (GameInteractor_Should(VB_LOAD_ITEM_ICON, (uint8_t)font->msgBuf[msgCtx->msgBufPos + 1] < ITEM_CUSTOM,
+            if (GameInteractor_Should(VB_LOAD_ITEM_ICON,
+                                      Message_IsItemIconLoadedByDefault(font->msgBuf[msgCtx->msgBufPos + 1]),
                                       sDisplayNextMessageAsEnglish)) {
-                Message_LoadItemIcon(play, font->msgBuf[msgCtx->msgBufPos + 1], R_TEXTBOX_Y + 10);
+                Message_LoadItemIcon(play, (u8)font->msgBuf[msgCtx->msgBufPos + 1], R_TEXTBOX_Y + 10);
             }
         } else if (temp_s2 == MESSAGE_BACKGROUND) {
             msgCtx->textboxBackgroundIdx = font->msgBuf[msgCtx->msgBufPos + 1] * 2;

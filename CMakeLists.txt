@@ -50,7 +50,7 @@ set(PROJECT_TEAM "github.com/harbourmasters" CACHE STRING "" FORCE)
 # cutting a release: the tag is "${PROJECT_VERSION}-${PROJECT_FORK_VERSION}" (see unbound-docs/README.md,
 # "Releasing"). Shown under Settings > General > About; gBuildVersion stays the vanilla SoH version.
 set(PROJECT_FORK_NAME "SoH: Unbound" CACHE STRING "" FORCE)
-set(PROJECT_FORK_VERSION "unbound0.8" CACHE STRING "" FORCE)
+set(PROJECT_FORK_VERSION "unbound0.9" CACHE STRING "" FORCE)
 
 execute_process(
     COMMAND git branch --show-current
@@ -247,6 +247,11 @@ target_compile_definitions(libultraship PUBLIC INCLUDE_MPQ_SUPPORT)
 if(NOT EMSCRIPTEN)
     add_subdirectory(ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
     add_subdirectory(OTRExporter)
+    foreach(extractor ZAPDLib OTRExporter)
+        if(TARGET ${extractor})
+            set_target_properties(${extractor} PROPERTIES INTERPROCEDURAL_OPTIMIZATION_RELEASE FALSE)
+        endif()
+    endforeach()
 endif()
 add_subdirectory(soh)
 

@@ -1,5 +1,6 @@
 #ifndef Z_KALEIDO_SCOPE_H
 #define Z_KALEIDO_SCOPE_H
+#include "soh/ModApi/Layout/ModLayout.h"
 
 #include <libultraship/libultra.h>
 #include "global.h"
@@ -32,6 +33,9 @@ void KaleidoScope_DrawEquipment(PlayState* play);
 void KaleidoScope_SetCursorVtx(PauseContext* pauseCtx, u16 index, Vtx* vtx);
 void KaleidoScope_DrawItemSelect(PlayState* play);
 void KaleidoScope_SetupItemEquip(PlayState* play, u16 item, u16 slot, s16 animX, s16 animY);
+void KaleidoScope_DrawAmmoCountAt(PauseContext* pauseCtx, GraphicsContext* gfxCtx, s16 item, Vtx* digitVtx);
+void KaleidoScope_DrawAmmoDigits(GraphicsContext* gfxCtx, s16 ammo, Vtx* digitVtx);
+s8 ItemInSlotUsesAmmo(s16 slot);
 void KaleidoScope_UpdateItemEquip(PlayState* play);
 void KaleidoScope_DrawDungeonMap(PlayState* play, GraphicsContext* gfxCtx);
 void KaleidoScope_DrawWorldMap(PlayState* play, GraphicsContext* gfxCtx);
@@ -50,5 +54,14 @@ void PauseMapMark_Draw(PlayState* play);
 void KaleidoScope_UpdateCursorSize(PauseContext* pauseCtx);
 
 void KaleidoScope_ResetItemCycling();
+
+typedef struct {
+    void* icon;
+    bool ageAllowed;
+} KaleidoCycleIcon;
+
+void KaleidoScope_DrawCycleIcons(PlayState* play, u8 slot, KaleidoCycleIcon left, KaleidoCycleIcon right);
+void KaleidoScope_DrawCycleIconsAt(PlayState* play, u8 slot, KaleidoCycleIcon left, KaleidoCycleIcon right,
+                                  s16 centerX, s16 centerY, bool isCycling, bool hovered);
 
 #endif

@@ -10,6 +10,7 @@
 #include <cerrno>
 #include <cstdint>
 #include <cstdlib>
+#include <string_view>
 
 namespace SOH::Unbound {
 
@@ -73,6 +74,79 @@ Json LoadMergedJson(const std::string& path) {
     }
     StripDirectives(merged);
     return merged;
+}
+
+size_t ForEachRegistryEntry(const std::string& path, const char* what,
+                            const std::function<bool(const std::string& key, const Json& entry)>& add) {
+    Json registry = LoadMergedJson(path);
+    if (!registry.is_object()) {
+        return 0;
+    }
+    size_t accepted = 0;
+    for (const auto& key : ListKeys(registry)) {
+        try {
+            if (registry[key].is_object() && add(key, registry[key])) {
+                accepted++;
+            }
+        } catch (const nlohmann::json::exception& e) {
+            SPDLOG_ERROR("[Unbound] {}: {} '{}': {}", path, what, key, e.what());
+        }
+    }
+    return accepted;
+}
+
+static constexpr std::string_view kRegistryFileSuffix = ".json";
+
+struct RegistryFile {
+    std::string name;
+    std::string path;
+};
+
+// "unbound/actors/mymod/old_man.json" under "unbound/actors/" -> "mymod/old_man".
+static std::string RegistryName(const std::string& dir, const std::string& path) {
+    return path.substr(dir.size(), path.size() - dir.size() - kRegistryFileSuffix.size());
+}
+
+// Every mounted path under `dir` ending in ".json", sorted by name: the path with ".json" attached sorts differently
+// when one name starts another ("npc-old.json" < "npc.json"). The archive manager lists each path once.
+static std::vector<RegistryFile> ListRegistryFiles(const std::string& dir) {
+    std::string mask = dir + "*" + std::string(kRegistryFileSuffix);
+    auto listed = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(mask);
+    std::vector<RegistryFile> files;
+    for (const auto& path : *listed) {
+        files.push_back({ RegistryName(dir, path), path });
+    }
+    std::sort(files.begin(), files.end(), [](const RegistryFile& a, const RegistryFile& b) { return a.name < b.name; });
+    return files;
+}
+
+// The merged document at `file.path`, or a null Json when it is deleted or not an object (logged).
+static Json LoadRegistryFile(const RegistryFile& file, const char* what) {
+    Json entry = LoadMergedJson(file.path);
+    if (!entry.is_null() && !entry.is_object()) {
+        SPDLOG_ERROR("[Unbound] {}: not a JSON object, so no {}; skipped", file.path, what);
+        return Json();
+    }
+    return entry;
+}
+
+size_t ForEachRegistryFile(const std::string& dir, const char* what,
+                           const std::function<bool(const std::string& name, const Json& entry)>& add) {
+    size_t accepted = 0;
+    for (const auto& file : ListRegistryFiles(dir)) {
+        Json entry = LoadRegistryFile(file, what);
+        if (entry.is_null()) {
+            continue;
+        }
+        try {
+            if (add(file.name, entry)) {
+                accepted++;
+            }
+        } catch (const nlohmann::json::exception& e) {
+            SPDLOG_ERROR("[Unbound] {}: {} '{}': {}", file.path, what, file.name, e.what());
+        }
+    }
+    return accepted;
 }
 
 static bool IsIntegerKey(const std::string& key, long long& value) {

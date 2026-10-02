@@ -1,0 +1,186 @@
+name: build-mods
+on:
+  push:
+    tags:
+      - '*mods*'
+    paths:
+      - 'mod-sdk/mods/**'
+      - '!mod-sdk/mods/README.md'
+  pull_request:
+    paths:
+      - 'mod-sdk/mods/**'
+      - '!mod-sdk/mods/README.md'
+  workflow_dispatch:
+    inputs:
+      release_repository:
+        description: Repository whose Unbound release provides soh.lib
+        default: skijer/Shipwright
+      release_tag:
+        description: Release tag to take soh.lib from (empty = newest Unbound release)
+        default: ''
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  RELEASE_REPOSITORY: ${{ inputs.release_repository || vars.UNBOUND_RELEASE_REPOSITORY || 'skijer/Shipwright' }}
+  RELEASE_TAG: ${{ inputs.release_tag }}
+  SOH_LIB_ARTIFACT: unbound-mod-sdk-windows
+  ALL_MODS_PACKAGE: unbound-mods-all.zip
+jobs:
+
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows_x64
+          - os: ubuntu-22.04
+            platform: linux_x64
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v6
+      with:
+        submodules: true
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install pillow
+    - name: Get soh.lib
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        TAG="$RELEASE_TAG"
+        if [ -z "$TAG" ]; then
+          TAG=$(gh release list --repo "$RELEASE_REPOSITORY" --limit 50 --json tagName \
+                --jq '[.[] | select(.tagName | test("unbound"))][0].tagName // empty')
+        fi
+        if [ -n "$TAG" ] && gh release download "$TAG" --repo "$RELEASE_REPOSITORY" --pattern soh.lib --dir soh-lib; then
+          echo "Using soh.lib from release $RELEASE_REPOSITORY $TAG"
+          exit 0
+        fi
+        RUN=$(gh api "repos/$RELEASE_REPOSITORY/actions/artifacts?name=$SOH_LIB_ARTIFACT&per_page=20" \
+              --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+        if [ -z "$RUN" ]; then
+          echo "::error::$RELEASE_REPOSITORY has neither a release with soh.lib nor a Windows build artifact"
+          exit 1
+        fi
+        echo "No release with soh.lib: using the $SOH_LIB_ARTIFACT artifact of run $RUN"
+        gh run download "$RUN" --repo "$RELEASE_REPOSITORY" --name "$SOH_LIB_ARTIFACT" --dir soh-lib
+    - name: Build mods
+      shell: bash
+      run: |
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          python mod-sdk/build_mods.py --soh-lib soh-lib/soh.lib
+        else
+          python mod-sdk/build_mods.py
+        fi
+    - name: Upload packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: mods-${{ matrix.platform }}
+        if-no-files-found: error
+        path: build/mod-sdk/packages/Release/*.o2r
+
+  universal:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v6
+      with:
+        sparse-checkout: mod-sdk/tools
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Download platform packages
+      uses: actions/download-artifact@v7
+      with:
+        pattern: mods-*
+        path: platform-packages
+    - name: Merge into one package per mod
+      run: |
+        mkdir -p universal
+        for mod in $(find platform-packages -name '*.o2r' -exec basename {} \; | sort -u); do
+          python mod-sdk/tools/merge_mod_packages.py platform-packages/*/"$mod" --output "universal/$mod"
+        done
+        (cd universal && zip -q "$ALL_MODS_PACKAGE" *.o2r)
+    - name: Upload universal packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: unbound-mods
+        path: universal/
+
+  describe-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v6
+      with:
+        sparse-checkout: mod-sdk
+    - name: List the mods in the pull request description
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        SIGNED=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName \
+                 --jq '[.[] | select(.tagName | startswith("signed-mod-"))][0].tagName // empty')
+        gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
+        if [ -n "$SIGNED" ]; then
+          STATUS="Signed by the sign-mod workflow ($SIGNED): each package carries its signature, checked by the game."
+          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md \
+                  --download-base "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$SIGNED"
+        else
+          STATUS="Downloads are published when a tag containing \`mods\` is pushed on this pull request's commit."
+          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md
+        fi
+        gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file body.md
+
+  release:
+    needs: universal
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+    - name: Git Checkout
+      uses: actions/checkout@v6
+      with:
+        sparse-checkout: mod-sdk
+    - name: Download universal packages
+      uses: actions/download-artifact@v7
+      with:
+        name: unbound-mods
+        path: universal
+    - name: Publish GitHub Release
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        DOWNLOAD_BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+        python3 mod-sdk/tools/list_mods.py mod-sdk/mods --download-base "$DOWNLOAD_BASE" > notes.md
+        gh release create "$GITHUB_REF_NAME" universal/* --repo "$GITHUB_REPOSITORY" \
+          --title "Unbound mods ${GITHUB_REF_NAME}" --notes-file notes.md --generate-notes
+    - name: Link the downloads in the pull requests of this commit
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        DOWNLOAD_BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+        for PR_NUMBER in $(gh pr list --repo "$GITHUB_REPOSITORY" --state open --json number,headRefOid \
+                             --jq ".[] | select(.headRefOid == \"$GITHUB_SHA\") | .number"); do
+          gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
+          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --download-base "$DOWNLOAD_BASE" --update-body body.md
+          gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file body.md
+        done

@@ -70,6 +70,7 @@ uint32_t GameInteractor_GetEmulatedButtons();
 void GameInteractor_SetEmulatedButtons(uint32_t buttons);
 uint8_t GameInteractor_GetRandomBombFuseTimerActive();
 uint8_t GameInteractor_GetDisableLedgeGrabsActive();
+void GameInteractor_SetDisableLedgeGrabsActive(uint8_t state);
 uint8_t GameInteractor_GetRandomWindActive();
 uint8_t GameInteractor_GetRandomBonksActive();
 uint8_t GameInteractor_GetSlipperyFloorActive();
