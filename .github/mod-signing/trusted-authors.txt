@@ -1,0 +1,3 @@
+# GitHub logins whose sign-mod requests skip the maintainer's approval, one per line.
+# Blocked authors live in soh/soh/ModApi/ModTrust/RevokedMods.h, which the game reads too.
+skijer

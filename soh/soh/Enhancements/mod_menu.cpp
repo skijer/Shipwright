@@ -10,6 +10,7 @@
 
 #include "mod_menu.h"
 #include "soh/Enhancements/audio/OotrsArchive.h"
+#include "soh/ModApi/ModApi.h"
 #include "soh/OTRGlobals.h"
 #include "soh/util.h"
 #include "soh/SohGui/MenuTypes.h"
@@ -276,6 +277,9 @@ void UpdateModFiles(bool init = false, bool reset = false) {
     std::vector<std::filesystem::path> ootrsFiles;
     std::string modsPath = ModsFolder();
     if (!modsPath.empty()) {
+        if (init) {
+            UserFiles_ApplyPending(modsPath);
+        }
         changed = ScanModsFolder(modsPath, ootrsFiles);
         // Only a scan can tell a deleted mod from one this install never had. Pruning used to
         // happen only while loading archives; it happens before the list is drawn too, since
@@ -324,6 +328,19 @@ static std::string ModDisplayName(const std::string& mod) {
         return mod + " (missing)";
     }
     return path->second.filename().generic_string();
+}
+
+static void DrawModTrust(const std::string& mod) {
+    auto path = filePaths.find(mod);
+    if (path == filePaths.end()) {
+        return;
+    }
+    const std::string trust = ModLoader_DescribeTrust(path->second.generic_string());
+    if (trust.empty()) {
+        return;
+    }
+    ImGui::SameLine();
+    ImGui::TextDisabled("(%s)", trust.c_str());
 }
 
 void HandleModDropBoundaries() {
@@ -441,6 +458,7 @@ void DrawMods(bool enabled) {
         } else {
             ImGui::Text("%s", displayName.c_str());
         }
+        DrawModTrust(file);
 
         if (enabled) {
             ImGui::EndGroup();

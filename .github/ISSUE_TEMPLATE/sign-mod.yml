@@ -1,0 +1,34 @@
+name: Sign a mod
+description: Scan, build and sign the mods of your repository so release builds of Unbound will run them.
+title: "Sign mods: "
+labels: [sign-mod]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The sign-mod workflow checks out your repository at the commit you give, scans the sources, builds them
+        with Unbound's own build files, checks what the binaries import and signs the packages with your GitHub
+        name, repository and commit. If any step fails nothing is signed, and the log says why.
+        Requests are signed one at a time; your first one waits for a maintainer's approval.
+        See mod-sdk/docs/SIGNING.md for the rules.
+  - type: input
+    id: repository
+    attributes:
+      label: Mod repository
+      description: A public repository you own, as owner/name.
+      placeholder: your-name/your-mods
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: Commit
+      description: The full 40-character commit hash to sign.
+    validations:
+      required: true
+  - type: input
+    id: directory
+    attributes:
+      label: Mods folder
+      description: The folder whose subfolders are your mods. Leave empty for "mods".
+      placeholder: mods

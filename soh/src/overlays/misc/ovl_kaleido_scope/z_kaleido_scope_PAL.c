@@ -4307,7 +4307,7 @@ void KaleidoScope_Update(PlayState* play) {
 
         case 6:
             switch (pauseCtx->unk_1E4) {
-                case 0:
+                case 0: {
                     bool modInputHandled = false;
                     GameInteractor_ExecuteOnKaleidoInput(play, input, &modInputHandled);
                     if (modInputHandled) {
@@ -4339,6 +4339,7 @@ void KaleidoScope_Update(PlayState* play) {
                         pauseCtx->randoQuestMode ^= 1;
                     }
                     break;
+                }
 
                 case 1:
                     func_808237B4(play, play->state.input);

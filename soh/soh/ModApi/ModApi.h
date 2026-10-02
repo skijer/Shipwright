@@ -34,6 +34,9 @@ extern "C" {
 #include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 #include "soh/ModApi/ModMessages/ModMessages.h"
 #include "soh/ModApi/Layout/ModLayout.h"
+#include "soh/ModApi/Microphone/Microphone.h"
+#include "soh/ModApi/UserFiles/UserFiles.h"
+#include "soh/ModApi/ModDialogs/ModDialogs.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -166,6 +169,16 @@ typedef struct {
     void* (*FindService)(const char* name);
     uint16_t (*RegisterMessage)(const SOHModMessage* message);
     uint16_t (*GetMessageId)(const char* key);
+    SOHMicrophoneStatus (*OpenMicrophone)(uint32_t sampleRate);
+    uint32_t (*ReadMicrophone)(float* samples, uint32_t capacity);
+    void (*CloseMicrophone)(void);
+    bool (*PickUserFile)(const char* title, const char* filterName, const char* filterPatterns, SOHUserFile* file);
+    void (*FreeUserFile)(SOHUserFile* file);
+    bool (*SaveToModsFolder)(const char* fileName, const void* data, uint64_t size);
+    bool (*ExtractRomToModsFolder)(const SOHRomExtractRequest* request);
+    bool (*AskPlayer)(const char* title, const char* message);
+    void (*TellPlayer)(const char* title, const char* message);
+    bool (*RequestRestart)(const char* reason);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \
@@ -193,10 +206,13 @@ bool ModApi_HasHook(const char* name);
 
 #ifdef __cplusplus
 
+#include <filesystem>
 #include <string>
 
 void ModApi_Init();
 void ModLoader_LoadMods();
+std::string ModLoader_DescribeTrust(const std::string& archivePath);
+std::filesystem::path ModLoader_GetModsDirectory();
 void ModApi_SetCurrentMod(const std::string& name);
 void ModApi_ClearCurrentMod();
 std::string ModApi_GetCatalogFingerprint();

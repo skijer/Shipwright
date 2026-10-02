@@ -436,6 +436,19 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU|Clang|AppleClang")
         LOG_LEVEL_GAME_PRINTS=${SPDLOG_LEVEL_OFF}
     )
 endif()
+
+# "open" until signing is switched on for releases; then releases use "signed" and mod authors "ask".
+set(UNBOUND_MOD_POLICY "open" CACHE STRING
+    "Native mods: open (load all), ask (unsigned ones need the player's yes), signed (only sign-mod signatures)")
+set_property(CACHE UNBOUND_MOD_POLICY PROPERTY STRINGS open ask signed)
+# Only the loader reads the policy, so switching it rebuilds one file and the link.
+if(UNBOUND_MOD_POLICY STREQUAL "ask")
+    set_source_files_properties(soh/ModApi/ModLoader.cpp PROPERTIES COMPILE_DEFINITIONS UNBOUND_MOD_POLICY_ASK)
+elseif(UNBOUND_MOD_POLICY STREQUAL "signed")
+    set_source_files_properties(soh/ModApi/ModLoader.cpp PROPERTIES COMPILE_DEFINITIONS UNBOUND_MOD_POLICY_SIGNED)
+elseif(NOT UNBOUND_MOD_POLICY STREQUAL "open")
+    message(FATAL_ERROR "UNBOUND_MOD_POLICY must be open, ask or signed")
+endif()
 ################################################################################
 # Compile and link options
 ################################################################################

@@ -19,8 +19,9 @@ on:
       - '*celshade*'
       - '*unbound*'
   pull_request:
-    paths-ignore:
-      - 'mod-sdk/mods/**'
+    branches:
+      - wind-waker-style-cel-shading
+      - unbound
   workflow_dispatch:
     inputs:
       tag:
@@ -153,6 +154,22 @@ jobs:
         path: |
           SoH.dmg
           readme.txt
+    - name: Build the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      run: |
+        cp readme.txt README.md
+        cmake --no-warn-unused-cli -H. -Bbuild-cmake -DUNBOUND_MOD_POLICY=ask
+        cmake --build build-cmake --parallel 3
+        (cd build-cmake && cpack)
+        mv _packages/*.dmg SoH-unbound-unsafe.dmg
+    - name: Upload the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: soh-unbound-unsafe-mac
+        path: |
+          SoH-unbound-unsafe.dmg
+          readme.txt
 
   build-linux:
     needs: generate-soh-otr
@@ -243,6 +260,22 @@ jobs:
       with:
         name: soh-linux
         path: soh.appimage
+    - name: Build the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      run: |
+        cmake --no-warn-unused-cli -H. -Bbuild-cmake -DUNBOUND_MOD_POLICY=ask
+        cmake --build build-cmake --config Release -j3
+        (cd build-cmake && cpack -G External)
+        mv build-cmake/*.appimage soh-unbound-unsafe.appimage
+      env:
+        CC: gcc-12
+        CXX: g++-12
+    - name: Upload the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: soh-unbound-unsafe-linux
+        path: soh-unbound-unsafe.appimage
     - name: Save Cache deps folder
       if: ${{ github.event_name == 'push' }}
       uses: actions/cache/save@v5
@@ -317,6 +350,26 @@ jobs:
       with:
         name: soh-windows
         path: soh-windows
+    # The mod developers' edition asks before loading each unsigned mod; only ModLoader.cpp and the link rebuild.
+    - name: Build the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      env:
+        VCPKG_ROOT: ${{github.workspace}}/vcpkg
+      run: |
+        Remove-Item -Path _packages/*.zip -Force
+        cmake -S . -B build-windows -DUNBOUND_MOD_POLICY=ask
+        cmake --build build-windows --config Release --parallel 10
+        (cd build-windows && cpack)
+        cd ..
+        mv _packages/*.zip _packages/soh-unbound-unsafe-windows.zip
+        Expand-Archive -Path _packages/soh-unbound-unsafe-windows.zip -DestinationPath soh-unbound-unsafe-windows
+        Copy-Item -Path x64/Release/soh.lib -Destination soh-unbound-unsafe-windows/soh.lib
+    - name: Upload the unsafe mods edition
+      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: soh-unbound-unsafe-windows
+        path: soh-unbound-unsafe-windows
     - name: Save Cache VCPKG folder
       if: ${{ github.event_name == 'push' }}
       uses: actions/cache/save@v5
@@ -365,6 +418,11 @@ jobs:
       with:
         name: soh-windows
         path: rel/windows
+    - name: Download the unsafe mods editions
+      uses: actions/download-artifact@v7
+      with:
+        pattern: soh-unbound-unsafe-*
+        path: rel
     - name: Package release assets
       run: |
         mkdir -p dist
@@ -372,6 +430,11 @@ jobs:
         cp "rel/linux/soh.appimage" "dist/SoH-${TAG}-Linux.appimage"
         (cd rel/windows && zip -r "../../dist/SoH-${TAG}-Win64.zip" .)
         cp "rel/windows/soh.lib" "dist/soh.lib"
+        if [ -d rel/soh-unbound-unsafe-windows ]; then
+          cp "rel/soh-unbound-unsafe-mac/SoH-unbound-unsafe.dmg" "dist/SoH-${TAG}-Mac-unsafe-mods.dmg"
+          cp "rel/soh-unbound-unsafe-linux/soh-unbound-unsafe.appimage" "dist/SoH-${TAG}-Linux-unsafe-mods.appimage"
+          (cd rel/soh-unbound-unsafe-windows && zip -r "../../dist/SoH-${TAG}-Win64-unsafe-mods.zip" .)
+        fi
     - name: Publish GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}

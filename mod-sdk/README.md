@@ -26,6 +26,7 @@ mods/
 | React to the game: hooks, vanilla behaviours, time, input, audio, menus | [Hooks and services](docs/HOOKS.md) |
 | Put my item in the randomizer, change its logic | [Randomizer](docs/RANDOMIZER.md) |
 | Ship one `.o2r` for Windows, Linux and macOS from CI | [Publishing](docs/PUBLISHING.md) |
+| Get my mod signed so release builds run it | [Signing](docs/SIGNING.md) |
 
 ## The short version
 

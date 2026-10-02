@@ -107,3 +107,5 @@ working example of the fork layout above, with dozens of real mods.
 - Check your pause placement against the mods you expect players to combine with yours.
 - A new version may add fields your old saves did not have; read storage and flags defensively.
 - Guard every table entry newer than the oldest game you support with `SOH_MOD_API_HAS`.
+- Builds with the `signed` mod policy only run signed mods; the [sign-mod workflow](SIGNING.md) publishes
+  packages they accept.
