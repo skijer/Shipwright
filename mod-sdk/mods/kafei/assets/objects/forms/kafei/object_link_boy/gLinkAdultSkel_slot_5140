@@ -1,0 +1,13 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<Texture S="0" T="0" Level="0" Tile="0" On="0"/>
+	<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_1" A1="G_CCMUX_0" B1="G_CCMUX_0" C1="G_CCMUX_0" D1="G_CCMUX_COMBINED" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetOtherMode Cmd="G_SETOTHERMODE_L" Sft="3" Length="29" G_RM_FOG_SHADE_A="1" G_RM_AA_ZB_OPA_SURF2="1" />
+	<ClearGeometryMode G_LIGHTING="1" G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" />
+	<SetGeometryMode G_CULL_BACK="1" G_FOG="1" G_LIGHTING="1" G_CLIPPING="1" />
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<LoadVertices Path="objects/forms/kafei/object_link_boy/gLinkAdultSkel_slot_5140_vtx_0" VertexBufferIndex="0" VertexOffset="0" Count="6"/>
+	<Triangles2 V00="4" V01="5" V02="0" Flag0="0" V10="4" V11="0" V12="1" Flag1="0"/>
+	<Triangles2 V00="1" V01="0" V02="2" Flag0="0" V10="1" V11="2" V12="3" Flag1="0"/>
+	<EndDisplayList/>
+</DisplayList>

@@ -1,0 +1,6 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<SetPrimColor M="0" L="128" R="100" G="255" B="230" A="255"/>
+	<SetEnvColor R="0" G="180" B="130" A="255"/>
+	<EndDisplayList/>
+</DisplayList>

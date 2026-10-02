@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_whip/whip_grip_opaque_dl"/>
+	<CallDisplayList Path="objects/object_nei_whip/whip_coil_opaque_dl"/>
+	<EndDisplayList/>
+</DisplayList>
