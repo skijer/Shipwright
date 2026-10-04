@@ -17,8 +17,10 @@
 //   0x7F05 / 0x7F15 / 0x7F25 Sheik idle / arms crossed / harp
 //   0x7F06 / 0x7F16 / 0x7F26 adult Ruto idle / hands on hips / looking down left
 //   0x7F07 / 0x7F17 / 0x7F27 child Ruto hands behind / hands on hips / sitting
+//   0x7E0A / 0x7E1A / 0x7E2A Keaton idle / chuckle / celebrate   (Majora's Mask, needs mm.o2r)
+//   0x7E0D / 0x7E1D / 0x7E2D Anju idle / bow / sitting          (Majora's Mask, needs mm.o2r)
 // The models are OoT's own, loaded by path. Not ported yet: head and torso tracking, talking, soft collision, the
-// other characters (Impa, Zelda, Kokiri, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
+// other characters (Impa, Zelda, Kokiri, Lulu, Skull Kid, Kafei, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
 
 #include "soh/ModApi/ModApi.h"
 
@@ -36,6 +38,21 @@
 #include "objects/object_xc/object_xc.h"
 #include "overlays/actors/ovl_En_Ma2/z_en_ma2.h"
 
+// Majora's Mask models, by the path the mm.o2r that mm_assets extracts stores them under. Without it they are skipped.
+#define MM(object, name) "__OTR__objects/" object "/" name
+static const ALIGN_ASSET(2) char sKeatonSkel[] = MM("object_kitan", "gKeatonSkel");
+static const ALIGN_ASSET(2) char sKeatonIdle[] = MM("object_kitan", "gKeatonIdleAnim");
+static const ALIGN_ASSET(2) char sKeatonChuckle[] = MM("object_kitan", "gKeatonChuckleAnim");
+static const ALIGN_ASSET(2) char sKeatonCelebrate[] = MM("object_kitan", "gKeatonCelebrateAnim");
+static const ALIGN_ASSET(2) char sAnjuSkel[] = MM("object_an1", "gAnju1Skel");
+static const ALIGN_ASSET(2) char sAnjuIdle[] = MM("object_an1", "gAnju1IdleAnim");
+static const ALIGN_ASSET(2) char sAnjuBow[] = MM("object_an1", "gAnju1BowAnim");
+static const ALIGN_ASSET(2) char sAnjuSit[] = MM("object_an1", "gAnju1SittingInDisbeliefAnim");
+static const ALIGN_ASSET(2) char sAnjuEyeOpen[] = MM("object_an1", "gAnju1EyeOpenTex");
+static const ALIGN_ASSET(2) char sAnjuEyeHalf[] = MM("object_an1", "gAnju1EyeHalfTex");
+static const ALIGN_ASSET(2) char sAnjuEyeClosed[] = MM("object_an1", "gAnju1EyeClosedTex");
+static const ALIGN_ASSET(2) char sAnjuMouth[] = MM("object_an1", "gAnju1MouthClosedTex");
+
 #define STORY_NPC_KEY "marsh6487.story_npc"
 #define PARAM_PREFIX_LEGACY 0x7F00
 #define PARAM_PREFIX_EXPANDED 0x7E00
@@ -52,6 +69,8 @@ typedef enum {
     NPC_SHEIK,
     NPC_ADULT_RUTO,
     NPC_CHILD_RUTO,
+    NPC_KEATON,
+    NPC_ANJU,
     NPC_COUNT,
 } NpcKind;
 
@@ -64,6 +83,7 @@ typedef struct {
     f32 scale;
     s32 hiddenLimbs[2];
     bool segmentC; // the fixed-function segment 0x0C that some of these models read
+    bool fromMm;   // needs mm.o2r
 } NpcDefinition;
 
 static const NpcDefinition sNpcs[NPC_COUNT] = {
@@ -126,6 +146,24 @@ static const NpcDefinition sNpcs[NPC_COUNT] = {
                          0.01f,
                          { -1, -1 },
                          true },
+    [NPC_KEATON] = { sKeatonSkel,
+                     { sKeatonIdle, sKeatonChuckle, sKeatonCelebrate },
+                     3,
+                     { NULL, NULL, NULL },
+                     NULL,
+                     0.01f,
+                     { -1, -1 },
+                     false,
+                     true },
+    [NPC_ANJU] = { sAnjuSkel,
+                   { sAnjuIdle, sAnjuBow, sAnjuSit },
+                   3,
+                   { sAnjuEyeOpen, sAnjuEyeHalf, sAnjuEyeClosed },
+                   sAnjuMouth,
+                   0.01f,
+                   { -1, -1 },
+                   false,
+                   true },
 };
 
 typedef struct StoryNpc {
@@ -154,6 +192,10 @@ static bool Decode(s16 params, NpcKind* kind, u8* pose) {
             *kind = NPC_DARUNIA;
         } else if (id == 2) {
             *kind = NPC_NABOORU;
+        } else if (id == 0xA) {
+            *kind = NPC_KEATON;
+        } else if (id == 0xD) {
+            *kind = NPC_ANJU;
         } else {
             return false;
         }
@@ -196,6 +238,10 @@ static void StoryNpc_Init(Actor* thisx, PlayState* play) {
         return;
     }
     this->definition = &sNpcs[kind];
+    if (this->definition->fromMm && !sApi->HasResource(this->definition->skeleton)) {
+        Actor_Kill(thisx); // no mm.o2r: nothing to show
+        return;
+    }
     pose = MIN(pose, this->definition->poseCount - 1);
 
     ActorShape_Init(&thisx->shape, 0.0f, ActorShadow_DrawCircle, 20.0f);
@@ -242,13 +288,16 @@ static void StoryNpc_Draw(Actor* thisx, PlayState* play) {
     StoryNpc* this = (StoryNpc*)thisx;
     const NpcDefinition* definition = this->definition;
     const char* eye = definition->eyes[blinkFrames[this->eyeIndex & 3]];
+    bool hasFace = eye != NULL;
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     // Eyes sit on segments 8 and 9 (Saria's second eye too) and the mouth on 9 or 10, as in each NPC's own draw.
-    gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
-    gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
-    gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
+    if (hasFace) {
+        gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
+        gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
+        gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
+    }
     if (definition->segmentC) {
         gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
     }
