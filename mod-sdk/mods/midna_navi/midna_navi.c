@@ -8,6 +8,11 @@
 //        Pose00..Pose63, DiffuseNeutral, MarkingsMask
 //   poc2/BlinkHalfDL, BlinkClosedDL,  optional blink, with DiffuseHalf / DiffuseClosed
 //
+// Voice (optional, and also supplied by the pack): sample resources custom/samples/midna_<event>, 32 kHz mono, for
+// dash, emerge, vanish, target_npc, target_enemy and target_other. They replace the matching Navi calls that go
+// through her actor (the "Hey!", "Listen!" and fairy dash sounds). Navi's calls from the HUD and her talk laugh are
+// not routed through her actor, so they stay vanilla. Without a clip the vanilla sound plays.
+//
 // Navi's own actor keeps running; only EnElf_Draw is replaced, and only for params == FAIRY_NAVI, so the other
 // fairies that share the gameplay_keep skeleton are never touched.
 
@@ -21,13 +26,14 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "overlays/actors/ovl_En_Elf/z_en_elf.h"
 #include <libultraship/bridge/consolevariablebridge.h>
+#include "sequence.h"
 
 #define MIDNA_CVAR "gMods.MidnaNavi.Enabled"
 #define MIDNA_STATIC_DL "objects/midna_navi/poc1/MidnaFloatDL"
 #define MIDNA_BASE_SCALE 0.6f
 #define MIDNA_MOTES 6
 
-static const char* const sRequiredHooks[] = { "OnActorDraw" };
+static const char* const sRequiredHooks[] = { "OnActorDraw", "OnActorPlaySfx" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -167,6 +173,125 @@ static void ReplaceNavi(Actor* actor, PlayState* play, bool* drawVanilla) {
     }
 }
 
+// -- voice ----------------------------------------------------------------------------------------------------------
+
+#define VOICE_SLOTS 2
+#define VOICE_COOLDOWN_FRAMES (8 * 20) // frames of game logic: 20 Hz
+
+typedef enum {
+    VOICE_DASH,
+    VOICE_EMERGE,
+    VOICE_VANISH,
+    VOICE_TARGET_NPC,
+    VOICE_TARGET_ENEMY,
+    VOICE_TARGET_OTHER,
+    VOICE_COUNT,
+} VoiceEvent;
+
+static const char* const sVoicePaths[VOICE_COUNT] = {
+    "custom/samples/midna_dash",         "custom/samples/midna_emerge",       "custom/samples/midna_vanish",
+    "custom/samples/midna_target_npc",   "custom/samples/midna_target_enemy", "custom/samples/midna_target_other",
+};
+
+typedef struct {
+    const s16* samples;
+    s32 count;
+    bool tried;
+} VoiceClip;
+
+typedef struct {
+    s32 clip; // index into sClips, or -1
+    s32 position;
+} VoiceSlot;
+
+static VoiceClip sClips[VOICE_COUNT];
+static VoiceSlot sSlots[VOICE_SLOTS] = { { -1, 0 }, { -1, 0 } };
+static volatile s32 sRequested = -1;
+static s32 sDashCooldown;
+
+// Audio thread: reads only the request and the slots, never the game state.
+static void MixMidna(s16* samples, u32 frameCount) {
+    s32 request = sRequested;
+
+    if (request >= 0) {
+        sRequested = -1;
+        // A new cue takes the oldest slot; two voices at most, so a fresh cue replaces a stale one.
+        sSlots[0] = sSlots[1];
+        sSlots[1].clip = request;
+        sSlots[1].position = 0;
+    }
+    for (s32 slot = 0; slot < VOICE_SLOTS; slot++) {
+        VoiceSlot* voice = &sSlots[slot];
+        const VoiceClip* clip = voice->clip >= 0 ? &sClips[voice->clip] : NULL;
+
+        for (u32 frame = 0; clip != NULL && frame < frameCount; frame++) {
+            s32 value;
+
+            if (clip->samples == NULL || voice->position >= clip->count) {
+                voice->clip = -1;
+                break;
+            }
+            value = clip->samples[voice->position++];
+            samples[frame * 2 + 0] = (s16)CLAMP(samples[frame * 2 + 0] + value, -32768, 32767);
+            samples[frame * 2 + 1] = (s16)CLAMP(samples[frame * 2 + 1] + value, -32768, 32767);
+        }
+    }
+}
+
+static const VoiceClip* LoadClip(VoiceEvent event) {
+    VoiceClip* clip = &sClips[event];
+
+    if (!clip->tried) {
+        SoundFontSample* sample;
+
+        clip->tried = true;
+        sample = sApi->HasResource(sVoicePaths[event]) ? ResourceMgr_LoadAudioSample(sVoicePaths[event]) : NULL;
+        if (sample != NULL) {
+            clip->samples = (const s16*)sample->sampleAddr;
+            clip->count = (s32)(sample->size / sizeof(s16));
+        }
+    }
+    return clip->samples != NULL ? clip : NULL;
+}
+
+static s32 EventFor(uint16_t sfxId) {
+    switch (sfxId) {
+        case NA_SE_EV_FAIRY_DASH:
+            return VOICE_DASH;
+        case NA_SE_EV_NAVY_VANISH:
+            return VOICE_VANISH;
+        case NA_SE_VO_NAVY_HELLO:
+            return VOICE_TARGET_NPC;
+        case NA_SE_VO_NAVY_ENEMY:
+            return VOICE_TARGET_ENEMY;
+        case NA_SE_VO_NAVY_HEAR:
+            return VOICE_TARGET_OTHER;
+        default:
+            return -1;
+    }
+}
+
+static void SpeakAsMidna(Actor* actor, int32_t kind, uint16_t* sfxId, bool* handled) {
+    s32 event;
+
+    if (actor->params != FAIRY_NAVI || !CVarGetInteger(MIDNA_CVAR, 1) || !ResourceMgr_FileExists(MIDNA_STATIC_DL)) {
+        return;
+    }
+    event = EventFor(*sfxId);
+    if (event < 0 || LoadClip((VoiceEvent)event) == NULL) {
+        return;
+    }
+    *handled = true;
+    // Her darts and calls repeat constantly: movement cues keep a cooldown, speech cues do not.
+    if (event == VOICE_DASH || event == VOICE_EMERGE || event == VOICE_VANISH) {
+        if (gPlayState != NULL && (s32)gPlayState->gameplayFrames < sDashCooldown) {
+            return;
+        }
+        sDashCooldown = gPlayState != NULL ? (s32)gPlayState->gameplayFrames + VOICE_COOLDOWN_FRAMES : 0;
+    }
+    sRequested = event;
+}
+
 static void RegisterToggle(void) {
     SOHModMenuWidget widget = { sizeof(SOHModMenuWidget) };
 
@@ -190,6 +315,10 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 
 SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_EN_ELF, ReplaceNavi);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorPlaySfx, ACTOR_EN_ELF, SpeakAsMidna);
+    if (SOH_MOD_API_HAS(sApi, RegisterAudioMixInGroup)) {
+        sApi->RegisterAudioMixInGroup(MixMidna, SOH_AUDIO_GROUP_SFX, NULL);
+    }
     if (SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
         RegisterToggle();
     }
