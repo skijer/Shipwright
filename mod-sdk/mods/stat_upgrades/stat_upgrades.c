@@ -7,10 +7,12 @@
 //   Speed       +4% walking and running speed per copy
 //   Climb       +20% ladder and ledge climbing speed per copy
 //   Crawl       +12% crawlspace speed per copy
+//   Push        faster block pushing and pulling per copy
 //   Quarter Heart  a quarter of a heart container, up to the vanilla maximum
 //
-// The stats stack up to STAT_MAX copies. The counts are kept per save file in the mod's storage. The original's
-// Push Speed (blocks) is not ported: it rewrote nine pushable actors.
+// The stats stack up to STAT_MAX copies. The counts are kept per save file in the mod's storage. Climb and Push
+// borrow the game's own ClimbSpeed / FasterBlockPush options (the pushable actors and the climbing action already
+// read them every frame) for exactly as long as the movement lasts, then hand the player's own setting back.
 
 #include <stdio.h>
 
@@ -30,6 +32,8 @@
 #define CRAWL_PER_COPY 0.12f
 #define CLIMB_CVAR "gEnhancements.ClimbSpeed" // the game's own climb-speed option, which adds to the animation speed
 #define CLIMB_PER_COPY 2
+#define PUSH_CVAR "gEnhancements.FasterBlockPush"
+#define PUSH_PER_COPY 1
 #define QUARTER_HEART_UNITS 4
 #define MAX_HEALTH_CAPACITY 0x140
 #define POOL_COPIES 8
@@ -40,6 +44,7 @@ typedef enum {
     STAT_SPEED,
     STAT_CLIMB,
     STAT_CRAWL,
+    STAT_PUSH,
     STAT_COUNT,
 } Stat;
 
@@ -69,6 +74,9 @@ static const ALIGN_ASSET(2) char sClimbModel[] = OBJ "gStatClimbSpeedDL";
 static const ALIGN_ASSET(2) char sCrawlIcon[] = TEX "gCrawlSpeedTex";
 static const ALIGN_ASSET(2) char sCrawlName[] = TEX "gStatCrawlNameTex";
 static const ALIGN_ASSET(2) char sCrawlModel[] = OBJ "gStatCrawlSpeedDL";
+static const ALIGN_ASSET(2) char sPushIcon[] = TEX "gPushSpeedTex";
+static const ALIGN_ASSET(2) char sPushName[] = TEX "gStatPushNameTex";
+static const ALIGN_ASSET(2) char sPushModel[] = OBJ "gStatPushSpeedDL";
 static const ALIGN_ASSET(2) char sHeartIcon[] = "__OTR__textures/icon_item_24_static/gQuestIconHeartPieceTex";
 static const ALIGN_ASSET(2) char sHeartName[] = TEX "gStatHeartNameTex";
 static const ALIGN_ASSET(2) char sHeartModel[] = "__OTR__objects/object_gi_hearts/gGiHeartPieceDL";
@@ -86,12 +94,14 @@ static const StatItem sStats[STAT_COUNT] = {
       "You got a %yClimb Up%w!&You climb ladders and ledges faster.", "%yClimb Up&%wEvery copy speeds up climbing." },
     { "marsh6487.stat_crawl", sCrawlIcon, sCrawlName, sCrawlModel,
       "You got a %yCrawl Up%w!&You crawl through tunnels faster.", "%yCrawl Up&%wEvery copy speeds up crawling." },
+    { "marsh6487.stat_push", sPushIcon, sPushName, sPushModel,
+      "You got a %yPush Up%w!&You push and pull blocks faster.", "%yPush Up&%wEvery copy speeds up pushing blocks." },
 };
 #define QUARTER_HEART_KEY "marsh6487.quarter_heart"
 
 static const char* const sRequiredHooks[] = { "OnResolveSwordDamage", "OnCollisionResolveDamage",
                                               "OnPlayerResolveMotionScale", "OnLoadGame", "OnPlayerFilterInput",
-                                              "OnPlayerUpdate", "OnExitGame" };
+                                              "OnPlayerUpdate", "OnExitGame", "OnGameFrameUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -99,6 +109,8 @@ static const SOHModApi* sApi;
 static u8 sCount[STAT_COUNT];
 static bool sClimbBoosted;
 static s32 sClimbOriginal;
+static bool sPushBoosted;
+static s32 sPushOriginal;
 
 static void StorageKey(char* out, size_t size, int32_t fileNum, Stat stat) {
     snprintf(out, size, "file%d.stat%d", (int)fileNum, (int)stat);
@@ -147,6 +159,10 @@ static void ReceiveClimb(const char* key) {
 
 static void ReceiveCrawl(const char* key) {
     Receive(STAT_CRAWL);
+}
+
+static void ReceivePush(const char* key) {
+    Receive(STAT_PUSH);
 }
 
 static void ReceiveQuarterHeart(const char* key) {
@@ -199,6 +215,37 @@ static void BoostClimb(Player* player, Input* input) {
     } else {
         RestoreClimb();
     }
+}
+
+static void RestorePush(void) {
+    if (sPushBoosted) {
+        CVarSetInteger(PUSH_CVAR, sPushOriginal);
+        sPushBoosted = false;
+    }
+}
+
+// Runs before the actors update, so it reads what Link was doing last frame.
+static void BoostPush(void) {
+    PlayState* play = gPlayState;
+    bool pushing = false;
+
+    if (play != NULL && sCount[STAT_PUSH] > 0) {
+        pushing = (GET_PLAYER(play)->stateFlags2 & (PLAYER_STATE2_MOVING_DYNAPOLY | PLAYER_STATE2_GRABBING_DYNAPOLY)) != 0;
+    }
+    if (pushing) {
+        if (!sPushBoosted) {
+            sPushOriginal = CVarGetInteger(PUSH_CVAR, 0);
+            sPushBoosted = true;
+        }
+        CVarSetInteger(PUSH_CVAR, sPushOriginal + PUSH_PER_COPY * sCount[STAT_PUSH]);
+    } else {
+        RestorePush();
+    }
+}
+
+static void RestoreAll(int32_t fileNum) {
+    RestoreClimb();
+    RestorePush();
 }
 
 static void BoostCrawl(void) {
@@ -258,7 +305,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 
 SOH_MOD_EXPORT void ModInit(void) {
     static const SOHCustomItemStateFunc sReceivers[STAT_COUNT] = { ReceivePower, ReceiveDefense, ReceiveSpeed,
-                                                                    ReceiveClimb, ReceiveCrawl };
+                                                                    ReceiveClimb, ReceiveCrawl, ReceivePush };
 
     if (!SOH_MOD_API_HAS(sApi, RegisterCustomItem)) {
         return;
@@ -279,5 +326,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnLoadGame, ForgetFile);
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, BoostClimb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, BoostCrawl);
-    SOH_REGISTER_HOOK(sApi, OnExitGame, RestoreClimb);
+    SOH_REGISTER_HOOK(sApi, OnExitGame, RestoreAll);
+    SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, BoostPush);
 }
