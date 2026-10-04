@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_gustjar_pot.c - Gust Jar 3D model and draw functions
  *
@@ -19,6 +20,10 @@ static Gfx* GustJarPot_GetDL(const char* otr) {
 
 static void GustJarPot_Draw(Player* player, PlayState* play) {
     if (!gCustomItemState.gustJarEquipped)
+        return;
+
+    if (NeiHeld_DrawGustJar(player, play, gCustomItemState.gustJarBlowDir,
+                            (f32)gCustomItemState.gustJarHeatTimer / 300.0f))
         return;
 
     static Gfx* sBodyDL = NULL;

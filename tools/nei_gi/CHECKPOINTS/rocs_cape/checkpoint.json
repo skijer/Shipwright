@@ -1,0 +1,37 @@
+{
+  "resource_count": 10,
+  "vertex_records": 9676,
+  "vertex_loads": 321,
+  "slug": "rocs_cape",
+  "name": "Roc's Cape",
+  "entry": "objects/nei_gi_redesign/rocs_cape/gi_dl",
+  "draw_scale": 0.6,
+  "matrix_scale": 0.054168701171875,
+  "triangles": 8114,
+  "bounds_author": [
+    [
+      -34.875,
+      -47.625,
+      -25.5
+    ],
+    [
+      34.9375,
+      42.0,
+      25.0625
+    ]
+  ],
+  "markers": {
+    "collar_author": [
+      0,
+      39,
+      0
+    ],
+    "presentation_only": true
+  },
+  "notes": [
+    "Exact supplied Roc's Cape icon: white open collar, gray lining, single gold clasp and blue/cyan pointed feather tips.",
+    "Two front tails and shorter back are modeled cloth surfaces with explicit lining and edge thickness.",
+    "GI only; existing Roc jump/glide behavior is preserved. Caller .6, effective scale .52."
+  ],
+  "runtime_tested": false
+}

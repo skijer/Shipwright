@@ -79,6 +79,38 @@ void* MmAssets_LoadResource(const char* path);
 void* MmAssets_LoadResourceStrict(const char* path);
 
 /**
+ * Load a complete MM display-list graph strictly from mm.o2r. Nested display
+ * lists are recursively converted to direct calls and vertex hashes are
+ * converted to pointers into resources from that same archive.
+ */
+Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath);
+void MmAssets_EnsureStrictTextureBindings(void);
+Gfx* MmAssets_GetOpaqueRenderMode(void);
+
+/* A complete model on the native 21-limb skeleton. Index 17 is drawn manually.
+ * All pointers and their resources remain valid across scene/cache eviction.
+ * Alt assets selects one complete objects/object_stk_3ds/v1/ archive, or the
+ * whole strict native model if the optional archive is absent or invalid. */
+typedef struct {
+    Gfx* limbs[22];
+    Gfx* head;
+    Gfx* eyes;
+    Gfx* mask;
+} MmSkullKidDisplayLists;
+const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void);
+
+/* Anju's 20 native limbs / 19 matrix slots. Optional v1 packs supply the
+ * complete body and three eyelid heads, atomically selected at draw time.
+ * The native fallback, umbrella and all referenced resources are retained. */
+typedef struct MmAnjuDisplayLists {
+    Gfx* limbs[21];
+    Gfx* heads[3];
+    Gfx* umbrella;
+    uint8_t custom;
+} MmAnjuDisplayLists;
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(uint8_t pose);
+
+/**
  * Load a resource from mm.o2r and get its size
  * @param path Resource path (e.g., "objects/gameplay_keep/gPlayerAnim_...")
  * @param outSize Output: size in bytes of the resource data
@@ -119,6 +151,19 @@ void* MmAssets_LoadSkeleton(const char* path);
  * @return AnimationHeader pointer (or LinkAnimationHeader / TransformUpdateIndex per type), or NULL.
  */
 void* MmAssets_LoadAnimation(const char* path);
+
+/* Exact normal-flex catalogue load. Ownership is per viewer; release after SkelAnime_Free. */
+typedef struct {
+    void* owner;
+    FlexSkeletonHeader* skeleton;
+    AnimationHeader* animation;
+    void* eyes[8];
+    void* mouths[4];
+    const int16_t* playerFrames;
+} MmNormalActorResources;
+bool MmAssets_LoadKafei(unsigned char pose, MmNormalActorResources* output);
+bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output);
+void MmAssets_ReleaseNormalActor(void* owner);
 
 /**
  * List files matching a pattern from mm.o2r

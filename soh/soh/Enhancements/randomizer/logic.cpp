@@ -1,4 +1,5 @@
 #include "logic.h"
+#include "randostatupgrade.h"
 #include "../debugger/performanceTimer.h"
 
 #include <vector>
@@ -94,8 +95,12 @@ bool Logic::HasItem(RandomizerGet itemName) {
         case RG_PROGRESSIVE_BOMB_BAG:
         case RG_BOMB_BAG:
             return CurrentUpgrade(UPG_BOMB_BAG);
-        case RG_MAGIC_SINGLE:
+        case RG_MAGIC_SINGLE: {
+            if (Rando::Context::GetInstance()->GetOption(RSK_MAGIC_STAT_UPGRADE)) {
+                return GetSaveContext()->ship.quest.data.randomizer.magicStatUpgrades >= MagicStatLogicThreshold();
+            }
             return GetSaveContext()->magicLevel >= 1 || GetSaveContext()->isMagicAcquired;
+        }
             // Custom Item
         case RG_SHOVEL:
             return ctx->GetOption(RSK_SKIJER_CUSTOM_ITEMS) && CheckInventory(ITEM_SHOVEL, true);
@@ -2551,6 +2556,9 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     }
                     mSaveContext->magicLevel += (!state ? -1 : 1);
                 } break;
+                case RG_MAGIC_STAT_UPGRADE: {
+                    mSaveContext->ship.quest.data.randomizer.magicStatUpgrades += (!state ? -1 : 1);
+                } break;
                 case RG_PROGRESSIVE_OCARINA: {
                     uint8_t i;
                     for (i = 0; i < 3; i++) {
@@ -2614,6 +2622,7 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                 case RG_HEART_CONTAINER:
                     mSaveContext->healthCapacity += (!state ? -16 : 16);
                     break;
+                case RG_QUARTER_HEART:
                 case RG_PIECE_OF_HEART:
                     mSaveContext->healthCapacity += (!state ? -4 : 4);
                     break;

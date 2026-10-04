@@ -88,6 +88,8 @@ void Randomizer_DrawQuartzOfMotion(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawBottomlessBottle(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacci(PlayState* play, GetItemEntry* getItemEntry);
+// Shared by the original Somaria upgrade and its optional GI replacement.
+void Randomizer_DrawCaneSomariaUpgradeFlame(PlayState* play);
 void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacciUpgrade(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawCanePacciUltrahand(PlayState* play, GetItemEntry* getItemEntry);
@@ -147,6 +149,13 @@ void Randomizer_DrawMmCompass(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMmGsToken(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMmFrog(PlayState* play, GetItemEntry* getItemEntry);
 void Randomizer_DrawMmGoldDustBottle(PlayState* play, GetItemEntry* getItemEntry);
+
+void Randomizer_DrawDefenseUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawPowerUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawCrawlSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawClimbSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
+void Randomizer_DrawPushSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry);
 
 #define GET_ITEM_MYSTERY                                                                                 \
     {                                                                                                    \

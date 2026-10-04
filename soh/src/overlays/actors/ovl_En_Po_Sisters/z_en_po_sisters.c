@@ -5,6 +5,7 @@
  */
 
 #include "z_en_po_sisters.h"
+#include "din_fire_sword.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/object_po_sisters/object_po_sisters.h"
 #include "soh/frame_interpolation.h"
@@ -311,9 +312,10 @@ void func_80AD9568(EnPoSisters* this) {
 void func_80AD95D8(EnPoSisters* this) {
     Animation_MorphToPlayOnce(&this->skelAnime, &gPoeSistersDamagedAnim, -3.0f);
     if (this->collider.base.ac != NULL) {
-        this->actor.world.rot.y = (this->collider.info.acHitInfo->toucher.dmgFlags & 0x1F824)
-                                      ? this->collider.base.ac->world.rot.y
-                                      : Actor_WorldYawTowardActor(&this->actor, this->collider.base.ac) + 0x8000;
+        this->actor.world.rot.y =
+            (DinFireSword_OriginalDamageFlags(gPlayState, this->collider.info.acHitInfo) & 0x1F824)
+                ? this->collider.base.ac->world.rot.y
+                : Actor_WorldYawTowardActor(&this->actor, this->collider.base.ac) + 0x8000;
     }
     if (this->unk_194 != 0) {
         this->actor.speedXZ = 10.0f;

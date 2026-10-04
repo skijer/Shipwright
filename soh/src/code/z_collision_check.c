@@ -1,7 +1,9 @@
 #include "global.h"
+#include "din_fire_sword.h"
 #include "vt.h"
 #include "overlays/effects/ovl_Effect_Ss_HitMark/z_eff_ss_hitmark.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <assert.h>
 
 // Skijer's NEI: damage scaled by ivanDamageMultiplier (Ivan co-op or SM64 Mario)
@@ -3046,8 +3048,10 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
             }
         }
 
-        damage = tbl->table[i] & 0xF;
-        collider->actor->colChkInfo.damageEffect = tbl->table[i] >> 4 & 0xF;
+        u8 entry =
+            DinFireSword_DamageEntry(play, collider->actor, info->acHitInfo, info->bumper.dmgFlags, tbl->table[i]);
+        damage = entry & 0xF;
+        collider->actor->colChkInfo.damageEffect = entry >> 4 & 0xF;
     }
     // DMG_UNBLOCKABLE (Gigantamax Pikachu): bypass damage table, force minimum damage
     if (info->acHitInfo->toucher.dmgFlags & DMG_UNBLOCKABLE) {
@@ -3059,7 +3063,10 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
         damage = (f32)info->acHitInfo->toucher.damage;
     }
     if (!(collider->acFlags & AC_HARD)) {
-        collider->actor->colChkInfo.damage += damage;
+        // Scale this hit before accumulation; actors can have several hit collider elements.
+        u8 hitDamage = (u8)damage;
+        GameInteractor_Should(VB_PLAYER_ATTACK_DAMAGE_MULTIPLIER, true, play, &hitDamage, collider->actor);
+        collider->actor->colChkInfo.damage += hitDamage;
     }
 
     if (NEI_PlayerDamageBoostActive()) {

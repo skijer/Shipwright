@@ -1,0 +1,28 @@
+{
+  "resource_count": 5,
+  "vertex_records": 640,
+  "vertex_loads": 24,
+  "slug": "beetle_wings",
+  "name": "Beetle / gameplay beetle_wings",
+  "entry": "objects/nei_held_redesign/beetle_wings/gi_dl",
+  "draw_scale": 0.06,
+  "matrix_scale": 0.162506103515625,
+  "triangles": 512,
+  "bounds_author": [
+    [
+      14.3125,
+      4.0625,
+      -42.0625
+    ],
+    [
+      38.1875,
+      44.25,
+      41.3125
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Undo GI display tilt; mechanical pincers point along native -X. Wing blades/inlays kept separate from stationary hinge axles. Existing flight/aim and wing animation retained."
+  ],
+  "runtime_tested": false
+}

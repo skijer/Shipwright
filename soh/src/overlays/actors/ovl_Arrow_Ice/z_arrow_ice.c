@@ -5,8 +5,13 @@
  */
 
 #include "z_arrow_ice.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
+#include "objects/gameplay_keep/gameplay_keep.h"
+#include "soh/ResourceManagerHelpers.h"
+#include "soh/frame_interpolation.h"
+#include <libultraship/bridge/resourcebridge.h>
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
 
@@ -20,6 +25,96 @@ void ArrowIce_Fly(ArrowIce* this, PlayState* play);
 void ArrowIce_Hit(ArrowIce* this, PlayState* play);
 
 #include "overlays/ovl_Arrow_Ice/ovl_Arrow_Ice.h"
+
+// Installing the separate Alt texture pack opts into this visual POC. Keep the
+// named reference intact so the renderer retains the texture's HD dimensions.
+static const ALIGN_ASSET(2) char sIceSnowflakeTex[] = "__OTR__custom/henriko_effects/arrows/ice_snowflake_poc2";
+static Vtx sIceSnowflakeVertices[] = {
+    VTX(-32, -32, 0, 0, 2016, 255, 255, 255, 255),
+    VTX(32, -32, 0, 2016, 2016, 255, 255, 255, 255),
+    VTX(32, 32, 0, 2016, 0, 255, 255, 255, 255),
+    VTX(-32, 32, 0, 0, 0, 255, 255, 255, 255),
+};
+
+// About 0.8 seconds at OoT's 20 Hz simulation rate. Only the draw envelope
+// changes: the original hit timer still owns damage, audio and actor lifetime.
+static f32 ArrowIce_SnowflakeFade(ArrowIce* this) {
+    if (this->timer <= 16 || this->timer > 32) {
+        return 0.0f;
+    }
+    return MIN((this->timer - 16) * 0.2f, 1.0f);
+}
+
+static void ArrowIce_DrawSnowflake(ArrowIce* this, PlayState* play, Vec3f* pos, Color_RGB8 primary,
+                                   Color_RGB8 secondary, s32 impact) {
+    f32 halfSize;
+    f32 opacity;
+    f32 rotation = 0.0f;
+
+    if (impact) {
+        f32 age = 32.0f - this->timer;
+        f32 growth = CLAMP(age / 12.0f, 0.0f, 1.0f);
+        halfSize = 8.0f + 40.0f * (1.0f - SQ(1.0f - growth));
+        opacity = ArrowIce_SnowflakeFade(this) * MIN((age + 1.0f) / 3.0f, 1.0f);
+    } else {
+        f32 charge = CLAMP(this->radius * 0.1f, 0.0f, 1.0f);
+        // Gameplay time freezes on pause and stays stable across redraws.
+        // At 20 Hz, turn once in twelve seconds with a gentle three-second pulse.
+        f32 pulse = sinf((play->gameplayFrames % 60) * (2.0f * M_PI / 60.0f));
+        rotation = (play->gameplayFrames % 240) * (2.0f * M_PI / 240.0f);
+        halfSize = (5.0f + 7.0f * charge) * (1.0f + 0.04f * pulse);
+        opacity = charge * (0.92f + 0.08f * pulse);
+        if (this->actionFunc == ArrowIce_Fly) {
+            opacity *= this->alpha / 255.0f;
+        }
+    }
+    if (opacity <= 0.0f || this->alpha == 0) {
+        return;
+    }
+
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPClearGeometryMode(POLY_XLU_DISP++, G_LIGHTING | G_FOG | G_CULL_BOTH | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR);
+    gSPSetGeometryMode(POLY_XLU_DISP++, G_ZBUFFER);
+    gDPSetCycleType(POLY_XLU_DISP++, G_CYC_1CYCLE);
+    gDPSetRenderMode(POLY_XLU_DISP++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
+    gDPSetTextureLUT(POLY_XLU_DISP++, G_TT_NONE);
+    gDPSetTextureFilter(POLY_XLU_DISP++, G_TF_BILERP);
+    gDPSetAlphaCompare(POLY_XLU_DISP++, G_AC_NONE);
+    gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_ON);
+    gDPSetCombineLERP(POLY_XLU_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
+                      ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+    gDPSetEnvColor(POLY_XLU_DISP++, secondary.r, secondary.g, secondary.b, 0);
+
+    // A small native flash supplies the bright collision center. The separate
+    // snowflake retains airy interiors instead of becoming an opaque ice disk.
+    for (s32 layer = impact ? 0 : 1; layer < 2; ++layer) {
+        f32 size = halfSize * (layer == 0 ? 0.32f : 1.0f);
+        u8 alpha = (u8)(opacity * (layer == 0 ? 245.0f : (impact ? 210.0f : 96.0f)));
+        // Charge and flight share a continuous billboard; impact layers stay separate.
+        FrameInterpolation_RecordOpenChild(this, impact ? layer + 1 : 0);
+        Matrix_Translate(pos->x, pos->y, pos->z, MTXMODE_NEW);
+        Matrix_ReplaceRotation(&play->billboardMtxF);
+        // Lift the billboard slightly toward the camera at collision surfaces.
+        Matrix_Translate(0.0f, 0.0f, 1.5f, MTXMODE_APPLY);
+        if (!impact) {
+            Matrix_RotateZ(rotation, MTXMODE_APPLY);
+        }
+        Matrix_Scale(size / 32.0f, size / 32.0f, 1.0f, MTXMODE_APPLY);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, primary.r, primary.g, primary.b, alpha);
+        gDPLoadTextureBlock(POLY_XLU_DISP++, layer == 0 ? gFlashTex : sIceSnowflakeTex, G_IM_FMT_I, G_IM_SIZ_8b, 64, 64,
+                            0, G_TX_CLAMP, G_TX_CLAMP, 6, 6, G_TX_NOLOD, G_TX_NOLOD);
+        gSPVertex(POLY_XLU_DISP++, (uintptr_t)sIceSnowflakeVertices, 4, 0);
+        gSP2Triangles(POLY_XLU_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
+        gDPPipeSync(POLY_XLU_DISP++);
+        FrameInterpolation_RecordCloseChild();
+    }
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
 
 const ActorInit Arrow_Ice_InitVars = {
     ACTOR_ARROW_ICE,
@@ -165,7 +260,7 @@ void ArrowIce_Fly(ArrowIce* this, PlayState* play) {
     func_80867E8C(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_ICE);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_ICE));
         ArrowIce_SetupAction(this, ArrowIce_Hit);
         this->timer = 32;
         this->alpha = 255;
@@ -205,6 +300,12 @@ void ArrowIce_Draw(Actor* thisx, PlayState* play) {
     }
 
     if ((arrow != NULL) && (arrow->actor.update != NULL) && (this->timer < 255)) {
+        s32 snowflake = (this->actionFunc == ArrowIce_Charge || this->actionFunc == ArrowIce_Fly ||
+                         this->actionFunc == ArrowIce_Hit) &&
+                        ResourceMgr_IsAltAssetsEnabled() && ResourceMgr_FileAltExists(sIceSnowflakeTex) &&
+                        ResourceGetDataByName(sIceSnowflakeTex) != NULL;
+        s32 snowflakeImpact = snowflake && this->actionFunc == ArrowIce_Hit;
+        f32 screenIntensity = this->unk_164 * (snowflakeImpact ? ArrowIce_SnowflakeFade(this) : 1.0f);
         tranform = (arrow->hitFlags & 2) ? &this->actor : &arrow->actor;
 
         OPEN_DISPS(play->state.gfxCtx);
@@ -216,35 +317,46 @@ void ArrowIce_Draw(Actor* thisx, PlayState* play) {
         Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
 
         // Draw blue effect over the screen when arrow hits
-        if (this->unk_164 > 0) {
+        if (screenIntensity > 0) {
             POLY_XLU_DISP = Gfx_SetupDL_57(POLY_XLU_DISP);
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (s32)((secondaryColor.r / 6) * this->unk_164) & 0xFF,
-                            (s32)((secondaryColor.g / 6) * this->unk_164) & 0xFF,
-                            (s32)((secondaryColor.b / 6) * this->unk_164) & 0xFF, (s32)(150.0f * this->unk_164) & 0xFF);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (s32)((secondaryColor.r / 6) * screenIntensity) & 0xFF,
+                            (s32)((secondaryColor.g / 6) * screenIntensity) & 0xFF,
+                            (s32)((secondaryColor.b / 6) * screenIntensity) & 0xFF,
+                            (s32)(150.0f * screenIntensity) & 0xFF);
             gDPSetAlphaDither(POLY_XLU_DISP++, G_AD_DISABLE);
             gDPSetColorDither(POLY_XLU_DISP++, G_CD_DISABLE);
             gDPFillRectangle(POLY_XLU_DISP++, 0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
         }
 
-        // Draw ice on the arrow
-        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);
-        gDPSetEnvColor(POLY_XLU_DISP++, secondaryColor.r, secondaryColor.g, secondaryColor.b, 128);
-        Matrix_RotateZYX(0x4000, 0x0, 0x0, MTXMODE_APPLY);
-        if (this->timer != 0) {
-            Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_APPLY);
-        } else {
-            Matrix_Translate(0.0f, 1500.0f, 0.0f, MTXMODE_APPLY);
+        // Keep the custom effect through flight so release cannot reintroduce
+        // the native cone. Missing/disabled/failed textures retain native geometry.
+        if (!snowflake) {
+            Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);
+            gDPSetEnvColor(POLY_XLU_DISP++, secondaryColor.r, secondaryColor.g, secondaryColor.b, 128);
+            Matrix_RotateZYX(0x4000, 0x0, 0x0, MTXMODE_APPLY);
+            if (this->timer != 0) {
+                Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+            } else {
+                Matrix_Translate(0.0f, 1500.0f, 0.0f, MTXMODE_APPLY);
+            }
+            Matrix_Scale(this->radius * 0.2f, this->unk_160 * 3.0f, this->radius * 0.2f, MTXMODE_APPLY);
+            Matrix_Translate(0.0f, -700.0f, 0.0f, MTXMODE_APPLY);
+            gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_XLU_DISP++, sMaterialDL);
+            gSPDisplayList(POLY_XLU_DISP++, Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 511 - (stateFrames * 5) % 512, 0,
+                                                               128, 32, 1, 511 - (stateFrames * 10) % 512,
+                                                               511 - (stateFrames * 10) % 512, 4, 16, -5, 0, -10, -10));
+            gSPDisplayList(POLY_XLU_DISP++, sModelDL);
         }
-        Matrix_Scale(this->radius * 0.2f, this->unk_160 * 3.0f, this->radius * 0.2f, MTXMODE_APPLY);
-        Matrix_Translate(0.0f, -700.0f, 0.0f, MTXMODE_APPLY);
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, sMaterialDL);
-        gSPDisplayList(POLY_XLU_DISP++, Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 511 - (stateFrames * 5) % 512, 0, 128,
-                                                           32, 1, 511 - (stateFrames * 10) % 512,
-                                                           511 - (stateFrames * 10) % 512, 4, 16, -5, 0, -10, -10));
-        gSPDisplayList(POLY_XLU_DISP++, sModelDL);
 
         CLOSE_DISPS(play->state.gfxCtx);
+
+        if (snowflake) {
+            // Hit owns a captured collision position, even if the parent arrow
+            // subsequently moves with an enemy or falls away from it.
+            Vec3f* pos = snowflakeImpact ? &this->actor.world.pos : &tranform->world.pos;
+            ArrowIce_DrawSnowflake(this, play, pos, primaryColor, secondaryColor, snowflakeImpact);
+        }
     }
 }

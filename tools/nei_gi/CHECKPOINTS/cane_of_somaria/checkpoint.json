@@ -1,0 +1,47 @@
+{
+  "resource_count": 7,
+  "vertex_records": 2450,
+  "vertex_loads": 84,
+  "slug": "cane_of_somaria",
+  "name": "Cane of Somaria",
+  "entry": "objects/nei_gi_redesign/cane_of_somaria/gi_dl",
+  "draw_scale": 0.25,
+  "matrix_scale": 0.125,
+  "triangles": 2708,
+  "bounds_author": [
+    [
+      -15.3125,
+      -44.875,
+      -4.0
+    ],
+    [
+      20.5,
+      54.0625,
+      4.3125
+    ]
+  ],
+  "markers": {
+    "grip_author": [
+      -3.428648351858021,
+      -18.861636727752717,
+      0.0
+    ],
+    "tip_author": [
+      8.085447650845918,
+      40.33562328688409,
+      0.0
+    ],
+    "gameplay_world_scale": 0.35,
+    "canonical_shaft_axis": [
+      0,
+      1,
+      0
+    ]
+  },
+  "notes": [
+    "Supplied icon: orange-red hooked cane encircling a red faceted ruby; restrained gold fittings.",
+    "Only Somaria uses this replacement. Pacci, Byrna, Trirod and Ultrahand resources stay unchanged.",
+    "Canonical grip author y=-22.5; gameplay is derived before the GI display lean."
+  ],
+  "runtime_tested": false
+}

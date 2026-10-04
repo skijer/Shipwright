@@ -1,0 +1,34 @@
+{
+  "resource_count": 7,
+  "vertex_records": 3456,
+  "vertex_loads": 125,
+  "slug": "fire_rod",
+  "name": "Fire Rod",
+  "entry": "objects/nei_gi_redesign/fire_rod/gi_dl",
+  "draw_scale": 0.2,
+  "matrix_scale": 0.243743896484375,
+  "triangles": 3752,
+  "bounds_author": [
+    [
+      -20.75,
+      -51.375,
+      -12.125
+    ],
+    [
+      25.625,
+      53.125,
+      12.125
+    ]
+  ],
+  "markers": {
+    "tip_author": [
+      12.669696769372843,
+      38.99331716810129,
+      0.0
+    ]
+  },
+  "notes": [
+    "18 degree baked lean; tip marker consumed by the unified GI particle draw."
+  ],
+  "runtime_tested": false
+}

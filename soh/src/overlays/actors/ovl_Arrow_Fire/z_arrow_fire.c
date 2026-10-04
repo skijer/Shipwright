@@ -5,6 +5,7 @@
  */
 
 #include "z_arrow_fire.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_UPDATE_DURING_OCARINA)
@@ -164,7 +165,7 @@ void ArrowFire_Fly(ArrowFire* this, PlayState* play) {
     func_80865ECC(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_FRAME);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_FRAME));
         ArrowFire_SetupAction(this, ArrowFire_Hit);
         this->timer = 32;
         this->alpha = 255;

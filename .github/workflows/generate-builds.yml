@@ -7,7 +7,23 @@ concurrency:
   cancel-in-progress: true
 jobs:
 
+  cumulative-regressions:
+    runs-on: ubuntu-24.04
+    steps:
+    - name: Checkout complete feature history
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+        submodules: true
+    - name: Install focused regression dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential python3 python3-numpy python3-pil nlohmann-json3-dev
+    - name: Verify cumulative features and production regressions
+      run: bash scripts/diagnostics/run_cumulative_regressions.sh
+
   generate-soh-otr:
+    needs: cumulative-regressions
     runs-on: ubuntu-22.04
     steps:
     - name: Git Checkout

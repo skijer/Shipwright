@@ -204,7 +204,7 @@ static void BombArrows_Stop(Player* p, PlayState* play) {
     sBaUpperPrevHeld = 0;
     sBaAnimPhase = -1;
 
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_BOMB_ARROWS);
 }
 
 // Start AIM — entering sustained aim mode. No persistent bomb spawn on entry.
@@ -236,7 +236,7 @@ static void BombArrows_StartAim(Player* p, PlayState* play) {
         baFirstPerson = 0;
     }
 
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_BOMB_ARROWS);
     Player_PlaySfx(p, NA_SE_IT_BOW_DRAW);
 }
 

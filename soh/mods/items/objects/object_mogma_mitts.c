@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_mogma_mitts.c - Mogma Mitts 3D model and draw functions
  *
@@ -29,6 +30,8 @@ static Gfx* MogmaMitts_GetDL(void) {
 
 void CustomItems_DrawMogmaMitts(Player* player, PlayState* play) {
     if (!gCustomItemState.mogmaMittsActive)
+        return;
+    if (NeiHeld_DrawMitts(player, play))
         return;
     if (MogmaMitts_GetDL() == NULL)
         return;

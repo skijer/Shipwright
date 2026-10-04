@@ -1,0 +1,34 @@
+{
+  "resource_count": 8,
+  "vertex_records": 7747,
+  "vertex_loads": 309,
+  "slug": "ball",
+  "name": "Ball and Chain / gameplay ball",
+  "entry": "objects/nei_held_redesign/ball/gi_dl",
+  "draw_scale": 0.1,
+  "matrix_scale": 0.25,
+  "triangles": 4388,
+  "bounds_author": [
+    [
+      -31.0,
+      -34.625,
+      -36.625
+    ],
+    [
+      31.0,
+      45.5,
+      36.625
+    ]
+  ],
+  "markers": {
+    "physics_center_native": [
+      0,
+      0,
+      0
+    ]
+  },
+  "notes": [
+    "Six approved pointed spikes and anchor retained; display coil removed; center at authoritative ball position. Existing held .06 / thrown .1 scales retained."
+  ],
+  "runtime_tested": false
+}

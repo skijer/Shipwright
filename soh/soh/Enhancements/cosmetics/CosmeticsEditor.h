@@ -87,6 +87,12 @@ inline void ResetColor(CosmeticOption& cosmeticOption) {
     CVarClear((std::string(cosmeticOption.valuesCvar) + ".A").c_str());
     CVarClear((std::string(cosmeticOption.valuesCvar) + ".Type").c_str());
 
+    // Mod labels are user supplied and can coincide with built-in labels.
+    if (cosmeticOption.group == COSMETICS_GROUP_MAX) {
+        ShipInit::Init(cosmeticOption.valuesCvar);
+        return;
+    }
+
     if (cosmeticOption.label == "Bow Body") {
         ResetColor(cosmeticOptions.at("Equipment.BowTips"));
         ResetColor(cosmeticOptions.at("Equipment.BowHandle"));
@@ -175,6 +181,13 @@ void ScanCustomCosmetics();
 bool HasCustomCosmetics();
 void DrawCustomCosmetics();
 void ApplyCustomCosmetics();
+union Gfx;
+void ApplyCustomCosmeticsToDisplayListCopy(const char* materialPath, Gfx* instructions, size_t count);
+void RandomizeColor(CosmeticOption& cosmeticOption, bool manual = true);
+void RandomizeAllCustomCosmetics(bool manual);
+void ResetAllCustomCosmetics();
+void SetAllCustomCosmeticsLocked(bool locked);
+void SetAllCustomCosmeticsRainbow(bool enabled);
 void UpdateCustomCosmeticsRainbow(int hue, float rainbowSpeed, int& index);
 
 class CosmeticsEditorWindow final : public Ship::GuiWindow {

@@ -255,6 +255,10 @@ void NeiSave_Init(bool isDebug) {
 }
 
 void NeiSave_Save(SaveContext* saveContext, int sectionID, bool fullSave) {
+    if (saveContext->inventory.equipment & (1U << EQUIP_INV_SWORD_MASTER)) {
+        gNeiSave.timePedestalNoMasterSwordRepair = 0;
+    }
+    SaveManager::Instance->SaveData("timePedestalNoMasterSwordRepair", gNeiSave.timePedestalNoMasterSwordRepair);
     SaveManager::Instance->SaveArray("ownedItems", 48,
                                      [](size_t i) { SaveManager::Instance->SaveData("", gNeiSave.ownedItems[i]); });
     SaveManager::Instance->SaveData("shovelOwned", gNeiSave.shovelOwned);
@@ -349,6 +353,8 @@ void NeiSave_Save(SaveContext* saveContext, int sectionID, bool fullSave) {
 void NeiSave_Load() {
     // memset first so a save lacking this section loads as a clean new game.
     memset(&gNeiSave, 0, sizeof(gNeiSave));
+    SaveManager::Instance->LoadData("timePedestalNoMasterSwordRepair", gNeiSave.timePedestalNoMasterSwordRepair,
+                                    (uint8_t)0);
     // ownedItems is u16 now, so memset(0xFF) would write 0xFFFF per entry — and the empty marker
     // is ITEM_NONE (0xFF), not 0xFFFF. Fill it element by element. Skijer's NEI
     for (int i = 0; i < (int)(sizeof(gNeiSave.ownedItems) / sizeof(gNeiSave.ownedItems[0])); i++) {

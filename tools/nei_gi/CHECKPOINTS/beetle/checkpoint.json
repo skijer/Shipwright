@@ -1,0 +1,28 @@
+{
+  "resource_count": 9,
+  "vertex_records": 4417,
+  "vertex_loads": 164,
+  "slug": "beetle",
+  "name": "Beetle",
+  "entry": "objects/nei_gi_redesign/beetle/gi_dl",
+  "draw_scale": 0.3,
+  "matrix_scale": 0.1208343505859375,
+  "triangles": 3192,
+  "bounds_author": [
+    [
+      -44.0625,
+      -43.1875,
+      -27.5625
+    ],
+    [
+      44.0625,
+      57.3125,
+      35.8125
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Visual POC2: elongated mechanical chassis; flush hex sockets; rigid engraved wing blades; broad crescent pincers. Reference supplied by user."
+  ],
+  "runtime_tested": false
+}

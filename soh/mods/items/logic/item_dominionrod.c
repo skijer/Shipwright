@@ -129,7 +129,7 @@ static void DomRod_Stop(Player* p, PlayState* play) {
     domRodAttackCooldown = 0;
     domRodCButtonHoldTimer = 0;
 
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_DOMINION_ROD);
 }
 
 static void DomRod_Start(Player* p, PlayState* play) {
@@ -147,7 +147,7 @@ static void DomRod_Start(Player* p, PlayState* play) {
     domRodCButtonHoldTimer = 0;
 
     FirstPerson_Init(p, play);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_DOMINION_ROD);
 }
 
 static void DomRod_Launch(Player* p, PlayState* play) {

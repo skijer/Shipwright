@@ -5,6 +5,7 @@
  */
 
 #include "z_arrow_light.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 
@@ -163,7 +164,7 @@ void ArrowLight_Fly(ArrowLight* this, PlayState* play) {
     func_80869E6C(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_LIGHT);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_LIGHT));
         ArrowLight_SetupAction(this, ArrowLight_Hit);
         this->timer = 32;
         this->alpha = 255;

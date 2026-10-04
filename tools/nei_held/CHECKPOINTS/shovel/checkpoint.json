@@ -1,0 +1,34 @@
+{
+  "resource_count": 9,
+  "vertex_records": 2133,
+  "vertex_loads": 85,
+  "slug": "shovel",
+  "name": "Shovel / gameplay shovel",
+  "entry": "objects/nei_held_redesign/shovel/gi_dl",
+  "draw_scale": 0.06,
+  "matrix_scale": 0.625,
+  "triangles": 1772,
+  "bounds_author": [
+    [
+      -76.5,
+      -16.0,
+      -22.375
+    ],
+    [
+      32.1875,
+      11.1875,
+      22.4375
+    ]
+  ],
+  "markers": {
+    "grip_native": [
+      0,
+      0,
+      0
+    ]
+  },
+  "notes": [
+    "Shaft lies along existing hand-to-hand frame. Blade plane follows native spade; midpoint grip at author Y=20."
+  ],
+  "runtime_tested": false
+}

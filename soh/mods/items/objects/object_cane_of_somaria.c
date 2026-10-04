@@ -5,6 +5,8 @@
 #include "z64.h"
 #include "../custom_items.h"
 #include "../logic/item_cane_of_somaria.h"
+#include "../helpers/equip_helper.h"
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 #include "../../actors/cane_pacci.h"
 #include "macros.h"
 #include "functions.h"
@@ -45,51 +47,74 @@ void CustomItems_DrawCaneOfSomaria(Player* player, PlayState* play) {
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
 
-    // Get forearm and hand positions to calculate hand direction
-    Vec3f forearmPos = player->bodyPartsPos[PLAYER_BODYPART_R_FOREARM];
-    Vec3f handPos = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
-
-    // Calculate direction vector from forearm to hand
-    f32 dx = handPos.x - forearmPos.x;
-    f32 dy = handPos.y - forearmPos.y;
-    f32 dz = handPos.z - forearmPos.z;
-
-    // Calculate yaw and pitch from direction
-    f32 handYaw = atan2f(dx, dz);
-    f32 horizDist = sqrtf(dx * dx + dz * dz);
-    f32 handPitch = atan2f(dy, horizDist);
-
-    // Position at hand
-    Matrix_Translate(handPos.x, handPos.y, handPos.z, MTXMODE_NEW);
-
-    // Apply hand rotation
-    Matrix_RotateY(handYaw, MTXMODE_APPLY);
-    Matrix_RotateX(-handPitch, MTXMODE_APPLY);
-    Matrix_RotateY(BINANG_TO_RAD(0x4000), MTXMODE_APPLY);
-
-    // Offset up in local Y after rotation
-    Matrix_Translate(-2.5f, 15.0f, 1.0f, MTXMODE_APPLY);
-
-    Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
-
-    // Ultrahand is empty-handed: no cane in the hand at all. It is a gesture, not a
-    // tool you hold out, so drawing the staff there reads wrong.
-    Gfx* handDL = (Cane_GetType() == CANE_TYPE_ULTRAHAND) ? NULL : Somaria_GetHandDL();
-    if (handDL != NULL) {
-        // Both canes share this display list; only the tint tells them apart —
-        // Somaria is red, Pacci is yellow (user-locked). Components are spelled out
-        // on purpose: MSVC hands a multi-value #define to a function-like macro as a
-        // SINGLE argument, so gDPSetPrimColor would not expand.
-        if (Cane_GetType() == CANE_TYPE_PACCI) {
-            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 215, 70, 255);
-            gDPSetEnvColor(POLY_OPA_DISP++, 150, 105, 0, 255);
-        } else {
-            gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 60, 60, 255);
-            gDPSetEnvColor(POLY_OPA_DISP++, 140, 0, 0, 255);
+    // Only the original red Somaria receives this mesh. Pacci's locked yellow
+    // tint, Trirod presentation and empty-handed Ultrahand remain on their own
+    // existing paths. Capture the wrist's full roll through the casting motion.
+    // Closed-fist grip is native hand +X, at the measured child/adult palm.
+    // ItemHandPose translates after rotation, so -X here becomes wrist +Y.
+    ItemHandPose somariaPose = { -(LINK_IS_ADULT ? 328.0f : 216.22f) * player->actor.scale.x,
+                                 0.0f,
+                                 (LINK_IS_ADULT ? 77.0f : -4.5f) * player->actor.scale.x,
+                                 0.0f,
+                                 0.0f,
+                                 -90.0f,
+                                 1.0f };
+    u8 replacementDrawn = 0;
+    if (Cane_GetType() == CANE_TYPE_SOMARIA) {
+        Matrix_Push();
+        if (ItemEquip_ApplyHandPose(player, &somariaPose)) {
+            replacementDrawn = NeiHeld_DrawModel(play, NEI_HELD_PATH("cane_of_somaria"), NULL);
         }
-        gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
-                  G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_OPA_DISP++, handDL);
+        Matrix_Pop();
+    }
+
+    if (!replacementDrawn) {
+        // Get forearm and hand positions to calculate hand direction
+        Vec3f forearmPos = player->bodyPartsPos[PLAYER_BODYPART_R_FOREARM];
+        Vec3f handPos = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+
+        // Calculate direction vector from forearm to hand
+        f32 dx = handPos.x - forearmPos.x;
+        f32 dy = handPos.y - forearmPos.y;
+        f32 dz = handPos.z - forearmPos.z;
+
+        // Calculate yaw and pitch from direction
+        f32 handYaw = atan2f(dx, dz);
+        f32 horizDist = sqrtf(dx * dx + dz * dz);
+        f32 handPitch = atan2f(dy, horizDist);
+
+        // Position at hand
+        Matrix_Translate(handPos.x, handPos.y, handPos.z, MTXMODE_NEW);
+
+        // Apply hand rotation
+        Matrix_RotateY(handYaw, MTXMODE_APPLY);
+        Matrix_RotateX(-handPitch, MTXMODE_APPLY);
+        Matrix_RotateY(BINANG_TO_RAD(0x4000), MTXMODE_APPLY);
+
+        // Offset up in local Y after rotation
+        Matrix_Translate(-2.5f, 15.0f, 1.0f, MTXMODE_APPLY);
+
+        Matrix_Scale(0.05f, 0.05f, 0.05f, MTXMODE_APPLY);
+
+        // Ultrahand is empty-handed: no cane in the hand at all. It is a gesture, not a
+        // tool you hold out, so drawing the staff there reads wrong.
+        Gfx* handDL = (Cane_GetType() == CANE_TYPE_ULTRAHAND) ? NULL : Somaria_GetHandDL();
+        if (handDL != NULL) {
+            // Both canes share this display list; only the tint tells them apart —
+            // Somaria is red, Pacci is yellow (user-locked). Components are spelled out
+            // on purpose: MSVC hands a multi-value #define to a function-like macro as a
+            // SINGLE argument, so gDPSetPrimColor would not expand.
+            if (Cane_GetType() == CANE_TYPE_PACCI) {
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 215, 70, 255);
+                gDPSetEnvColor(POLY_OPA_DISP++, 150, 105, 0, 255);
+            } else {
+                gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 60, 60, 255);
+                gDPSetEnvColor(POLY_OPA_DISP++, 140, 0, 0, 255);
+            }
+            gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
+                      G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+            gSPDisplayList(POLY_OPA_DISP++, handDL);
+        }
     }
 
     CLOSE_DISPS(play->state.gfxCtx);

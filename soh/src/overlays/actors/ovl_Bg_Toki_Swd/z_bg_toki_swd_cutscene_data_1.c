@@ -76,4 +76,6 @@ CutsceneData D_808BB2F0[] = {
         CS_CAM_AT(CS_CMD_STOP, 0x00, 20, 60.0f, -1, 117, 7, 0x6B2F),
     CS_END(),
 };
+
+const size_t gMasterSwordChildCutsceneWordCount = ARRAY_COUNT(D_808BB2F0);
 // clang-format on

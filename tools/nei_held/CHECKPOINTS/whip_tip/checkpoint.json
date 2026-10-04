@@ -1,0 +1,35 @@
+{
+  "resource_count": 4,
+  "vertex_records": 245,
+  "vertex_loads": 13,
+  "slug": "whip_tip",
+  "name": "Whip Tip",
+  "entry": "objects/nei_held_redesign/whip_tip/gi_dl",
+  "draw_scale": 0.022,
+  "matrix_scale": 0.17755126953125,
+  "triangles": 220,
+  "bounds_author": [
+    [
+      -24.0,
+      -14.375,
+      -9.625
+    ],
+    [
+      24.0,
+      24.0,
+      86.375
+    ]
+  ],
+  "markers": {
+    "rope_socket_world": [
+      0,
+      0,
+      0
+    ]
+  },
+  "notes": [
+    "Approved snake head, eyes and details, rebased at the coil's terminal socket.",
+    "Head faces +Z and remains the same size as the equipped coil's head."
+  ],
+  "runtime_tested": false
+}

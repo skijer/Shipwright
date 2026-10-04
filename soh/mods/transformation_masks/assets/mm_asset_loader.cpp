@@ -16,6 +16,12 @@
  */
 
 #include "mm_asset_loader.h"
+#include "mm_display_list_patch.h"
+#include "mm_normal_actor_resource.h"
+#include "mm_kafei_resource.h"
+extern "C" {
+#include "src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.h"
+}
 #include "mods/sound_translator/mm_audio_sfx.h" // MM SFX engine (Tier C vanilla port)
 #include <filesystem>
 #include <cstring>
@@ -24,14 +30,24 @@
 #include <exception>
 #include <unordered_map>
 #include <vector> // was transitively via OTRGlobals.h before upstream #6636 cleanup
+#include <fast/resource/type/DisplayList.h>
+#include <fast/resource/type/Texture.h>
+#include "mm_strict_texture_binding.h"
+#include <fast/resource/type/Vertex.h>
+#include <fast/resource/ResourceType.h>
 #include <libultraship/libultraship.h>
 #include <libultraship/log/luslog.h>
+#include <ship/utils/binarytools/MemoryStream.h>
 #include <SDL2/SDL.h>
 #include "soh/OTRGlobals.h"
 #include "soh/GameVersions.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
+#include "soh/resource/type/Array.h"
+#include "soh/resource/type/SohResourceType.h"
 #include "soh/resource/type/Text.h"
 #include "functions.h"           // For Audio_SetFontInstrument, AudioLoad_IsFontLoadComplete
+#include "variables.h"           // Native cull display lists; never assume adjacent arrays.
 #include "message_data_static.h" // MessageTableEntry struct
 
 // SoH globals that hold pointers into Text-resource std::string buffers. After
@@ -220,6 +236,7 @@ static bool LoadMmO2r() {
                     // resources and assertion-crash, then decline MM features and let the
                     // game boot normally with OOT only.
                     archiveManager->RemoveArchive(sMmO2rPath);
+                    PreludeNativeMaterialScroll_InvalidateMetadata("MM archive removal");
                     sMmO2rLoaded = false;
                     return false;
                 }
@@ -240,6 +257,7 @@ static bool LoadMmO2r() {
                     }
                 }
                 archiveManager->SetArchives(reordered);
+                PreludeNativeMaterialScroll_InvalidateMetadata("MM archive reorder");
                 MMASSETS_LOG("[MM Assets] Loaded mm.o2r at lowest priority (pos 0 of %zu archives)", reordered->size());
 
                 // SetArchives → ResetVirtualFileSystem unloads+reloads every archive,
@@ -561,6 +579,563 @@ void* MmAssets_LoadResourceStrict(const char* path) {
     return nullptr;
 }
 
+static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize);
+static std::shared_ptr<Ship::IResource> MmAssets_LoadResourceObjectFromMmArchive(const char* path);
+static const char* MmAssets_StripOtrPrefix(const char* path);
+
+namespace {
+
+static constexpr const char* kSkullKidModelPrefix = "objects/object_stk_3ds/v1/";
+static constexpr const char* kAnjuModelPrefix = "objects/object_anju_hd/v1/";
+static const char* const kAnjuModelLimbs[21] = {
+    nullptr,
+    nullptr,
+    "gAnju1TorsoDL",
+    "gAnju1LeftUpperArmDL",
+    "gAnju1LeftForearmDL",
+    "gAnju1LeftHandDL",
+    "gAnju1RightUpperArmDL",
+    "gAnju1RightForearmDL",
+    "gAnju1RightHandDL",
+    "gAnju1HeadDL",
+    "gAnju1PelvisDL",
+    "gAnju1RightThighDL",
+    "gAnju1RightShinDL",
+    "gAnju1RightFootDL",
+    "gAnju1LeftThighDL",
+    "gAnju1LeftShinDL",
+    "gAnju1LeftFootDL",
+    "gAnju1Skirt1DL",
+    "gAnju1Skirt2DL",
+    "gAnju1Skirt3DL",
+    "gAnju1Skirt4DL",
+};
+
+struct MmAnjuPoseLimb {
+    unsigned limb;
+    const char* name;
+};
+static const MmAnjuPoseLimb kAnjuStandingLimbs[] = {
+    { 2, "gAnju1TorsoStandingDL" },   { 3, "gAnju1LeftUpperArmStandingDL" }, { 4, "gAnju1LeftForearmStandingDL" },
+    { 5, "gAnju1RelaxedLeftHandDL" }, { 7, "gAnju1RightForearmStandingDL" }, { 8, "gAnju1RightHandStandingDL" },
+};
+// Seated refits may preserve their standing body in a separate, complete set.
+// Requiring the whole set prevents incomplete packs from mixing the two fits.
+static const MmAnjuPoseLimb kAnjuStandingSkirtLimbs[] = {
+    { 10, "gAnju1PelvisStandingDL" },    { 11, "gAnju1RightThighStandingDL" }, { 12, "gAnju1RightShinStandingDL" },
+    { 14, "gAnju1LeftThighStandingDL" }, { 15, "gAnju1LeftShinStandingDL" },   { 17, "gAnju1Skirt1StandingDL" },
+    { 18, "gAnju1Skirt2StandingDL" },    { 20, "gAnju1Skirt4StandingDL" },
+};
+
+struct MmDisplayListGraphContext {
+    std::shared_ptr<Ship::Archive> archive;
+    bool optionalSkullKid = false;
+    bool optionalAnju = false;
+    std::unordered_map<uint64_t, std::string> pathsByHash;
+    std::unordered_map<std::string, Gfx*> inProgress;
+    std::unordered_map<std::string, std::shared_ptr<Ship::IResource>> resources;
+    std::unordered_map<std::string, std::shared_ptr<std::vector<Gfx>>> displayLists;
+    MmStrictTextureBindings textures;
+    bool modelAttempted = false;
+    bool modelComplete = false;
+    MmSkullKidDisplayLists model = {};
+    bool anjuAttempted[2] = {};
+    bool anjuComplete[2] = {};
+    MmAnjuDisplayLists anju[2] = {};
+};
+
+struct MmDisplayListResolveContext {
+    MmDisplayListGraphContext* graph;
+    int depth;
+};
+
+// The archive shared_ptr is both the identity and an owner. A later mount of
+// the same filename cannot reuse this graph, and scene cache clears cannot
+// release vertices, texture aliases or lists already handed to the renderer.
+static std::unordered_map<std::shared_ptr<Ship::Archive>, std::unique_ptr<MmDisplayListGraphContext>>
+    sDisplayListGraphs;
+static std::unordered_map<std::shared_ptr<Ship::Archive>, std::unique_ptr<MmDisplayListGraphContext>> sAnjuGraphs;
+
+// Matches MM Scene_SetRenderModeXlu's opaque index-0 table. Keep all four
+// entries: G_DL_INDEX addresses both command 0 and command 2.
+static Gfx sMmOpaqueRenderModeDL[] = {
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+};
+
+static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth);
+
+static MmDisplayListGraphContext* MmAssets_GetDisplayListGraph(const std::shared_ptr<Ship::Archive>& archive,
+                                                               bool anju = false) {
+    if (!archive)
+        return nullptr;
+    auto& cache = anju ? sAnjuGraphs : sDisplayListGraphs;
+    auto found = cache.find(archive);
+    if (found != cache.end())
+        return found->second.get();
+    auto files = archive->ListFiles();
+    if (!files)
+        return nullptr;
+    auto graph = std::make_unique<MmDisplayListGraphContext>();
+    graph->archive = archive;
+    graph->optionalSkullKid = archive != sMmArchive && !anju;
+    graph->optionalAnju = archive != sMmArchive && anju;
+    for (const auto& [hash, path] : *files) {
+        if ((!graph->optionalSkullKid && !graph->optionalAnju) ||
+            path.rfind(anju ? kAnjuModelPrefix : kSkullKidModelPrefix, 0) == 0)
+            graph->pathsByHash.emplace(hash, path);
+    }
+    auto* result = graph.get();
+    cache.emplace(archive, std::move(graph));
+    return result;
+}
+
+// The optional v1 format is binary F3DEX2, vertex arrays and raw RGBA32. Check
+// serialized lengths before factories can allocate from untrusted counts.
+static bool MmAssets_ValidateSkullKidResource(const std::shared_ptr<Ship::File>& file,
+                                              const std::shared_ptr<Ship::ResourceInitData>& init) {
+    const auto& bytes = *file->Buffer;
+    auto word = [&](size_t offset) {
+        uint32_t result = 0;
+        for (unsigned byte = 0; byte < 4; ++byte) {
+            const unsigned shift = init->ByteOrder == Ship::Endianness::Big ? (3 - byte) * 8 : byte * 8;
+            result |= uint32_t(static_cast<unsigned char>(bytes[offset + byte])) << shift;
+        }
+        return result;
+    };
+    if (init->Format != RESOURCE_FORMAT_BINARY)
+        return false;
+    if (init->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
+        return init->ResourceVersion == 0 && bytes.size() >= 80 && bytes.size() <= 72 + 4096 * 8 &&
+               bytes[64] == ucode_f3dex2 && (bytes.size() - 72) % 8 == 0 && word(bytes.size() - 8) == 0xDF000000;
+    }
+    if (init->Type == static_cast<uint32_t>(SOH::ResourceType::SOH_Array)) {
+        return init->ResourceVersion == 0 && bytes.size() >= 72 &&
+               word(64) == static_cast<uint32_t>(SOH::ArrayResourceType::Vertex) && word(68) != 0 &&
+               word(68) <= (bytes.size() - 72) / 16 && (bytes.size() - 72) % 16 == 0;
+    }
+    if (init->Type == static_cast<uint32_t>(Fast::ResourceType::Texture)) {
+        return init->ResourceVersion == 1 && bytes.size() >= 92 &&
+               word(64) == static_cast<uint32_t>(Fast::TextureType::RGBA32bpp) && word(76) == TEX_FLAG_LOAD_AS_RAW &&
+               word(88) <= bytes.size() - 92;
+    }
+    return false;
+}
+
+static std::shared_ptr<Ship::IResource> MmAssets_LoadGraphResource(const std::string& path,
+                                                                   MmDisplayListGraphContext& graph) {
+    auto cached = graph.resources.find(path);
+    if (cached != graph.resources.end())
+        return cached->second;
+    const bool optionalModel = graph.optionalSkullKid || graph.optionalAnju;
+    if (optionalModel && path.rfind(graph.optionalAnju ? kAnjuModelPrefix : kSkullKidModelPrefix, 0) != 0)
+        return nullptr;
+    try {
+        auto file = graph.archive->LoadFile(path);
+        if (!file || !file->Buffer || file->Buffer->size() < 64 ||
+            (file->Buffer->at(0) != 0 && file->Buffer->at(0) != 1))
+            return nullptr;
+        if (optionalModel && file->Buffer->size() > 256U * 1024U * 1024U)
+            return nullptr;
+        auto loader = Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader();
+        // Passing null initData lets the loader follow GLOBAL .meta redirects,
+        // even when file came from a specific archive. Both graphs use the
+        // standard 64-byte OTR binary header; read that header without redirects.
+        Ship::BinaryReader reader(std::make_shared<Ship::MemoryStream>(file->Buffer));
+        auto init = std::make_shared<Ship::ResourceInitData>();
+        init->Parent = graph.archive;
+        init->Path = path;
+        init->Format = RESOURCE_FORMAT_BINARY;
+        init->ByteOrder = static_cast<Ship::Endianness>(reader.ReadUByte());
+        reader.SetEndianness(init->ByteOrder);
+        init->IsCustom = reader.ReadUByte() != 0;
+        reader.ReadUInt16(); // Reserved bytes.
+        init->Type = reader.ReadUInt32();
+        init->ResourceVersion = reader.ReadInt32();
+        init->Id = reader.ReadUInt64();
+        file->BufferOffset = 64;
+        if (optionalModel && !MmAssets_ValidateSkullKidResource(file, init))
+            return nullptr;
+        auto resource = loader->LoadResource(path, file, init);
+        if (resource)
+            graph.resources.emplace(path, resource);
+        return resource;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[MM Assets] graph resource rejected: %s (%s)", path.c_str(), error.what());
+    } catch (...) { MMASSETS_LOG("[MM Assets] graph resource rejected: %s", path.c_str()); }
+    return nullptr;
+}
+
+static bool MmAssets_ValidateSkullKidCommands(const std::vector<MmDisplayListCommand>& commands,
+                                              unsigned matrixCount = 20) {
+    auto validTriangle = [](uintptr_t packed) {
+        for (unsigned shift = 0; shift < 24; shift += 8) {
+            const unsigned index = (packed >> shift) & 0xFF;
+            if ((index & 1) != 0 || index >= 32 * 2)
+                return false;
+        }
+        return true;
+    };
+    for (size_t i = 0; i < commands.size(); ++i) {
+        const auto& command = commands[i];
+        switch (command.w0 >> 24) {
+            case 0xDF:
+                return true;
+            case 0x20: // Texture hash.
+            case 0x31: // Nested-list hash.
+            case 0x33: // Debug marker hash; no resource is loaded.
+                if (++i >= commands.size())
+                    return false;
+                break;
+            case 0x32: { // Vertex hash; the patcher also checks the byte range.
+                const unsigned count = (command.w0 >> 12) & 0xFF;
+                const unsigned end = (command.w0 & 0xFF) >> 1;
+                if ((command.w0 & 1) != 0 || count == 0 || end < count || end > 32 || ++i >= commands.size())
+                    return false;
+                break;
+            }
+            case 0xDA: { // Only load an existing native flex matrix, never a new resource.
+                const uintptr_t address = command.w1 & ~uintptr_t(1);
+                if (command.w0 != 0xDA380003 || !(command.w1 & 1) || (address >> 24) != 0x0D ||
+                    (address & 0xFFFFFF) % 64 != 0 || (address & 0xFFFFFF) >= matrixCount * 64)
+                    return false;
+                break;
+            }
+            case 0x05:
+                if (!validTriangle(command.w0))
+                    return false;
+                break;
+            case 0x06:
+                if (!validTriangle(command.w0) || !validTriangle(command.w1))
+                    return false;
+                break;
+            case 0x00:
+                // G_NOOP also carries OPEN_DISPS filename pointers in this engine.
+                if (command.w0 != 0 || command.w1 != 0)
+                    return false;
+                break;
+            case 0xE2:
+            case 0xE3:
+                // F3DEX2 derives a bit shift from 31 - shift - (length - 1).
+                if (((command.w0 >> 8) & 0xFF) + (command.w0 & 0xFF) > 31)
+                    return false;
+                break;
+            // Pointer-free F3DEX2 material/geometry commands.
+            case 0x03:
+            case 0xD7:
+            case 0xD9:
+            case 0xE6:
+            case 0xE7:
+            case 0xE8:
+            case 0xE9:
+            case 0xF2:
+            case 0xF3:
+            case 0xF4:
+            case 0xF5:
+            case 0xF8:
+            case 0xF9:
+            case 0xFA:
+            case 0xFB:
+            case 0xFC:
+                break;
+            default:
+                // Raw addresses, filepaths and other unresolved OTR resource
+                // commands could escape the selected archive. v1 forbids them.
+                return false;
+        }
+    }
+    return false;
+}
+
+static uintptr_t MmAssets_ResolveDisplayListReference(void* context, MmDisplayListReferenceKind kind, uint64_t hash,
+                                                      size_t* resourceSize) {
+    auto* resolve = static_cast<MmDisplayListResolveContext*>(context);
+    *resourceSize = 0;
+    if (kind == MM_DISPLAY_LIST_REFERENCE_RENDER_MODE) {
+        return (hash == 0 || hash == 2) ? reinterpret_cast<uintptr_t>(&sMmOpaqueRenderModeDL[hash]) : 0;
+    }
+    auto pathIt = resolve->graph->pathsByHash.find(hash);
+    if (pathIt == resolve->graph->pathsByHash.end()) {
+        MMASSETS_LOG("[MM Assets] STRICT graph hash miss: 0x%016llx", static_cast<unsigned long long>(hash));
+        return 0;
+    }
+
+    if (kind == MM_DISPLAY_LIST_REFERENCE_NESTED) {
+        return reinterpret_cast<uintptr_t>(
+            MmAssets_PatchDisplayListGraph(pathIt->second, *resolve->graph, resolve->depth + 1));
+    }
+
+    if (kind == MM_DISPLAY_LIST_REFERENCE_TEXTURE) {
+        auto textureResource = MmAssets_LoadGraphResource(pathIt->second, *resolve->graph);
+        auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+        return reinterpret_cast<uintptr_t>(resolve->graph->textures.Bind(*manager, pathIt->second, textureResource));
+    }
+
+    auto vertexResource = MmAssets_LoadGraphResource(pathIt->second, *resolve->graph);
+    auto vertex = std::dynamic_pointer_cast<Fast::Vertex>(vertexResource);
+    auto vertexArray = std::dynamic_pointer_cast<SOH::Array>(vertexResource);
+    MmDisplayListVertexResourceView vertexView = {};
+    if (!MmDisplayList_SelectVertexResource(
+            vertex != nullptr ? vertex->GetRawPointer() : nullptr, vertex != nullptr ? vertex->GetPointerSize() : 0,
+            vertexArray != nullptr ? vertexArray->GetRawPointer() : nullptr,
+            vertexArray != nullptr ? vertexArray->GetPointerSize() : 0,
+            vertexArray != nullptr && vertexArray->ArrayType == SOH::ArrayResourceType::Vertex, &vertexView)) {
+        MMASSETS_LOG("[MM Assets] STRICT graph vertex type/miss: %s", pathIt->second.c_str());
+        return 0;
+    }
+    *resourceSize = vertexView.size;
+    return vertexView.pointer;
+}
+
+static Gfx* MmAssets_PatchDisplayListGraph(const std::string& path, MmDisplayListGraphContext& graph, int depth) {
+    if (depth > 8) {
+        MMASSETS_LOG("[MM Assets] STRICT graph depth exceeded: %s", path.c_str());
+        return nullptr;
+    }
+    auto cached = graph.displayLists.find(path);
+    if (cached != graph.displayLists.end()) {
+        return cached->second->data();
+    }
+    auto active = graph.inProgress.find(path);
+    if (active != graph.inProgress.end()) {
+        MMASSETS_LOG("[MM Assets] STRICT graph cycle rejected: %s", path.c_str());
+        return nullptr;
+    }
+
+    auto displayListResource = MmAssets_LoadGraphResource(path, graph);
+    auto displayList = std::dynamic_pointer_cast<Fast::DisplayList>(displayListResource);
+    size_t resourceSize = displayList != nullptr ? displayList->GetPointerSize() : 0;
+    Gfx* source = displayList != nullptr ? static_cast<Gfx*>(displayList->GetRawPointer()) : nullptr;
+    const size_t commandCapacity = resourceSize / sizeof(Gfx);
+    if (source == nullptr || resourceSize % sizeof(Gfx) != 0 || commandCapacity == 0 || commandCapacity > 4096) {
+        MMASSETS_LOG("[MM Assets] STRICT graph invalid DL type/data: %s (%zu bytes)", path.c_str(), resourceSize);
+        return nullptr;
+    }
+
+    auto output = std::make_shared<std::vector<Gfx>>(source, source + commandCapacity);
+    graph.inProgress[path] = output->data();
+
+    std::vector<MmDisplayListCommand> commands(commandCapacity);
+    for (size_t i = 0; i < commandCapacity; ++i) {
+        commands[i].w0 = static_cast<uint32_t>((*output)[i].words.w0);
+        commands[i].w1 = static_cast<uintptr_t>((*output)[i].words.w1);
+    }
+    if ((graph.optionalSkullKid || graph.optionalAnju) &&
+        !MmAssets_ValidateSkullKidCommands(commands, graph.optionalAnju ? 19 : 20)) {
+        graph.inProgress.erase(path);
+        return nullptr;
+    }
+
+    MmDisplayListResolveContext resolve = { &graph, depth };
+    MmDisplayListPatchStats stats = {};
+    const bool valid = MmDisplayList_PatchCommands(commands.data(), commands.size(),
+                                                   MmAssets_ResolveDisplayListReference, &resolve, &stats);
+    if (!valid || stats.unresolved != 0) {
+        MMASSETS_LOG("[MM Assets] STRICT graph rejected: %s (nested=%zu vertices=%zu unresolved=%zu malformed=%zu)",
+                     path.c_str(), stats.nestedPatched, stats.verticesPatched, stats.unresolved, stats.malformed);
+        graph.inProgress.erase(path);
+        return nullptr;
+    }
+
+    for (size_t i = 0; i < commandCapacity; ++i) {
+        (*output)[i].words.w0 = commands[i].w0;
+        (*output)[i].words.w1 = commands[i].w1;
+    }
+    Gfx* result = output->data();
+    graph.displayLists.emplace(path, std::move(output));
+    graph.inProgress.erase(path);
+    MMASSETS_LOG("[MM Assets] STRICT graph ready: %s (nested=%zu vertices=%zu textures=%zu renderMode=%zu)",
+                 path.c_str(), stats.nestedPatched, stats.verticesPatched, stats.texturesPatched,
+                 stats.renderModePatched);
+    return result;
+}
+
+static const MmSkullKidDisplayLists* MmAssets_LoadSkullKidModel(MmDisplayListGraphContext& graph) {
+    if (graph.modelAttempted)
+        return graph.modelComplete ? &graph.model : nullptr;
+    graph.modelAttempted = true;
+    MmSkullKidDisplayLists model = {};
+    auto load = [&](const char* nativePath) {
+        std::string path = nativePath;
+        if (graph.optionalSkullKid)
+            path = kSkullKidModelPrefix + path.substr(path.find_last_of('/') + 1);
+        return MmAssets_PatchDisplayListGraph(path, graph, 0);
+    };
+    for (unsigned limb = 0; limb < 22; ++limb) {
+        const char* path = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
+        if (path && !(model.limbs[limb] = load(path)))
+            return nullptr;
+    }
+    model.head = load("objects/object_stk/gSkullKidNormalHeadDL");
+    model.eyes = load("objects/object_stk/gSkullKidNormalEyesDL");
+    model.mask = load("objects/object_stk/gSkullKidMajorasMask1DL");
+    if (!model.head || !model.eyes || !model.mask)
+        return nullptr;
+    graph.model = model; // Publish only after every root and transitive reference passed.
+    graph.modelComplete = true;
+    return &graph.model;
+}
+
+static bool MmAssets_HasSkullKidModel(const std::shared_ptr<Ship::Archive>& archive) {
+    // Any supplied root declares a candidate. Unrelated HD textures or metadata
+    // alone are not a model; an incomplete candidate must not borrow lower packs.
+    for (unsigned limb = 0; limb < 22; ++limb) {
+        const char* native = StaticStoryMm_GetSkullKidLimbDisplayListPath(limb);
+        if (native && archive->HasFile(std::string(kSkullKidModelPrefix) + (strrchr(native, '/') + 1)))
+            return true;
+    }
+    for (const char* name : { "gSkullKidNormalHeadDL", "gSkullKidNormalEyesDL", "gSkullKidMajorasMask1DL" }) {
+        if (archive->HasFile(std::string(kSkullKidModelPrefix) + name))
+            return true;
+    }
+    return false;
+}
+
+static const MmAnjuDisplayLists* MmAssets_LoadAnjuModel(MmDisplayListGraphContext& graph, uint8_t pose) {
+    if (pose > 1)
+        return nullptr;
+    // Native poses share geometry; only HD packs need distinct corrective roots.
+    if (!graph.optionalAnju)
+        pose = 0;
+    if (graph.anjuAttempted[pose])
+        return graph.anjuComplete[pose] ? &graph.anju[pose] : nullptr;
+    graph.anjuAttempted[pose] = true;
+    if (pose == 1) {
+        const auto* base = MmAssets_LoadAnjuModel(graph, 0);
+        if (!base)
+            return nullptr;
+        MmAnjuDisplayLists model = *base;
+        for (const auto& limb : kAnjuStandingLimbs) {
+            model.limbs[limb.limb] =
+                MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + limb.name, graph, 0);
+            if (!model.limbs[limb.limb])
+                return nullptr;
+        }
+        bool standingSkirt = false;
+        for (const auto& limb : kAnjuStandingSkirtLimbs)
+            standingSkirt |= graph.archive->HasFile(std::string(kAnjuModelPrefix) + limb.name);
+        if (standingSkirt) {
+            for (const auto& limb : kAnjuStandingSkirtLimbs) {
+                model.limbs[limb.limb] =
+                    MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + limb.name, graph, 0);
+                if (!model.limbs[limb.limb])
+                    return nullptr;
+            }
+        }
+        model.umbrella =
+            MmAssets_PatchDisplayListGraph(std::string(kAnjuModelPrefix) + "gAnju2UmbrellaStandingDL", graph, 0);
+        if (!model.umbrella)
+            return nullptr;
+        graph.anju[pose] = model;
+        graph.anjuComplete[pose] = true;
+        return &graph.anju[pose];
+    }
+    MmAnjuDisplayLists model = {};
+    const std::string prefix = graph.optionalAnju ? kAnjuModelPrefix : "objects/object_an1/";
+    for (unsigned limb = 2; limb <= 20; ++limb) {
+        model.limbs[limb] = MmAssets_PatchDisplayListGraph(prefix + kAnjuModelLimbs[limb], graph, 0);
+        if (!model.limbs[limb])
+            return nullptr;
+    }
+    model.heads[0] = model.limbs[9];
+    model.heads[1] = graph.optionalAnju ? MmAssets_PatchDisplayListGraph(prefix + "gAnju1BlinkHalfHeadDL", graph, 0)
+                                        : model.heads[0];
+    model.heads[2] = graph.optionalAnju ? MmAssets_PatchDisplayListGraph(prefix + "gAnju1BlinkClosedHeadDL", graph, 0)
+                                        : model.heads[0];
+    model.umbrella = MmAssets_PatchDisplayListGraph(
+        graph.optionalAnju ? prefix + "gAnju2UmbrellaDL" : "objects/object_an2/gAnju2UmbrellaDL", graph, 0);
+    if (!model.heads[1] || !model.heads[2] || !model.umbrella)
+        return nullptr;
+    model.custom = graph.optionalAnju;
+    graph.anju[pose] = model;
+    graph.anjuComplete[pose] = true;
+    return &graph.anju[pose];
+}
+
+static bool MmAssets_HasAnjuModel(const std::shared_ptr<Ship::Archive>& archive) {
+    for (unsigned limb = 2; limb <= 20; ++limb)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + kAnjuModelLimbs[limb]))
+            return true;
+    for (const auto& limb : kAnjuStandingLimbs)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + limb.name))
+            return true;
+    for (const auto& limb : kAnjuStandingSkirtLimbs)
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + limb.name))
+            return true;
+    for (const char* name :
+         { "gAnju1BlinkHalfHeadDL", "gAnju1BlinkClosedHeadDL", "gAnju2UmbrellaDL", "gAnju2UmbrellaStandingDL" })
+        if (archive->HasFile(std::string(kAnjuModelPrefix) + name))
+            return true;
+    return false;
+}
+
+} // namespace
+
+Gfx* MmAssets_LoadDisplayListGraphStrict(const char* displayListPath) {
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive);
+    return displayListPath && graph
+               ? MmAssets_PatchDisplayListGraph(MmAssets_StripOtrPrefix(displayListPath), *graph, 0)
+               : nullptr;
+}
+
+const MmSkullKidDisplayLists* MmAssets_GetSkullKidDisplayLists(void) {
+    if (!sMmArchive)
+        return nullptr;
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    if (manager->IsAltAssetsEnabled()) {
+        auto archives = manager->GetArchiveManager()->GetArchives();
+        if (archives)
+            for (auto it = archives->rbegin(); it != archives->rend(); ++it) {
+                if (*it == sMmArchive || !MmAssets_HasSkullKidModel(*it))
+                    continue;
+                auto* graph = MmAssets_GetDisplayListGraph(*it);
+                if (graph) {
+                    if (const auto* model = MmAssets_LoadSkullKidModel(*graph))
+                        return model;
+                }
+                break; // Invalid highest-priority candidate selects the entire native model.
+            }
+    }
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive);
+    return graph ? MmAssets_LoadSkullKidModel(*graph) : nullptr;
+}
+
+Gfx* MmAssets_GetOpaqueRenderMode(void) {
+    return sMmOpaqueRenderModeDL;
+}
+
+const MmAnjuDisplayLists* MmAssets_GetAnjuDisplayLists(uint8_t pose) {
+    if (!sMmArchive || pose > 1)
+        return nullptr;
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    if (manager->IsAltAssetsEnabled()) {
+        auto archives = manager->GetArchiveManager()->GetArchives();
+        if (archives)
+            for (auto it = archives->rbegin(); it != archives->rend(); ++it) {
+                if (*it == sMmArchive || !MmAssets_HasAnjuModel(*it))
+                    continue;
+                auto* graph = MmAssets_GetDisplayListGraph(*it, true);
+                if (graph) {
+                    if (const auto* model = MmAssets_LoadAnjuModel(*graph, pose))
+                        return model;
+                }
+                break;
+            }
+    }
+    auto* graph = MmAssets_GetDisplayListGraph(sMmArchive, true);
+    return graph ? MmAssets_LoadAnjuModel(*graph, pose) : nullptr;
+}
+
+void MmAssets_EnsureStrictTextureBindings(void) {
+    auto manager = Ship::Context::GetRawInstance()->GetResourceManager();
+    for (const auto& entry : sDisplayListGraphs)
+        entry.second->textures.EnsurePublished(*manager);
+    for (const auto& entry : sAnjuGraphs)
+        entry.second->textures.EnsurePublished(*manager);
+}
+
 /**
  * Load a resource from mm.o2r and get its size, with mod override support.
  * @param path Resource path
@@ -632,10 +1207,7 @@ void* MmAssets_LoadResourceWithSize(const char* path, size_t* outSize) {
  * @param outSize Output: size in bytes (optional, can be NULL)
  * @return Pointer to loaded resource data, or NULL if not found
  */
-static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
-    if (outSize)
-        *outSize = 0;
-
+static std::shared_ptr<Ship::IResource> MmAssets_LoadResourceObjectFromMmArchive(const char* path) {
     if (!sMmArchive || !path) {
         MMASSETS_LOG("[MM Assets] LoadFromMmArchive FAIL: archive=%p, path=%s", (void*)sMmArchive.get(),
                      path ? path : "NULL");
@@ -647,11 +1219,7 @@ static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
         std::string pathStr(path);
         auto cacheIt = sMmResourceCache.find(pathStr);
         if (cacheIt != sMmResourceCache.end() && cacheIt->second) {
-            void* ptr = cacheIt->second->GetRawPointer();
-            size_t size = cacheIt->second->GetPointerSize();
-            if (outSize)
-                *outSize = size;
-            return ptr;
+            return cacheIt->second;
         }
 
         auto resourceManager = OTRGlobals::Instance->context->GetResourceManager();
@@ -673,14 +1241,11 @@ static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
 
         auto resource = resourceManager->GetResourceLoader()->LoadResource(pathStr, file);
         if (resource) {
-            void* ptr = resource->GetRawPointer();
-            size_t size = resource->GetPointerSize();
-            if (outSize)
-                *outSize = size;
             // Keep resource alive in our cache
             sMmResourceCache[pathStr] = resource;
-            MMASSETS_LOG("[MM Assets] LoadFromMmArchive OK: %s -> %p (%zu bytes)", path, ptr, size);
-            return ptr;
+            MMASSETS_LOG("[MM Assets] LoadFromMmArchive OK: %s -> %p (%zu bytes)", path, resource->GetRawPointer(),
+                         resource->GetPointerSize());
+            return resource;
         }
 
         MMASSETS_LOG("[MM Assets] LoadFromMmArchive FAIL: %s could not be parsed", path);
@@ -688,6 +1253,44 @@ static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
         MMASSETS_LOG("[MM Assets] Exception in LoadFromMmArchive '%s': %s", path, e.what());
     } catch (...) { MMASSETS_LOG("[MM Assets] Unknown exception in LoadFromMmArchive '%s'", path); }
     return nullptr;
+}
+
+static std::shared_ptr<Ship::IResource> MmAssets_LoadAnjuNativeResource(const char* path) {
+    if (!sMmArchive || !path)
+        return nullptr;
+    auto file = sMmArchive->LoadFile(path);
+    if (!file || !file->Buffer || file->Buffer->size() < 64 || file->Buffer->at(0) > 1)
+        return nullptr;
+    // An explicitly selected file still follows global .meta redirects when
+    // initData is null. Read its native header, including archive identity.
+    Ship::BinaryReader reader(std::make_shared<Ship::MemoryStream>(file->Buffer));
+    auto init = std::make_shared<Ship::ResourceInitData>();
+    init->Parent = sMmArchive;
+    init->Path = path;
+    init->Format = RESOURCE_FORMAT_BINARY;
+    init->ByteOrder = static_cast<Ship::Endianness>(reader.ReadUByte());
+    reader.SetEndianness(init->ByteOrder);
+    init->IsCustom = reader.ReadUByte() != 0;
+    reader.ReadUInt16();
+    init->Type = reader.ReadUInt32();
+    init->ResourceVersion = reader.ReadInt32();
+    init->Id = reader.ReadUInt64();
+    file->BufferOffset = 64;
+    return Ship::Context::GetRawInstance()->GetResourceManager()->GetResourceLoader()->LoadResource(path, file, init);
+}
+
+static void* MmAssets_LoadFromMmArchive(const char* path, size_t* outSize) {
+    if (outSize) {
+        *outSize = 0;
+    }
+    auto resource = MmAssets_LoadResourceObjectFromMmArchive(path);
+    if (!resource) {
+        return nullptr;
+    }
+    if (outSize) {
+        *outSize = resource->GetPointerSize();
+    }
+    return resource->GetRawPointer();
 }
 
 /**
@@ -742,6 +1345,148 @@ void* MmAssets_LoadSkeleton(const char* path) {
  */
 void* MmAssets_LoadAnimation(const char* path) {
     return MmAssets_LoadFromMmArchive(MmAssets_StripOtrPrefix(path), nullptr);
+}
+
+/* Kafei's misleading Standard header is accepted only by this finite, private LOD route.
+ * No global skeleton or Link animation factory is used. */
+bool MmAssets_LoadKafei(unsigned char pose, MmNormalActorResources* output) {
+    if (!output)
+        return false;
+    *output = {};
+    const auto* presentation = StaticStoryMm_GetPresentation(STATIC_STORY_ACTOR_CHILD_KAFEI, pose);
+    if (!presentation || !sMmArchive)
+        return false;
+    try {
+        auto loader = OTRGlobals::Instance->context->GetResourceManager()->GetResourceLoader();
+        auto wrapper = sMmArchive->LoadFile(presentation->animationPath);
+        auto file = sMmArchive->LoadFile(MmKafei::ClipPath(pose) + 7);
+        auto header = sMmArchive->LoadFile(presentation->skeletonPath);
+        if (!wrapper || !wrapper->Buffer || !MmKafei::Wrapper(*wrapper->Buffer, pose) || !file || !file->Buffer ||
+            !MmKafei::Payload(*file->Buffer, pose) || !header || !header->Buffer ||
+            !MmKafei::SkeletonBytes(*header->Buffer))
+            return false;
+        auto clip =
+            std::dynamic_pointer_cast<SOH::PlayerAnimation>(loader->LoadResource(MmKafei::ClipPath(pose) + 7, file));
+        if (!clip || clip->limbRotData.size() != presentation->frameCount * 67U ||
+            clip->GetRawPointer() != clip->limbRotData.data() || clip->GetPointerSize() != clip->limbRotData.size() * 2)
+            return false;
+        auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
+        auto skeleton = std::make_shared<SOH::Skeleton>();
+        skeleton->type = SOH::SkeletonType::Flex;
+        skeleton->limbType = skeleton->limbTableType = SOH::LimbType::LOD;
+        skeleton->limbCount = skeleton->limbTableCount = 21;
+        skeleton->dListCount = 18;
+        retained->push_back(skeleton);
+        for (unsigned i = 0; i < 21; ++i) {
+            std::string path = MmKafei::Path(MmKafei::Limbs[i].name);
+            auto childFile = sMmArchive->LoadFile(path);
+            if (!childFile || !childFile->Buffer || !MmKafei::LimbBytes(*childFile->Buffer, i))
+                return false;
+            auto child = std::dynamic_pointer_cast<SOH::SkeletonLimb>(loader->LoadResource(path, childFile));
+            if (!MmKafei::Limb(child, i))
+                return false;
+            skeleton->limbTable.push_back(path);
+            skeleton->skeletonHeaderSegments.push_back(child->GetRawPointer());
+            retained->push_back(child);
+        }
+        auto& flex = skeleton->skeletonData.flexSkeletonHeader;
+        flex.sh.segment = skeleton->skeletonHeaderSegments.data();
+        flex.sh.limbCount = 21;
+        flex.sh.skeletonType = (uint8_t)SOH::SkeletonType::Flex;
+        flex.dListCount = 18;
+        retained->push_back(clip);
+        MmNormalActorResources result = {};
+        for (unsigned i = 0; i < 12; ++i) {
+            const char* path = i < 8 ? StaticStoryMm_GetEyeTexturePath(STATIC_STORY_ACTOR_CHILD_KAFEI, i)
+                                     : StaticStoryMm_GetMouthTexturePath(STATIC_STORY_ACTOR_CHILD_KAFEI, i - 8);
+            auto texture = MmAssets_LoadResourceObjectFromMmArchive(path);
+            if (!MmNormalActor::ValidateTexture(texture))
+                return false;
+            (i < 8 ? result.eyes : result.mouths)[i < 8 ? i : i - 8] = texture->GetRawPointer();
+            retained->push_back(texture);
+        }
+        result.skeleton = static_cast<FlexSkeletonHeader*>(skeleton->GetRawPointer());
+        result.playerFrames = clip->limbRotData.data();
+        result.owner = retained.release();
+        *output = result;
+        return true;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[Kafei] resource validation failed: %s", error.what());
+        return false;
+    }
+}
+
+bool MmAssets_LoadNormalActor(int actorType, unsigned char pose, MmNormalActorResources* output) {
+    if (!output)
+        return false;
+    *output = {};
+    auto type = static_cast<StaticStoryActorType>(actorType);
+    const auto* presentation = StaticStoryMm_GetPresentation(type, pose);
+    if (!presentation || presentation->kind != STATIC_STORY_MM_NORMAL_FLEX || !presentation->frameCount ||
+        presentation->eyeCount > 8 || presentation->mouthCount > 4)
+        return false;
+    try {
+        auto retained = std::make_unique<std::vector<MmNormalActor::Resource>>();
+        auto load = type == STATIC_STORY_ACTOR_ANJU ? MmAssets_LoadAnjuNativeResource
+                                                    : MmAssets_LoadResourceObjectFromMmArchive;
+        auto skeleton = load(presentation->skeletonPath);
+        auto animation = load(presentation->animationPath);
+        if (type == STATIC_STORY_ACTOR_ANJU) {
+            /* The factory's child lookups can select global alt limbs. Anju
+             * always animates a private native hierarchy; the draw callback
+             * chooses one complete geometry pack and its bounded fit offset. */
+            auto source = std::dynamic_pointer_cast<SOH::Skeleton>(skeleton);
+            if (!source || source->limbTable.size() != 20)
+                return false;
+            auto scoped = std::make_shared<SOH::Skeleton>();
+            scoped->type = source->type;
+            scoped->limbType = source->limbType;
+            scoped->limbCount = source->limbCount;
+            scoped->dListCount = source->dListCount;
+            scoped->limbTableType = source->limbTableType;
+            scoped->limbTableCount = source->limbTableCount;
+            scoped->limbTable = source->limbTable;
+            for (const auto& path : scoped->limbTable) {
+                auto child = load(path.c_str());
+                if (!child)
+                    return false;
+                scoped->limbResources.push_back(child);
+                scoped->skeletonHeaderSegments.push_back(child->GetRawPointer());
+            }
+            scoped->skeletonData.flexSkeletonHeader = source->skeletonData.flexSkeletonHeader;
+            scoped->skeletonData.flexSkeletonHeader.sh.segment = scoped->skeletonHeaderSegments.data();
+            skeleton = scoped;
+        }
+        if (!MmNormalActor::ValidateSkeleton(skeleton, presentation->limbCount, presentation->matrixCount, *retained) ||
+            !MmNormalActor::ValidateAnimation(animation, presentation->limbCount, presentation->frameCount))
+            return false;
+        retained->push_back(animation);
+        MmNormalActorResources result = {};
+        for (unsigned i = 0; i < presentation->eyeCount + presentation->mouthCount; ++i) {
+            bool eye = i < presentation->eyeCount;
+            unsigned index = eye ? i : i - presentation->eyeCount;
+            const char* path =
+                eye ? StaticStoryMm_GetEyeTexturePath(type, index) : StaticStoryMm_GetMouthTexturePath(type, index);
+            auto texture = load(path);
+            if (!MmNormalActor::ValidateTexture(texture))
+                return false;
+            (eye ? result.eyes : result.mouths)[index] = texture->GetRawPointer();
+            retained->push_back(texture);
+        }
+        /* Raw casts occur only after actual resource and child type validation. */
+        result.skeleton = static_cast<FlexSkeletonHeader*>(skeleton->GetRawPointer());
+        result.animation = static_cast<AnimationHeader*>(animation->GetRawPointer());
+        result.owner = retained.release();
+        *output = result;
+        return true;
+    } catch (const std::exception& error) {
+        MMASSETS_LOG("[MM actor] resource validation failed: %s", error.what());
+        return false;
+    }
+}
+
+void MmAssets_ReleaseNormalActor(void* owner) {
+    delete static_cast<std::vector<MmNormalActor::Resource>*>(owner);
 }
 
 /**

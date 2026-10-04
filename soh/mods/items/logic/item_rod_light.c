@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
 /**
  * item_rod_light.c - Light Rod (custom item)
  *
@@ -15,6 +16,7 @@
  */
 
 #include "item_rod_light.h"
+#include "item_rod_common.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
 #include "../helpers/fx_helper.h"
@@ -496,6 +498,10 @@ static void LightRod_UpdateLightBeam(Player* p, PlayState* play) {
                 LightRod_SpawnJumpSparkles(play, &lightRodBeamPos[i], scale);
             }
         }
+        // Sample the existing wave/beam state; no additional effect lifetime.
+        for (s32 i = 0; i < LIGHT_ROD_BEAM_COUNT; ++i) {
+            NeiUsedMagic_DrawBurst(play, 2, &lightRodBeamPos[i], .6f + .18f * i, lightRodBeamTimer / 30.0f);
+        }
     } else {
         lightRodBeamActive = 0;
         Audio_StopSfxById(LIGHT_ROD_SFX_LIGHT_LOOP);
@@ -659,7 +665,7 @@ static void LightRod_UpdateSpinLight(Player* p, PlayState* play) {
         lightRodSpinCollider.base.atFlags &= ~AT_HIT;
     }
 
-    FX_DrawSpinFireCylinder(play, p, lightRodSpinRadius, lightRodSpinIsBig, &sLightRodColor);
+    NeiUsedMagic_DrawSpin(play, p, 2, lightRodSpinRadius, lightRodSpinIsBig);
 
     if ((play->gameplayFrames % 6) == 0) {
         Audio_PlayActorSound2(&p->actor, LIGHT_ROD_SFX_LIGHT_IGNITE);
@@ -781,26 +787,11 @@ static void LightRod_UpdateCharge(Player* p, PlayState* play) {
         Audio_PlayActorSound2(&p->actor, LIGHT_ROD_SFX_CHARGE);
     }
 
-    // Use bright yellow (255, 255, 0) when at max charge, otherwise use default color
-    RodColor chargeColor;
-    if (lightRodChargeLevel >= LIGHT_ROD_CHARGE_BIG) {
-        // Bright yellow for max charge - intense light magic
-        chargeColor.primR = 255;
-        chargeColor.primG = 255;
-        chargeColor.primB = 0;
-        chargeColor.primA = 255;
-        chargeColor.envR = 255;
-        chargeColor.envG = 255;
-        chargeColor.envB = 100;
-        chargeColor.envA = 255;
-    } else {
-        chargeColor = sLightRodColor;
-    }
-    FX_DrawChargeAura(play, p, lightRodChargeLevel, &chargeColor);
+    NeiUsedMagic_DrawCharge(play, p, 2, lightRodChargeLevel);
 
     if ((play->gameplayFrames % 3) == 0) {
         Vec3f* tipPos = &p->meleeWeaponInfo[0].tip;
-        FX_SpawnRodSwingParticles(play, tipPos, &sLightRodColor);
+        RodCommon_PreserveChargeSparkCadence(play, tipPos, &sLightRodColor);
     }
 
     if ((play->gameplayFrames % 12) == 0) {
@@ -923,7 +914,7 @@ static void LightRod_OnEquip(PlayState* play, Player* p) {
     sLightChargeHoldCounter = 0;
 
     lightRodBlureIdx = FX_InitSwordTrail(play, &sLightRodColor);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_ROD_LIGHT);
 }
 
 static void LightRod_OnUnequip(PlayState* play, Player* p) {
@@ -958,7 +949,13 @@ static void LightRod_OnUnequip(PlayState* play, Player* p) {
 
     if (lightRodSpinActive)
         LightRod_StopSpinLight();
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_ROD_LIGHT);
+}
+
+void LightRod_PutAway(Player* p, PlayState* play) {
+    if (lightRodActive || lightRodFirstPerson)
+        LightRod_OnUnequip(play, p);
+    sLightEquipState.isEquipped = 0;
 }
 
 // =============================================================================
@@ -1068,6 +1065,8 @@ void Handle_LightRod(Player* p, PlayState* play) {
 
 void Player_InitLightRodIA(PlayState* play, Player* p) {
     lightRodActive = 1;
+    // Native item-change animation may finish after the original button press has passed.
+    sLightEquipState.isEquipped = 1;
     lightRodState = LIGHT_ROD_STATE_EQUIPPED;
     sLightLastSwingType = 0;
     sLightJumpEffectSpawned = 0;

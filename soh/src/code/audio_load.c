@@ -93,8 +93,36 @@ char** fontMap;
 
 // Number of SoundFont struct slots allocated in gAudioContext.soundFonts at
 // boot. AudioLoad_PopulateMmFontMeta uses this to OOB-check before writing.
-// Set inside AudioLoad_Init right after the soundFonts alloc.
+// Set by AudioLoad_InitFontMetadata during boot/reset.
 static size_t sSoundFontsCapacity = 0;
+static SoundFont* sSoundFontsStorage = NULL;
+
+static bool AudioLoad_InitFontMetadata(size_t capacity) {
+    if (capacity < fontMapSize || capacity > SIZE_MAX / sizeof(SoundFont)) {
+        return false;
+    }
+    SoundFont* metadata = calloc(capacity, sizeof(SoundFont));
+    if (metadata == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < fontMapSize; ++i) {
+        if (fontMap[i] == NULL) {
+            continue;
+        }
+        SoundFont* font = ResourceMgr_LoadAudioSoundFontByName(fontMap[i]);
+        if (font != NULL) {
+            metadata[i] = *font;
+            metadata[i].fntIndex = (s32)i;
+        }
+    }
+    // Boot/reset only, before the audio thread starts using this context.
+    // Host catalogs must not consume the small, fixed N64 audio-init pool.
+    free(sSoundFontsStorage);
+    sSoundFontsStorage = metadata;
+    gAudioContext.soundFonts = metadata;
+    sSoundFontsCapacity = capacity;
+    return true;
+}
 
 // Allocated capacity (NOT logical size) of the sequenceMap/seqLoadStatus and
 // fontMap/fontLoadStatus backing arrays. These are pre-sized at boot with
@@ -104,7 +132,7 @@ static size_t sSoundFontsCapacity = 0;
 // under the audio thread that reads sequenceMap[]/fontMap[]/*LoadStatus[] every
 // callback, a use-after-free). The grow helpers fall back to realloc only if a
 // request ever exceeds this capacity (should not happen in normal play).
-//   *_CAP_HEADROOM mirrors the MM_FONT_HEADROOM pattern used for soundFonts.
+//   Font-map capacity also determines the host soundFonts metadata capacity.
 // sequenceMapCapacity counts the +0xF slack band too (matching the acceptance
 // guard's sequenceMapSize + 0xF), so reads in that band stay in-bounds.
 static size_t sSequenceMapCapacity = 0; // # of char* slots allocated in sequenceMap (and bytes in seqLoadStatus)
@@ -321,21 +349,20 @@ void AudioLoad_InitSampleDmaBuffers(s32 arg0) {
 // SOH [Port] Completely reworked from decomp: SAF custom fontIds can exceed the native table; bounds-check against
 // fontMapSize to avoid OOB reads.
 s32 AudioLoad_IsFontLoadComplete(s32 fontId) {
-    if (fontId == 0xFF) {
+    if (fontId == AUDIO_FONT_NONE) {
         return true;
     }
     // Resolve indirection (identity for FONT_TABLE today, but kept for parity with other tables).
     fontId = (s32)AudioLoad_GetRealTableIndex(FONT_TABLE, (u32)fontId);
     if ((size_t)fontId >= fontMapSize) {
-        // No entry in the font map — SAF sequence with no associated soundfont, treat as ready.
-        return true;
+        return false;
     }
     return gAudioContext.fontLoadStatus[fontId] >= 2;
 }
 
 s32 AudioLoad_IsSeqLoadComplete(s32 seqId) {
-    if (seqId == 0xFF) {
-        return true;
+    if (seqId < 0 || (size_t)seqId >= sequenceMapSize + 0xF || sequenceMap[seqId] == NULL) {
+        return false;
     } else if (gAudioContext.seqLoadStatus[seqId] >= 2) {
         return true;
     } else if (gAudioContext.seqLoadStatus[AudioLoad_GetRealTableIndex(SEQUENCE_TABLE, seqId)] >= 2) {
@@ -358,13 +385,14 @@ s32 AudioLoad_IsSampleLoadComplete(s32 sampleBankId) {
 }
 
 void AudioLoad_SetFontLoadStatus(s32 fontId, s32 status) {
-    if ((fontId != 0xFF) && ((size_t)fontId < fontMapSize) && (gAudioContext.fontLoadStatus[fontId] != 5)) {
+    if ((size_t)fontId < fontMapSize && (gAudioContext.fontLoadStatus[fontId] != 5)) {
         gAudioContext.fontLoadStatus[fontId] = status;
     }
 }
 
 void AudioLoad_SetSeqLoadStatus(s32 seqId, s32 status) {
-    if ((seqId != 0xFF) && (gAudioContext.seqLoadStatus[seqId] != 5)) {
+    if (seqId >= 0 && (size_t)seqId < sequenceMapSize + 0xF && sequenceMap[seqId] != NULL &&
+        (gAudioContext.seqLoadStatus[seqId] != 5)) {
         gAudioContext.seqLoadStatus[seqId] = status;
     }
 }
@@ -416,7 +444,7 @@ SoundFontData* AudioLoad_SyncLoadSeqFonts(s32 seqId, u32* outDefaultFontId) {
         return NULL;
     }
 
-    fontId = 0xFF;
+    fontId = AUDIO_FONT_NONE;
     index = ((u16*)gAudioContext.sequenceFontTable)[seqId];
     numFonts = gAudioContext.sequenceFontTable[index++];
 
@@ -511,24 +539,28 @@ void AudioLoad_AsyncLoadFont(s32 fontId, s32 arg1, s32 retData, OSMesgQueue* ret
     AudioLoad_AsyncLoad(FONT_TABLE, fontId, 0, retData, retQueue);
 }
 
-u8* AudioLoad_GetFontsForSequence(s32 seqId, u32* outNumFonts) {
-    s32 index;
-
-    // Check for NA_BGM_DISABLED and account for seqId that are stripped with `& 0xFF` by the caller
-    if (seqId == NA_BGM_DISABLED || seqId == 0xFF) {
+s32* AudioLoad_GetFontsForSequence(s32 seqId, u32* outNumFonts) {
+    if (outNumFonts != NULL) {
+        *outNumFonts = 0;
+    }
+    if (seqId < 0 || seqId == NA_BGM_DISABLED) {
         return NULL;
     }
 
-    u16 newSeqId = AudioEditor_GetReplacementSeq(seqId);
-    if (newSeqId > sequenceMapSize || !sequenceMap[newSeqId]) {
+    // Callers pass an already-resolved host sequence ID.
+    u16 newSeqId = seqId;
+    if ((size_t)newSeqId >= sequenceMapSize + 0xF || !sequenceMap[newSeqId]) {
         return NULL;
     }
-    SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[newSeqId]);
-
-    if (sDat.numFonts == 0)
+    // Resource-owned storage, not the fonts member of a temporary stack copy.
+    SequenceData* sDat = ResourceMgr_LoadSeqPtrByName(sequenceMap[newSeqId]);
+    if (sDat == NULL || sDat->numFonts <= 0 || sDat->numFonts > 16) {
         return NULL;
-
-    return sDat.fonts;
+    }
+    if (outNumFonts != NULL) {
+        *outNumFonts = sDat->numFonts;
+    }
+    return sDat->fonts;
 }
 
 void AudioLoad_DiscardSeqFonts(s32 seqId) {
@@ -606,7 +638,7 @@ s32 AudioLoad_SyncInitSeqPlayerInternal(s32 playerIdx, s32 seqId, s32 arg2) {
 
     AudioSeq_SequencePlayerDisable(seqPlayer);
 
-    fontId = 0xFF;
+    fontId = AUDIO_FONT_NONE;
 
     // seqId is the resolved 16-bit id from func_800F9280(). Reject ids with no loaded sequence; the
     // map has sequenceMapSize + 0xF slots (custom ids skip the reserved 129-135 range).
@@ -614,14 +646,19 @@ s32 AudioLoad_SyncInitSeqPlayerInternal(s32 playerIdx, s32 seqId, s32 arg2) {
         return 0;
     }
     SequenceData seqData2 = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
+    if (seqData2.numFonts < 0 || seqData2.numFonts > 16) {
+        return 0;
+    }
 
     for (int i = 0; i < seqData2.numFonts; i++) {
-        // resolvedFont (>= 0) carries the un-truncated font index for streamed custom
-        // songs, lifting the 256-soundfont cap that the u8 fonts[] imposes. For every
-        // other sequence resolvedFont is -1 and we use the per-entry fonts[i].
-        fontId = (seqData2.resolvedFont >= 0) ? seqData2.resolvedFont : seqData2.fonts[i];
-        AudioLoad_SyncLoadFont(fontId); // NOTE: If this is commented out, then enemies will play child link sounds...
-        // numFonts--;
+        // Both streamed defaults and per-entry/MM bank lists carry host IDs.
+        fontId = AudioSequence_GetFont(&seqData2, i);
+        if (fontId < 0 || (size_t)fontId >= fontMapSize || fontMap[fontId] == NULL) {
+            return 0;
+        }
+        if (AudioLoad_SyncLoadFont(fontId) == NULL) {
+            return 0;
+        }
     }
 
     seqData = AudioLoad_SyncLoadSeq(seqId);
@@ -652,9 +689,8 @@ s32 AudioLoad_SyncInitSeqPlayerInternal(s32 playerIdx, s32 seqId, s32 arg2) {
     }
 
     AudioSeq_SkipForwardSequence(seqPlayer);
-    //! @bug missing return (but the return value is not used so it's not UB)
-
     GameInteractor_ExecuteOnSeqPlayerInit(playerIdx, seqId);
+    return 1;
 }
 
 u8* AudioLoad_SyncLoadSeq(s32 seqId) {
@@ -665,7 +701,7 @@ u8* AudioLoad_SyncLoadSeq(s32 seqId) {
         return NULL;
     }
 
-    return AudioLoad_SyncLoad(SEQUENCE_TABLE, seqId, &didAllocate);
+    return (u8*)AudioLoad_SyncLoad(SEQUENCE_TABLE, seqId, &didAllocate);
 }
 
 uintptr_t AudioLoad_GetSampleBank(u32 sampleBankId, u32* outMedium) {
@@ -710,6 +746,9 @@ SoundFontData* AudioLoad_SyncLoadFont(u32 fontId) {
     s32 sampleBankId2;
     s32 didAllocate;
     RelocInfo relocInfo;
+    if ((size_t)fontId >= fontMapSize || fontMap[fontId] == NULL) {
+        return NULL;
+    }
     s32 realFontId = AudioLoad_GetRealTableIndex(FONT_TABLE, fontId);
 
     if (gAudioContext.fontLoadStatus[realFontId] == 1) {
@@ -717,6 +756,9 @@ SoundFontData* AudioLoad_SyncLoadFont(u32 fontId) {
     }
 
     SoundFont* sf = ResourceMgr_LoadAudioSoundFontByName(fontMap[fontId]);
+    if (sf == NULL) {
+        return NULL;
+    }
 
     sampleBankId1 = sf->sampleBankId1;
     sampleBankId2 = sf->sampleBankId2;
@@ -735,7 +777,7 @@ SoundFontData* AudioLoad_SyncLoadFont(u32 fontId) {
     relocInfo.baseAddr2 = 0;
     //}
 
-    ret = AudioLoad_SyncLoad(FONT_TABLE, fontId, &didAllocate);
+    ret = (SoundFontData*)AudioLoad_SyncLoad(FONT_TABLE, fontId, &didAllocate);
     if (ret == NULL) {
         return NULL;
     }
@@ -748,86 +790,91 @@ SoundFontData* AudioLoad_SyncLoadFont(u32 fontId) {
 
 uintptr_t AudioLoad_SyncLoad(u32 tableType, u32 id, s32* didAllocate) {
     size_t size;
-    AudioTable* table;
     s32 pad;
     u32 medium;
     s32 status;
-    uintptr_t romAddr;
     s32 cachePolicy;
     uintptr_t ret;
     u32 realId;
 
+    *didAllocate = false;
+    if (tableType == SEQUENCE_TABLE) {
+        if ((size_t)id >= sequenceMapSize + 0xF || sequenceMap[id] == NULL) {
+            return 0;
+        }
+    } else if (tableType == FONT_TABLE) {
+        if ((size_t)id >= fontMapSize || fontMap[id] == NULL) {
+            return 0;
+        }
+        // Imported fonts already live in the resource manager, and instrument
+        // lookup reads that same resource. Do not duplicate them in the tiny
+        // native font cache: eviction there can disable a resting MAIN player.
+        SoundFont* font = ResourceMgr_LoadAudioSoundFontByName(fontMap[id]);
+        if (font == NULL) {
+            return 0;
+        }
+        AudioLoad_SetFontLoadStatus(id, 5);
+        return (uintptr_t)font;
+    } else {
+        // Native sample-bank DMA is handled separately from host resources.
+        return 0;
+    }
+
     realId = AudioLoad_GetRealTableIndex(tableType, id);
-    ret = AudioLoad_SearchCaches(tableType, realId);
-    if (ret != NULL) {
+    ret = (uintptr_t)AudioLoad_SearchCaches(tableType, realId);
+    if (ret != 0) {
         *didAllocate = false;
         status = 2;
     } else {
-        char* seqData = 0;
-        SoundFont* fnt;
+        SequenceData sData = ResourceMgr_LoadSeqByName(sequenceMap[id]);
+        if (sData.seqData == NULL || sData.seqDataSize <= 0) {
+            return 0;
+        }
+        char* seqData = sData.seqData;
+        size = sData.seqDataSize;
+        medium = sData.medium;
+        cachePolicy = sData.cachePolicy;
 
-        if (tableType == SEQUENCE_TABLE) {
-            SequenceData sData = ResourceMgr_LoadSeqByName(sequenceMap[id]);
-            seqData = sData.seqData;
-            size = sData.seqDataSize;
-            medium = sData.medium;
-            cachePolicy = sData.cachePolicy;
-            romAddr = 0;
-        } else if (tableType == FONT_TABLE) {
-            fnt = ResourceMgr_LoadAudioSoundFontByName(fontMap[id]);
-            size = sizeof(SoundFont);
-            medium = 2;
-            cachePolicy = 0;
-            romAddr = 0;
-        } else {
-            // table = AudioLoad_GetLoadTable(tableType);
-            // size = table->entries[realId].size;
-            // size = ALIGN16(size);
-            // medium = table->entries[id].medium;
-            // cachePolicy = table->entries[id].cachePolicy;
-            // romAddr = table->entries[realId].romAddr;
+        if (medium == MEDIUM_UNK || cachePolicy < 0 || cachePolicy > 4) {
+            return 0;
         }
 
         switch (cachePolicy) {
             case 0:
-                ret = AudioHeap_AllocPermanent(tableType, realId, size);
-                if (ret == NULL) {
-                    return ret;
+                ret = (uintptr_t)AudioHeap_AllocPermanent(tableType, realId, size);
+                if (ret == 0) {
+                    // Catalog size is not cache capacity. Reuse the normal
+                    // evictable cache once permanent slots/bytes are exhausted.
+                    cachePolicy = 3;
+                    ret = (uintptr_t)AudioHeap_AllocCached(tableType, size, CACHE_EITHER, realId);
+                    if (ret == 0) {
+                        return 0;
+                    }
                 }
                 break;
             case 1:
-                ret = AudioHeap_AllocCached(tableType, size, CACHE_PERSISTENT, realId);
-                if (ret == NULL) {
+                ret = (uintptr_t)AudioHeap_AllocCached(tableType, size, CACHE_PERSISTENT, realId);
+                if (ret == 0) {
                     return ret;
                 }
                 break;
             case 2:
-                ret = AudioHeap_AllocCached(tableType, size, CACHE_TEMPORARY, realId);
-                if (ret == NULL) {
+                ret = (uintptr_t)AudioHeap_AllocCached(tableType, size, CACHE_TEMPORARY, realId);
+                if (ret == 0) {
                     return ret;
                 }
                 break;
             case 3:
             case 4:
-                ret = AudioHeap_AllocCached(tableType, size, CACHE_EITHER, realId);
-                if (ret == NULL) {
+                ret = (uintptr_t)AudioHeap_AllocCached(tableType, size, CACHE_EITHER, realId);
+                if (ret == 0) {
                     return ret;
                 }
                 break;
         }
 
         *didAllocate = true;
-        if (medium == MEDIUM_UNK) {
-            AudioLoad_SyncDmaUnkMedium(romAddr, ret, size, (s16)table->unkMediumParam);
-        } else {
-            if (tableType == SEQUENCE_TABLE && seqData != NULL) {
-                AudioLoad_SyncDma(seqData, ret, size, medium);
-            } else if (tableType == FONT_TABLE) {
-                AudioLoad_SyncDma(fnt, ret, size, medium);
-            } else {
-                // AudioLoad_SyncDma(romAddr, ret, size, medium);
-            }
-        }
+        AudioLoad_SyncDma((uintptr_t)seqData, (u8*)ret, size, medium);
 
         status = cachePolicy == 0 ? 5 : 2;
     }
@@ -1402,7 +1449,7 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
     // Pre-size with headroom (see sFontMapCapacity note) so the MM BGM loader
     // never reallocs fontMap/fontLoadStatus during playback. MM registers ~41
     // fonts starting at fontMapSize, well within this headroom; the soundFonts
-    // array has its own MM_FONT_HEADROOM and PopulateMmFontMeta guards that side.
+    // metadata array uses the same capacity and PopulateMmFontMeta bounds-checks it.
     sFontMapCapacity = fontMapSize + MM_FONT_CAP_HEADROOM;
     gAudioContext.fontLoadStatus = calloc(sFontMapCapacity, sizeof(u8));
     fontMap = calloc(sFontMapCapacity, sizeof(char*));
@@ -1446,7 +1493,7 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
         if (sDat->numFonts == -1) {
             uint64_t crc;
 
-            memcpy(&crc, sDat->fonts, sizeof(uint64_t));
+            crc = AudioSequence_GetFontHash(sDat);
             const char* res = ResourceGetNameByCrc(crc);
             if (res == NULL) {
                 // Passing a null buffer and length of 0 to snprintf will return the required numbers of characters the
@@ -1464,10 +1511,8 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
             }
             SoundFont* sf = ResourceMgr_LoadAudioSoundFontByName(res);
             memset(&sDat->fonts[0], 0, sizeof(sDat->fonts));
-            sDat->fonts[0] = (u8)sf->fntIndex; // low byte kept for the fanfare reload-compare path
-            // Full-width index used at playback. Without this, streamed packs with
-            // >256 songs (each ships its own soundfont) truncate the font index in
-            // the u8 fonts[] and song #256+ plays the wrong/corrupt soundfont.
+            sDat->fonts[0] = sf->fntIndex;
+            // Preserve the resolved default as well as the full-width bank list.
             sDat->resolvedFont = sf->fntIndex;
             sDat->numFonts = 1;
         }
@@ -1477,9 +1522,9 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
         }
 
         // Sequence ids are carried in 16 bits; fail gracefully past the limit.
-        if (seqNum > 0xFFFF) {
+        if (seqNum >= 0xFFFF) {
             Messagebox_ShowErrorBox("Too Many Sequences",
-                                    "The number of custom sequences exceeds the supported limit (65535). Some custom "
+                                    "The sequence ID limit (65534; 65535 is reserved) was reached. Some custom "
                                     "music will not be available. Please reduce the size of your music pack(s).");
             LUSLOG_ERROR("Custom sequence limit (0xFFFF) exceeded; remaining custom sequences skipped.");
             break;
@@ -1498,25 +1543,11 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
     }
     free(customSeqList);
 
-    numFonts = fntListSize;
-
-// #end region
-// MM_FONT_HEADROOM: extra SoundFont slots beyond OOT's boot count, so the
-// MM BGM loader (soh/mods/sound_translator/mm_bgm_loader.cpp) can register
-// MM soundfonts at SoH-side indices past `numFonts` without OOB on the
-// audio thread. Verified crash 0xc0000005 at mixer.c:103 (aLoadBufferImpl)
-// when an MM seq referenced font idx 134 and gAudioContext.soundFonts was
-// only sized for 38 OOT fonts. MM has 41 fonts; OOT has ~38; combined
-// worst-case (no aliasing) ≈ 79 slots. 256 is generous safety margin.
-#define MM_FONT_HEADROOM 256
-    gAudioContext.soundFonts =
-        AudioHeap_Alloc(&gAudioContext.audioInitPool, (numFonts + MM_FONT_HEADROOM) * sizeof(SoundFont));
-    // Zero the headroom so an OOB-into-headroom read returns 0 fields (and any
-    // pointer-deref following bad metadata bails cleanly) instead of garbage.
-    if (gAudioContext.soundFonts != NULL) {
-        memset(&gAudioContext.soundFonts[numFonts], 0, MM_FONT_HEADROOM * sizeof(SoundFont));
+    // Match the complete native + streamed catalog and preallocated MM slack.
+    if (!AudioLoad_InitFontMetadata(sFontMapCapacity)) {
+        LUSLOG_ERROR("Unable to allocate soundfont metadata for %zu slots", sFontMapCapacity);
+        return;
     }
-    sSoundFontsCapacity = (size_t)(numFonts + MM_FONT_HEADROOM);
 
     if (addr = AudioHeap_Alloc(&gAudioContext.audioInitPool, D_8014A6C4.permanentPoolSize), addr == NULL) {
         // cast away const from D_8014A6C4
@@ -1542,20 +1573,20 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
 // sequenceMapSize. Caller passes back the same value to AudioLoad_RegisterMmSequence.
 s32 AudioLoad_FindNextFreeSeqId(void) {
     int seqNum = (int)sequenceMapSize;
-    while (AudioCollection_HasSequenceNum((u16)seqNum)) {
+    while (seqNum < 0xFFFF && AudioCollection_HasSequenceNum((u16)seqNum)) {
         seqNum++;
     }
-    return seqNum;
+    return seqNum < 0xFFFF ? seqNum : -1;
 }
 
 // Grow sequenceMap to fit seqNum (if needed), strdup path into the slot, and add
 // it to AudioCollection. Returns 1 on success, 0 on alloc failure.
 s32 AudioLoad_RegisterMmSequence(const char* path, u16 seqNum) {
-    if (path == NULL) {
+    if (path == NULL || seqNum == 0xFFFF) {
         return 0;
     }
     if ((size_t)seqNum >= sequenceMapSize) {
-        size_t newSize = (size_t)seqNum + 16;
+        size_t newSize = (size_t)seqNum + 1;
         // Fast path: the slot (and its +0xF slack band) already lives inside the
         // capacity pre-allocated at boot. Just publish the larger logical size —
         // NO realloc, so the audio thread (reading sequenceMap[]/seqLoadStatus[]

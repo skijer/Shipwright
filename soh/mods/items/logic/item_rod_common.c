@@ -12,6 +12,18 @@
 
 #include "item_rod_common.h"
 
+void RodCommon_PreserveChargeSparkCadence(PlayState* play, Vec3f* tipPos, RodColor* color) {
+    Player* player = GET_PLAYER(play);
+    Color_RGBA8 prim = { color->primR, color->primG, color->primB, color->primA };
+    Color_RGBA8 env = { color->envR, color->envG, color->envB, 0 };
+    Vec3f vel = { 0, 0.5f, 0 };
+    Vec3f accel = { 0, 0, 0 };
+    // EffectSsGSpk_Update consumes two gameplay RNG values per live frame.
+    // Keep the same instance and timing, with zero-size legacy geometry;
+    // removing its spawn would alter later combat/backfire randomness.
+    EffectSsGSpk_SpawnAccel(play, &player->actor, tipPos, &vel, &accel, &prim, &env, 0, 0);
+}
+
 // -----------------------------------------------------------------------------
 // RodCommon_CalcVelocity
 //

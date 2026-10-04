@@ -1,0 +1,13 @@
+# Deku Leaf ground activation and completion regression
+
+Run `python tests/nei_leaf/run_tests.py` from the repository root.
+
+This fixture runs the production ground activation, upper-action, gust, and stop code, plus the native `LinkAnimation_Once` function extracted verbatim. The animation frame copy uses the checked-in source payload; the runner checks that it matches the packed resource byte-for-byte. The complete production MM bank engine is now compiled and linked: `MmSfx_Stop` forwards to its real `AudioMmSfx_StopById`, without replacing that bank traversal with a no-op. ASan and UBSan remain enabled. Leak checking is disabled because the execution sandbox prevents LeakSanitizer from enumerating threads.
+
+The checks cover first ground activation, normal completion and input-lock release, repeat activation, interruption, missing animation, insufficient magic, a single magic charge, and the six-tick gust collider window. Separate processes check stop-before-first-play and an initialized-engine control, plus removal of an existing/pending sound, preservation of an unrelated sound, stale-request suppression, and later playback with the production parameter tables. A five-second process timeout turns the original infinite loop into a clear test failure.
+
+On baseline `68047d9a4d16a67f0ca47d2b48f9fec93c8cb4f1`, the initialized control passes but the real ground Leaf completion hangs. `DekuLeaf_Stop` stops the MM glide hum even after a ground gust. Before the first MM playback, the bank engine is uninitialized: its zero-filled sentinel links point back to index zero, while `AudioMmSfx_StopById` traverses until index `0xFF`. The production bridge holds the audio mutex during this traversal. The candidate guard returns before traversing an uninitialized bank; all of these checks then pass. The previous fixture hid this failure by stubbing `MmSfx_Stop` entirely.
+
+Input, resource-manager loading/ownership, animation initialization, collision registration, audio output/mutex scheduling, and particle allocation remain fixture boundaries. The fixture does not exercise native upper-action selection, display lists, GPU execution, active mod-pack overrides, or resource cache eviction. It reproduces the completion hang in production Leaf/bank code, not the user's entire game process. Runtime confirmation remains pending. See `docs/poc/deku-leaf-cold-stop-20260928.md` for the log evidence and limits.
+
+Source review also found that `ResourceMgr_LoadPlayerAnimAsHeader` retains a wrapper header but not the owning animation resource. Evicting that resource could invalidate its segment. There is no evidence that this occurred during the reported activation, so the helper was left unchanged.

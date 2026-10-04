@@ -11,6 +11,10 @@ extern "C" {
 
 #define TATUMS_PER_BEAT 48
 
+// Runtime sentinel, outside the non-negative host soundfont-map index space.
+// Do not use the bytecode/sample-bank 0xFF sentinel for runtime font IDs.
+#define AUDIO_FONT_NONE (-1)
+
 #define IS_SEQUENCE_CHANNEL_VALID(ptr) ((uintptr_t)(ptr) != (uintptr_t)&gAudioContext.sequenceChannelNone)
 
 #define MAX_CHANNELS_PER_BANK 3
@@ -43,6 +47,11 @@ s32 AudioLoad_RegisterMmFont(const char* path, s32 fontIndex);
 // instead of writing seqReplaced/seqToPlay directly, so the MM bypass cannot
 // leak into the custom/music/* randomizer's own use of those fields.
 void Audio_PrimeMmSideChannel(u8 playerIdx, u16 fullSeqId);
+
+// Queue an already-resolved 16-bit ID without another Audio Editor lookup.
+// The ID/bypass belong to this queue slot and do not use the MM side channel.
+// fadeTimer uses the same units as bits 16-23 of an ordinary op-0 command.
+void Audio_QueueResolvedSeqCmd(u8 playerIdx, u16 seqId, u8 fadeTimer);
 
 // PopulateMmFontMeta declaration lives below, after the SoundFont typedef.
 
@@ -290,7 +299,9 @@ typedef struct {
     /* 0x002 */ u8 noteAllocPolicy;
     /* 0x003 */ u8 muteBehavior;
     /* 0x004 */ u16 seqId;
-    /* 0x005 */ u8 defaultFont;
+    // Host soundfont-map indices can exceed 255 for streamed music packs.
+    // Keep the resolved index through player -> channel -> note/cache lifetime.
+    s32 defaultFont; // Host-width field; surrounding offsets describe the original layout.
     /* 0x006 */ u8 unk_06[1];
     /* 0x007 */ s8 playerIdx;
     /* 0x008 */ u16 tempo; // tatums per minute
@@ -398,7 +409,7 @@ typedef struct SequenceChannel {
     /* 0x04 */ u8 reverb;       // or dry/wet mix
     /* 0x05 */ u8 notePriority; // 0-3
     /* 0x06 */ u8 someOtherPriority;
-    /* 0x07 */ u8 fontId;
+    s32 fontId; // Host soundfont-map index, not a script operand byte (original offset 0x07).
     /* 0x08 */ u8 reverbIndex;
     /* 0x09 */ u8 bookOffset;
     /* 0x0A */ u8 newPan;
@@ -529,7 +540,7 @@ typedef struct {
     /* 0x00 */ u8 priority;
     /* 0x01 */ u8 waveId;
     /* 0x02 */ u8 sampleCountIndex;
-    /* 0x03 */ u8 fontId;
+    s32 fontId; // Must match channel fontId for cache eviction/release (original offset 0x03).
     /* 0x04 */ u8 unk_04;
     /* 0x05 */ u8 stereoHeadsetEffects;
     /* 0x06 */ s16 adsrVolScaleUnused;
@@ -656,13 +667,13 @@ typedef struct {
     /* 0x0 */ u8* ptr;
     /* 0x4 */ size_t size;
     /* 0x8 */ s16 tableType;
-    /* 0xA */ s16 id;
+    s32 id; // Host sequence/font index; -1 denotes an empty cache entry.
 } AudioCacheEntry; // size = 0xC
 
 typedef struct {
     /* 0x00 */ s8 inUse;
     /* 0x01 */ s8 origMedium;
-    /* 0x02 */ s8 sampleBankId;
+    s32 sampleBankId; // Host sample cache also stores resolved font IDs.
     /* 0x03 */ char unk_03[0x5];
     /* 0x08 */ u8* allocatedAddr;
     /* 0x0C */ void* sampleAddr;
@@ -798,7 +809,7 @@ typedef struct {
 
 typedef struct {
     /* 0x00 */ u8 medium;
-    /* 0x01 */ u8 seqOrFontId;
+    s32 seqOrFontId; // Keep the host ID across slow-load completion.
     /* 0x02 */ u16 instId;
     /* 0x04 */ s32 unkMediumParam;
     /* 0x08 */ u8* curDevAddr;
@@ -1190,19 +1201,8 @@ typedef enum OcarinaPitch {
     /* 0xFF */ OCARINA_PITCH_NONE = 0xFF
 } OcarinaPitch;
 
-typedef struct {
-    char* seqData;
-    int32_t seqDataSize;
-    uint16_t seqNumber;
-    uint8_t medium;
-    uint8_t cachePolicy;
-    int32_t numFonts;
-    uint8_t fonts[16];
-    // Full-width resolved soundfont index for streamed custom songs (lifts the
-    // 256-soundfont cap that truncates in the u8 fonts[]). -1 = use fonts[].
-    // MUST stay layout-identical to SOH::Sequence (AudioSequence.h).
-    int32_t resolvedFont;
-} SequenceData;
+#include "audio_sequence_data.h"
+typedef AudioSequenceData SequenceData;
 
 void Audio_SetGameVolume(int player_id, f32 volume);
 float Audio_GetGameVolume(int player_id);

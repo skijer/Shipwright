@@ -1022,17 +1022,12 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
         extern void CustomItems_DrawSheikahSlate(Player * player, PlayState * play);
         extern void CustomItems_DrawRodOfSeasons(Player * player, PlayState * play);
         extern void CustomItems_DrawElementalWand(Player * player, PlayState * play);
-        extern void ItemEquip_ReleaseHandMatrix(void);
         extern void Stasis_Draw(PlayState * play);
         extern void Hourglass_Draw(PlayState * play);
 
         CustomItems_DrawSheikahSlate(p, play);
         CustomItems_DrawRodOfSeasons(p, play);
         CustomItems_DrawElementalWand(p, play);
-        // After every handheld, never inside one: the hand matrix is shared, and a drawer that
-        // declined this frame must not eat it from the one that did not.
-        ItemEquip_ReleaseHandMatrix();
-
         Stasis_Draw(play);    // chains + launch arrow on whatever the Stasis rune is holding
         Hourglass_Draw(play); // the path the recall target is about to retrace
     }
@@ -1041,6 +1036,12 @@ s32 CustomItems_OverrideDraw(Player* p, PlayState* play) {
     }
     if (gCustomItemState.whipActive) {
         CustomItems_DrawWhip(p, play);
+    }
+    // The whip's grip is also a wrist-matrix consumer. Release only after all
+    // handhelds, including clone draws, have had their own captured matrix.
+    {
+        extern void ItemEquip_ReleaseHandMatrix(void);
+        ItemEquip_ReleaseHandMatrix();
     }
     if (gCustomItemState.timeGateActive) {
         CustomItems_DrawTimeGate(p, play);

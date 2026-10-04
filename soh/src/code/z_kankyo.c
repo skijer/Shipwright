@@ -7,6 +7,9 @@
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "concurrent_weather_audio.h"
+#include "soh/Enhancements/audio/WeatherSamplePlayer.h"
+#include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
 
 typedef enum {
     /* 0 */ LENS_FLARE_CIRCLE0,
@@ -600,7 +603,9 @@ void func_8006FB94(EnvironmentContext* envCtx, u8 unused) {
                     envCtx->unk_20 = 0;
                     D_8011FB34 = 0;
                     envCtx->unk_22 = envCtx->unk_24 = 100;
-                    envCtx->unk_EE[0] = 0;
+                    if (!GlobalOutdoorRain_HasRainIntent()) {
+                        envCtx->unk_EE[0] = 0;
+                    }
                     envCtx->gloomySkyMode = 0;
                     envCtx->unk_DE = 0;
                 }
@@ -906,6 +911,7 @@ void Environment_Update(PlayState* play, EnvironmentContext* envCtx, LightContex
             }
         }
 
+        GlobalOutdoorRain_Resolve(play);
         func_800766C4(play); // increments or decrements unk_EE[1] depending on some condition
         func_80075B44(play); // updates bgm/sfx and other things as the day progresses
 
@@ -1647,6 +1653,8 @@ void Environment_DrawRain(PlayState* play, View* view, GraphicsContext* gfxCtx) 
     Vec3f windDirection = { 0.0f, 0.0f, 0.0f };
     Player* player = GET_PLAYER(play);
 
+    GlobalOutdoorRain_RecordDraw(play, (play->cameraPtrs[0]->unk_14C & 0x100) != 0, play->envCtx.unk_EE[2],
+                                 play->cameraPtrs[0]->eye.y, play->cameraPtrs[0]->waterYPos, view->eye.y);
     if (!(play->cameraPtrs[0]->unk_14C & 0x100) && (play->envCtx.unk_EE[2] == 0)) {
         OPEN_DISPS(gfxCtx);
 
@@ -1668,8 +1676,13 @@ void Environment_DrawRain(PlayState* play, View* view, GraphicsContext* gfxCtx) 
         z280 = view->eye.z + temp3 * 280.0f;
 
         if (play->envCtx.unk_EE[1]) {
+            u8 rainRed = 150;
+            u8 rainGreen = 255;
+            u8 rainBlue = 255;
+
+            GlobalOutdoorRain_GetRenderColor(&rainRed, &rainGreen, &rainBlue);
             gDPPipeSync(POLY_XLU_DISP++);
-            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 150, 255, 255, 30);
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, rainRed, rainGreen, rainBlue, 30);
             POLY_XLU_DISP = Gfx_SetupDL(POLY_XLU_DISP, 20);
         }
 
@@ -1814,15 +1827,19 @@ void Environment_DrawLightningFlash(PlayState* play, u8 red, u8 green, u8 blue, 
 void Environment_UpdateLightningStrike(PlayState* play) {
     if (play->envCtx.lightningMode != LIGHTNING_MODE_OFF) {
         switch (gLightningStrike.state) {
-            case LIGHTNING_STRIKE_WAIT:
+            case LIGHTNING_STRIKE_WAIT: {
+                f32 thunderFrequencyScale = CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)
+                                                ? ConcurrentWeatherAudio_ThunderFrequencyScale(CVarGetInteger(
+                                                      CVAR_AUDIO("ProximityWeatherThunderFrequency"), 50))
+                                                : 0.0f;
                 // every frame theres a 10% chance of the timer advancing 50 units
-                if (Rand_ZeroOne() < 0.1f) {
-                    gLightningStrike.delayTimer += 50.0f;
+                if (thunderFrequencyScale > 0.0f && Rand_ZeroOne() < 0.1f) {
+                    gLightningStrike.delayTimer += 50.0f * thunderFrequencyScale;
                 }
 
-                gLightningStrike.delayTimer += Rand_ZeroOne();
+                gLightningStrike.delayTimer += Rand_ZeroOne() * thunderFrequencyScale;
 
-                if (gLightningStrike.delayTimer > 500.0f) {
+                if (thunderFrequencyScale > 0.0f && gLightningStrike.delayTimer > 500.0f) {
                     gLightningStrike.flashRed = 200;
                     gLightningStrike.flashGreen = 200;
                     gLightningStrike.flashBlue = 255;
@@ -1832,9 +1849,34 @@ void Environment_UpdateLightningStrike(PlayState* play) {
                     Environment_AddLightningBolts(play,
                                                   (u8)(Rand_ZeroOne() * (ARRAY_COUNT(sLightningBolts) - 0.1f)) + 1);
                     sLightningFlashAlpha = 0;
+                    if (!Audio_IsNatureLightningEnabled() && CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunder"), 1)) {
+                        f32 thunderGain = ConcurrentWeatherAudio_ClampPercent(
+                                              CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderVolume"), 70)) /
+                                          100.0f;
+                        ConcurrentWeatherThunderStyle thunderStyle = ConcurrentWeatherAudio_ThunderStyle(
+                            CVarGetInteger(CVAR_AUDIO("ProximityWeatherThunderStyle"), CONCURRENT_WEATHER_THUNDER_LOW));
+
+                        s32 lowThunderStarted = -1;
+                        if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LIGHTNING) {
+                            lowThunderStarted = WeatherSamplePlayer_Play(
+                                "audio/samples/Low Thunder_META",
+                                thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED ? thunderGain * 0.7f : thunderGain);
+                        }
+                        s32 lightningStarted = -1;
+                        if (thunderStyle != CONCURRENT_WEATHER_THUNDER_LOW) {
+                            lightningStarted = WeatherSamplePlayer_Play(
+                                "audio/samples/Lightning_META",
+                                thunderStyle == CONCURRENT_WEATHER_THUNDER_LAYERED ? thunderGain * 0.7f : thunderGain);
+                        }
+                        if (CVarGetInteger(CVAR_AUDIO("WeatherAudioDiagnostics"), 0)) {
+                            osSyncPrintf("[weather-audio] lightning trigger low=%d layer=%d style=%d gain=%.3f\n",
+                                         lowThunderStarted, lightningStarted, thunderStyle, thunderGain);
+                        }
+                    }
                     gLightningStrike.state++;
                 }
                 break;
+            }
             case LIGHTNING_STRIKE_START:
                 gLightningStrike.flashRed = 200;
                 gLightningStrike.flashGreen = 200;

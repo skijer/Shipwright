@@ -220,7 +220,7 @@ void MagicFire_Draw(Actor* thisx, PlayState* play) {
     if (CVarGetInteger(CVAR_COSMETIC("Magic.DinsSecondary.Changed"), 0)) {
         Spell_env = CVarGetColor24(CVAR_COSMETIC("Magic.DinsSecondary.Value"), Spell_env);
     }
-    if (CVarGetInteger(CVAR_COSMETIC("Magic.DinsPrimaryary.Changed"), 0)) {
+    if (CVarGetInteger(CVAR_COSMETIC("Magic.DinsPrimary.Changed"), 0)) {
         Spell_col = CVarGetColor24(CVAR_COSMETIC("Magic.DinsPrimary.Value"), Spell_col);
     }
 

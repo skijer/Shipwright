@@ -6,8 +6,11 @@
 
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "din_fire_shield.h"
+#include "din_fire_sword.h"
 
 #include "overlays/actors/ovl_Bg_Heavy_Block/z_bg_heavy_block.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 #include "overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "overlays/actors/ovl_En_Boom/z_en_boom.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
@@ -21,6 +24,8 @@
 #include "overlays/misc/ovl_kaleido_scope/z_kaleido_scope.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/object_link_child/object_link_child.h"
+#include "objects/object_horse_link_child/rideable_young_epona.h"
+#include "young_epona.h"
 #include <soh/Enhancements/custom-message/CustomMessageTypes.h>
 #include "soh/Enhancements/item-tables/ItemTableTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
@@ -29,6 +34,7 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/randomizer/randostatupgrade.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
@@ -1951,7 +1957,7 @@ void func_80832440(PlayState* play, Player* this) {
  * @return  true if an item needs to be put away, false if not.
  */
 s32 Player_PutAwayHeldItem(PlayState* play, Player* this) {
-    if (this->heldItemAction >= PLAYER_IA_FISHING_POLE) {
+    if (this->heldItemAction >= PLAYER_IA_FISHING_POLE || CustomItems_HasStowableHeldItem(this)) {
         Player_UseItem(play, this, ITEM_NONE);
         return true;
     } else {
@@ -2606,11 +2612,15 @@ void Player_InitBoomerangIA(PlayState* play, Player* this) {
 }
 
 void Player_InitItemAction(PlayState* play, Player* this, s8 itemAction) {
+    if (itemAction == PLAYER_IA_NONE) {
+        CustomItems_PutAwayHeldItems(this, play);
+    }
     this->unk_85C = 0.0f;
     this->unk_858 = 0.0f;
     this->unk_860 = 0;
 
     this->heldItemAction = this->itemAction = itemAction;
+    ItemEquip_ResetUnequipSound(play, this, itemAction);
     this->modelGroup = this->nextModelGroup;
 
     this->stateFlags1 &= ~(PLAYER_STATE1_ITEM_IN_HAND | PLAYER_STATE1_USING_BOOMERANG);
@@ -3139,7 +3149,9 @@ s32 func_8083442C(Player* this, PlayState* play) {
 }
 
 void Player_FinishItemChange(PlayState* play, Player* this) {
-    if (this->heldItemAction != PLAYER_IA_NONE) {
+    // Cleanup may already have sounded, or may run during/after Player_UseItem.
+    // Claim only the outgoing sound; the incoming equipment sound stays separate.
+    if (this->heldItemAction != PLAYER_IA_NONE && ItemEquip_ClaimUnequipSound(play, this, this->heldItemAction)) {
         if (func_8008F2BC(this, this->heldItemAction) >= 0) {
             func_808328EC(this, NA_SE_IT_SWORD_PUTAWAY);
         } else {
@@ -4109,6 +4121,12 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
             ((this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
              ((itemAction == PLAYER_IA_HOOKSHOT) || (itemAction == PLAYER_IA_LONGSHOT)))) {
 
+            // Some custom tools own a held model while the native action is already
+            // NONE. Clean up on accepted stow even when no item-change animation runs.
+            if (itemAction == PLAYER_IA_NONE) {
+                CustomItems_PutAwayHeldItems(this, play);
+            }
+
             if ((play->bombchuBowlingStatus == 0) &&
                 (((itemAction == PLAYER_IA_DEKU_STICK) && (AMMO(ITEM_STICK) == 0)) ||
                  ((itemAction == PLAYER_IA_MAGIC_BEAN) && (AMMO(ITEM_BEAN) == 0)) ||
@@ -4226,6 +4244,7 @@ void Player_UseItem(PlayState* play, Player* this, s32 item) {
             } else if ((itemAction != this->heldItemAction) ||
                        ((this->heldActor == NULL) && (Player_ActionToExplosive(this, itemAction) >= 0))) {
                 // Handle using a new held item
+                ItemEquip_BeginItemChangeSound(play, this, this->heldItemAction);
                 this->nextModelGroup = Player_ActionToModelGroup(this, itemAction);
                 nextAnimType = gPlayerModelTypes[this->nextModelGroup][PLAYER_MODELGROUPENTRY_ANIM];
 
@@ -4735,6 +4754,7 @@ s32 Player_CalcSpeedAndYawFromControlStick(PlayState* play, Player* this, f32* o
 
             *outSpeedTarget = (*outSpeedTarget * 0.14f) - (8.0f * floorPitchInfluence * floorPitchInfluence);
             *outSpeedTarget = CLAMP(*outSpeedTarget, 0.0f, speedCap);
+            GameInteractor_Should(VB_PLAYER_SPEED_MULTIPLIER, true, this, outSpeedTarget);
 
             return true;
         }
@@ -4963,6 +4983,15 @@ s32 Player_TryActionHandlerList(PlayState* play, Player* this, s8* actionHandler
 
         if (!(this->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM) &&
             (Player_UpperAction_ChangeHeldItem != this->upperActionFunc)) {
+            // Turning in place normally checks only item use, so A can be
+            // ignored while lining up at the stump. This ceremony aligns Link
+            // itself; allow its valid offer through the usual grab handler.
+            Actor* interaction = this->interactRangeActor;
+            if (actionHandlerList == sActionHandlerListTurnInPlace && interaction != NULL &&
+                interaction->id == ACTOR_BG_TOKI_SWD && interaction->params == BG_TOKI_SWD_TIME_PEDESTAL &&
+                this->getItemId == GI_NONE && Player_ActionHandler_2(this, play)) {
+                return true;
+            }
             // Process all entries in the Action Handler List with a positive index
             while (*actionHandlerList >= 0) {
                 if (sActionHandlerFuncs[*actionHandlerList](this, play)) {
@@ -5163,12 +5192,13 @@ s32 func_80837818(Player* this) {
     return sp18;
 }
 
-void func_80837918(Player* this, s32 quadIndex, u32 dmgFlags) {
+void func_80837918(PlayState* play, Player* this, s32 quadIndex, u32 dmgFlags) {
     // Giant's Mask: Link's strikes land as hammer blows (MM behavior). Skijer's NEI
     extern s32 MmMaskWear_IsGiantMaskActive(void);
     if (MmMaskWear_IsGiantMaskActive()) {
         dmgFlags = DMG_HAMMER_SWING;
     }
+    dmgFlags = DinFireSword_SetDamageFlags(play, this, quadIndex, dmgFlags);
     this->meleeWeaponQuads[quadIndex].info.toucher.dmgFlags = dmgFlags;
 
     if (dmgFlags == 2) {
@@ -5283,8 +5313,8 @@ void func_80837948(PlayState* play, Player* this, s32 arg2) {
                                                                                                    : D_80854488[0][0];
     }
 
-    func_80837918(this, 0, dmgFlags);
-    func_80837918(this, 1, dmgFlags);
+    func_80837918(play, this, 0, dmgFlags);
+    func_80837918(play, this, 1, dmgFlags);
 
     // Boss Remains (Odolwa): every melee swing with magic fires a moth projectile forward, like the
     // FD sword beam below. Self-guards on Odolwa-worn + magic. Mirrors the MM 2ship melee-setup hook.
@@ -6584,8 +6614,9 @@ void func_8083A0F4(PlayState* play, Player* this) {
             this->interactRangeActor->parent = &this->actor;
             Player_SetupAction(play, this, Player_Action_WaitForCutscene, 0);
             this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-            if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
-                !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0)) {
+            if (interactRangeActor->params != BG_TOKI_SWD_TIME_PEDESTAL &&
+                (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0) ||
+                 !CVarGetInteger(CVAR_ENHANCEMENT("AdultMasks"), 0))) {
                 gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
             }
         } else {
@@ -7794,7 +7825,9 @@ s32 Player_ActionHandler_Roll(Player* this, PlayState* play) {
             return true;
         } else if (GameInteractor_Should(
                        VB_PLAYER_PUTAWAY_HELD_ITEM,
-                       (this->putAwayCooldownTimer == 0) && (this->heldItemAction >= PLAYER_IA_SWORD_MASTER), this)) {
+                       (this->putAwayCooldownTimer == 0) &&
+                           (this->heldItemAction >= PLAYER_IA_SWORD_MASTER || CustomItems_HasStowableHeldItem(this)),
+                       this)) {
             Player_UseItem(play, this, ITEM_NONE);
         } else if (GameInteractor_Should(VB_PLAYER_TOGGLE_NAVI, true, this)) {
             this->stateFlags2 ^= PLAYER_STATE2_NAVI_ACTIVE;
@@ -8578,8 +8611,14 @@ static struct_80854578 D_80854578[] = {
     { &gPlayerAnim_link_uma_right_up, -34.16f, 7.91f },
 };
 
+static struct_80854578 sYoungEponaMountInfo[] = {
+    { (LinkAnimationHeader*)gYoungEponaMountLeftAnim, 22.718237f, 2.3294117f },
+    { (LinkAnimationHeader*)gYoungEponaMountRightAnim, -22.0f, 1.9800001f },
+};
+
 s32 Player_ActionHandler_3(Player* this, PlayState* play) {
     EnHorse* rideActor = (EnHorse*)this->rideActor;
+    struct_80854578* mountInfo;
     f32 unk_04;
     f32 unk_08;
     f32 sp38;
@@ -8587,6 +8626,11 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
     s32 temp;
 
     if ((rideActor != NULL) && CHECK_BTN_ALL(sControlInput->press.button, BTN_A)) {
+        if ((rideActor->type == HORSE_YOUNG_EPONA) && !Horse_CanUseYoungEpona()) {
+            return 0;
+        }
+
+        mountInfo = (rideActor->type == HORSE_YOUNG_EPONA) ? sYoungEponaMountInfo : D_80854578;
         sp38 = Math_CosS(rideActor->actor.shape.rot.y);
         sp34 = Math_SinS(rideActor->actor.shape.rot.y);
 
@@ -8601,8 +8645,8 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
             temp = 1;
         }
 
-        unk_04 = D_80854578[temp].unk_04;
-        unk_08 = D_80854578[temp].unk_08;
+        unk_04 = mountInfo[temp].unk_04;
+        unk_08 = mountInfo[temp].unk_08;
         this->actor.world.pos.x =
             rideActor->actor.world.pos.x + rideActor->riderPos.x + ((unk_04 * sp38) + (unk_08 * sp34));
         this->actor.world.pos.z =
@@ -8612,7 +8656,7 @@ s32 Player_ActionHandler_3(Player* this, PlayState* play) {
         this->yaw = this->actor.shape.rot.y = MasterCycle_RideYaw(&rideActor->actor);
 
         Actor_MountHorse(play, this, &rideActor->actor);
-        Player_AnimPlayOnce(play, this, D_80854578[temp].anim);
+        Player_AnimPlayOnce(play, this, mountInfo[temp].anim);
         Player_StartAnimMovement(play, this, 0x9B);
         this->actor.parent = this->rideActor;
         func_80832224(this);
@@ -8855,7 +8899,8 @@ s32 Player_ActionHandler_2(Player* this, PlayState* play) {
                     this->heldItemAction = this->itemAction;
                     Player_SetupWaitForPutAway(play, this, func_8083A0F4);
 
-                    if (sp24 == PLAYER_IA_SWORD_MASTER) {
+                    if (sp24 == PLAYER_IA_SWORD_MASTER || (interactedActor->id == ACTOR_BG_TOKI_SWD &&
+                                                           interactedActor->params == BG_TOKI_SWD_TIME_PEDESTAL)) {
                         this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
                         Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
                     } else {
@@ -10493,6 +10538,8 @@ s32 func_808428D8(Player* this, PlayState* play) {
     this->meleeWeaponAnimation = PLAYER_MWA_STAB_1H;
     this->yaw = this->actor.shape.rot.y + this->upperLimbRot.y;
 
+    DinFireSword_RefreshDamage(play, this);
+
     if (!CVarGetInteger(CVAR_ENHANCEMENT("CrouchStabHammerFix"), 0)) {
         return 1;
     }
@@ -10509,8 +10556,8 @@ s32 func_808428D8(Player* this, PlayState* play) {
     }
 
     u32 flags = D_80854488[swordId][0];
-    func_80837918(this, 0, flags);
-    func_80837918(this, 1, flags);
+    func_80837918(play, this, 0, flags);
+    func_80837918(play, this, 1, flags);
 
     return 1;
 }
@@ -12198,17 +12245,36 @@ void func_80846720(PlayState* play, Player* this, s32 arg2) {
 static Vec3f D_808546F4 = { -1.0f, 69.0f, 20.0f };
 
 void Player_StartMode_TimeTravel(PlayState* play, Player* this) {
+    s32 isTimePedestalArrival;
+
     Player_SetupAction(play, this, Player_Action_8084E9AC, 0);
     this->stateFlags1 |= PLAYER_STATE1_IN_CUTSCENE;
-    Math_Vec3f_Copy(&this->actor.world.pos, &D_808546F4);
-    this->yaw = this->actor.shape.rot.y = -0x8000;
+    isTimePedestalArrival = BgTokiSwd_IsTimePedestalArrival(play, this);
+    if (!isTimePedestalArrival) {
+        Math_Vec3f_Copy(&this->actor.world.pos, &D_808546F4);
+        this->yaw = this->actor.shape.rot.y = -0x8000;
+    }
     LinkAnimation_Change(play, &this->skelAnime, this->ageProperties->unk_A0, 2.0f / 3.0f, 0.0f, 0.0f, ANIMMODE_ONCE,
                          0.0f);
     Player_StartAnimMovement(play, this, 0x28F);
     if (LINK_IS_ADULT) {
-        func_80846720(play, this, 0);
+        if (isTimePedestalArrival) {
+            this->heldItemId = ITEM_NONE;
+            this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
+            Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
+        } else {
+            func_80846720(play, this, 0);
+        }
     }
-    this->av2.actionVar2 = 20;
+    if (isTimePedestalArrival) {
+        // The native hold synchronizes this animation with the Temple of Time
+        // cutscene. A local pedestal reload has no matching cue, so begin its
+        // exit movement immediately instead of lingering on the first pose.
+        this->av1.actionVar1 = 1;
+        this->skelAnime.endFrame = this->skelAnime.animLength - 1.0f;
+    } else {
+        this->av2.actionVar2 = 20;
+    }
 }
 
 void Player_StartMode_Door(PlayState* play, Player* this) {
@@ -12335,6 +12401,8 @@ void Player_Init(Actor* thisx, PlayState* play2) {
     s32 respawnFlag;
     s32 respawnMode;
 
+    DinFireShield_Reset();
+    DinFireSword_Reset();
     play->shootingGalleryStatus = play->bombchuBowlingStatus = 0;
 
     play->playerInit = Player_InitCommon;
@@ -12454,7 +12522,9 @@ void Player_Init(Actor* thisx, PlayState* play2) {
         }
     }
 
-    if (GameInteractor_Should(VB_EXECUTE_PLAYER_STARTMODE_FUNC, true, startMode)) {
+    if (BgTokiSwd_BeginTimePedestalArrival(play, this)) {
+        Player_StartMode_TimeTravel(play, this);
+    } else if (GameInteractor_Should(VB_EXECUTE_PLAYER_STARTMODE_FUNC, true, startMode)) {
         sStartModeFuncs[startMode](play, this);
     }
 
@@ -12644,6 +12714,7 @@ void Player_UpdateInterface(PlayState* play, Player* this) {
                         // disappear) — the putaway is blocked in Player_ActionHandler_Roll,
                         // so don't advertise it on the A button either.
                     } else if (((this->heldItemAction >= PLAYER_IA_SWORD_MASTER) && !Player_IsFDHoldingSword(this)) ||
+                               CustomItems_HasStowableHeldItem(this) ||
                                ((this->stateFlags2 & PLAYER_STATE2_NAVI_ACTIVE) &&
                                 (play->actorCtx.targetCtx.arrowPointedActor == NULL))) {
                         doAction = DO_ACTION_PUTAWAY;
@@ -13451,6 +13522,7 @@ static f32 sFloorConveyorSpeeds[] = { 0.5f, 1.0f, 3.0f };
 void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
     s32 pad;
 
+    BgTokiSwd_UpdateTimePedestalFill(play, this);
     sControlInput = input;
 
     if (this->unk_A86 < 0) {
@@ -13810,8 +13882,18 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         Player_UpdateCamAndSeqModes(play, this);
 
         if (this->skelAnime.movementFlags & 8) {
-            AnimationContext_SetMoveActor(play, &this->actor, &this->skelAnime,
-                                          (this->skelAnime.movementFlags & 4) ? 1.0f : this->ageProperties->unk_08);
+            f32 movementYScale = (this->skelAnime.movementFlags & 4) ? 1.0f : this->ageProperties->unk_08;
+            f32 swordPullFloor;
+            if (BgTokiSwd_GetChildSwordPullFloor(play, this, &swordPullFloor)) {
+                // Keep the original reach and frame-87 sword transfer. The
+                // child's later animation root lift is ceremonial. With that
+                // lift disabled, the native and Young Din foot soles sit about
+                // 2-4 world units above the actor origin during the hold.
+                // Anchor close to the stump cap; the planted sword is unaffected.
+                Math_ApproachF(&this->actor.world.pos.y, swordPullFloor - 3.0f, 1.0f, 4.0f);
+                movementYScale = 0.0f;
+            }
+            AnimationContext_SetMoveActor(play, &this->actor, &this->skelAnime, movementYScale);
         }
 
         Player_UpdateShapeYaw(this, play);
@@ -13924,6 +14006,24 @@ static Vec3f D_80854838 = { 0.0f, 0.0f, -30.0f };
 
 s32 Player_UpdateNoclip(Player* this, PlayState* play);
 
+static void Player_DetachYoungEponaOnAgeChange(Player* this, PlayState* play) {
+    Actor* rideActor = this->rideActor;
+
+    if (LINK_IS_ADULT && (rideActor != NULL) && (rideActor->id == ACTOR_EN_HORSE) &&
+        (((EnHorse*)rideActor)->type == HORSE_YOUNG_EPONA)) {
+        if (this->stateFlags1 & PLAYER_STATE1_ON_HORSE) {
+            func_8083C0E8(this, play);
+            this->stateFlags1 &= ~PLAYER_STATE1_ON_HORSE;
+            this->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
+            this->actor.parent = NULL;
+            AREG(6) = 0;
+            Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), CAM_SET_NORMAL0);
+        }
+        rideActor->child = NULL;
+        this->rideActor = NULL;
+    }
+}
+
 void Player_Update(Actor* thisx, PlayState* play) {
     static Vec3f sDogSpawnPos;
     Player* this = (Player*)thisx;
@@ -13931,6 +14031,9 @@ void Player_Update(Actor* thisx, PlayState* play) {
     s32 pad;
     Input sp44;
     Actor* dog;
+
+    // Leave the horse action before the young actor is removed after a live age change.
+    Player_DetachYoungEponaOnAgeChange(this, play);
 
     // Skijer's NEI "Pause Play": after the MM quest page closes itself for a song, this pulls out
     // the ocarina and instant-plays it in-world (machine in z_kaleido_collect.c; idle no-op).
@@ -14245,6 +14348,8 @@ void Player_Update(Actor* thisx, PlayState* play) {
     }
 
     GameInteractor_ExecuteOnPlayerUpdate();
+    DinFireShield_Update(play, this);
+    DinFireSword_Update(play, this);
 
     // SW97 Shadow Medallion heart→magic exchange — must run before the spell
     // cast pipeline aborts on zero magic, so it lives outside that gate.
@@ -14318,6 +14423,8 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
     static s32 D_8085486C = 255;
 
     OPEN_DISPS(play->state.gfxCtx);
+
+    DinFireSword_BeginPlayerDraw(play, this);
 
     gSPSegment(POLY_OPA_DISP++, 0x0C, cullDList);
     gSPSegment(POLY_XLU_DISP++, 0x0C, cullDList);
@@ -14422,6 +14529,10 @@ void Player_DrawGameplay(PlayState* play, Player* this, s32 lod, Gfx* cullDList,
         if (CVarGetInteger(CVAR_GENERAL("FixIceTrapWithBunnyHood"), 1))
             Matrix_Pop();
     }
+
+    // Body, equipment and masks have consumed their inherited material colors.
+    // Draw the saved sword pose now, before effects change the actor matrix.
+    DinFireSword_DrawAfterPlayer(play, this);
 
     if (Player_IsHovering(this) && !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) &&
         !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && (this->hoverBootsTimer != 0)) {
@@ -14664,6 +14775,8 @@ void Player_Draw(Actor* thisx, PlayState* play2) {
 
 void Player_Destroy(Actor* thisx, PlayState* play) {
     Player* this = (Player*)thisx;
+
+    BgTokiSwd_EndTimePedestalArrival(play, this);
 
     Effect_Delete(play, this->meleeWeaponEffectIndex);
 
@@ -15361,8 +15474,10 @@ void Player_Action_8084BF1C(Player* this, PlayState* play) {
         phi_f2 = -1.0f;
     }
 
-    this->skelAnime.playSpeed = phi_f2 * phi_f0 + phi_f2 * CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0) +
-                                phi_f2 * (SpiritualStone_GoronClimbActive() ? 2 : 0);
+    this->skelAnime.playSpeed =
+        phi_f2 * phi_f0 +
+        phi_f2 * (IsClimbStatActive() ? GetClimbStatValue() : CVarGetInteger(CVAR_ENHANCEMENT("ClimbSpeed"), 0)) +
+        phi_f2 * (SpiritualStone_GoronClimbActive() ? 2 : 0);
 
     if (this->av2.actionVar2 >= 0) {
         if ((this->actor.wallPoly != NULL) && (this->actor.wallBgId != BGCHECK_SCENE)) {
@@ -15721,6 +15836,11 @@ void Player_Action_8084CC98(Player* this, PlayState* play) {
 
     if (this->av2.actionVar2 == 0) {
         if (LinkAnimation_Update(play, &this->skelAnime)) {
+            // The young mount clips have 38 frames, before the adult sit cues at 42/58.
+            if (rideActor->type == HORSE_YOUNG_EPONA) {
+                Actor_RequestHorseCameraSetting(play, this);
+                Player_PlaySfx(this, NA_SE_PL_SIT_ON_HORSE);
+            }
             this->skelAnime.animation = &gPlayerAnim_link_uma_wait_1;
             this->av2.actionVar2 = 99;
             return;
@@ -15902,7 +16022,9 @@ void Player_Action_8084D3E4(Player* this, PlayState* play) {
         this->actor.parent = NULL;
         AREG(6) = 0;
 
-        if (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) || (DREG(1) != 0)) {
+        if (rideActor->type == HORSE_YOUNG_EPONA) {
+            Horse_SaveYoungEpona(play, &rideActor->actor);
+        } else if (Flags_GetEventChkInf(EVENTCHKINF_EPONA_OBTAINED) || (DREG(1) != 0)) {
             gSaveContext.horseData.pos.x = rideActor->actor.world.pos.x;
             gSaveContext.horseData.pos.y = rideActor->actor.world.pos.y;
             gSaveContext.horseData.pos.z = rideActor->actor.world.pos.z;
@@ -16525,13 +16647,34 @@ static AnimSfxEntry D_808549F4[] = {
     { 0, -ANIMSFX_DATA(ANIMSFX_TYPE_LANDING, 15) },
 };
 
+static void Player_FinishTimePedestalArrival(PlayState* play, Player* this) {
+    this->heldItemId = ITEM_NONE;
+    this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_NONE);
+    Player_InitItemAction(play, this, PLAYER_IA_NONE);
+    Player_SetEquipmentData(play, this);
+    func_8083C0E8(this, play);
+    // Restore the floor-safe position after idle setup finishes native root movement.
+    BgTokiSwd_EndTimePedestalArrival(play, this);
+}
+
 void Player_Action_8084E9AC(Player* this, PlayState* play) {
+    BgTokiSwd_UpdateTimePedestalArrivalCamera(play, this);
+    s32 skipArrival = BgTokiSwd_SkipTimePedestalArrival(play, this);
+    if (skipArrival > 0) {
+        Player_FinishTimePedestalArrival(play, this);
+        return;
+    }
+    if (skipArrival < 0) {
+        return;
+    }
     if (LinkAnimation_Update(play, &this->skelAnime)) {
         if (this->av1.actionVar1 == 0) {
             if (DECR(this->av2.actionVar2) == 0) {
                 this->av1.actionVar1 = 1;
                 this->skelAnime.endFrame = this->skelAnime.animLength - 1.0f;
             }
+        } else if (BgTokiSwd_IsTimePedestalArrival(play, this)) {
+            Player_FinishTimePedestalArrival(play, this);
         } else {
             func_8083C0E8(this, play);
         }
@@ -18222,8 +18365,16 @@ static LinkAnimationHeader* D_80855190[] = {
 static Vec3f D_80855198 = { -1.0f, 70.0f, 20.0f };
 
 void func_808519EC(PlayState* play, Player* this, CsCmdActorCue* cue) {
-    Math_Vec3f_Copy(&this->actor.world.pos, &D_80855198);
-    this->actor.shape.rot.y = -0x8000;
+    if (!BgTokiSwd_RelocateTimePedestalPlayer(play, this)) {
+        Math_Vec3f_Copy(&this->actor.world.pos, &D_80855198);
+        this->actor.shape.rot.y = -0x8000;
+    } else if (LINK_IS_ADULT) {
+        // Display the ceremonial sword even when it is not owned. The cutscene
+        // item action changes only the live player model, never save equipment.
+        this->heldItemId = ITEM_NONE;
+        this->nextModelGroup = Player_ActionToModelGroup(this, PLAYER_IA_SWORD_CS);
+        Player_InitItemAction(play, this, PLAYER_IA_SWORD_CS);
+    }
     Player_AnimPlayOnceAdjusted(play, this, this->ageProperties->unk_9C);
     Player_StartAnimMovement(play, this, 0x28F);
 }

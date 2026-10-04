@@ -1,8 +1,10 @@
+#include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_timegate.c - Time Gate draw functions
  *
- * Draws the time gate item in Link's hand during casting
- * and the blue warp portal effect on the ground.
+ * Keeps the item model hidden during activation and draws the blue warp portal
+ * effect on the ground.
  */
 
 #include "z64.h"
@@ -10,7 +12,6 @@
 #include "../logic/item_time_gate.h"
 #include "macros.h"
 #include "functions.h"
-#include "objects/object_warp1/object_warp1.h"
 
 // Time-gate model now in soh.o2r (object_nei_time_gate). Cached gated load.
 extern u8 ResourceMgr_FileExists(const char* resName);
@@ -29,16 +30,16 @@ static Gfx* TimeGate_GetDL(void) {
     return sDL;
 }
 
-// Portal animation state (local to avoid cluttering CustomItemState)
-static f32 sPortalScrollOffset = 0.0f;
-
 /**
- * Draw the time gate item in Link's hand during casting animation
+ * Draw the item only outside its activation sequence.
  */
 void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
-    if (!tgItemVisible)
+    // Casting sets this visibility flag as the portal-start latch and retains
+    // it through the confirmation dialogue. Keep that timing intact, but hide
+    // the physical model for the whole activation, including cancel/exit.
+    if (tgActive || !tgItemVisible)
         return;
-    if (TimeGate_GetDL() == NULL)
+    if (!NeiHeld_HasResources(NEI_HELD_PATH("time_gate"), NULL) && TimeGate_GetDL() == NULL)
         return;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -63,84 +64,16 @@ void CustomItems_DrawTimeGate(Player* player, PlayState* play) {
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, TimeGate_GetDL());
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("time_gate"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, TimeGate_GetDL());
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-/**
- * Draw the blue warp portal on the ground
- * Based on DoorWarp1_DrawWarp but simplified for our use case
- */
+/** Draw temporal energy using the existing portal growth/fade state. */
 void CustomItems_DrawTimeGatePortal(Player* player, PlayState* play) {
     if (!tgPortalActive || tgPortalAlpha <= 0.0f)
         return;
-
-    OPEN_DISPS(play->state.gfxCtx);
-
-    // Update scroll animation
-    sPortalScrollOffset += 15.0f;
-    if (sPortalScrollOffset > 512.0f)
-        sPortalScrollOffset -= 512.0f;
-
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-
-    // Blue portal colors (time-themed, slightly purple tint)
-    u8 alpha = (u8)tgPortalAlpha;
-    gDPSetPrimColor(POLY_XLU_DISP++, 0x00, 0x80, 180, 200, 255, alpha);
-    gDPSetEnvColor(POLY_XLU_DISP++, 50, 100, 255, 255);
-
-    gDPSetColorDither(POLY_XLU_DISP++, G_CD_DISABLE);
-    gDPSetColorDither(POLY_XLU_DISP++, G_AD_NOTPATTERN | G_CD_MAGICSQ);
-
-    // Position portal at Link's feet
-    Vec3f portalPos = player->actor.world.pos;
-    portalPos.y += 1.0f; // Slightly above ground
-
-    Matrix_Translate(portalPos.x, portalPos.y, portalPos.z, MTXMODE_NEW);
-
-    gSPSegment(POLY_XLU_DISP++, 0x0A, MATRIX_NEWMTX(play->state.gfxCtx));
-    Matrix_Push();
-
-    // Setup texture scrolling
-    u32 scrollTime = (u32)sPortalScrollOffset;
-    gSPSegment(POLY_XLU_DISP++, 0x08,
-               Gfx_TwoTexScroll(play->state.gfxCtx, 0, scrollTime & 0xFF, -((s16)(scrollTime * 2) & 511), 0x100, 0x100,
-                                1, scrollTime & 0xFF, -((s16)(scrollTime * 2) & 511), 0x100, 0x100));
-
-    // Scale the portal with grow effect
-    f32 baseScale = 0.8f * tgPortalScale;   // Slightly smaller than boss warp
-    f32 heightScale = 0.3f * tgPortalScale; // Lower height
-
-    Matrix_Translate(0.0f, heightScale * 230.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(baseScale, 1.0f, baseScale, MTXMODE_APPLY);
-
-    gSPSegment(POLY_XLU_DISP++, 0x09, MATRIX_NEWMTX(play->state.gfxCtx));
-    gSPDisplayList(POLY_XLU_DISP++, gWarpPortalDL);
-
-    Matrix_Pop();
-
-    // Draw light rays (inner part) with slightly different scroll
-    if (tgPortalAlpha > 128.0f) {
-        f32 rayAlpha = (tgPortalAlpha - 128.0f) * 2.0f;
-        if (rayAlpha > 255.0f)
-            rayAlpha = 255.0f;
-
-        gDPSetPrimColor(POLY_XLU_DISP++, 0x00, 0x80, 200, 220, 255, (u8)rayAlpha);
-        gDPSetEnvColor(POLY_XLU_DISP++, 100, 150, 255, 255);
-
-        u32 scrollTime2 = scrollTime * 2;
-        gSPSegment(POLY_XLU_DISP++, 0x08,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, scrollTime2 & 0xFF, -((s16)scrollTime & 511), 0x100, 0x100,
-                                    1, scrollTime2 & 0xFF, -((s16)scrollTime & 511), 0x100, 0x100));
-
-        f32 innerScale = 0.6f * tgPortalScale;
-        Matrix_Translate(0.0f, heightScale * 60.0f, 0.0f, MTXMODE_APPLY);
-        Matrix_Scale(innerScale, 1.0f, innerScale, MTXMODE_APPLY);
-
-        gSPSegment(POLY_XLU_DISP++, 0x09, MATRIX_NEWMTX(play->state.gfxCtx));
-        gSPDisplayList(POLY_XLU_DISP++, gWarpPortalDL);
-    }
-
-    CLOSE_DISPS(play->state.gfxCtx);
+    NeiUsedMagic_DrawPortal(play, player, tgPortalScale, tgPortalAlpha);
 }

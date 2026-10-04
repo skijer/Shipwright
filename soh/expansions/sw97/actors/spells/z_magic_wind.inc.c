@@ -9,6 +9,8 @@
 
 #include "expansions/sw97/sw97_compat.h"
 #include "expansions/sw97/sw97_config.h"
+#include "sw97_spell_appearance.h"
+#include "overlays/effects/ovl_Effect_Ss_Dust/z_eff_ss_dust.h"
 #include <math.h>
 
 // Adult Link's "rakkatyu" (falling) animation — used as Link's pose while
@@ -32,6 +34,8 @@ static LinkAnimationHeader* MagicWind_LoadFallAnim(void) {
     }
     return cached;
 }
+
+static const char ALIGN_ASSET(2) sMedallionForestTex[] = "__OTR__custom/medallion_magic/spells/forest/sTex";
 
 // ============================================================
 // Struct (merged from z_magic_wind.h)
@@ -672,7 +676,7 @@ static void MagicWind_TornadoDamageTick(PlayState* play, Vec3f* c) {
 //   - Inner core chimney (vertical column of rising particles).
 //   - Vertical wind streaks (long-lived particles with strong upward velocity)
 //     — these act as the "EffectBlure-style" upward wind support.
-// func_8002836C is the same particle spawner used by GustJar VFX.
+// Keep the func_8002836C dust behavior; only this tornado gets the private texture tag.
 static void MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
     Color_RGBA8 prim = { 220, 250, 255, 220 };
     Color_RGBA8 env = { 150, 200, 230, 140 };
@@ -692,7 +696,7 @@ static void MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
             5.0f + Rand_ZeroFloat(4.0f),
             cosf(angle) * 12.0f,
         };
-        func_8002836C(play, &pos, &vel, &accel, &prim, &env, 200, 30, 16);
+        EffectSsDust_Spawn(play, EFFECT_SS_DUST_DRAW_SW97_FOREST, &pos, &vel, &accel, &prim, &env, 200, 30, 16, 0);
     }
 
     // Inner core — vertical chimney with strong upward push.
@@ -709,7 +713,7 @@ static void MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
             14.0f + Rand_ZeroFloat(6.0f),
             cosf(angle) * 6.0f,
         };
-        func_8002836C(play, &pos, &vel, &accel, &prim, &env, 200, 30, 18);
+        EffectSsDust_Spawn(play, EFFECT_SS_DUST_DRAW_SW97_FOREST, &pos, &vel, &accel, &prim, &env, 200, 30, 18, 0);
     }
 
     // Vertical wind streaks — long-lived, fast upward, slight outward drift
@@ -732,7 +736,8 @@ static void MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
             sinf(angle) * 1.5f,
         };
         // Longer lifetime (60 vs 30) + bigger scale (22) → streak look.
-        func_8002836C(play, &pos, &vel, &streakAccel, &streakPrim, &streakEnv, 220, 60, 22);
+        EffectSsDust_Spawn(play, EFFECT_SS_DUST_DRAW_SW97_FOREST, &pos, &vel, &streakAccel, &streakPrim, &streakEnv,
+                           220, 60, 22, 0);
     }
 }
 #define WIND_PUSH_RADIUS 400.0f
@@ -964,22 +969,40 @@ void MagicWind_Update(Actor* thisx, PlayState* play) {
 
 s32 MagicWind_OverrideLimbDraw(PlayState* play, SkelAnimeCurve* skelCurve, s32 limbIndex, void* thisx) {
     MagicWind* this = THIS;
+    Color_RGB8 primary = { 255, 255, 170 };
+    Color_RGB8 secondary = { limbIndex == 1 ? 150 : 0, limbIndex == 1 ? 255 : 150, 0 };
+    const u8 primaryChanged = CVarGetInteger(CVAR_COSMETIC("Magic.MedallionForestPrimary.Changed"), 0);
+    const u8 secondaryChanged = CVarGetInteger(CVAR_COSMETIC("Magic.MedallionForestSecondary.Changed"), 0);
+    if (primaryChanged) {
+        primary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionForestPrimary.Value"), primary);
+    }
+    if (secondaryChanged) {
+        secondary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionForestSecondary.Value"), secondary);
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
     if (limbIndex == 1) {
-        gSPSegment(POLY_XLU_DISP++, 8,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, (play->state.frames * 9) & 0xFF,
-                                    0xFF - ((play->state.frames * 0xF) & 0xFF), 0x40, 0x40, 1,
-                                    (play->state.frames * 0xF) & 0xFF, 0xFF - ((play->state.frames * 0x1E) & 0xFF),
-                                    0x40, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 8,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, (play->state.frames * 9) & 0xFF,
+                                                            0xFF - ((play->state.frames * 0xF) & 0xFF), 0x40, 0x40, 1,
+                                                            (play->state.frames * 0xF) & 0xFF,
+                                                            0xFF - ((play->state.frames * 0x1E) & 0xFF), 0x40, 0x40),
+                                           sMedallionForestTex, sMedallionForestTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
 
     } else if (limbIndex == 2) {
-        gSPSegment(POLY_XLU_DISP++, 9,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, (play->state.frames * 3) & 0xFF,
-                                    0xFF - ((play->state.frames * 5) & 0xFF), 0x40, 0x40, 1,
-                                    (play->state.frames * 6) & 0xFF, 0xFF - ((play->state.frames * 0xA) & 0xFF), 0x40,
-                                    0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 9,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, (play->state.frames * 3) & 0xFF,
+                                                            0xFF - ((play->state.frames * 5) & 0xFF), 0x40, 0x40, 1,
+                                                            (play->state.frames * 6) & 0xFF,
+                                                            0xFF - ((play->state.frames * 0xA) & 0xFF), 0x40, 0x40),
+                                           sMedallionForestTex, sMedallionForestTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
     }
 
     CLOSE_DISPS(play->state.gfxCtx);

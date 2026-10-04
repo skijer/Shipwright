@@ -1,4 +1,5 @@
 #include "global.h"
+#include "mods/nei_save.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "textures/icon_item_static/icon_item_static.h"
 #include "textures/icon_item_24_static/icon_item_24_static.h"
@@ -232,6 +233,13 @@ u8 Inventory_DeleteEquipment(PlayState* play, s16 equipment) {
 
     if (equipValue) {
         equipValue >>= gEquipShifts[equipment];
+
+        if (equipment == EQUIP_TYPE_SWORD && equipValue == EQUIP_VALUE_SWORD_MASTER &&
+            CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER)) {
+            // Ganon's temporary sword loss must retain the native load repair,
+            // including when ownership arrived through a cross-game sync.
+            Nei_Save()->timePedestalNoMasterSwordRepair = 0;
+        }
 
         gSaveContext.equips.equipment &= gEquipNegMasks[equipment];
         gSaveContext.inventory.equipment ^= OWNED_EQUIP_FLAG(equipment, equipValue - 1);

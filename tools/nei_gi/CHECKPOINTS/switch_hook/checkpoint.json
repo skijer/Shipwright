@@ -1,0 +1,28 @@
+{
+  "resource_count": 8,
+  "vertex_records": 3868,
+  "vertex_loads": 128,
+  "slug": "switch_hook",
+  "name": "Switch Hook",
+  "entry": "objects/nei_gi_redesign/switch_hook/gi_dl",
+  "draw_scale": 0.01,
+  "matrix_scale": 5.375,
+  "triangles": 3184,
+  "bounds_author": [
+    [
+      -39.875,
+      -48.75,
+      -7.8125
+    ],
+    [
+      21.875,
+      44.625,
+      7.8125
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Open opposing crescent jaws, violet focus and grip, flexible segmented neck."
+  ],
+  "runtime_tested": false
+}

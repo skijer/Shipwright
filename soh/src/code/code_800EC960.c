@@ -6,6 +6,8 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/savestate_serialize.h"
+#include "concurrent_weather_audio.h"
+#include "night_bgm_bridge.h"
 
 // TODO: can these macros be shared between files? code_800F9280 seems to use
 // versions without any casts...
@@ -2786,6 +2788,7 @@ u8 sAudioBlkChgBgmWork[2] = { 0 };
 u8 sAudioBlkChgBgmSel = 0;
 char sBoolStrs[3][5] = { "OFF", "ON", "STBY" };
 u8 sAudioNatureFailed = false;
+ConcurrentWeatherAudioState sConcurrentWeatherAudioState = { 0 };
 u8 sPeakNumNotes = 0;
 
 void AudioDebug_SetInput(void) {
@@ -5205,23 +5208,24 @@ void func_800F5C2C(void) {
 void Audio_PlayFanfare(u16 seqId) {
     u16 curSeqId;
     u32 outNumFonts;
-    u8* curFontId;
-    u8* requestedFontId;
+    s32 curFontId;
+    s32* requestedFontId;
 
     curSeqId = func_800FA0B4(SEQ_PLAYER_FANFARE);
 
-    // Although seqIds are u16, there is no fanfare that is above 0xFF
-    // Sometimes the game will add 0x900 to a requested fanfare ID
-    // The `& 0xFF` here is to strip off this 0x900 and get the original fanfare ID
-    // when getting the sound font data for the sequence
-    curFontId = func_800E5E84(curSeqId & 0xFF, &outNumFonts);
-    requestedFontId = func_800E5E84(seqId & 0xFF, &outNumFonts);
+    // Native requests carry flags such as 0x900; MM/custom requests prime a
+    // full-width ID separately. Compare the actual current bank to the exact
+    // requested bank without consuming that pending start or resolving twice.
+    curFontId = gAudioContext.seqPlayers[SEQ_PLAYER_FANFARE].defaultFont;
+    u16 requestedSeqId = gAudioContext.seqReplaced[SEQ_PLAYER_FANFARE] ? gAudioContext.seqToPlay[SEQ_PLAYER_FANFARE]
+                                                                       : AudioEditor_GetReplacementSeq(seqId & 0xFF);
+    requestedFontId = func_800E5E84(requestedSeqId, &outNumFonts);
 
-    if (!curFontId || !requestedFontId) {
+    if (!requestedFontId) {
         // disable BGM, we're about to null deref!
         sFanfareStartTimer = 1;
     } else {
-        if ((curSeqId == NA_BGM_DISABLED) || (*curFontId == *requestedFontId)) {
+        if ((curSeqId == NA_BGM_DISABLED) || (outNumFonts == 1 && curFontId == *requestedFontId)) {
             sFanfareStartTimer = 1;
         } else {
             sFanfareStartTimer = 5;
@@ -5285,9 +5289,12 @@ void Audio_SetSequenceMode(u8 seqMode) {
             seqMode = SEQ_MODE_IGNORE;
         }
 
-        if ((seqId == NA_BGM_DISABLED) || (Audio_GetSeqFlags((u8)(seqId & 0xFF)) & 1) ||
+        if ((seqId == NA_BGM_DISABLED) || (Audio_GetSeqFlags((u8)(seqId & 0xFF)) & 1) || Audio_IsNightBgmActive() ||
             ((sPrevSeqMode & 0x7F) == SEQ_MODE_ENEMY)) {
-            if (seqMode != (sPrevSeqMode & 0x7F)) {
+            // FIELD_LOGIC's untagged enemy mode has no SUB overlay. When
+            // night takes over mid-combat, enter the ordinary overlay once.
+            if (seqMode != (sPrevSeqMode & 0x7F) ||
+                (Audio_IsNightBgmActive() && sPrevSeqMode == SEQ_MODE_ENEMY && seqMode == SEQ_MODE_ENEMY)) {
                 if (seqMode == SEQ_MODE_ENEMY) {
                     // Start playing enemy bgm
                     if (gActiveSeqs[SEQ_PLAYER_BGM_SUB].volScales[1] - sAudioEnemyVol < 0) {
@@ -5646,6 +5653,8 @@ void func_800F6C34(void) {
     sFanfareStartTimer = 0;
     D_8016B9F3 = 1;
     sMalonSingingDisabled = 0;
+    sConcurrentWeatherAudioState.natureRainEnabled = false;
+    sConcurrentWeatherAudioState.natureLightningEnabled = false;
 }
 
 void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
@@ -5657,6 +5666,9 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
         sAudioNatureFailed = true;
         return;
     }
+
+    ConcurrentWeatherAudio_TrackNatureChannel(&sConcurrentWeatherAudioState, channelIdxRange, port, val,
+                                              NATURE_CHANNEL_RAIN, NATURE_CHANNEL_LIGHTNING, CHANNEL_IO_PORT_1);
 
     // channelIdxRange = 01 on port 1
     if (((channelIdxRange << 8) + port) == ((NATURE_CHANNEL_CRITTER_0 << 8) + CHANNEL_IO_PORT_1)) {
@@ -5675,6 +5687,16 @@ void Audio_SetNatureAmbienceChannelIO(u8 channelIdxRange, u8 port, u8 val) {
     for (channelIdx = firstChannelIdx; channelIdx <= lastChannelIdx; channelIdx++) {
         Audio_SeqCmd8(SEQ_PLAYER_BGM_MAIN, port, channelIdx, val);
     }
+}
+
+u8 Audio_IsNatureRainEnabled(void) {
+    return !ConcurrentWeatherAudio_ShouldPlayRainSfx(&sConcurrentWeatherAudioState, func_800FA0B4(SEQ_PLAYER_BGM_MAIN),
+                                                     NA_BGM_NATURE_AMBIENCE);
+}
+
+u8 Audio_IsNatureLightningEnabled(void) {
+    return !ConcurrentWeatherAudio_ShouldPlayThunderSfx(&sConcurrentWeatherAudioState,
+                                                        func_800FA0B4(SEQ_PLAYER_BGM_MAIN), NA_BGM_NATURE_AMBIENCE);
 }
 
 void Audio_StartNatureAmbienceSequence(u16 playerIO, u16 channelMask) {

@@ -1,0 +1,28 @@
+{
+  "resource_count": 6,
+  "vertex_records": 3636,
+  "vertex_loads": 119,
+  "slug": "gust_jar",
+  "name": "Gust Jar / gameplay gust_jar",
+  "entry": "objects/nei_held_redesign/gust_jar/gi_dl",
+  "draw_scale": 0.22,
+  "matrix_scale": 0.0625,
+  "triangles": 3864,
+  "bounds_author": [
+    [
+      -49.0,
+      -45.0,
+      -34.0
+    ],
+    [
+      49.0,
+      50.0625,
+      34.0
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Author Y is the open mouth; native 90-degree aim rotation retained. Midpoint of paired loop handles at hand center. Separate wind band preserves direction/charge feedback."
+  ],
+  "runtime_tested": false
+}

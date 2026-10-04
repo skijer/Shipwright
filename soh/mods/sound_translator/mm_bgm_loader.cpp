@@ -51,7 +51,7 @@ std::unordered_map<std::string, uint16_t> sNameToId;
 // the ROM (audio->fontIndices[i][k]). Those indices reference MM's font table
 // — not SoH's. Without this remap, an MM seq that says "fonts[0] = 25" would
 // look up fontMap[25] in SoH and get OOT's Soundfont_25 (or NULL if absent).
-std::unordered_map<uint8_t, uint8_t> sMmFontIndexMap;
+std::unordered_map<uint8_t, int32_t> sMmFontIndexMap;
 
 // Strip "audio/sequences/" prefix and any extension so the name is just the
 // raw sequence basename (e.g. "Sequence_83").
@@ -133,18 +133,21 @@ void RegisterMmFonts() {
                 MMBGM_LOG("[MmBgm] Failed to grow fontMap for '%s'", path);
                 continue;
             }
-            sf->fntIndex = (u8)sohIdx;
             // CRITICAL: populate gAudioContext.soundFonts[sohIdx] so the audio
             // synth thread can resolve instruments[]/drums[]/soundEffects[]
             // without going OOB. Without this, mixer.c:103 aLoadBufferImpl
             // memcpy's from a garbage sampleAddr → access violation crash.
-            AudioLoad_PopulateMmFontMeta(sohIdx, sf);
             registered++;
         } else {
             aliased++;
         }
 
-        sMmFontIndexMap[mmOriginalIdx] = (u8)sohIdx;
+        // Reloading an aliased path invalidates the previous metadata pointers
+        // just as it does for a newly registered slot.
+        sf->fntIndex = sohIdx;
+        AudioLoad_PopulateMmFontMeta(sohIdx, sf);
+
+        sMmFontIndexMap[mmOriginalIdx] = sohIdx;
         MMBGM_LOG("[MmBgm] DIAG: font '%s' MM_orig=%u -> SoH=%d", path, mmOriginalIdx, sohIdx);
     }
 
@@ -230,7 +233,7 @@ void RegisterMmSequencesInternal() {
         //                        AudioExporter.cpp:370-371)
         if (sDat->numFonts == -1) {
             uint64_t crc;
-            memcpy(&crc, sDat->fonts, sizeof(uint64_t));
+            crc = AudioSequence_GetFontHash(sDat);
             const char* res = ResourceGetNameByCrc(crc);
             if (res == nullptr) {
                 MMBGM_LOG("[MmBgm] Could not find soundfont (CRC 0x%llx) for sequence '%s'", (unsigned long long)crc,
@@ -244,6 +247,7 @@ void RegisterMmSequencesInternal() {
             }
             memset(&sDat->fonts[0], 0, sizeof(sDat->fonts));
             sDat->fonts[0] = sf->fntIndex;
+            sDat->resolvedFont = sf->fntIndex;
             sDat->numFonts = 1;
         } else if (sDat->numFonts > 0) {
             // Remap each MM ROM font index to SoH's fontMap slot.
@@ -271,7 +275,7 @@ void RegisterMmSequencesInternal() {
             if (strstr(path, "BremenMarch") != nullptr || strstr(path, "GetSong") != nullptr ||
                 strstr(path, "LearnedNewSong") != nullptr || strstr(path, "_52") != nullptr ||
                 strstr(path, "_53") != nullptr || strstr(path, "Kamaro") != nullptr || strstr(path, "_71") != nullptr) {
-                u8 finalFont = sDat->fonts[0];
+                s32 finalFont = sDat->fonts[0];
                 const char* fontPath =
                     (finalFont < fontMapSize && fontMap[finalFont] != nullptr) ? fontMap[finalFont] : "(invalid)";
                 MMBGM_LOG("[MmBgm] DIAG: '%s' will play with fontMap[%u]='%s'", path, finalFont, fontPath);

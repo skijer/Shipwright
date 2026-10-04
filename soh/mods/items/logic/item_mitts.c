@@ -61,12 +61,12 @@ static void Mitts_OnEquip(PlayState* play, Player* p) {
     if (ItemMagic_HasEnough(play, MITTS_MP_COST)) {
         Mitts_Activate(p, play);
     }
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_MOGMA_MITTS);
 }
 
 static void Mitts_OnUnequip(PlayState* play, Player* p) {
     Mitts_Deactivate();
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_MOGMA_MITTS);
 }
 
 // ============================================================================

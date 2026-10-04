@@ -9,6 +9,7 @@
 #include "soh/SaveManager.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/FleetShipCombo/FleetShipCombo.h"
+#include "mods/nei_save.h"
 
 #define NUM_DUNGEONS 8
 #define NUM_COWS 10
@@ -202,12 +203,15 @@ void Sram_OpenSave() {
     }
 
     if (LINK_AGE_IN_YEARS == YEARS_ADULT && !CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER)) {
-        if (!IS_RANDO || !Randomizer_GetSettingValue(RSK_SHUFFLE_MASTER_SWORD)) {
+        if (Nei_Save()->timePedestalNoMasterSwordRepair != 1 &&
+            (!IS_RANDO || !Randomizer_GetSettingValue(RSK_SHUFFLE_MASTER_SWORD))) {
             gSaveContext.inventory.equipment |= OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER);
             gSaveContext.equips.buttonItems[0] = ITEM_SWORD_MASTER;
             gSaveContext.equips.equipment &= ~(0xF << (EQUIP_TYPE_SWORD * 4));
             gSaveContext.equips.equipment |= EQUIP_VALUE_SWORD_MASTER << (EQUIP_TYPE_SWORD * 4);
         }
+    } else if (CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_MASTER)) {
+        Nei_Save()->timePedestalNoMasterSwordRepair = 0;
     }
 
     if (GameInteractor_Should(VB_REVERT_SPOILING_ITEMS, true)) {

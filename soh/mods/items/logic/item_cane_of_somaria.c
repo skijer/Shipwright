@@ -453,7 +453,7 @@ static void Somaria_OnEquip(PlayState* play, Player* p) {
     shSomariaAnimTimer = 0;
     caneHoldTimer = 0;
     canePreviewValid = 0;
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_CANE_OF_SOMARIA);
 }
 
 static void Somaria_OnUnequip(PlayState* play, Player* p) {
@@ -473,7 +473,7 @@ static void Somaria_OnUnequip(PlayState* play, Player* p) {
     Pacci_DropUltrahand();
     Pacci_LiftCancel();
     caneSelectTimer = 0;
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_CANE_OF_SOMARIA);
 }
 
 // ============================================================================

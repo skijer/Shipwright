@@ -1,5 +1,6 @@
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "soh/ResourceManagerHelpers.h"
 
 void AudioHeap_InitSampleCaches(u32 persistentSize, u32 temporarySize);
 SampleCacheEntry* AudioHeap_AllocTemporarySampleCacheEntry(size_t size);
@@ -206,6 +207,15 @@ void AudioHeap_ResetPool(AudioAllocPool* pool) {
     pool->cur = pool->start;
 }
 
+static bool AudioHeap_IsSequenceInUse(s32 id) {
+    for (s32 i = 0; i < gAudioContext.audioBufferParameters.numSequencePlayers; ++i) {
+        if (gAudioContext.seqPlayers[i].enabled && gAudioContext.seqPlayers[i].seqId == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void AudioHeap_PopCache(s32 tableType) {
     AudioCache* loadedPool;
     AudioAllocPool* persistentPool;
@@ -232,6 +242,9 @@ void AudioHeap_PopCache(s32 tableType) {
     persistentPool = &persistent->pool;
 
     if (persistent->numEntries == 0) {
+        return;
+    }
+    if (tableType == SEQUENCE_TABLE && AudioHeap_IsSequenceInUse(persistent->entries[persistent->numEntries - 1].id)) {
         return;
     }
 
@@ -462,6 +475,25 @@ void* AudioHeap_AllocCached(s32 tableType, ptrdiff_t size, s32 cache, s32 id) {
 
         side = tp->nextSide;
 
+        if (tableType == SEQUENCE_TABLE) {
+            // A full cache is not permission to overwrite executing bytecode.
+            // Refuse the new load if both slots (or overlapping bytes) are live.
+            if (AudioHeap_IsSequenceInUse(tp->entries[side].id)) {
+                side ^= 1;
+                if ((tp->entries[side].id >= 0 && table[tp->entries[side].id] == 1) ||
+                    AudioHeap_IsSequenceInUse(tp->entries[side].id)) {
+                    return NULL;
+                }
+            }
+            if ((side == 0 && pool->start + size > tp->entries[1].ptr &&
+                 AudioHeap_IsSequenceInUse(tp->entries[1].id)) ||
+                (side == 1 && (u8*)((uintptr_t)(pool->start + pool->size - size) & ~0xF) < pool->cur &&
+                 AudioHeap_IsSequenceInUse(tp->entries[0].id))) {
+                return NULL;
+            }
+            tp->nextSide = side;
+        }
+
         if (tp->entries[side].id != -1) {
             if (tableType == SAMPLE_TABLE) {
                 AudioHeap_DiscardSampleBank(tp->entries[side].id);
@@ -534,6 +566,9 @@ void* AudioHeap_AllocCached(s32 tableType, ptrdiff_t size, s32 cache, s32 id) {
         return ret;
     }
 
+    if (loadedPool->persistent.numEntries >= ARRAY_COUNT(loadedPool->persistent.entries)) {
+        return cache == CACHE_EITHER ? AudioHeap_AllocCached(tableType, size, CACHE_TEMPORARY, id) : NULL;
+    }
     mem = AudioHeap_Alloc(&loadedPool->persistent.pool, size);
     loadedPool->persistent.entries[loadedPool->persistent.numEntries].ptr = mem;
 
@@ -997,6 +1032,12 @@ void AudioHeap_Init(void) {
 void* AudioHeap_SearchPermanentCache(s32 tableType, s32 id) {
     s32 i;
 
+    // Host soundfonts are resource-owned, not copies in the native fixed pool.
+    if (tableType == FONT_TABLE && id >= 0 && (size_t)id < fontMapSize && fontMap[id] != NULL &&
+        gAudioContext.fontLoadStatus[id] == 5) {
+        return ResourceMgr_LoadAudioSoundFontByName(fontMap[id]);
+    }
+
     for (i = 0; i < gAudioContext.permanentPool.count; i++) {
         if (gAudioContext.permanentCache[i].tableType == tableType && gAudioContext.permanentCache[i].id == id) {
             return gAudioContext.permanentCache[i].ptr;
@@ -1010,12 +1051,15 @@ void* AudioHeap_AllocPermanent(s32 tableType, s32 id, size_t size) {
     s32 index;
 
     index = gAudioContext.permanentPool.count;
+    if (index < 0 || (size_t)index >= ARRAY_COUNT(gAudioContext.permanentCache)) {
+        return NULL;
+    }
 
     ret = AudioHeap_Alloc(&gAudioContext.permanentPool, size);
-    gAudioContext.permanentCache[index].ptr = ret;
     if (ret == NULL) {
         return NULL;
     }
+    gAudioContext.permanentCache[index].ptr = ret;
     gAudioContext.permanentCache[index].tableType = tableType;
     gAudioContext.permanentCache[index].id = id;
     gAudioContext.permanentCache[index].size = size;

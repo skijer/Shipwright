@@ -1,0 +1,47 @@
+{
+  "ice_fracture": {
+    "source_entry": "alt/custom/medallion_magic/spells/water/sTex",
+    "source_sha256": "a3212f19d29f33b645950d3dc8bc92f34943d9a4c1f96080386b38a1edf524f3",
+    "resource_sha256": "6576cbb499f621e4bf18a0eef0e35d6c4ba3b678404e3dd6daf8c17902d56d92",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "resource_kind": 1,
+    "resource_flags": 1
+  },
+  "fire_wisp": {
+    "source_entry": "alt/custom/medallion_magic/arrows/spirit/s1Tex",
+    "source_sha256": "dc23db31e391b32adf661cc4f765ed2f401295f6f2476c6214ef096af5df3e63",
+    "resource_sha256": "43e978dfc1b57d4816e55aa1fc28201a055835cdceb69541b9f9411ba30f38d9",
+    "pixels": [
+      512,
+      1024
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "resource_kind": 1,
+    "resource_flags": 1
+  },
+  "light_rays": {
+    "source_entry": "alt/overlays/ovl_Arrow_Light/s1Tex",
+    "source_sha256": "5acee1d43e62f5c143e6b240d362ffeb9602b6fcf761e5e98d43b2dc0b229485",
+    "resource_sha256": "a07c9777fcbc880f9a35d228fedcff46b2fcc8fa62ee1f9187817caf4c565749",
+    "pixels": [
+      512,
+      1024
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "resource_kind": 1,
+    "resource_flags": 1
+  }
+}

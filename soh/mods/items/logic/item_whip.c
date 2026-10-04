@@ -268,7 +268,30 @@ static void Whip_Stop(Player* p, PlayState* play) {
     p->actor.gravity = -1.0f;
     // Stop looping swing sound
     Audio_StopSfxById(WHIP_SFX_SWING);
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_WHIP);
+}
+
+// Use the native forward reach instead of freezing the boomerang throw's
+// downward follow-through. The native upper-body pitch path also works with
+// child/adult rigs and alternate player geometry; no model-specific offsets.
+extern void ExtPlayer_CopyUpperBody(PlayState* play, Player* player);
+
+static void Whip_ApplyLashAim(Player* p) {
+    p->upperLimbRot.x = whipExtendPitch;
+    p->upperLimbRot.y = 0;
+    p->upperLimbRot.z = 0;
+    p->upperLimbYawSecondary = 0;
+    p->unk_6AE_rotFlags |= UNK6AE_ROT_UPPER_X | UNK6AE_ROT_UPPER_Y | UNK6AE_ROT_UPPER_Z;
+}
+
+static void Whip_BeginLashPose(Player* p, PlayState* play) {
+    LinkAnimation_PlayLoop(play, &p->upperSkelAnime, (LinkAnimationHeader*)&gPlayerAnim_link_hook_wait);
+    sWhipAnimState = whipState;
+    Whip_ApplyLashAim(p);
+    // Release runs after the normal upper action. Queue the native upper-body
+    // copy now so the first third-person frame already has the arm raised.
+    // The lower-body pose and gameplay tip position remain unchanged.
+    ExtPlayer_CopyUpperBody(play, p);
 }
 
 static void Whip_Start(Player* p, PlayState* play) {
@@ -299,6 +322,7 @@ static void Whip_Start(Player* p, PlayState* play) {
         p->actor.shape.rot.y = whipExtendYaw;
         p->actor.world.rot.y = whipExtendYaw;
         p->yaw = whipExtendYaw;
+        Whip_BeginLashPose(p, play);
 
         whipFirstPerson = 0;
         Audio_PlaySoundGeneral(WHIP_SFX_THROW, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
@@ -313,7 +337,7 @@ static void Whip_Start(Player* p, PlayState* play) {
         }
     }
 
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_WHIP);
 }
 
 // =============================================================================
@@ -366,6 +390,7 @@ static void WhipStateEquip(Player* p, PlayState* play, ItemInputState* in) {
         p->actor.shape.rot.y = whipExtendYaw;
         p->actor.world.rot.y = whipExtendYaw;
         p->yaw = whipExtendYaw;
+        Whip_BeginLashPose(p, play);
 
         Audio_PlaySoundGeneral(WHIP_SFX_THROW, &p->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -912,11 +937,11 @@ s32 Player_UpperAction_Whip(Player* p, PlayState* play) {
                 LinkAnimation_PlayLoop(play, &p->upperSkelAnime, &gPlayerAnim_link_boom_throw_waitR);
                 break;
             case WHIP_STATE_EXTENDING:
-                // Throw animation (one-handed swing forward)
-                LinkAnimation_PlayOnce(play, &p->upperSkelAnime, &gPlayerAnim_link_boom_throwR);
-                break;
+            case WHIP_STATE_HIT_ENEMY:
             case WHIP_STATE_RETRACTING:
-                // Keep throw pose while retracting
+                // Keep the grip aimed until the tip returns, not the throw's
+                // final arm-down recovery pose.
+                LinkAnimation_PlayLoop(play, &p->upperSkelAnime, (LinkAnimationHeader*)&gPlayerAnim_link_hook_wait);
                 break;
             case WHIP_STATE_ATTACHED:
             case WHIP_STATE_SWINGING:
@@ -928,19 +953,9 @@ s32 Player_UpperAction_Whip(Player* p, PlayState* play) {
         }
     }
 
-    // Advance animation and handle transitions when finished
-    if (LinkAnimation_Update(play, &p->upperSkelAnime)) {
-        switch (whipState) {
-            case WHIP_STATE_EXTENDING:
-                // Hold at end of throw during extension
-                break;
-            case WHIP_STATE_RETRACTING:
-                // Return to wait pose
-                LinkAnimation_PlayLoop(play, &p->upperSkelAnime, &gPlayerAnim_link_boom_throw_waitR);
-                break;
-            default:
-                break;
-        }
+    LinkAnimation_Update(play, &p->upperSkelAnime);
+    if (whipState == WHIP_STATE_EXTENDING || whipState == WHIP_STATE_HIT_ENEMY || whipState == WHIP_STATE_RETRACTING) {
+        Whip_ApplyLashAim(p);
     }
 
     return 1;

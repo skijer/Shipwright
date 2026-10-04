@@ -1,0 +1,37 @@
+{
+  "resource_count": 7,
+  "vertex_records": 7501,
+  "vertex_loads": 247,
+  "slug": "minish_cap",
+  "name": "Minish Cap",
+  "entry": "objects/nei_gi_redesign/minish_cap/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.0749969482421875,
+  "triangles": 7836,
+  "bounds_author": [
+    [
+      -38.5,
+      -26.0625,
+      -28.125
+    ],
+    [
+      40.0,
+      49.5,
+      34.5625
+    ]
+  ],
+  "markers": {
+    "brim_opening_author": [
+      -5,
+      -21,
+      0
+    ],
+    "presentation_only": true
+  },
+  "notes": [
+    "Exact supplied Minish Cap icon: crimson bent cone, brocade gold brim with red gems, tip orb and gold tassel.",
+    "GI only; Minish shrink/grow ability and player appearance are unchanged.",
+    "Caller .5, effective author scale .6; hollow brim and modeled cloth folds."
+  ],
+  "runtime_tested": false
+}

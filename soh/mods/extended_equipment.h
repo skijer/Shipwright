@@ -119,6 +119,8 @@ void ExtEquip_SetSlot(s16 equipType, u8 index);
 void ExtEquip_RefreshPlayer(void);  // Player_SetEquipmentData on the live player, if any
 void ExtEquip_ResyncFromSave(void); // Nei_Save()->extEquip* -> RAM copy (after a FleetSync apply)
 void ExtEquip_ValidateForAge(void); // after Inventory_SwapAgeEquipment: drop age-restricted pieces
+// Decorative age swaps validate the destination age without permanent info-flag writes.
+void ExtEquip_ValidateForAgeWithoutProgression(u8 targetAge);
 u8 ExtEquip_TridentAllowsShield(u8 extIndex, u16 vanillaValue); // Divine or a Mirror only
 void ExtEquip_SagesFlashReset(void);
 

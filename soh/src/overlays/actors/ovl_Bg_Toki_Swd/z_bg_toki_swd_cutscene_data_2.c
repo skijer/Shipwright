@@ -96,4 +96,6 @@ CutsceneData D_808BB7A0[] = {
     CS_TERMINATOR(TEMPLE_OF_TIME_AFTER_USE_MS, 210, 211),
     CS_END(),
 };
+
+const size_t gMasterSwordAdultCutsceneWordCount = ARRAY_COUNT(D_808BB7A0);
 // clang-format on

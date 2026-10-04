@@ -1,5 +1,6 @@
 #include "global.h"
 #include "z64camera.h"
+#include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
 
 #include <string.h>
 
@@ -236,7 +237,7 @@ void func_80064824(PlayState* play, CutsceneContext* csCtx, CsCmdBase* cmd) {
             if (sp3F != 0) {
                 Audio_SetNatureAmbienceChannelIO(NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_4, 0x3F);
                 Audio_SetNatureAmbienceChannelIO(NATURE_CHANNEL_RAIN, CHANNEL_IO_PORT_1, 1);
-                play->envCtx.unk_EE[0] = 20;
+                GlobalOutdoorRain_SetScriptedRain(play, 20);
             }
             break;
         case 2:
@@ -332,7 +333,7 @@ void func_80064824(PlayState* play, CutsceneContext* csCtx, CsCmdBase* cmd) {
             }
             break;
         case 18:
-            play->envCtx.unk_EE[0] = 0;
+            GlobalOutdoorRain_SetScriptedRain(play, 0);
             play->envCtx.gloomySkyMode = 2;
             if (gSaveContext.dayTime < 0x4AAB) {
                 gSaveContext.dayTime += 30;

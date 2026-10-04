@@ -5,6 +5,9 @@
  */
 
 #include "z_en_weather_tag.h"
+#include "code/concurrent_weather_audio.h"
+#include "soh/Enhancements/audio/GlobalOutdoorRainBridge.h"
+#include "soh/cvar_prefixes.h"
 #include "vt.h"
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
@@ -49,12 +52,31 @@ void EnWeatherTag_SetupAction(EnWeatherTag* this, EnWeatherTagActionFunc actionF
 }
 
 void EnWeatherTag_Destroy(Actor* thisx, PlayState* play) {
+    GlobalOutdoorRain_SetNativeRequest(play, thisx, 0, false);
 }
 
 void EnWeatherTag_Init(Actor* thisx, PlayState* play) {
     EnWeatherTag* this = (EnWeatherTag*)thisx;
 
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
+    this->sourceRoom = this->actor.room;
+    this->actionFunc = NULL;
+    // Enabled rain tags survive room cleanup. Revisiting their authored room
+    // must reuse that live tag rather than accumulate another permanent actor.
+    if ((this->actor.params & 0xF) == EN_WEATHER_TAG_TYPE_RAIN_LAKE_HYLIA ||
+        (this->actor.params & 0xF) == EN_WEATHER_TAG_TYPE_THUNDERSTORM_KAKARIKO ||
+        (this->actor.params & 0xF) == EN_WEATHER_TAG_TYPE_THUNDERSTORM_GRAVEYARD) {
+        Actor* other;
+        for (other = play->actorCtx.actorLists[ACTORCAT_PROP].head; other != NULL; other = other->next) {
+            if (other != thisx && other->id == ACTOR_EN_WEATHER_TAG && other->init == NULL && other->update != NULL &&
+                other->room == -1 && other->params == thisx->params &&
+                ((EnWeatherTag*)other)->sourceRoom == this->sourceRoom && other->home.pos.x == thisx->home.pos.x &&
+                other->home.pos.y == thisx->home.pos.y && other->home.pos.z == thisx->home.pos.z) {
+                Actor_Kill(thisx);
+                return;
+            }
+        }
+    }
 
     switch (this->actor.params & 0xF) {
         case EN_WEATHER_TAG_TYPE_CLOUDY_MARKET:
@@ -255,34 +277,34 @@ void EnWeatherTag_EnabledCloudySnow(EnWeatherTag* this, PlayState* play) {
 
 void EnWeatherTag_DisabledRainLakeHylia(EnWeatherTag* this, PlayState* play) {
     if (WeatherTag_CheckEnableWeatherEffect(this, play, 0, 1, 0, 2, 100, 4)) {
-        Environment_PlayStormNatureAmbience(play);
-        play->envCtx.unk_EE[0] = 25;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 25, false);
+        this->actor.room = -1;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledRainLakeHylia);
     }
 }
 
 void EnWeatherTag_EnabledRainLakeHylia(EnWeatherTag* this, PlayState* play) {
+    GlobalOutdoorRain_SetNativeRequest(play, this, 25, false);
+
     if (WeatherTag_CheckRestoreWeather(this, play, 1, 0, 2, 0, 100)) {
-        Environment_StopStormNatureAmbience(play);
-        play->envCtx.unk_EE[0] = 0;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 0, false);
         EnWeatherTag_SetupAction(this, EnWeatherTag_DisabledRainLakeHylia);
     }
 }
 
 void EnWeatherTag_DisabledCloudyRainThunderKakariko(EnWeatherTag* this, PlayState* play) {
     if (WeatherTag_CheckEnableWeatherEffect(this, play, 0, 1, 0, 4, 100, 5)) {
-        Environment_PlayStormNatureAmbience(play);
-        play->envCtx.lightningMode = LIGHTNING_MODE_ON;
-        play->envCtx.unk_EE[0] = 30;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 30, true);
+        this->actor.room = -1;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledCloudyRainThunderKakariko);
     }
 }
 
 void EnWeatherTag_EnabledCloudyRainThunderKakariko(EnWeatherTag* this, PlayState* play) {
+    GlobalOutdoorRain_SetNativeRequest(play, this, 30, true);
+
     if (WeatherTag_CheckRestoreWeather(this, play, 1, 0, 4, 0, 100)) {
-        Environment_StopStormNatureAmbience(play);
-        play->envCtx.lightningMode = LIGHTNING_MODE_LAST;
-        play->envCtx.unk_EE[0] = 0;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 0, false);
         EnWeatherTag_SetupAction(this, EnWeatherTag_DisabledCloudyRainThunderKakariko);
     }
 }
@@ -303,9 +325,8 @@ void EnWeatherTag_DisabledRainThunder(EnWeatherTag* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
     if (Actor_WorldDistXZToActor(&player->actor, &this->actor) < WEATHER_TAG_RANGE100(this->actor.params)) {
-        Environment_PlayStormNatureAmbience(play);
-        play->envCtx.lightningMode = LIGHTNING_MODE_ON;
-        play->envCtx.unk_EE[0] = 25;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 25, true);
+        this->actor.room = -1;
         EnWeatherTag_SetupAction(this, EnWeatherTag_EnabledRainThunder);
     }
 }
@@ -313,11 +334,10 @@ void EnWeatherTag_DisabledRainThunder(EnWeatherTag* this, PlayState* play) {
 void EnWeatherTag_EnabledRainThunder(EnWeatherTag* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
+    GlobalOutdoorRain_SetNativeRequest(play, this, 25, true);
+
     if ((WEATHER_TAG_RANGE100(this->actor.params) + 10.0f) < Actor_WorldDistXZToActor(&player->actor, &this->actor)) {
-        Environment_StopStormNatureAmbience(play);
-        play->envCtx.lightningMode = LIGHTNING_MODE_LAST;
-        play->envCtx.unk_EE[0] = 0;
-        play->envCtx.unk_EE[1] = 10;
+        GlobalOutdoorRain_SetNativeRequest(play, this, 0, false);
         EnWeatherTag_SetupAction(this, EnWeatherTag_DisabledRainThunder);
     }
 }

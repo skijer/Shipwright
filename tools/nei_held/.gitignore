@@ -1,0 +1,4 @@
+RESOURCES/
+__pycache__/
+**/__pycache__/
+*.o2r

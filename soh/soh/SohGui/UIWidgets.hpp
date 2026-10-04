@@ -107,18 +107,26 @@ template <typename T>
 bool Combobox(std::string label, T* value, const std::map<T, const char*>& comboMap,
               const ComboboxOptions& options = {}) {
     bool dirty = false;
-    float startX = ImGui::GetCursorPosX();
     std::string invisibleLabelStr = "##" + std::string(label);
     const char* invisibleLabel = invisibleLabelStr.c_str();
     std::string trueLabel = label.substr(0, label.find("#"));
     ImGui::PushID(label.c_str());
     ImGui::BeginGroup();
-    ImGui::BeginDisabled(options.disabled);
+    ImGui::BeginDisabled(options.disabled || comboMap.empty());
     PushStyleCombobox(options.color);
 
-    const char* longest;
-    size_t length = 0;
+    // Dynamic lists can lose a saved key (e.g. a removed PAK). Keep the widget
+    // usable without throwing or silently changing the user's selection.
+    const auto selected = comboMap.find(*value);
+    const char* preview = selected != comboMap.end() && selected->second != nullptr
+                              ? selected->second
+                              : (comboMap.empty() ? "No options" : "Unavailable");
+    const char* longest = preview;
+    size_t length = strlen(longest);
     for (auto& [index, string] : comboMap) {
+        if (string == nullptr) {
+            continue;
+        }
         size_t len = strlen(string);
         if (len > length) {
             longest = string;
@@ -147,12 +155,13 @@ bool Combobox(std::string label, T* value, const std::map<T, const char*>& combo
     }
 
     ImGui::SetNextItemWidth(comboWidth);
-    if (ImGui::BeginCombo(invisibleLabel, comboMap.at(*value), options.flags)) {
+    if (ImGui::BeginCombo(invisibleLabel, preview, options.flags)) {
         ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 10.0f));
         for (const auto& pair : comboMap) {
-            if (strlen(pair.second) > 1) {
+            if (pair.second != nullptr && pair.second[0] != '\0') {
                 if (ImGui::Selectable(pair.second, pair.first == *value)) {
                     *value = pair.first;
+                    preview = pair.second;
                     dirty = true;
                 }
             }
@@ -167,7 +176,7 @@ bool Combobox(std::string label, T* value, const std::map<T, const char*>& combo
                 ImGui::SameLine();
                 ImGui::Text("%s", trueLabel.c_str());
             } else if (options.labelPosition == LabelPositions::Far) {
-                float width = ImGui::CalcTextSize(comboMap.at(*value)).x + ImGui::GetStyle().FramePadding.x * 2;
+                float width = ImGui::CalcTextSize(preview).x + ImGui::GetStyle().FramePadding.x * 2;
                 ImGui::SameLine(ImGui::GetContentRegionAvail().x - width);
                 ImGui::Text("%s", trueLabel.c_str());
             }

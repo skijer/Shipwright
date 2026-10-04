@@ -1,0 +1,28 @@
+{
+  "resource_count": 6,
+  "vertex_records": 4900,
+  "vertex_loads": 161,
+  "slug": "time_gate",
+  "name": "Time Gate / gameplay time_gate",
+  "entry": "objects/nei_held_redesign/time_gate/gi_dl",
+  "draw_scale": 0.008,
+  "matrix_scale": 1.0,
+  "triangles": 2972,
+  "bounds_author": [
+    [
+      -50.0625,
+      -50.125,
+      -3.9375
+    ],
+    [
+      50.125,
+      50.5,
+      3.9375
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Approved engraved gear; 12.8-unit nominal diameter during existing casting pose. Portal is unchanged."
+  ],
+  "runtime_tested": false
+}

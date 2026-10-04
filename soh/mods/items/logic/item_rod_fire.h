@@ -77,6 +77,7 @@ typedef struct {
     s16 pitch;
     ColliderCylinder colliders[3];
     u8 collidersInited;
+    u32 drawEpoch; // Presentation identity changes when this slot is relaunched.
 } RodProjSet;
 #endif // ROD_PROJ_SET_DEFINED
 

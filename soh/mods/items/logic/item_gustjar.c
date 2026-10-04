@@ -85,7 +85,7 @@ static void GustJar_Equip(PlayState* play, Player* player) {
     // toward focusActor like the bow, without forcing first-person).
     gjFirstPerson = 0;
     gjAimMode = 0;
-    ItemEquip_PlayEquipSFX(play, player);
+    ItemEquip_PlayEquipSFXForAction(play, player, PLAYER_IA_GUST_JAR);
 }
 
 static void GustJar_Unequip(PlayState* play, Player* player) {
@@ -105,7 +105,7 @@ static void GustJar_Unequip(PlayState* play, Player* player) {
     gjCooldownTimer = 0;
     gjButtonMask = 0;
     Audio_StopSfxById(NA_SE_EV_WIND_TRAP);
-    ItemEquip_PlayUnequipSFX(play, player);
+    ItemEquip_PlayUnequipSFXForAction(play, player, PLAYER_IA_GUST_JAR);
 }
 
 // =============================================================================
@@ -726,7 +726,7 @@ void Handle_GustJar(Player* this, PlayState* play) {
             gjAimMode = 0;
             this->unk_834 = 14; // 14-frame camera transition (bow pattern)
         }
-        ItemEquip_PlayEquipSFX(play, this);
+        ItemEquip_PlayEquipSFXForAction(play, this, PLAYER_IA_GUST_JAR);
         return;
     }
 

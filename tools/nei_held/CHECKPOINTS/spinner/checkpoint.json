@@ -1,0 +1,46 @@
+{
+  "resource_count": 10,
+  "vertex_records": 10425,
+  "vertex_loads": 374,
+  "slug": "spinner",
+  "name": "Spinner",
+  "entry": "objects/nei_held_redesign/spinner/gi_dl",
+  "draw_scale": 0.2,
+  "matrix_scale": 0.15625,
+  "triangles": 7812,
+  "bounds_author": [
+    [
+      -47.375,
+      -28.0,
+      -48.75
+    ],
+    [
+      47.375,
+      -0.9375,
+      48.75
+    ]
+  ],
+  "markers": {
+    "deck_author": [
+      0,
+      -1.125,
+      0
+    ],
+    "deck_world_y": -0.5625,
+    "world_scale": 0.5,
+    "deck_radius_world": 19.65,
+    "player_hover_world": 17,
+    "lowest_world_y": -14,
+    "radius_world": 24.4,
+    "rotation_binang_per_frame": 2048
+  },
+  "notes": [
+    "Same supplied-icon Spinner as GI; lower hull compressed only for floor clearance.",
+    "Wrapper T(player) RY(BINANG_TO_RAD(frames*0x800)) S(.2); resource matrix .15625.",
+    "Usable flat deck radius19.65 covers exact native-stance foot radius18.8805.",
+    "Decky=-.5625 is below rightsole -.5272..-.4704; leftsole -.218..-.1561 stays slightly raised by native stance.",
+    "Radius24.4; underside y=-14 at normal player floor+17 leaves three world units clearance.",
+    "Hover, attack, homing, damage and collision behavior are unchanged."
+  ],
+  "runtime_tested": false
+}

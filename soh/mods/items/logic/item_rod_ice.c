@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiUsedMagicPresentation.h"
 /**
  * item_rod_ice.c - Ice Rod from A Link Between Worlds
  *
@@ -15,6 +16,7 @@
  */
 
 #include "item_rod_ice.h"
+#include "item_rod_common.h"
 #include "../helpers/equip_helper.h"
 #include "../helpers/combat_helper.h"
 #include "../helpers/fx_helper.h"
@@ -33,6 +35,7 @@ static u8 sIceWaveCollidersInited = 0;
 
 // Multi-set projectile system (5 concurrent sets)
 static RodProjSet sIceProjSets[ROD_MAX_PROJ_SETS];
+static u32 sIceDrawEpoch;
 
 static RodColor sIceRodColor = { ICE_ROD_PRIM_R, ICE_ROD_PRIM_G, ICE_ROD_PRIM_B, ICE_ROD_PRIM_A,
                                  ICE_ROD_ENV_R,  ICE_ROD_ENV_G,  ICE_ROD_ENV_B,  ICE_ROD_ENV_A };
@@ -140,6 +143,7 @@ static void IceRod_CalcVelocity(Vec3f* outVel, s16 yaw, s16 pitch) {
 static void IceRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* startPos, s16 yaw, s16 pitch, f32 maxRange) {
     RodProjSet* set = IceRod_FindFreeSet(play);
     IceRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sIceDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;
@@ -165,6 +169,7 @@ static void IceRod_InitSingleProjectile(Player* p, PlayState* play, Vec3f* start
 static void IceRod_InitTripleProjectile(Player* p, PlayState* play, Vec3f* startPos, s16 baseYaw, s16 pitch) {
     RodProjSet* set = IceRod_FindFreeSet(play);
     IceRod_InitSetColliders(set, p, play);
+    set->drawEpoch = ++sIceDrawEpoch;
 
     set->targetScale = 2.0f;
     set->active = 1;
@@ -247,7 +252,9 @@ static void IceRod_SpawnIceSparks(PlayState* play, Vec3f* pos, f32 scale) {
         vel.x = (Rand_ZeroOne() - 0.5f) * 3.0f;
         vel.y = Rand_ZeroOne() * 2.0f;
         vel.z = (Rand_ZeroOne() - 0.5f) * 3.0f;
-        EffectSsEnIce_Spawn(play, &sparkPos, scale * 0.3f, &vel, &accel, &primColor, &envColor, 15);
+        // The private frost wake replaces these six opaque flight clumps.
+        // Keep allocation, lifespan and RNG cadence; only collapse their visual size.
+        EffectSsEnIce_Spawn(play, &sparkPos, 0.0f, &vel, &accel, &primColor, &envColor, 15);
     }
 }
 
@@ -458,6 +465,10 @@ static void IceRod_UpdateIceWave(Player* p, PlayState* play) {
                 iceRodWaveColliders[i].base.atFlags &= ~AT_HIT;
             }
         }
+        // Sample the existing wave/beam state; no additional effect lifetime.
+        for (s32 i = 0; i < ICE_ROD_WAVE_COUNT; ++i) {
+            NeiUsedMagic_DrawBurst(play, 1, &iceRodWavePos[i], .8f + .1f * i, iceRodWaveTimer / 30.0f);
+        }
     } else {
         iceRodWaveActive = 0;
         Audio_StopSfxById(ICE_ROD_SFX_ICE_LOOP);
@@ -623,7 +634,7 @@ static void IceRod_UpdateSpinIce(Player* p, PlayState* play) {
     }
 
     // Draw ice cylinder (blue to white based on progress)
-    FX_DrawSpinFireCylinder(play, p, iceRodSpinRadius, iceRodSpinIsBig, &sIceRodColor);
+    NeiUsedMagic_DrawSpin(play, p, 1, iceRodSpinRadius, iceRodSpinIsBig);
 
     if ((play->gameplayFrames % 6) == 0) {
         Audio_PlayActorSound2(&p->actor, ICE_ROD_SFX_ICE_IGNITE);
@@ -746,11 +757,11 @@ static void IceRod_UpdateCharge(Player* p, PlayState* play) {
         Audio_PlayActorSound2(&p->actor, ICE_ROD_SFX_CHARGE);
     }
 
-    FX_DrawChargeAura(play, p, iceRodChargeLevel, &sIceRodColor);
+    NeiUsedMagic_DrawCharge(play, p, 1, iceRodChargeLevel);
 
     if ((play->gameplayFrames % 3) == 0) {
         Vec3f* tipPos = &p->meleeWeaponInfo[0].tip;
-        FX_SpawnRodSwingParticles(play, tipPos, &sIceRodColor);
+        RodCommon_PreserveChargeSparkCadence(play, tipPos, &sIceRodColor);
     }
 
     if ((play->gameplayFrames % 12) == 0) {
@@ -876,7 +887,7 @@ static void IceRod_OnEquip(PlayState* play, Player* p) {
     sIceChargeHoldCounter = 0;
 
     iceRodBlureIdx = FX_InitSwordTrail(play, &sIceRodColor);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_ROD_ICE);
 }
 
 static void IceRod_OnUnequip(PlayState* play, Player* p) {
@@ -909,7 +920,13 @@ static void IceRod_OnUnequip(PlayState* play, Player* p) {
 
     if (iceRodSpinActive)
         IceRod_StopSpinIce();
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_ROD_ICE);
+}
+
+void IceRod_PutAway(Player* p, PlayState* play) {
+    if (iceRodActive || iceRodFirstPerson)
+        IceRod_OnUnequip(play, p);
+    sIceEquipState.isEquipped = 0;
 }
 
 // =============================================================================
@@ -1019,6 +1036,8 @@ void Handle_IceRod(Player* p, PlayState* play) {
 
 void Player_InitIceRodIA(PlayState* play, Player* p) {
     iceRodActive = 1;
+    // Native item-change animation may finish after the original button press has passed.
+    sIceEquipState.isEquipped = 1;
     iceRodState = ICE_ROD_STATE_EQUIPPED;
     sIceLastSwingType = 0;
     sIceJumpEffectSpawned = 0;

@@ -19,6 +19,7 @@
 #include "../../nei_save.h" // Skijer's NEI
 #include "objects/object_poh/object_poh.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
+#include "soh/Enhancements/randomizer/NeiLanternPresentation.h"
 // Fire sources whose flame COLOUR has to be read off the actor itself (see
 // Lantern_DetectFireType): the Poe-sister torches and the Poes' lanterns.
 #include "overlays/actors/ovl_Bg_Po_Syokudai/z_bg_po_syokudai.h"
@@ -738,7 +739,17 @@ u8 Lantern_GetFireType(void) {
 }
 
 void Player_InitLanternIA(PlayState* play, Player* this) {
-    // Nothing special needed on equip
+    gCustomItemState.lanternStowed = 0;
+}
+
+void Lantern_PutAway(Player* p, PlayState* play) {
+    if (!gCustomItemState.lanternEquipped && !gCustomItemState.lanternSwinging)
+        return;
+
+    // Holding is separate from the captured fire: pocket light, healing and spawned flames persist.
+    gCustomItemState.lanternEquipped = 0;
+    gCustomItemState.lanternSwinging = 0;
+    gCustomItemState.lanternStowed = 1;
 }
 
 void Handle_Lantern(Player* p, PlayState* play) {
@@ -753,12 +764,12 @@ void Handle_Lantern(Player* p, PlayState* play) {
     // it is a burning light source, not something you fish out for one swing. That
     // makes "in hand" reachable without swinging first, which is what the shadow
     // fire's lens and the in-hand light both gate on (Lantern_IsInHand).
-    // Any other item action — drawing the sword included — puts it away, and so does
-    // taking the lantern off every button (handled by the draw pass).
+    // Explicit put-away keeps it in the pocket until its next use. Another held item temporarily
+    // takes the hand, and taking the lantern off every button hides it in the draw pass.
     // Handle_Lantern only runs while the lantern IS on a button, so no extra check here.
     if (p->heldItemAction != PLAYER_IA_LANTERN && p->heldItemAction != PLAYER_IA_NONE) {
         gCustomItemState.lanternEquipped = 0;
-    } else if (gCustomItemState.lanternFireType != LANTERN_FIRE_NONE) {
+    } else if (gCustomItemState.lanternFireType != LANTERN_FIRE_NONE && !gCustomItemState.lanternStowed) {
         gCustomItemState.lanternEquipped = 1;
     }
 
@@ -777,6 +788,7 @@ void Handle_Lantern(Player* p, PlayState* play) {
     // Entire swing/catch/message flow handled by Player_Action_SwingLantern in z_player.c
     if (input.isPressed) {
         extern void Player_StartLanternSwing(Player * this, PlayState * play);
+        gCustomItemState.lanternStowed = 0;
         Player_StartLanternSwing(p, play);
     }
 }
@@ -788,6 +800,15 @@ s32 Player_UpperAction_Lantern(Player* this, PlayState* play) {
 // ── Draw ────────────────────────────────────────────────────────────────────
 
 void CustomItems_DrawLantern(Player* p, PlayState* play) {
+    if (NeiLantern_DrawHeld(p, play, gCustomItemState.lanternFireType)) {
+        // The original lit draw consumes one random sample for its glass tint.
+        // Preserve that shared RNG cadence while the new visual motion is deterministic.
+        if (gCustomItemState.lanternFireType > LANTERN_FIRE_NONE &&
+            gCustomItemState.lanternFireType < LANTERN_FIRE_MAX) {
+            Rand_ZeroOne();
+        }
+        return;
+    }
     Vec3f handPos = p->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     s16 handYaw = p->actor.shape.rot.y;
     u8 fireType = gCustomItemState.lanternFireType;

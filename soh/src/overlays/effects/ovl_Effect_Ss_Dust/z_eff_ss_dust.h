@@ -4,6 +4,10 @@
 #include <libultraship/libultra.h>
 #include "global.h"
 
+// Private SW97 tornado appearance tag. Low bits 0x1/0x2 select native draw
+// modes and 0x4 selects randomized colors; 0x100 changes neither behavior.
+#define EFFECT_SS_DUST_DRAW_SW97_FOREST 0x100
+
 typedef struct {
     /* 0x00 */ Vec3f pos;
     /* 0x0C */ Vec3f velocity;

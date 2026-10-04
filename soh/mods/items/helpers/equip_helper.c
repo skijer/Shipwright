@@ -3,6 +3,7 @@
  */
 
 #include "equip_helper.h"
+#include <string.h>
 #include "../custom_items.h"
 #include "macros.h"
 #include "functions.h"
@@ -18,14 +19,23 @@ typedef struct {
 } EquipCache;
 
 static EquipCache sEquipCache = { 0 };
+static u16 sStowedItemButtons[256] = { 0 };
+static u32 sStowedItemFrames[256] = { 0 };
 
 static void EquipCache_Update(PlayState* play) {
     if (sEquipCache.frameCount == play->gameplayFrames)
         return;
     sEquipCache.frameCount = play->gameplayFrames;
 
-    for (int i = 0; i < 256; i++)
+    for (int i = 0; i < 256; i++) {
         sEquipCache.cachedButtons[i] = 0;
+        sStowedItemButtons[i] &= play->state.input[0].cur.button | play->state.input[0].press.button;
+        // A fresh press proves release even if no custom item was assigned/polled
+        // during the intervening frames. Keep suppression on the stow frame itself.
+        if (sStowedItemFrames[i] != play->gameplayFrames) {
+            sStowedItemButtons[i] &= ~play->state.input[0].press.button;
+        }
+    }
 
     u8 dpadEnabled = CVarGetInteger("gEnhancements.DpadEquips", 0);
     u8 maxSlot = dpadEnabled ? 8 : 4;
@@ -53,6 +63,12 @@ static void EquipCache_Update(PlayState* play) {
 u16 ItemInput_GetEquippedButton(u8 itemId, PlayState* play) {
     EquipCache_Update(play);
     return sEquipCache.cachedButtons[itemId];
+}
+
+void ItemInput_SuppressUntilRelease(u8 itemId, PlayState* play) {
+    sStowedItemButtons[itemId] |= ItemInput_GetEquippedButton(itemId, play) &
+                                  (play->state.input[0].cur.button | play->state.input[0].press.button);
+    sStowedItemFrames[itemId] = play->gameplayFrames;
 }
 
 // mods/actors/cane_pacci.c - while Ultrahand mode is up the D-pad rotates and moves the held
@@ -106,6 +122,12 @@ void ItemInput_Update(ItemInputState* out, u8 itemId, Player* player, PlayState*
     out->isReleased = !out->isHeld && !out->isPressed;
     out->otherButtonPressed = ItemInput_CheckOtherButtons(out->equippedButton, &play->state.input[0]);
     out->damageTaken = 0;
+
+    // A held C/B/D-pad button must not immediately draw a just-stowed whip or
+    // Ball and Chain again. Release re-arms that item's normal hold behavior.
+    if (sStowedItemButtons[itemId] & out->equippedButton) {
+        out->isPressed = out->isHeld = out->isReleased = 0;
+    }
 }
 
 u8 ItemInput_CheckDamage(Player* player, s8* prevInvincibility) {
@@ -183,23 +205,56 @@ u8 ItemEquip_HoldsEmptyHand(void) {
     return Hourglass_WantsEmptyHand() || Pacci_IsHoldingUltrahand();
 }
 
-// ── Handheld models in the right fist ────────────────────────────────────────────────────────────
+// ── Handheld models at captured wrists ───────────────────────────────────────────────────────────
 extern u8 ResourceMgr_FileExists(const char* resName);
 extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
 
-// The right fist's own matrix, taken during the skeleton draw (Player_PostLimbDrawGameplay at
-// PLAYER_LIMB_R_HAND). ONE owner for every handheld: a Four Sword clone must get its own hand and
-// never Link's, and a transformed body draws through its own callback and never reaches the capture.
+// Each fist's own matrix, taken during Player_PostLimbDrawGameplay before
+// item-specific limb transforms. A Four Sword clone must get its own hands
+// and never Link's; both captures expire after the current player's drawers.
 static MtxF sHandMtx;
 static u8 sHandMtxValid = 0;
+static MtxF sLeftHandMtx;
+static u8 sLeftHandMtxValid = 0;
 
 void ItemEquip_CaptureHandMatrix(void) {
     Matrix_Get(&sHandMtx);
     sHandMtxValid = 1;
 }
 
+void ItemEquip_CaptureLeftHandMatrix(void) {
+    Matrix_Get(&sLeftHandMtx);
+    sLeftHandMtxValid = 1;
+}
+
 void ItemEquip_ReleaseHandMatrix(void) {
     sHandMtxValid = 0;
+    sLeftHandMtxValid = 0;
+}
+
+static u8 ItemEquip_ApplyCapturedHandPose(Player* player, const ItemHandPose* pose, MtxF* matrix, u8 valid) {
+    f32 unscale;
+    if (!valid || player == NULL || pose == NULL) {
+        return 0;
+    }
+    Matrix_Put(matrix);
+    unscale = (player->actor.scale.x != 0.0f) ? (1.0f / player->actor.scale.x) : 1.0f;
+    Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
+    Matrix_RotateY(DEG_TO_RAD(pose->rotY), MTXMODE_APPLY);
+    Matrix_RotateX(DEG_TO_RAD(pose->rotX), MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(pose->rotZ), MTXMODE_APPLY);
+    // Keep the established handheld convention: offsets follow model rotation.
+    Matrix_Translate(pose->offsetX, pose->offsetY, pose->offsetZ, MTXMODE_APPLY);
+    Matrix_Scale(pose->scale, pose->scale, pose->scale, MTXMODE_APPLY);
+    return 1;
+}
+
+u8 ItemEquip_ApplyHandPose(Player* player, const ItemHandPose* pose) {
+    return ItemEquip_ApplyCapturedHandPose(player, pose, &sHandMtx, sHandMtxValid);
+}
+
+u8 ItemEquip_ApplyLeftHandPose(Player* player, const ItemHandPose* pose) {
+    return ItemEquip_ApplyCapturedHandPose(player, pose, &sLeftHandMtx, sLeftHandMtxValid);
 }
 
 // Six wand rods carry an opaque and a translucent DL each, so a session can walk 12 paths before
@@ -274,6 +329,77 @@ u8 ItemEquip_DrawHeldModel(Player* player, PlayState* play, const char* opaPath,
 
     CLOSE_DISPS(play->state.gfxCtx);
     return 1;
+}
+
+// Custom tools can also play a completion sound (digging, landing, empty aim).
+// Deduplicate only an actual native item change, not the whole held lifetime.
+// Keep the outgoing action as the key so late cleanup cannot claim the new item.
+typedef struct {
+    u8 changing;
+    u8 played;
+    u8 hasCustomSound;
+    u32 customSoundFrame;
+} ItemUnequipSoundState;
+
+static ItemUnequipSoundState* ItemEquip_UnequipSoundState(PlayState* play, Player* player) {
+    static PlayState* ownerPlay;
+    static Player* ownerPlayer;
+    static u32 lastFrame;
+    static ItemUnequipSoundState states[128];
+    if (ownerPlay != play || ownerPlayer != player || play->gameplayFrames < lastFrame) {
+        memset(states, 0, sizeof(states));
+        ownerPlay = play;
+        ownerPlayer = player;
+    }
+    lastFrame = play->gameplayFrames;
+    return states;
+}
+
+void ItemEquip_ResetUnequipSound(PlayState* play, Player* player, s32 itemAction) {
+    if (itemAction >= 0 && itemAction < 128) {
+        memset(&ItemEquip_UnequipSoundState(play, player)[itemAction], 0, sizeof(ItemUnequipSoundState));
+    }
+}
+
+void ItemEquip_BeginItemChangeSound(PlayState* play, Player* player, s32 itemAction) {
+    if (itemAction >= 0 && itemAction < 128) {
+        ItemUnequipSoundState* state = &ItemEquip_UnequipSoundState(play, player)[itemAction];
+        if (!state->changing) {
+            state->changing = 1;
+            // Input cleanup may precede native dispatch in this same update.
+            state->played = state->hasCustomSound && state->customSoundFrame == play->gameplayFrames;
+        }
+    }
+}
+
+u8 ItemEquip_ClaimUnequipSound(PlayState* play, Player* player, s32 itemAction) {
+    if (itemAction < 0 || itemAction >= 128) {
+        return 1;
+    }
+    ItemEquip_BeginItemChangeSound(play, player, itemAction);
+    ItemUnequipSoundState* state = &ItemEquip_UnequipSoundState(play, player)[itemAction];
+    if (state->played) {
+        return 0;
+    }
+    state->played = 1;
+    return 1;
+}
+
+void ItemEquip_PlayEquipSFXForAction(PlayState* play, Player* player, s32 itemAction) {
+    ItemEquip_ResetUnequipSound(play, player, itemAction);
+    ItemEquip_PlayEquipSFX(play, player);
+}
+
+void ItemEquip_PlayUnequipSFXForAction(PlayState* play, Player* player, s32 itemAction) {
+    if (itemAction >= 0 && itemAction < 128) {
+        ItemUnequipSoundState* state = &ItemEquip_UnequipSoundState(play, player)[itemAction];
+        if (state->changing && !ItemEquip_ClaimUnequipSound(play, player, itemAction)) {
+            return;
+        }
+        state->hasCustomSound = 1;
+        state->customSoundFrame = play->gameplayFrames;
+    }
+    ItemEquip_PlayUnequipSFX(play, player);
 }
 
 void ItemEquip_PlayEquipSFX(PlayState* play, Player* player) {

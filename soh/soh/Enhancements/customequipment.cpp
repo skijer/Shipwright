@@ -7,6 +7,7 @@
 #include "soh/Enhancements/game-interactor/vanilla-behavior/PlayerAnimOverride.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/customequipment.h"
 // Skijer's NEI: needed so OPEN_DISPS/CLOSE_DISPS in the draw handler get C linkage (else LNK2001)
 #include "soh/frame_interpolation.h"
 
@@ -268,6 +269,64 @@ static void BuildHandItemDL(PlayState* play, Gfx** dList, Gfx* hand, Gfx* item, 
 static bool IsScalingAdultItemAsChild() {
     return CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0) &&
            CVarGetInteger(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"), 0) && !LINK_IS_ADULT;
+}
+
+extern "C" Gfx* CustomEquipment_GetTimePedestalSwordDL(void) {
+    Gfx* sword = PakLoader_GetTimePedestalSwordDL();
+    if (sword != nullptr) {
+        return sword;
+    }
+    if (!CVarGetInteger(CVAR_SETTING("AltAssets"), 1) || TransformMasks_IsTransformedAny()) {
+        return nullptr;
+    }
+    return LoadCustomGfx(gCustomMasterSwordDL);
+}
+
+static void BuildTimePedestalHandItemDL(PlayState* play, Gfx** dList, Gfx* hand, Gfx* sword) {
+    if (LINK_IS_ADULT) {
+        BuildHandItemDL(play, dList, hand, sword, false);
+        return;
+    }
+
+    // Rigid registration of the native adult Master Sword's 136 vertices in
+    // object_link_boyVtx_010EE8[0..135] to the child's ceremonial sword in
+    // object_link_childVtx_00D4E0[27..162]. These meshes have identical sword
+    // topology; the residual is below 1.1 model units (integer vertex rounding).
+    // Reproduce with scripts/diagnostics/derive_pedestal_child_grip.py.
+    // Only the weapon uses this basis: rotating the whole limb turns the child's
+    // +Y palm backwards through its wrist and still misses the native blade axis.
+    MtxF swordBasis = { { { -0.95307054f, -0.30258935f, 0.00980994f, 0.0f },
+                          { -0.14613497f, 0.43142223f, -0.89023560f, 0.0f },
+                          { 0.26514359f, -0.84989090f, -0.45539471f, 0.0f },
+                          { 125.3999033f, 33.6824661f, 182.9736196f, 1.0f } } };
+    Mtx* swordMtx = (Mtx*)Graph_Alloc(play->state.gfxCtx, sizeof(Mtx));
+    Matrix_MtxFToMtx(&swordBasis, swordMtx);
+    Gfx* buf = (Gfx*)Graph_Alloc(play->state.gfxCtx, 5 * sizeof(Gfx));
+    Gfx* p = buf;
+    gSPDisplayList(p++, hand);
+    gSPMatrix(p++, swordMtx, G_MTX_PUSH | G_MTX_MUL | G_MTX_MODELVIEW);
+    gSPDisplayList(p++, sword);
+    gSPPopMatrix(p++, G_MTX_MODELVIEW);
+    gSPEndDisplayList(p);
+    *dList = buf;
+}
+
+extern "C" s32 CustomEquipment_OverrideMasterSwordHand(PlayState* play, Gfx** dList) {
+    Gfx* sword = CustomEquipment_GetTimePedestalSwordDL();
+    if (sword == nullptr) {
+        return false;
+    }
+    Gfx* hand = PakLoader_GetTimePedestalHandDL();
+    if (hand == nullptr || hand == PAK_DL_STUB) {
+        hand = LoadGfxByName(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+    }
+    if (hand == nullptr) {
+        return false;
+    }
+    // The ceremonial draw does not apply the child equipment scale, so the
+    // normal hand is already the correct size and needs no counter-scale.
+    BuildTimePedestalHandItemDL(play, dList, hand, sword);
+    return true;
 }
 
 const char* bottleContentDLs[] = {

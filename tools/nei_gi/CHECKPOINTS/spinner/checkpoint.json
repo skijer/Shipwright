@@ -1,0 +1,47 @@
+{
+  "resource_count": 10,
+  "vertex_records": 10425,
+  "vertex_loads": 374,
+  "slug": "spinner",
+  "name": "Spinner",
+  "entry": "objects/nei_gi_redesign/spinner/gi_dl",
+  "draw_scale": 0.3,
+  "matrix_scale": 0.1041717529296875,
+  "triangles": 7812,
+  "bounds_author": [
+    [
+      -47.375,
+      -19.0,
+      -48.75
+    ],
+    [
+      47.375,
+      12.1875,
+      48.75
+    ]
+  ],
+  "markers": {
+    "deck_author": [
+      0,
+      12,
+      0
+    ],
+    "deck_radius_author": 39.3,
+    "outer_radius_author": 48.8,
+    "underside_author": [
+      0,
+      -19,
+      0
+    ],
+    "gameplay_world_scale": 0.5,
+    "gameplay_deck_world_y": -0.5625,
+    "gameplay_radius_world": 24.4,
+    "gameplay_lowest_world_y": -14
+  },
+  "notes": [
+    "Supplied Spinner icon: bronze sun dial, ten stone gear blocks, conical spindle.",
+    "GI caller .3; effective .5. Gameplay uses the same deck art, with sole-height fitting and a shortened underside.",
+    "Ride player origin floor+17; no gameplay physics/collider changes."
+  ],
+  "runtime_tested": false
+}

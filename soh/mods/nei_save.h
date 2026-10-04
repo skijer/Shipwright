@@ -241,6 +241,9 @@ typedef struct NeiSaveData {
     // readable.
     uint8_t season;       // SEASON_* — the season the cell shows / the world is currently in
     uint8_t seasonsOwned; // SEASON_* bitmask (four bits) — 0 = rod not owned at all
+    // Local time-pedestal travel can create a legitimate adult save without the
+    // story sword. This opts out of its load-time repair; it is not ownership.
+    uint8_t timePedestalNoMasterSwordRepair;
 } NeiSaveData;
 
 #define RITO_FLAG_MASK_OWNED (1 << 0)

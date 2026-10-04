@@ -5,6 +5,10 @@
 
 #include "expansions/sw97/sw97_compat.h"
 #include "expansions/sw97/sw97_config.h"
+#include "sw97_spell_appearance.h"
+
+static const char ALIGN_ASSET(2) sMedallionFire1Tex[] = "__OTR__custom/medallion_magic/spells/fire/s1Tex";
+static const char ALIGN_ASSET(2) sMedallionFire2Tex[] = "__OTR__custom/medallion_magic/spells/fire/s2Tex";
 
 // ============================================================
 // Struct (merged from z_magic_fire.h)
@@ -567,17 +571,26 @@ s32 MagicFire_OverrideLimbDraw(PlayState* play, SkelAnimeCurve* skelCurve, s32 l
     OPEN_DISPS(play->state.gfxCtx);
 
     if (limbIndex == 1) {
-        gSPSegment(POLY_XLU_DISP++, 8,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 8,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionFire1Tex, sMedallionFire2Tex, G_IM_SIZ_4b, NULL, NULL));
     } else if (limbIndex == 2) {
-        gSPSegment(POLY_XLU_DISP++, 9,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 9,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionFire1Tex, sMedallionFire2Tex, G_IM_SIZ_4b, NULL, NULL));
     } else if (limbIndex == 3) {
-        gSPSegment(POLY_XLU_DISP++, 0xA,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 0xA,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionFire1Tex, sMedallionFire2Tex, G_IM_SIZ_4b, NULL, NULL));
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
@@ -588,12 +601,20 @@ s32 MagicFire_OverrideLimbDraw(PlayState* play, SkelAnimeCurve* skelCurve, s32 l
 void MagicFire_Draw(Actor* thisx, PlayState* play) {
     GraphicsContext* gfxCtx = play->state.gfxCtx;
     MagicFire* this = THIS;
+    Color_RGB8 primary = { 255, 200, 0 };
+    Color_RGB8 secondary = { 255, 0, 0 };
+    if (CVarGetInteger(CVAR_COSMETIC("Magic.MedallionFirePrimary.Changed"), 0)) {
+        primary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionFirePrimary.Value"), primary);
+    }
+    if (CVarGetInteger(CVAR_COSMETIC("Magic.MedallionFireSecondary.Changed"), 0)) {
+        secondary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionFireSecondary.Value"), secondary);
+    }
 
     OPEN_DISPS(gfxCtx);
 
     POLY_XLU_DISP = Gfx_CallSetupDL(POLY_XLU_DISP, 25);
-    gDPSetPrimColor(POLY_XLU_DISP++, 0, 128, 255, 200, 0, (u8)(this->alphaMultiplier * 255));
-    gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, (u8)(this->alphaMultiplier * 255));
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 128, primary.r, primary.g, primary.b, (u8)(this->alphaMultiplier * 255));
+    gDPSetEnvColor(POLY_XLU_DISP++, secondary.r, secondary.g, secondary.b, (u8)(this->alphaMultiplier * 255));
     SkelCurve_Draw(thisx, play, &this->skelCurve, MagicFire_OverrideLimbDraw, NULL, 1, NULL);
 
     CLOSE_DISPS(gfxCtx);

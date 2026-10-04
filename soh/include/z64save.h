@@ -227,6 +227,14 @@ typedef struct {
 typedef struct ShipRandomizerSaveContextData {
     u8 triforcePiecesCollected;
     u8 bombchuUpgradeLevel;
+    u8 quarterHearts;
+    u8 defenseUpgrades;
+    u8 speedUpgrades;
+    u8 powerUpgrades;
+    u8 magicStatUpgrades;
+    u8 crawlSpeedUpgrades;
+    u8 climbSpeedUpgrades;
+    u8 pushSpeedUpgrades;
 } ShipRandomizerSaveContextData;
 
 typedef struct ShipBossRushSaveContextData {
@@ -266,6 +274,8 @@ typedef struct ShipSaveContextData {
     // APPEND-ONLY past this point: members are serialized by name but the struct is also snapshotted
     // wholesale (SaveContext copies), so inserting above shifts existing offsets.
     ExtButtonSaveInfo extButtons;
+    HorseData youngHorseData;
+    u8 youngHorseDataValid;
 } ShipSaveContextData;
 
 #pragma endregion

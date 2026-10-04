@@ -498,7 +498,7 @@ static void SwitchHook_Stop(Player* p, PlayState* play) {
     shTarget = NULL;
 
     Audio_StopSfxById(NA_SE_IT_HOOKSHOT_CHAIN);
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_SWITCH_HOOK);
 }
 
 // ============================================================================
@@ -545,7 +545,7 @@ static void SwitchHook_StartAiming(Player* p, PlayState* play) {
     // Enter first-person mode (exactly like Beetle)
     FirstPerson_Init(p, play);
 
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_SWITCH_HOOK);
 }
 
 // ============================================================================

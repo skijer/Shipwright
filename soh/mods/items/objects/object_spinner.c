@@ -9,6 +9,7 @@
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 
 // Spinner 3D model lives in soh.o2r (object_nei_spinner). No inline C model.
 extern u8 ResourceMgr_FileExists(const char* resName);
@@ -20,6 +21,23 @@ extern Gfx* ResourceMgr_LoadGfxByName(const char* path);
 
 void CustomItems_DrawSpinner(Player* this, PlayState* play) {
     if (gCustomItemState.spinnerActive) {
+        // The new mesh is authored around its riding deck. The player already
+        // follows the unchanged hover/attack/homing heights, so this frame also
+        // carries the platform through the complete movement without reapplying
+        // the old export's 150-unit origin correction.
+        u8 replacementDrawn;
+        s16 spinRot = (s16)(play->gameplayFrames * 0x800);
+        Matrix_Push();
+        Matrix_Translate(this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, MTXMODE_NEW);
+        // Matrix_RotateY takes radians; the intended 0x800 step is 1/32 turn.
+        Matrix_RotateY(BINANG_TO_RAD(spinRot), MTXMODE_APPLY);
+        Matrix_Scale(0.20f, 0.20f, 0.20f, MTXMODE_APPLY);
+        replacementDrawn = NeiHeld_DrawModel(play, NEI_HELD_PATH("spinner"), NULL);
+        Matrix_Pop();
+        if (replacementDrawn) {
+            return;
+        }
+
         static Gfx* sDL = NULL;
         static u8 sTried = 0;
         if (!sTried) {
@@ -38,7 +56,6 @@ void CustomItems_DrawSpinner(Player* this, PlayState* play) {
         Matrix_Translate(this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, MTXMODE_NEW);
 
         // Constant rotation calculation
-        s16 spinRot = play->gameplayFrames * 0x800;
         Matrix_RotateY(spinRot, MTXMODE_APPLY);
 
         // Handle scaling logic (Expand when attacking)

@@ -9,6 +9,7 @@
 
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Enhancements/randomizer/NeiGiPresentation.h"
 #include <assert.h>
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
@@ -1460,7 +1461,9 @@ void EnGirlA_Draw(Actor* thisx, PlayState* play) {
                                               shopItemIdentity.identity.randomizerCheck, shopItemIdentity.ogItemId);
 
         EnItem00_CustomItemsParticles(&this->actor, play, getItemEntry);
-        GetItemEntry_Draw(play, getItemEntry);
+        if (!NeiGi_DrawShop(play, &getItemEntry)) {
+            GetItemEntry_Draw(play, getItemEntry);
+        }
         return;
     }
 

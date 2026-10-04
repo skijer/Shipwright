@@ -851,6 +851,13 @@ void AudioMmSfx_StopByTokenAndId(u8 token, u16 sfxId) {
 }
 
 void AudioMmSfx_StopById(u32 sfxId) {
+    // Ground Leaf can stop the glide hum before the first MM sound starts.
+    // Before Reset, zero-filled bank links point back to the sentinel forever.
+    // Nothing is playing yet; preserve lazy initialization and skip traversal.
+    if (!sMmSfxEngineReady) {
+        return;
+    }
+
     MmSfxBankEntry* entry;
     u8 entryIndex = gMmSfxBanks[SFX_BANK(sfxId)][0].next;
     u8 prevEntryIndex = 0;

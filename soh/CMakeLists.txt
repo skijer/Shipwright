@@ -2,9 +2,242 @@ cmake_minimum_required(VERSION 3.26.0 FATAL_ERROR)
 
 set(CMAKE_SYSTEM_VERSION 10.0 CACHE STRING "" FORCE)
 
-project(soh LANGUAGES C CXX)
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    project(soh VERSION 9.2.3 LANGUAGES C CXX)
+else()
+    project(soh LANGUAGES C CXX)
+endif()
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "The C++ standard to use")
 set(CMAKE_C_STANDARD 23 CACHE STRING "The C standard to use")
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../CMake/soh-cvars.cmake")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/../CMake/lus-cvars.cmake")
+    set(SPDLOG_LEVEL_TRACE 0)
+    set(SPDLOG_LEVEL_OFF 6)
+    set(SPDLOG_MIN_CUTOFF SPDLOG_LEVEL_TRACE CACHE STRING "cutoff at trace")
+endif()
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(pak_selection_test tests/pak_selection_test.cpp)
+    target_include_directories(pak_selection_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    add_test(NAME pak_selection_test COMMAND pak_selection_test)
+
+    add_executable(spin_effect_texture_test
+        tests/spin_effect_texture_test.cpp
+        soh/resource/importer/SpinEffectTextureFactory.cpp
+    )
+    target_link_libraries(spin_effect_texture_test PRIVATE libultraship)
+    # Match the library's static MSVC CRT, including its Debug configuration.
+    set_property(TARGET spin_effect_texture_test PROPERTY MSVC_RUNTIME_LIBRARY
+        "$<TARGET_GENEX_EVAL:libultraship,$<TARGET_PROPERTY:libultraship,MSVC_RUNTIME_LIBRARY>>")
+    add_test(NAME spin_effect_texture_test COMMAND spin_effect_texture_test)
+
+    add_executable(static_story_actor_test
+        tests/static_story_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_actor_test COMMAND static_story_actor_test)
+
+    add_executable(static_story_dialogue_test
+        tests/static_story_dialogue_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+    )
+    add_test(NAME static_story_dialogue_test COMMAND static_story_dialogue_test)
+
+    add_executable(static_story_talk_test
+        tests/static_story_talk_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_talk.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+        src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+    )
+    target_include_directories(static_story_talk_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_talk_test COMMAND static_story_talk_test)
+
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(static_story_viewer_talk_test
+            tests/static_story_viewer_talk_test.c
+            src/overlays/actors/ovl_En_Viewer/z_en_viewer.c
+            src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+            src/overlays/actors/ovl_En_Viewer/static_story_dialogue.c
+            src/overlays/actors/ovl_En_Viewer/static_story_talk.c
+        )
+        target_include_directories(static_story_viewer_talk_test PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets
+            ${CMAKE_CURRENT_SOURCE_DIR}
+            ${CMAKE_CURRENT_SOURCE_DIR}/../libultraship/include
+        )
+        target_compile_definitions(static_story_viewer_talk_test PRIVATE LOG_LEVEL_GAME_PRINTS=0)
+        target_compile_options(static_story_viewer_talk_test PRIVATE -ffunction-sections -fdata-sections)
+        target_link_options(static_story_viewer_talk_test PRIVATE -Wl,--gc-sections)
+        add_test(NAME static_story_viewer_talk_test COMMAND static_story_viewer_talk_test)
+    endif()
+
+    add_executable(static_story_ruto_water_test
+        tests/static_story_ruto_water_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ruto_water.c
+    )
+    add_test(NAME static_story_ruto_water_test COMMAND static_story_ruto_water_test)
+
+    add_executable(static_story_mm_actor_test
+        tests/static_story_mm_actor_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_mm_actor.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_mm_actor_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    # MSVC's CRT provides the math functions directly; unlike Unix platforms,
+    # Windows has no separate libm (and attempting to link `m` requests m.lib).
+    if(NOT WIN32)
+        target_link_libraries(static_story_mm_actor_test PRIVATE m)
+    endif()
+    add_test(NAME static_story_mm_actor_test COMMAND static_story_mm_actor_test)
+
+    add_executable(mm_display_list_patch_test
+        tests/mm_display_list_patch_test.cpp
+        mods/transformation_masks/assets/mm_display_list_patch.cpp
+    )
+    add_test(NAME mm_display_list_patch_test COMMAND mm_display_list_patch_test)
+
+    add_executable(static_story_ganon_test
+        tests/static_story_ganon_test.c
+        src/overlays/actors/ovl_En_Viewer/static_story_ganon.c
+        src/overlays/actors/ovl_En_Viewer/static_story_actor.c
+    )
+    target_include_directories(static_story_ganon_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME static_story_ganon_test COMMAND static_story_ganon_test)
+
+    add_executable(hyrule_field_night_music_test
+        tests/hyrule_field_night_music_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
+    )
+    target_include_directories(hyrule_field_night_music_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_music_test PRIVATE HYRULE_FIELD_NIGHT_MUSIC_TEST)
+    add_test(NAME hyrule_field_night_music_test COMMAND hyrule_field_night_music_test)
+
+    add_executable(hyrule_field_night_runtime_test
+        tests/hyrule_field_night_runtime_test.cpp
+        soh/Enhancements/audio/HyruleFieldNightMusic.cpp
+        src/code/code_800F9280.c
+    )
+    target_include_directories(hyrule_field_night_runtime_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/night_runtime_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(hyrule_field_night_runtime_test PRIVATE CVAR_PREFIX_AUDIO="gAudioEditor")
+    add_test(NAME hyrule_field_night_runtime_test COMMAND hyrule_field_night_runtime_test)
+
+    add_executable(audio_font_id_test tests/audio_font_id_test.c)
+    target_include_directories(audio_font_id_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/audio_sequence_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+    add_test(NAME audio_font_id_test COMMAND audio_font_id_test)
+
+    add_executable(global_outdoor_rain_test
+        tests/global_outdoor_rain_test.cpp
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+    )
+    target_include_directories(global_outdoor_rain_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_test PRIVATE GLOBAL_OUTDOOR_RAIN_TEST)
+    add_test(NAME global_outdoor_rain_test COMMAND global_outdoor_rain_test)
+
+    add_executable(concurrent_weather_audio_test
+        tests/concurrent_weather_audio_test.c
+        src/code/concurrent_weather_audio.c
+    )
+    add_test(NAME concurrent_weather_audio_test COMMAND concurrent_weather_audio_test)
+
+    # Compile the actual mixer/updater; only resources, CVars and hook registration are stubbed.
+    add_executable(weather_sample_player_test
+        tests/weather_sample_player_test.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+    )
+    target_include_directories(weather_sample_player_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(weather_sample_player_test PRIVATE
+        CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
+    )
+    add_test(NAME weather_sample_player_test COMMAND weather_sample_player_test)
+
+    add_executable(global_outdoor_rain_audio_test
+        tests/global_outdoor_rain_audio_test.cpp
+        tests/weather_sfx_engine_fixture.c
+        soh/Enhancements/audio/GlobalOutdoorRain.cpp
+        soh/Enhancements/audio/WeatherSamplePlayer.cpp
+        src/code/concurrent_weather_audio.c
+        src/code/code_800F7260.c
+        src/code/audio_sound_params.c
+    )
+    target_include_directories(global_outdoor_rain_audio_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather_audio_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    target_compile_definitions(global_outdoor_rain_audio_test PRIVATE
+        CVAR_PREFIX_SETTING="gSettings" CVAR_PREFIX_AUDIO="gAudioEditor"
+    )
+    add_test(NAME global_outdoor_rain_audio_test COMMAND global_outdoor_rain_audio_test)
+
+    find_package(nlohmann_json REQUIRED)
+    add_executable(scene_rain_policy_test tests/scene_rain_policy_test.cpp
+        soh/Enhancements/audio/SceneRainPolicy.cpp)
+    target_include_directories(scene_rain_policy_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_compile_definitions(scene_rain_policy_test PRIVATE SCENE_RAIN_POLICY_TEST)
+    target_link_libraries(scene_rain_policy_test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME scene_rain_policy_test COMMAND scene_rain_policy_test)
+    add_executable(scene_rain_binding_test tests/scene_rain_binding_test.cpp
+        soh/Enhancements/audio/SceneRainPolicy.cpp)
+    target_include_directories(scene_rain_binding_test PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/scene_rain_stubs
+        ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/libultraship/include)
+    target_link_libraries(scene_rain_binding_test PRIVATE nlohmann_json::nlohmann_json)
+    add_test(NAME scene_rain_binding_test COMMAND scene_rain_binding_test)
+
+
+    # The standalone engine harness uses GNU-style section/linker flags.
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_test(NAME chest_size_matches_contents COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_chest_size_tests.py)
+        set_tests_properties(chest_size_matches_contents PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
+        add_test(NAME rain_engine_runtime COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_rain_runtime_test.py
+            ${CMAKE_CURRENT_BINARY_DIR}/rain-runtime ${CMAKE_C_COMPILER} ${CMAKE_CXX_COMPILER})
+        add_test(NAME midna_navi_draw COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_midna_navi_draw_test.py)
+        set_tests_properties(midna_navi_draw PROPERTIES ENVIRONMENT "CC=${CMAKE_C_COMPILER}")
+        add_test(NAME midna_audio COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_SOURCE_DIR}/scripts/diagnostics/run_midna_audio_test.py)
+        set_tests_properties(midna_audio PROPERTIES
+            ENVIRONMENT "CC=${CMAKE_C_COMPILER};CXX=${CMAKE_CXX_COMPILER}")
+    endif()
+
+endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     enable_language(OBJCXX)
@@ -106,6 +339,10 @@ endif()
 
 if (NOT TARGET ZAPDLib)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../ZAPDTR/ZAPD ${CMAKE_BINARY_DIR}/ZAPD)
+endif()
+
+if (NOT TARGET OTRExporter)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../OTRExporter ${CMAKE_BINARY_DIR}/OTRExporter)
 endif()
 
 set(PROJECT_NAME soh)
@@ -612,8 +849,8 @@ if (CMAKE_GENERATOR MATCHES "Visual Studio")
     add_custom_command(
     TARGET ${PROJECT_NAME}
     POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/extractor ${CMAKE_BINARY_DIR}/soh/assets
-    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/xml ${CMAKE_BINARY_DIR}/soh/assets/xml
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/extractor ${CMAKE_BINARY_DIR}/soh/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/xml ${CMAKE_BINARY_DIR}/soh/assets/xml
     )
 endif()
 if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
@@ -621,8 +858,8 @@ if(NOT CMAKE_SYSTEM_NAME MATCHES "NintendoSwitch|CafeOS")
         TARGET ${PROJECT_NAME}
         POST_BUILD
         COMMENT "Copying asset xmls..."
-        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/extractor $<TARGET_FILE_DIR:soh>/assets
-        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/xml $<TARGET_FILE_DIR:soh>/assets/xml
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/extractor $<TARGET_FILE_DIR:soh>/assets
+        COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_CURRENT_SOURCE_DIR}/assets/xml $<TARGET_FILE_DIR:soh>/assets/xml
         COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:soh>/assets/symbols
     #    COMMAND ${VS_COPY_ASSETS_CMD}
     )

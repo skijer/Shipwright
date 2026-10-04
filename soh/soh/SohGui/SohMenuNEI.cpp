@@ -1,4 +1,5 @@
 #include "SohMenu.h"
+#include "soh/Enhancements/randomizer/NeiGiPresentation.h"
 #include "soh/OTRGlobals.h"
 #include "UIWidgets.hpp"
 #include "soh/ResourceManagerHelpers.h"
@@ -505,6 +506,14 @@ void RegisterNEIMenu() {
     path.column = SECTION_COLUMN_1;
     mSohMenu->AddWidget(path, "Custom Items", WIDGET_SEPARATOR_TEXT);
 
+    mSohMenu->AddWidget(path, "NEI item shimmer", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_NEI_GI_EFFECTS)
+        .RaceDisable(false)
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Adds wonder-item-style glints to NEI pickups, shop displays, and shuffled world items.\n"
+            "Deku Leaf uses green shimmer. Rod and spell energy remain active independently.\n"
+            "Applies immediately and does not change the seed or item behavior."));
+
     // Gerudo demon mode. The axe placement is dialled and baked (GERUDO_AXE_* in
     // mm_player_form.cpp); what is left is a way INTO demon mode while the rest of its
     // moveset is being built. Skijer's NEI
@@ -891,8 +900,11 @@ void RegisterNEIMenu() {
                     }
                 }
                 s32 v = CVarGetInteger("gMods.PakLoader.AdultModel", -1);
-                if (v >= 0 && !opt->comboMap.count(v)) {}
+                if (!opt->comboMap.count(v)) {
+                    PakLoader_SaveSelection("gMods.PakLoader.AdultModel", -1);
+                }
             })
+            .Callback([](WidgetInfo& info) { PakLoader_SaveSelection(info.cVar, CVarGetInteger(info.cVar, -1)); })
             .PostFunc([](WidgetInfo& info) {
                 if (CVarGetInteger("gMods.PakLoader.Enabled", 0)) {
                     PakLoader_SelectAdultModel(CVarGetInteger("gMods.PakLoader.AdultModel", -1));
@@ -920,8 +932,11 @@ void RegisterNEIMenu() {
                     }
                 }
                 s32 v = CVarGetInteger("gMods.PakLoader.ChildModel", -1);
-                if (v >= 0 && !opt->comboMap.count(v)) {}
+                if (!opt->comboMap.count(v)) {
+                    PakLoader_SaveSelection("gMods.PakLoader.ChildModel", -1);
+                }
             })
+            .Callback([](WidgetInfo& info) { PakLoader_SaveSelection(info.cVar, CVarGetInteger(info.cVar, -1)); })
             .PostFunc([](WidgetInfo& info) {
                 if (CVarGetInteger("gMods.PakLoader.Enabled", 0)) {
                     PakLoader_SelectChildModel(CVarGetInteger("gMods.PakLoader.ChildModel", -1));
@@ -960,8 +975,11 @@ void RegisterNEIMenu() {
                         }
                     }
                     s32 v = CVarGetInteger("gMods.PakLoader.Equipment", -1);
-                    if (v >= 0 && !opt->comboMap.count(v)) {}
+                    if (!opt->comboMap.count(v)) {
+                        PakLoader_SaveSelection("gMods.PakLoader.Equipment", -1);
+                    }
                 })
+                .Callback([](WidgetInfo& info) { PakLoader_SaveSelection(info.cVar, CVarGetInteger(info.cVar, -1)); })
                 .PostFunc([](WidgetInfo& info) {
                     // Equipment works independently of the body-model toggle —
                     // pak_loader resolves vanilla fists/hands at draw time so an
@@ -1058,6 +1076,12 @@ void RegisterNEIMenu() {
     path.column = SECTION_COLUMN_1;
 
     mSohMenu->AddWidget(path, "Per-slot equipment override", WIDGET_SEPARATOR_TEXT);
+    mSohMenu->AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Hides stowed swords, shields, and the scabbard, even while a weapon is drawn.\n"
+            "Equipment held in the hands stays visible. Also applies to the pause-menu preview."));
     mSohMenu->AddWidget(path,
                         "Each slot can pull from a different pak. 'Default' inherits from the main "
                         "Equipment Pack dropdown (or vanilla if no pack selected). Sheathed and "
@@ -1072,7 +1096,7 @@ void RegisterNEIMenu() {
             char cvarName[96];
             for (s32 i = 0; i < n; i++) {
                 snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(i));
-                CVarSetInteger(cvarName, -1);
+                PakLoader_SaveSelection(cvarName, -1);
                 PakLoader_SetSlotMix(i, -1);
             }
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
@@ -1128,10 +1152,11 @@ void RegisterNEIMenu() {
                 char cvarName[96];
                 snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));
                 s32 v = CVarGetInteger(cvarName, -1);
-                if (v >= 0 && !opt->comboMap.count(v)) {
-                    CVarSetInteger(cvarName, -1);
+                if (!opt->comboMap.count(v)) {
+                    PakLoader_SaveSelection(cvarName, -1);
                 }
             })
+            .Callback([](WidgetInfo& info) { PakLoader_SaveSelection(info.cVar, CVarGetInteger(info.cVar, -1)); })
             .PostFunc([slotIdx](WidgetInfo& info) {
                 char cvarName[96];
                 snprintf(cvarName, sizeof(cvarName), "gMods.PakLoader.SlotMix.%s", PakLoader_GetSlotKey(slotIdx));

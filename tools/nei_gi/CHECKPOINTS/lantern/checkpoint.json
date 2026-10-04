@@ -1,0 +1,54 @@
+{
+  "resource_count": 10,
+  "vertex_records": 4059,
+  "vertex_loads": 141,
+  "xlu_entry": "objects/nei_gi_redesign/lantern/gi_xlu_dl",
+  "slug": "lantern",
+  "name": "Lantern",
+  "entry": "objects/nei_gi_redesign/lantern/gi_dl",
+  "draw_scale": 0.025,
+  "matrix_scale": 1.25,
+  "triangles": 4250,
+  "bounds_author": [
+    [
+      -27.0,
+      -36.0,
+      -27.0
+    ],
+    [
+      27.0,
+      53.375,
+      27.0
+    ]
+  ],
+  "markers": {
+    "grip_author": [
+      0,
+      52,
+      0
+    ],
+    "flame_author": [
+      0,
+      0,
+      0
+    ],
+    "chamber_radius_author": 20.5,
+    "chamber_y_author": [
+      -26.5,
+      25.5
+    ],
+    "held_author_scale": 0.1346153846153846,
+    "held_flame_offset_world": [
+      0,
+      -7,
+      0
+    ]
+  },
+  "notes": [
+    "Shared upright cage, glass and unlit wick for GI and held rendering; no gameplay resources replaced.",
+    "GI scale .025, effective author scale .5, native matrix 1.25; held uses 7/52 world units per author unit.",
+    "Grip at author y=52 puts chamber center exactly seven world units below the hand.",
+    "Opaque cage first, contained deterministic effects second, transparent glass last."
+  ],
+  "runtime_tested": false
+}

@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_dekuleaf.c - Deku Leaf 3D model and draw functions
  *
@@ -58,7 +59,9 @@ static void DekuLeaf_DrawModel(PlayState* play, f32 posX, f32 posY, f32 posZ, s1
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("deku_leaf"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -75,7 +78,9 @@ static void DekuLeaf_DrawModelWithHandDir(PlayState* play, Vec3f* handPos, f32 h
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("deku_leaf"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, DekuLeaf_GetDL());
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -83,7 +88,7 @@ static void DekuLeaf_DrawModelWithHandDir(PlayState* play, Vec3f* handPos, f32 h
 void CustomItems_DrawDekuLeaf(Player* p, PlayState* play) {
     if (!dlGliding && !dlBlowing)
         return;
-    if (DekuLeaf_GetDL() == NULL)
+    if (!NeiHeld_HasResources(NEI_HELD_PATH("deku_leaf"), NULL) && DekuLeaf_GetDL() == NULL)
         return; // model not packed -> skip rather than draw a NULL DL
 
     DekuLeaf_SetupGeometryMode(play->state.gfxCtx);

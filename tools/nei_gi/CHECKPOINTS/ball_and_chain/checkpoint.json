@@ -1,0 +1,28 @@
+{
+  "resource_count": 8,
+  "vertex_records": 11419,
+  "vertex_loads": 429,
+  "slug": "ball_and_chain",
+  "name": "Ball and Chain",
+  "entry": "objects/nei_gi_redesign/ball_and_chain/gi_dl",
+  "draw_scale": 0.25,
+  "matrix_scale": 0.217498779296875,
+  "triangles": 8982,
+  "bounds_author": [
+    [
+      -48.9375,
+      -54.125,
+      -39.625
+    ],
+    [
+      58.5,
+      50.8125,
+      33.625
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Visual POC3: six sharp four-sided iron spikes with true pointed tips replace the rounded bosses, following user correction of the TP reference. Forged iron plates and heavy rectangular links preserved."
+  ],
+  "runtime_tested": false
+}

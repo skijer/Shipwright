@@ -1,0 +1,34 @@
+{
+  "resource_count": 7,
+  "vertex_records": 2938,
+  "vertex_loads": 107,
+  "slug": "ice_rod",
+  "name": "Ice Rod",
+  "entry": "objects/nei_gi_redesign/ice_rod/gi_dl",
+  "draw_scale": 0.2,
+  "matrix_scale": 0.243743896484375,
+  "triangles": 3168,
+  "bounds_author": [
+    [
+      -20.75,
+      -51.375,
+      -12.125
+    ],
+    [
+      25.625,
+      57.0625,
+      12.125
+    ]
+  ],
+  "markers": {
+    "tip_author": [
+      13.287730758122738,
+      40.8954302006916,
+      0.0
+    ]
+  },
+  "notes": [
+    "18 degree baked lean; tip marker consumed by the unified GI particle draw."
+  ],
+  "runtime_tested": false
+}

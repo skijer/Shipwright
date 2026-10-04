@@ -5,6 +5,7 @@
  */
 
 #include "z_obj_comb.h"
+#include "din_fire_sword.h"
 #include "overlays/effects/ovl_Effect_Ss_Kakera/z_eff_ss_kakera.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "include/z64actor.h"
@@ -178,7 +179,7 @@ void ObjComb_Wait(ObjComb* this, PlayState* play) {
 
     if ((this->collider.base.acFlags & AC_HIT) != 0) {
         this->collider.base.acFlags &= ~AC_HIT;
-        dmgFlags = this->collider.elements[0].info.acHitInfo->toucher.dmgFlags;
+        dmgFlags = DinFireSword_OriginalDamageFlags(play, this->collider.elements[0].info.acHitInfo);
         if (dmgFlags & 0x4001F866) {
             this->unk_1B0 = 1500;
         } else {

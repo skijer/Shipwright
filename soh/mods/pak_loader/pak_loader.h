@@ -67,6 +67,10 @@ Gfx* PakLoader_GetDLOverride(const char* otrPath);
  */
 #define PAK_DL_STUB ((Gfx*)(uintptr_t)1)
 Gfx* PakLoader_GetEquipDL(Player* player, s32 limbIndex);
+// Shared sword-only geometry for the local pedestal and both ceremonial hands.
+// Uses the selected Master slot independently of the current age or inventory.
+Gfx* PakLoader_GetTimePedestalSwordDL(void);
+Gfx* PakLoader_GetTimePedestalHandDL(void);
 
 /**
  * Check if the pak model used a combined DL for the given hand (includes weapon geometry).
@@ -121,6 +125,13 @@ u8 PakLoader_ModelHasChild(s32 index);
  */
 void PakLoader_SelectAdultModel(s32 index);
 void PakLoader_SelectChildModel(s32 index);
+
+/**
+ * Persist a validated menu choice by file path as well as its current index.
+ * Keep this separate from Select*: disabling models or rendering a remote
+ * player may change the active selection without changing the user's choice.
+ */
+void PakLoader_SaveSelection(const char* cvarName, s32 index);
 
 /**
  * Get currently selected model indices per age.

@@ -7,6 +7,10 @@
 #include <soh/Enhancements/TimeDisplay/TimeDisplay.h>
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/Restorations/GetItemManipulation.h"
+#include "soh/Enhancements/audio/MidnaAudio.h"
+#include <algorithm>
+#include <cfloat>
+#include <cstring>
 #include <ship/Context.h>
 
 extern "C" {
@@ -95,6 +99,72 @@ static const std::map<int32_t, const char*> allPowers = {
     { DAMAGE_OHKO, "OHKO (256x)" },
 };
 
+static std::string MidnaClipLabel(const std::string& path) {
+    constexpr const char* prefix = "objects/midna_navi/audio/";
+    std::string label = path.rfind(prefix, 0) == 0 ? path.substr(std::strlen(prefix)) : path;
+    if (label.size() >= 4) {
+        label.resize(label.size() - 4);
+    }
+    std::replace(label.begin(), label.end(), '_', ' ');
+    return label;
+}
+
+static void DrawMidnaSoundAssignments(WidgetInfo& info) {
+    if (!ImGui::CollapsingHeader("Midna Sound Effects")) {
+        return;
+    }
+    const auto clips = MidnaAudio_GetAvailableClips();
+    if (clips.empty()) {
+        ImGui::TextWrapped("No playable Midna sounds found. Install the Midna companion archive and restart the game.");
+        return;
+    }
+    bool changed = false;
+    if (ImGui::BeginTable("MidnaSoundAssignments", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Event", ImGuiTableColumnFlags_WidthStretch, 0.45f);
+        ImGui::TableSetupColumn("Sound", ImGuiTableColumnFlags_WidthStretch, 0.55f);
+        for (int i = 0; i < MIDNA_AUDIO_EVENT_COUNT; ++i) {
+            const auto event = static_cast<MidnaAudioEvent>(i);
+            const auto selected = MidnaAudio_GetAssignment(event);
+            const char* native = event == MIDNA_AUDIO_YAWN ? "Silent" : "Original game sound";
+            std::string preview = selected.empty() ? native : MidnaClipLabel(selected);
+            if (!selected.empty() && std::find(clips.begin(), clips.end(), selected) == clips.end()) {
+                preview += " (unavailable)";
+            }
+            ImGui::PushID(i);
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::TextWrapped("%s", MidnaAudio_GetEventLabel(event));
+            ImGui::TableNextColumn();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::BeginCombo("##Sound", preview.c_str())) {
+                if (ImGui::Selectable(native, selected.empty())) {
+                    changed |= MidnaAudio_Assign(event, "");
+                }
+                for (const auto& clip : clips) {
+                    ImGui::PushID(clip.c_str());
+                    if (ImGui::Selectable(MidnaClipLabel(clip).c_str(), selected == clip)) {
+                        changed |= MidnaAudio_Assign(event, clip);
+                    }
+                    if (selected == clip) {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                    ImGui::PopID();
+                }
+                ImGui::EndCombo();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndTable();
+    }
+    if (ImGui::Button("Reset Midna Sounds")) {
+        MidnaAudio_ResetAssignments();
+        changed = true;
+    }
+    if (changed) {
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    }
+}
+
 static const std::map<int32_t, const char*> subPowers = {
     { DAMAGE_VANILLA, "Vanilla (1x)" },      { DAMAGE_DOUBLE, "Double (2x)" },
     { DAMAGE_QUADRUPLE, "Quadruple (4x)" },  { DAMAGE_OCTUPLE, "Octuple (8x)" },
@@ -165,6 +235,29 @@ void SohMenu::AddMenuEnhancements() {
     AddSidebarEntry("Enhancements", path.sidebarName, 3);
     path.column = SECTION_COLUMN_1;
 
+    AddWidget(path, "Ride Young Epona as Child", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("RideYoungEpona"))
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Ride Young Epona as Child Link after learning Epona's Song.\n"
+            "Available in Hyrule Field, Lake Hylia, Gerudo Valley, Gerudo's Fortress, and Lon Lon Ranch, "
+            "with native horse fences and area restrictions.\n"
+            "Requires Young_Epona_SoH_POC1_Assets.o2r. Reload the area after changing this option.\n"
+            "Young Epona's saved location is separate from adult Epona."));
+
+    AddWidget(path, "Midna Companion (Navi)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("MidnaCompanion"))
+        .RaceDisable(false)
+        .Callback([](WidgetInfo&) { MidnaAudio_Reset(); })
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Replace Navi with Midna's model, animation and companion sounds. Requires the Midna companion pack in "
+            "mods. "
+            "Missing assets use Navi's normal appearance or sounds. Turn off to restore Navi. "
+            "Enable to choose a sound for each event below."));
+    AddWidget(path, "Midna Sound Effects", WIDGET_CUSTOM)
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = !CVarGetInteger(CVAR_ENHANCEMENT("MidnaCompanion"), 0); })
+        .CustomFunction(DrawMidnaSoundAssignments);
+
     AddWidget(path, "Saving", WIDGET_SEPARATOR_TEXT);
     AddWidget(path, "Autosave", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("Autosave"))
@@ -193,6 +286,14 @@ void SohMenu::AddMenuEnhancements() {
             "then asks if you want to Continue, Reset, or Reset to Spawn."));
 
     AddWidget(path, "Containers Match Contents", WIDGET_SEPARATOR_TEXT);
+    AddWidget(path, "Chest Size Matches Contents", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("ChestSizeMatchesContents"))
+        .Options(CheckboxOptions().DefaultValue(false).Tooltip(
+            "Restore classic chest sizing in normal and randomizer games.\n"
+            "Major items, lesser items, heart rewards and boss keys use large chests.\n"
+            "Junk, small keys and Skulltula Tokens use small chests.\n"
+            "Works independently of container textures and the Stone of Agony.\n"
+            "Treasure Chest Game guessing rooms keep their original sizes."));
     AddWidget(path, "Containers Match Contents", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ChestSizeAndTextureMatchContents"))
         .Callback([](WidgetInfo& info) {
@@ -518,12 +619,30 @@ void SohMenu::AddMenuEnhancements() {
         .Options(CheckboxOptions().Tooltip("Speeds up emptying animation when dumping out the contents of a bottle."));
     AddWidget(path, "Vine/Ladder Climb Speed +%d", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("ClimbSpeed"))
+        .PreFunc([](WidgetInfo& info) {
+            info.options->disabled =
+                IS_RANDO && OTRGlobals::Instance->gRandoContext->GetOption(RSK_CLIMB_SPEED_UPGRADE).Is(RO_GENERIC_ON);
+            info.options->disabledTooltip = "This slider is controlled by the Climb Speed Upgrade stat item in the "
+                                            "current randomizer seed.";
+        })
         .Options(IntSliderOptions().Min(0).Max(12).DefaultValue(0).Format("+%d"));
     AddWidget(path, "Block Pushing Speed +%d", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("FasterBlockPush"))
+        .PreFunc([](WidgetInfo& info) {
+            info.options->disabled =
+                IS_RANDO && OTRGlobals::Instance->gRandoContext->GetOption(RSK_PUSH_SPEED_UPGRADE).Is(RO_GENERIC_ON);
+            info.options->disabledTooltip = "This slider is controlled by the Push Speed Upgrade stat item in the "
+                                            "current randomizer seed.";
+        })
         .Options(IntSliderOptions().Min(0).Max(5).DefaultValue(0).Format("+%d"));
     AddWidget(path, "Crawl Speed %dx", WIDGET_CVAR_SLIDER_INT)
         .CVar(CVAR_ENHANCEMENT("CrawlSpeed"))
+        .PreFunc([](WidgetInfo& info) {
+            info.options->disabled =
+                IS_RANDO && OTRGlobals::Instance->gRandoContext->GetOption(RSK_CRAWL_SPEED_UPGRADE).Is(RO_GENERIC_ON);
+            info.options->disabledTooltip = "This slider is controlled by the Crawl Speed Upgrade stat item in the "
+                                            "current randomizer seed.";
+        })
         .Options(IntSliderOptions().Min(1).Max(5).DefaultValue(1).Format("%dx"));
     AddWidget(path, "Exclude Glitch-Aiding Crawlspaces", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("GlitchAidingCrawlspaces"))
@@ -661,6 +780,38 @@ void SohMenu::AddMenuEnhancements() {
         .CVar(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"))
         .RaceDisable(false)
         .Options(CheckboxOptions().Tooltip("Makes all equipment visible, regardless of age."));
+    AddWidget(path, "Din Fire Shield (POC)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireShield"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Forms an animated flame shield while guarding with Din's bracer. Requires the fire-shield add-on, "
+            "the matching Din bracer pack, and Alternate Assets. POC supports child Deku and adult Hylian shields. "
+            "Blocking follows the equipped shield's normal rules."));
+    AddWidget(path, "Shield SFX", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireShieldSfx"))
+        .RaceDisable(false)
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireShield"), 0) == 0; })
+        .Options(
+            CheckboxOptions().Tooltip("Plays a flame sound while guarding with Din's Fire Shield. Off by default."));
+    AddWidget(path, "Din Fire Sword (POC)", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireSword"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Surrounds Din's drawn sword with animated fire, including while idle. Requires the fire-weapons add-on, "
+            "matching Din equipment, and Alternate Assets. Supports Kokiri, Master, and full/broken Biggoron swords. "
+            "Normal sword damage and reach are unchanged."));
+    AddWidget(path, "Fire Damage", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("DinFireSwordDamage"))
+        .PreFunc([](WidgetInfo& info) { info.isHidden = CVarGetInteger(CVAR_ENHANCEMENT("DinFireSword"), 0) == 0; })
+        .Options(CheckboxOptions().Tooltip(
+            "Adds fire interactions to direct sword hits while preserving normal sword damage, cutting, and enemy "
+            "reactions. Off by default. Does not change reach. Charged spin waves stay unchanged."));
+    AddWidget(path, "Hide Back Equipment and Scabbard", WIDGET_CVAR_CHECKBOX)
+        .CVar(CVAR_ENHANCEMENT("HideBackEquipment"))
+        .RaceDisable(false)
+        .Options(CheckboxOptions().Tooltip(
+            "Hides stowed swords, shields, and the scabbard, even while a weapon is drawn.\n"
+            "Equipment held in the hands stays visible. Also applies to the pause-menu preview."));
     AddWidget(path, "Scale Adult Equipment as Child", WIDGET_CVAR_CHECKBOX)
         .CVar(CVAR_ENHANCEMENT("ScaleAdultEquipmentAsChild"))
         .RaceDisable(false)

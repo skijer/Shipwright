@@ -7,6 +7,7 @@
 
 #include "z64.h"
 #include "../custom_items.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 #include "macros.h"
 #include "functions.h"
 #include "variables.h"
@@ -307,6 +308,92 @@ static void Whip_DrawEquippedWhip(PlayState* play, Vec3f* handPos, Player* playe
 // =============================================================================
 // Main Draw Function
 // =============================================================================
+
+static void Whip_ApprovedPathPoint(Vec3f* start, Vec3f* end, f32 sag, f32 t, Vec3f* out) {
+    out->x = start->x + (end->x - start->x) * t;
+    out->y = start->y + (end->y - start->y) * t - sag * 4.0f * t * (1.0f - t);
+    out->z = start->z + (end->z - start->z) * t;
+}
+
+static void Whip_DrawApprovedBody(PlayState* play, Vec3f* start, Vec3f* end, f32 sag) {
+    f32 dx = end->x - start->x;
+    f32 dy = end->y - start->y;
+    f32 dz = end->z - start->z;
+    s32 count = (s32)(sqrtf(dx * dx + dy * dy + dz * dz) / WHIP_BODY_SEGMENT);
+    s32 i;
+    Vec3f a, b;
+
+    if (count < 1)
+        count = 1;
+    if (count > WHIP_BODY_MAX_SEGS)
+        count = WHIP_BODY_MAX_SEGS;
+    Matrix_Push();
+    Whip_ApprovedPathPoint(start, end, sag, 0.0f, &a);
+    for (i = 0; i < count; ++i) {
+        f32 length;
+        Whip_ApprovedPathPoint(start, end, sag, (f32)(i + 1) / count, &b);
+        dx = b.x - a.x;
+        dy = b.y - a.y;
+        dz = b.z - a.z;
+        length = sqrtf(dx * dx + dy * dy + dz * dz);
+        if (length > 0.001f) {
+            // The existing parabolic path is visual only. Orient each braid
+            // interval along its own tangent and meet its neighbors exactly.
+            Matrix_Translate((a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f, (a.z + b.z) * 0.5f, MTXMODE_NEW);
+            Matrix_RotateY(Math_FAtan2F(dx, dz), MTXMODE_APPLY);
+            Matrix_RotateX(Math_FAtan2F(-dy, sqrtf(dx * dx + dz * dz)), MTXMODE_APPLY);
+            Matrix_Scale(WHIP_BODY_SCALE, WHIP_BODY_SCALE, WHIP_BODY_SCALE * length / WHIP_BODY_SEGMENT, MTXMODE_APPLY);
+            NeiHeld_DrawModel(play, NEI_HELD_PATH("whip_segment"), NULL);
+        }
+        a = b;
+    }
+    Matrix_Pop();
+}
+
+static void Whip_DrawApprovedHead(PlayState* play, Vec3f* pos, Vec3f* direction) {
+    f32 horizontal = sqrtf(direction->x * direction->x + direction->z * direction->z);
+    Matrix_Push();
+    Matrix_Translate(pos->x, pos->y, pos->z, MTXMODE_NEW);
+    Matrix_RotateY(Math_FAtan2F(direction->x, direction->z), MTXMODE_APPLY);
+    Matrix_RotateX(Math_FAtan2F(-direction->y, horizontal), MTXMODE_APPLY);
+    Matrix_Scale(WHIP_HEAD_SCALE, WHIP_HEAD_SCALE, WHIP_HEAD_SCALE, MTXMODE_APPLY);
+    NeiHeld_DrawModel(play, NEI_HELD_PATH("whip_tip"), NULL);
+    Matrix_Pop();
+}
+
+static u8 Whip_DrawApproved(Player* player, PlayState* play, u8 state) {
+    Vec3f start, direction;
+    Vec3f* end;
+    u8 attached = state == WHIP_STATE_ATTACHED || state == WHIP_STATE_SWINGING;
+    u8 moving = state == WHIP_STATE_EXTENDING || state == WHIP_STATE_RETRACTING || state == WHIP_STATE_HIT_ENEMY;
+    u8 drawn;
+
+    if (!NeiArticulated_HasWhip() || (state != WHIP_STATE_EQUIP && !attached && !moving)) {
+        return 0;
+    }
+    // Deferred asset paths use the same base/Alt selection as the whole bundle.
+    // Only the visual rope start follows this socket; gameplay positions stay owned by the item logic.
+    // The camera enters first person over several equip frames. Use the same
+    // grip as the lash immediately; the display coil would flash across that
+    // transition before Link's body is hidden.
+    drawn = NeiArticulated_DrawWhipGrip(player, play,
+                                        state == WHIP_STATE_EQUIP && !gCustomItemState.whipFirstPersonActive, &start);
+    if (!drawn || state == WHIP_STATE_EQUIP) {
+        return drawn;
+    }
+    end = attached ? &gCustomItemState.whipAttachPos : &gCustomItemState.whipTipPos;
+    Whip_DrawApprovedBody(play, &start, end, attached ? 15.0f : 0.0f);
+    if (attached) {
+        direction = gCustomItemState.whipAttachNormal;
+    } else {
+        direction.x = end->x - start.x;
+        direction.y = end->y - start.y;
+        direction.z = end->z - start.z;
+    }
+    Whip_DrawApprovedHead(play, end, &direction);
+    return 1;
+}
+
 void CustomItems_DrawWhip(Player* player, PlayState* play) {
     Vec3f handPos;
     u8 state;
@@ -316,6 +403,15 @@ void CustomItems_DrawWhip(Player* player, PlayState* play) {
 
     handPos = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
     state = gCustomItemState.whipState;
+
+    if (Whip_DrawApproved(player, play, state)) {
+        return;
+    }
+    // A hidden first-person wrist or missing bundle must not resurrect the
+    // legacy equipped snake during the same camera transition.
+    if (state == WHIP_STATE_EQUIP && gCustomItemState.whipFirstPersonActive) {
+        return;
+    }
 
     switch (state) {
         case WHIP_STATE_EQUIP:

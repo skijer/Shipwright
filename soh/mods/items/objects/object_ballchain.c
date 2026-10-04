@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_ballchain.c - Ball and Chain 3D model and draw functions
  *
@@ -35,7 +36,9 @@ static void BallChain_DrawBall(PlayState* play, Vec3f* pos, f32 scale, u8 should
 
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, gBallDL);
+    if (!NeiHeld_DrawModel(play, NEI_HELD_PATH("ball"), NULL)) {
+        gSPDisplayList(POLY_OPA_DISP++, gBallDL);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

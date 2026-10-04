@@ -87,6 +87,8 @@ void DeinitOTR(void);
 void OTRMessage_Init();
 void Graph_StartFrame();
 void Graph_ProcessGfxCommands(Gfx* commands);
+void PreludeLoadProbe_BeginStateReload(void);
+void PreludeLoadProbe_EndStateReload(void);
 void OTRGfxPrint(const char* str, void* printer, void (*printImpl)(void*, char));
 void OTRGetPixelDepthPrepare(float x, float y);
 uint16_t OTRGetPixelDepth(float x, float y);

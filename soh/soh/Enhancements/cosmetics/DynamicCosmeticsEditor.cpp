@@ -22,6 +22,8 @@ extern "C" {
 static constexpr const char* CUSTOM_COSMETIC_GROUP = "Custom";
 static constexpr const char* CUSTOM_CVAR_PREFIX = "gCosmetics.Custom.";
 
+enum class CustomCosmeticForm { Child, Adult, Deku, Goron, Zora, FierceDeity, Other };
+
 struct CustomCosmeticBinding {
     std::string materialPath;
     size_t commandIndex = 0;
@@ -39,6 +41,7 @@ struct CustomCosmeticEntry {
     std::string lockedCvar;
     std::string changedCvar;
     std::string category;
+    CustomCosmeticForm form = CustomCosmeticForm::Other;
     std::vector<CustomCosmeticBinding> bindings;
 };
 
@@ -53,17 +56,77 @@ static bool IsCustomArchive(const std::shared_ptr<Ship::Archive>& archive) {
     return archivePath.find("\\mods\\") != std::string::npos || archivePath.find("/mods/") != std::string::npos;
 }
 
-static int GetCustomMaterialSortOrder(const std::string& materialPath) {
-    if (materialPath.starts_with("objects/object_link_child/") ||
-        materialPath.starts_with("__OTR__objects/object_link_child/")) {
-        return 0;
+static std::shared_ptr<Ship::Archive> GetCustomMaterialArchive(Ship::ArchiveManager* archiveManager,
+                                                               const std::string& path) {
+    // GetArchiveFromFile inserts a null owner on a miss; HasFile alone also
+    // considers those inserted keys present. Do not create new phantom paths.
+    return archiveManager->HasFile(path) ? archiveManager->GetArchiveFromFile(path) : nullptr;
+}
+
+static std::string NormalizeCustomMaterialPath(std::string path, bool keepAlt = false) {
+    bool isAlt = false;
+    while (path.starts_with("__OTR__") || path.starts_with("alt/")) {
+        if (path.starts_with("__OTR__")) {
+            path.erase(0, 7);
+        } else {
+            isAlt = true;
+            path.erase(0, 4);
+        }
     }
-    if (materialPath.starts_with("objects/object_link_boy/") ||
-        materialPath.starts_with("__OTR__objects/object_link_boy/")) {
-        return 1;
+    return keepAlt && isAlt ? "alt/" + path : path;
+}
+
+static CustomCosmeticForm GetCustomMaterialForm(const std::string& materialPath, const std::string& category,
+                                                const std::string& label) {
+    const std::string path = NormalizeCustomMaterialPath(materialPath);
+    if (path.starts_with("objects/object_link_child/")) {
+        return CustomCosmeticForm::Child;
+    }
+    if (path.starts_with("objects/object_link_nuts/")) {
+        return CustomCosmeticForm::Deku;
+    }
+    if (path.starts_with("objects/object_link_goron/")) {
+        return CustomCosmeticForm::Goron;
+    }
+    if (path.starts_with("objects/object_link_zora/")) {
+        return CustomCosmeticForm::Zora;
     }
 
-    return 2;
+    // OoT Adult and MM Fierce Deity share object_link_boy. Use the actual
+    // material/manifest identity instead of treating every adult mod as FD.
+    std::string identity;
+    for (unsigned char character : category + label + path) {
+        if (std::isalnum(character)) {
+            identity += static_cast<char>(std::tolower(character));
+        }
+    }
+    if (identity.find("fiercedeity") != std::string::npos || identity.find("feircediety") != std::string::npos) {
+        return CustomCosmeticForm::FierceDeity;
+    }
+    if (path.starts_with("objects/object_link_boy/")) {
+        return CustomCosmeticForm::Adult;
+    }
+
+    // Packs may put form materials in custom folders (such as object_link_goy)
+    // or shared gameplay_keep effects. Keep their declared form grouping.
+    if (identity.find("goronlink") != std::string::npos || identity.find("glinkgoron") != std::string::npos) {
+        return CustomCosmeticForm::Goron;
+    }
+    if (identity.find("dekulink") != std::string::npos || identity.find("glinkdeku") != std::string::npos) {
+        return CustomCosmeticForm::Deku;
+    }
+    if (identity.find("zoralink") != std::string::npos || identity.find("glinkzora") != std::string::npos) {
+        return CustomCosmeticForm::Zora;
+    }
+    if (identity.find("childlink") != std::string::npos || identity.find("humanlink") != std::string::npos ||
+        identity.find("glinkchild") != std::string::npos || identity.find("glinkhuman") != std::string::npos) {
+        return CustomCosmeticForm::Child;
+    }
+    if (identity.find("adultlink") != std::string::npos || identity.find("glinkadult") != std::string::npos) {
+        return CustomCosmeticForm::Adult;
+    }
+
+    return CustomCosmeticForm::Other;
 }
 
 static void SanitizeCustomKey(std::string& value) {
@@ -98,16 +161,46 @@ static bool TryLoadCustomDisplayListXml(Ship::ArchiveManager* archiveManager, Sh
     return material != nullptr;
 }
 
-static size_t FindDisplayListInstructionIndex(const Fast::DisplayList& displayList, const Gfx& expected,
-                                              size_t searchStart) {
+static size_t FindDisplayListColorCommandIndex(const Fast::DisplayList& displayList, bool isPrimColor,
+                                               size_t searchStart) {
+    const uint8_t opcode = isPrimColor ? G_SETPRIMCOLOR : G_SETENVCOLOR;
     for (size_t i = searchStart; i < displayList.Instructions.size(); i++) {
-        const Gfx& current = displayList.Instructions[i];
-        if (current.words.w0 == expected.words.w0 && current.words.w1 == expected.words.w1) {
+        const uint8_t currentOpcode = static_cast<uint8_t>(displayList.Instructions[i].words.w0 >> 24);
+        if (currentOpcode == opcode) {
             return i;
+        }
+        // Skip data slots used by expanded GBI commands. A hash or coordinate
+        // payload can have the same high byte as a color opcode.
+        switch (currentOpcode) {
+            case G_SETTIMG_OTR_HASH:
+            case G_DL_OTR_HASH:
+            case G_VTX_OTR_HASH:
+            case G_BRANCH_Z_OTR:
+            case G_MARKER:
+            case G_MTX_OTR:
+            case G_MOVEMEM_OTR:
+            case G_VTX_OTR_FILEPATH:
+            case G_LOADBLOCK_WIDE:
+            case G_FILLWIDERECT:
+                i++;
+                break;
+            case G_TEXRECT_WIDE:
+                i += 2;
+                break;
+            case G_ENDDL:
+                return SIZE_MAX;
         }
     }
 
     return SIZE_MAX;
+}
+
+static void RefreshCustomCosmeticOption(CustomCosmeticEntry& entry) {
+    entry.option.cvar = entry.baseCvar.c_str();
+    entry.option.valuesCvar = entry.valuesCvar.c_str();
+    entry.option.rainbowCvar = entry.rainbowCvar.c_str();
+    entry.option.lockedCvar = entry.lockedCvar.c_str();
+    entry.option.changedCvar = entry.changedCvar.c_str();
 }
 
 static Color_RGBA8 GetCustomCosmeticColor(const CustomCosmeticEntry& entry) {
@@ -126,7 +219,7 @@ void ApplyCustomCosmetics() {
         Color_RGBA8 color = GetCustomCosmeticColor(entry);
 
         for (const auto& binding : entry.bindings) {
-            if (!IsCustomArchive(archiveManager->GetArchiveFromFile(binding.materialPath))) {
+            if (!IsCustomArchive(GetCustomMaterialArchive(archiveManager.get(), binding.materialPath))) {
                 continue;
             }
 
@@ -147,27 +240,52 @@ void ApplyCustomCosmetics() {
     }
 }
 
-static void SetCustomCosmeticColor(const CustomCosmeticEntry& entry, Color_RGBA8 color) {
-    CVarSetColor(entry.option.valuesCvar, color);
-    CVarSetInteger(entry.option.rainbowCvar, 0);
-    CVarSetInteger(entry.option.changedCvar, 1);
+void ApplyCustomCosmeticsToDisplayListCopy(const char* materialPath, Gfx* instructions, size_t count) {
+    if (materialPath == nullptr || instructions == nullptr) {
+        return;
+    }
+    auto resourceManager = Ship::Context::GetRawInstance()->GetResourceManager();
+    auto archiveManager = resourceManager->GetArchiveManager();
+    const std::string path = NormalizeCustomMaterialPath(materialPath);
+    const bool useAlt = NormalizeCustomMaterialPath(materialPath, true).starts_with("alt/") ||
+                        (resourceManager->IsAltAssetsEnabled() &&
+                         GetCustomMaterialArchive(archiveManager.get(), "alt/" + path) != nullptr);
+
+    for (const auto& entry : customCosmeticEntries) {
+        const Color_RGBA8 color = GetCustomCosmeticColor(entry);
+        for (const auto& binding : entry.bindings) {
+            if (NormalizeCustomMaterialPath(binding.materialPath) != path ||
+                binding.materialPath.starts_with("alt/") != useAlt ||
+                !IsCustomArchive(GetCustomMaterialArchive(archiveManager.get(), binding.materialPath)) ||
+                binding.commandIndex >= count) {
+                continue;
+            }
+            Gfx& command = instructions[binding.commandIndex];
+            const uint8_t opcode = binding.isPrimColor ? G_SETPRIMCOLOR : G_SETENVCOLOR;
+            if (static_cast<uint8_t>(command.words.w0 >> 24) != opcode) {
+                continue;
+            }
+            if (binding.isPrimColor) {
+                command = gsDPSetPrimColor(binding.primM, binding.primL, color.r, color.g, color.b, binding.defaultA);
+            } else {
+                command = gsDPSetEnvColor(color.r, color.g, color.b, binding.defaultA);
+            }
+        }
+    }
+}
+
+static void ResetCustomCosmeticColor(CustomCosmeticEntry& entry) {
+    ResetColor(entry.option);
+    ShipInit::Init(entry.option.rainbowCvar);
+    ShipInit::Init(entry.option.lockedCvar);
+    ShipInit::Init(entry.option.changedCvar);
+}
+
+static void RandomizeCustomCosmeticColor(CustomCosmeticEntry& entry, bool manual) {
+    RandomizeColor(entry.option, manual);
     ShipInit::Init(entry.option.valuesCvar);
     ShipInit::Init(entry.option.rainbowCvar);
     ShipInit::Init(entry.option.changedCvar);
-    ApplyCustomCosmetics();
-    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-}
-
-static void ResetCustomCosmeticColor(const CustomCosmeticEntry& entry) {
-    ResetColor(const_cast<CosmeticOption&>(entry.option));
-    ApplyCustomCosmetics();
-    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-}
-
-static void RandomizeCustomCosmeticColor(const CustomCosmeticEntry& entry) {
-    Color_RGBA8 color = { static_cast<uint8_t>(rand() % 256), static_cast<uint8_t>(rand() % 256),
-                          static_cast<uint8_t>(rand() % 256), 255 };
-    SetCustomCosmeticColor(entry, color);
 }
 
 static void DrawCustomCosmeticColorRow(const char* label, const char* cvar, Color_RGBA8 defaultColor,
@@ -242,10 +360,16 @@ void ScanCustomCosmetics() {
 
             std::string resolvedMaterialPath;
             if (materialPath != nullptr && materialPath[0] != '\0') {
-                resolvedMaterialPath = materialPath;
-                if (!archiveManager->HasFile(resolvedMaterialPath)) {
+                resolvedMaterialPath = NormalizeCustomMaterialPath(materialPath, true);
+                if (!resolvedMaterialPath.starts_with("alt/") &&
+                    IsCustomArchive(GetCustomMaterialArchive(archiveManager.get(), "alt/" + resolvedMaterialPath)) &&
+                    (resourceManager->IsAltAssetsEnabled() ||
+                     !IsCustomArchive(GetCustomMaterialArchive(archiveManager.get(), resolvedMaterialPath)))) {
+                    resolvedMaterialPath = "alt/" + resolvedMaterialPath;
+                }
+                if (GetCustomMaterialArchive(archiveManager.get(), resolvedMaterialPath) == nullptr) {
                     if (!resolvedMaterialPath.starts_with("alt/") &&
-                        archiveManager->HasFile("alt/" + resolvedMaterialPath)) {
+                        GetCustomMaterialArchive(archiveManager.get(), "alt/" + resolvedMaterialPath) != nullptr) {
                         resolvedMaterialPath = "alt/" + resolvedMaterialPath;
                     } else {
                         resolvedMaterialPath.clear();
@@ -276,36 +400,32 @@ void ScanCustomCosmetics() {
                 continue;
             }
 
-            size_t searchStart = 0;
+            size_t primSearchStart = 0;
+            size_t envSearchStart = 0;
             for (auto* child = displayListRoot->FirstChildElement(); child != nullptr;
                  child = child->NextSiblingElement()) {
                 const std::string childName = child->Name();
                 const bool childIsPrimColor = childName == "SetPrimColor";
-                if ((!childIsPrimColor && childName != "SetEnvColor") || childIsPrimColor != isPrimColor) {
+                if (!childIsPrimColor && childName != "SetEnvColor") {
                     continue;
                 }
 
-                const char* childCosmeticEntry = child->Attribute("CosmeticEntry");
-                if (childCosmeticEntry == nullptr || std::string(childCosmeticEntry) != cosmeticEntry) {
-                    continue;
-                }
-
-                Gfx expectedInstruction;
-                if (isPrimColor) {
-                    expectedInstruction =
-                        gsDPSetPrimColor(child->IntAttribute("M"), child->IntAttribute("L"), child->IntAttribute("R"),
-                                         child->IntAttribute("G"), child->IntAttribute("B"), child->IntAttribute("A"));
-                } else {
-                    expectedInstruction = gsDPSetEnvColor(child->IntAttribute("R"), child->IntAttribute("G"),
-                                                          child->IntAttribute("B"), child->IntAttribute("A"));
-                }
-
-                const size_t commandIndex =
-                    FindDisplayListInstructionIndex(*material, expectedInstruction, searchStart);
+                // Advance for every color command, including untagged ones.
+                // RGB words may already contain a saved, random or rainbow color.
+                size_t& searchStart = childIsPrimColor ? primSearchStart : envSearchStart;
+                const size_t commandIndex = FindDisplayListColorCommandIndex(*material, childIsPrimColor, searchStart);
                 if (commandIndex == SIZE_MAX) {
                     continue;
                 }
                 searchStart = commandIndex + 1;
+
+                if (childIsPrimColor != isPrimColor) {
+                    continue;
+                }
+                const char* childCosmeticEntry = child->Attribute("CosmeticEntry");
+                if (childCosmeticEntry == nullptr || std::string(childCosmeticEntry) != cosmeticEntry) {
+                    continue;
+                }
 
                 size_t entryIndex = 0;
                 if (auto it = entryIndicesByKey.find(key); it != entryIndicesByKey.end()) {
@@ -344,25 +464,18 @@ void ScanCustomCosmetics() {
                 binding.defaultA = static_cast<uint8_t>(child->IntAttribute("A"));
                 binding.primM = static_cast<uint8_t>(child->IntAttribute("M"));
                 binding.primL = static_cast<uint8_t>(child->IntAttribute("L"));
-                customCosmeticEntries[entryIndex].bindings.push_back(std::move(binding));
+                auto& entry = customCosmeticEntries[entryIndex];
+                entry.form = std::min(entry.form,
+                                      GetCustomMaterialForm(resolvedMaterialPath, entry.category, entry.option.label));
+                entry.bindings.push_back(std::move(binding));
             }
         }
     }
 
     std::stable_sort(customCosmeticEntries.begin(), customCosmeticEntries.end(),
                      [](const CustomCosmeticEntry& lhs, const CustomCosmeticEntry& rhs) {
-                         int lhsOrder = 2;
-                         int rhsOrder = 2;
-
-                         for (const auto& binding : lhs.bindings) {
-                             lhsOrder = std::min(lhsOrder, GetCustomMaterialSortOrder(binding.materialPath));
-                         }
-                         for (const auto& binding : rhs.bindings) {
-                             rhsOrder = std::min(rhsOrder, GetCustomMaterialSortOrder(binding.materialPath));
-                         }
-
-                         if (lhsOrder != rhsOrder) {
-                             return lhsOrder < rhsOrder;
+                         if (lhs.form != rhs.form) {
+                             return lhs.form < rhs.form;
                          }
 
                          if (lhs.category.empty() != rhs.category.empty()) {
@@ -376,39 +489,55 @@ void ScanCustomCosmetics() {
                          return lhs.option.label < rhs.option.label;
                      });
 
+    for (auto& entry : customCosmeticEntries) {
+        RefreshCustomCosmeticOption(entry);
+    }
+
     ApplyCustomCosmetics();
 }
 
-static void DrawCustomCosmeticRow(const CustomCosmeticEntry& entry) {
+static void DrawCustomCosmeticRow(CustomCosmeticEntry& entry) {
     const char* cvar = entry.option.cvar;
 
     DrawCustomCosmeticColorRow(
         entry.option.label.c_str(), cvar, entry.option.defaultColor, entry.option.rainbowCvar, entry.option.lockedCvar,
         entry.option.changedCvar,
         [&entry]() {
+            CVarSetInteger(entry.option.rainbowCvar, 0);
             CVarSetInteger(entry.option.changedCvar, 1);
+            ShipInit::Init(entry.option.rainbowCvar);
             ShipInit::Init(entry.option.changedCvar);
             ApplyCustomCosmetics();
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         },
-        [&entry]() { RandomizeCustomCosmeticColor(entry); },
+        [&entry]() {
+            RandomizeCustomCosmeticColor(entry, true);
+            ApplyCustomCosmetics();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        },
         [&entry]() {
             CVarSetInteger(entry.option.changedCvar, 1);
             ShipInit::Init(entry.option.changedCvar);
             ApplyCustomCosmetics();
             Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         },
-        [&entry]() { ResetCustomCosmeticColor(entry); });
+        [&entry]() {
+            ResetCustomCosmeticColor(entry);
+            ApplyCustomCosmetics();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        });
 }
 
-static void DrawCustomCosmeticCategory(const char* label, const std::vector<const CustomCosmeticEntry*>& entries) {
+static void DrawCustomCosmeticCategory(const char* label, const std::vector<CustomCosmeticEntry*>& entries) {
     ImGui::Text("%s", label);
     ImGui::SameLine((ImGui::CalcTextSize("Message Light Blue (None No Shadow)").x * 1.0f) + 60.0f);
     if (UIWidgets::Button(
             ("Random##" + std::string(label)).c_str(),
             UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)).Color(THEME_COLOR))) {
-        for (const auto* entry : entries) {
-            RandomizeCustomCosmeticColor(*entry);
+        for (auto* entry : entries) {
+            if (!CVarGetInteger(entry->option.lockedCvar, 0)) {
+                RandomizeCustomCosmeticColor(*entry, true);
+            }
         }
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         ApplyCustomCosmetics();
@@ -416,13 +545,16 @@ static void DrawCustomCosmeticCategory(const char* label, const std::vector<cons
     ImGui::SameLine();
     if (UIWidgets::Button(("Reset##" + std::string(label)).c_str(),
                           UIWidgets::ButtonOptions().Size(ImVec2(80, 31)).Padding(ImVec2(2.0f, 0.0f)))) {
-        for (const auto* entry : entries) {
-            ResetCustomCosmeticColor(*entry);
+        for (auto* entry : entries) {
+            if (!CVarGetInteger(entry->option.lockedCvar, 0)) {
+                ResetCustomCosmeticColor(*entry);
+            }
         }
         ApplyCustomCosmetics();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
     UIWidgets::Spacer();
-    for (const auto* entry : entries) {
+    for (auto* entry : entries) {
         DrawCustomCosmeticRow(*entry);
     }
     UIWidgets::Separator(true, true, 2.0f, 2.0f);
@@ -433,32 +565,77 @@ bool HasCustomCosmetics() {
 }
 
 void DrawCustomCosmetics() {
-    if (customCosmeticEntries.empty()) {
-        return;
-    }
-
-    std::vector<const CustomCosmeticEntry*> currentEntries;
-    std::string currentCategory;
-
-    auto flushCategory = [&]() {
-        if (currentEntries.empty()) {
-            return;
+    static constexpr const char* formLabels[] = { "Child", "Adult", "Deku", "Goron", "Zora", "Fierce Deity", "Other" };
+    for (int formIndex = 0; formIndex <= static_cast<int>(CustomCosmeticForm::Other); ++formIndex) {
+        const auto form = static_cast<CustomCosmeticForm>(formIndex);
+        if (std::none_of(customCosmeticEntries.begin(), customCosmeticEntries.end(),
+                         [form](const CustomCosmeticEntry& entry) { return entry.form == form; }) ||
+            !ImGui::CollapsingHeader(formLabels[formIndex])) {
+            continue;
         }
+        ImGui::PushID(formLabels[formIndex]);
+        std::vector<CustomCosmeticEntry*> currentEntries;
+        std::string currentCategory;
+        auto flushCategory = [&]() {
+            if (!currentEntries.empty()) {
+                const char* label = currentCategory.empty() ? CUSTOM_COSMETIC_GROUP : currentCategory.c_str();
+                DrawCustomCosmeticCategory(label, currentEntries);
+                currentEntries.clear();
+            }
+        };
+        for (auto& entry : customCosmeticEntries) {
+            if (entry.form != form) {
+                continue;
+            }
+            if (entry.category != currentCategory) {
+                flushCategory();
+                currentCategory = entry.category;
+            }
+            currentEntries.push_back(&entry);
+        }
+        flushCategory();
+        ImGui::PopID();
+    }
+}
 
-        const char* label = currentCategory.empty() ? CUSTOM_COSMETIC_GROUP : currentCategory.c_str();
-        DrawCustomCosmeticCategory(label, currentEntries);
-        currentEntries.clear();
-    };
+void RandomizeAllCustomCosmetics(bool manual) {
+    for (auto& entry : customCosmeticEntries) {
+        if (!CVarGetInteger(entry.option.lockedCvar, 0)) {
+            RandomizeCustomCosmeticColor(entry, manual);
+        }
+    }
+    ApplyCustomCosmetics();
+}
 
+void ResetAllCustomCosmetics() {
+    for (auto& entry : customCosmeticEntries) {
+        if (!CVarGetInteger(entry.option.lockedCvar, 0)) {
+            ResetCustomCosmeticColor(entry);
+        }
+    }
+    ApplyCustomCosmetics();
+}
+
+void SetAllCustomCosmeticsLocked(bool locked) {
     for (const auto& entry : customCosmeticEntries) {
-        if (entry.category != currentCategory) {
-            flushCategory();
-            currentCategory = entry.category;
-        }
-        currentEntries.push_back(&entry);
+        CVarSetInteger(entry.option.lockedCvar, locked ? 1 : 0);
+        ShipInit::Init(entry.option.lockedCvar);
     }
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
 
-    flushCategory();
+void SetAllCustomCosmeticsRainbow(bool enabled) {
+    for (const auto& entry : customCosmeticEntries) {
+        if (!CVarGetInteger(entry.option.lockedCvar, 0)) {
+            CVarSetInteger(entry.option.rainbowCvar, enabled ? 1 : 0);
+            if (enabled) {
+                CVarSetInteger(entry.option.changedCvar, 1);
+            }
+            ShipInit::Init(entry.option.rainbowCvar);
+            ShipInit::Init(entry.option.changedCvar);
+        }
+    }
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 void UpdateCustomCosmeticsRainbow(int hue, float rainbowSpeed, int& index) {

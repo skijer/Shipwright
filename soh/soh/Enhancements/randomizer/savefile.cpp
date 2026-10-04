@@ -434,6 +434,17 @@ extern "C" void Randomizer_InitSaveFile() {
     // Reset Bombchu Bag Upgrade
     gSaveContext.ship.quest.data.randomizer.bombchuUpgradeLevel = 0;
 
+    // A new seed can be created without restarting the process.
+    auto& stats = gSaveContext.ship.quest.data.randomizer;
+    stats.quarterHearts = 0;
+    stats.defenseUpgrades = 0;
+    stats.speedUpgrades = 0;
+    stats.powerUpgrades = 0;
+    stats.magicStatUpgrades = 0;
+    stats.crawlSpeedUpgrades = 0;
+    stats.climbSpeedUpgrades = 0;
+    stats.pushSpeedUpgrades = 0;
+
     SetStartingItems();
 
     // Set Cutscene flags and texts to skip them.

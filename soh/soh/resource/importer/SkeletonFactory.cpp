@@ -49,6 +49,7 @@ ResourceFactoryBinarySkeletonV0::ReadResource(std::shared_ptr<Ship::File> file,
         std::string limbStr = skeleton->limbTable[i];
         auto limb = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResourceProcess(limbStr.c_str());
         skeleton->skeletonHeaderSegments.push_back(limb ? limb->GetRawPointer() : nullptr);
+        skeleton->limbResources.push_back(limb);
     }
 
     if (skeleton->type == SkeletonType::Normal) {
@@ -119,6 +120,7 @@ ResourceFactoryXMLSkeletonV0::ReadResource(std::shared_ptr<Ship::File> file,
 
             auto limb = Ship::Context::GetRawInstance()->GetResourceManager()->LoadResourceProcess(limbName.c_str());
             skel->skeletonHeaderSegments.push_back(limb ? limb->GetRawPointer() : nullptr);
+            skel->limbResources.push_back(limb);
         }
 
         child = child->NextSiblingElement();

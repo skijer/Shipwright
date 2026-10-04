@@ -1,0 +1,100 @@
+{
+  "fire_surge": {
+    "source": "tools/nei_feedback_preview/art/fire_surge.png",
+    "source_sha256": "386353ef11c5b6eb11347e8d467d90b9d4d3a4bd28d8702a29fd977684eb54bc",
+    "resource_sha256": "824c9501c9702710636e056bb463e476d81f2680cef710e3936cd01e60335463",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "frost_surge": {
+    "source": "tools/nei_feedback_preview/art/frost_surge.png",
+    "source_sha256": "dce6ba9e6be56086829645efe4bf08966153eeee8cfd6a818bbe682e7e4d5d09",
+    "resource_sha256": "3eb86b726c1c62105235a3630a94d0a6af0916aacaf9ad139a12674076879904",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "light_surge": {
+    "source": "tools/nei_feedback_preview/art/light_surge.png",
+    "source_sha256": "dfbdeb71ee398e01ce30d6f1916d81568e5a7e4c71c36064542889d4d4294193",
+    "resource_sha256": "1074ccd6c5a36fb3f218ca9ec382bf3ad58caeb43255441c1ee450ead85f0d06",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "fire_release_flow": {
+    "source": "tools/nei_feedback_preview/art/fire_release_flow.png",
+    "source_sha256": "dbc8eaa99135156711468187b63d46ba5abd602c5c70696a563346a6abe394e0",
+    "resource_sha256": "b3f73f91a668c89b88ad7a2790befb6a603daa28699181d61117cdd005b87a70",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "ice_release_flow": {
+    "source": "tools/nei_feedback_preview/art/ice_release_flow.png",
+    "source_sha256": "cd0c3049c471cdcbc1d031c17ca3a1a9637237be8520338ae9e54554c38a60db",
+    "resource_sha256": "0ecdee1c1221f37be9d9d2e762048b7896171bde20ce1380f6fe5bf4fd0a9cec",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "fire_release_crest": {
+    "source": "tools/nei_feedback_preview/art/fire_release_crest.png",
+    "source_sha256": "2ddd5fcaf86763093fd6a930f53fac9d225393f40210cc686d6429b7da5af873",
+    "resource_sha256": "05e0a53b044ac55080e4e47e0606c62f11ab552c57c450508b19b47705f5b4bb",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  },
+  "ice_release_crest": {
+    "source": "tools/nei_feedback_preview/art/ice_release_crest.png",
+    "source_sha256": "4ad8b7c7ec199ba70c3c5503b6d56c2c61452706b4d1f87cfe3fb52cf76e8fbe",
+    "resource_sha256": "3a742f042432f58d4d2031d9951bc7da5a481a1284d00fb56c7e01948a8734de",
+    "pixels": [
+      512,
+      512
+    ],
+    "logical_tile": [
+      32,
+      32
+    ],
+    "origin": "Original generated RGBA artwork; no medallion/Henriko texture source; authored alpha preserved"
+  }
+}

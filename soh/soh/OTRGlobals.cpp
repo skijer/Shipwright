@@ -1,9 +1,12 @@
 ﻿#include "OTRGlobals.h"
 #include "OTRAudio.h"
+#include "Enhancements/Graphics/PreludeLoadProbe.h"
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <vector>
 #include <chrono>
 #include <optional>
@@ -32,6 +35,8 @@
 #include "Enhancements/speechsynthesizer/SpeechSynthesizer.h"
 #include "Enhancements/controls/SohInputEditorWindow.h"
 #include "Enhancements/audio/AudioCollection.h"
+#include "Enhancements/audio/WeatherSamplePlayer.h"
+#include "Enhancements/audio/MidnaAudio.h"
 #include "Enhancements/debugconsole.h"
 #include "Enhancements/randomizer/randomizer.h"
 #include "Enhancements/randomizer/randomizer_entrance_tracker.h"
@@ -105,8 +110,10 @@
 #include "soh/resource/type/Skeleton.h"
 #include <ship/resource/factory/BlobFactory.h>
 #include <fast/resource/factory/DisplayListFactory.h>
+#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include <fast/resource/factory/MatrixFactory.h>
 #include <fast/resource/factory/TextureFactory.h>
+#include "soh/resource/importer/SpinEffectTextureFactory.h"
 #include <fast/resource/factory/VertexFactory.h>
 #include "soh/resource/importer/ArrayFactory.h"
 #include "soh/resource/importer/AnimationFactory.h"
@@ -984,17 +991,17 @@ void OTRGlobals::Initialize() {
                 (char*)gGitBranch, (char*)gGitCommitHash);
 
     auto loader = context->GetResourceManager()->GetResourceLoader();
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV0>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0);
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV1>(), RESOURCE_FORMAT_BINARY,
+    loader->RegisterResourceFactory(std::make_shared<SOH::SpinEffectTextureFactoryV1>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 1);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryVertexV0>(), RESOURCE_FORMAT_BINARY,
                                     "Vertex", static_cast<uint32_t>(Fast::ResourceType::Vertex), 0);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryXMLVertexV0>(), RESOURCE_FORMAT_XML, "Vertex",
                                     static_cast<uint32_t>(Fast::ResourceType::Vertex), 0);
-    loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryDisplayListV0>(),
-                                    RESOURCE_FORMAT_BINARY, "DisplayList",
-                                    static_cast<uint32_t>(Fast::ResourceType::DisplayList), 0);
+    loader->RegisterResourceFactory(
+        std::make_shared<Prelude::NativeMaterialDisplayListFactory>(context->GetResourceManager()->GetArchiveManager()),
+        RESOURCE_FORMAT_BINARY, "DisplayList", static_cast<uint32_t>(Fast::ResourceType::DisplayList), 0);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryXMLDisplayListV0>(), RESOURCE_FORMAT_XML,
                                     "DisplayList", static_cast<uint32_t>(Fast::ResourceType::DisplayList), 0);
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryMatrixV0>(), RESOURCE_FORMAT_BINARY,
@@ -1258,6 +1265,9 @@ void OTRAudio_Thread() {
                                            num_audio_samples);
         }
 
+        WeatherSamplePlayer_Mix(audio_buffer, total_frames);
+        MidnaAudio_Mix(audio_buffer, total_frames);
+
         // Fleet Ship Combo: silence OoT's output while it's the inactive game. audio_buffer holds
         // the COMPLETE post-mix output (synth + all mix-ins), so zeroing it mutes everything
         // without stopping any sequence (positions keep advancing -> bit-exact resume).
@@ -1335,6 +1345,8 @@ void OTRAudio_Thread() {
 void OTRAudio_Init() {
     // Precache all our samples, sequences, etc...
     ResourceMgr_LoadDirectory("audio");
+    WeatherSamplePlayer_Init();
+    MidnaAudio_Init();
 
     if (!audio.running) {
         audio.running = true;
@@ -1363,6 +1375,8 @@ extern "C" char** fontMap;
 extern "C" size_t fontMapSize;
 
 extern "C" void OTRAudio_Exit() {
+    WeatherSamplePlayer_Reset();
+    MidnaAudio_Reset();
     // Tell the audio thread to stop
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
@@ -2006,7 +2020,59 @@ static void CrossoverHotkey_Tick() {
     sHeld = pressed;
 }
 
+extern "C" void PreludeLoadProbe_BeginStateReload() {
+    Prelude::LoadProbe::BeginStateReload(gPlayState ? gPlayState->sceneNum : -1,
+                                         gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                         CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+                                         CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
+}
+
+static nlohmann::json PreludeLoadProbe_ActorSnapshot(PlayState* play, bool& truncated) {
+    constexpr size_t kMaxActors = 4096;
+    std::map<std::array<int, 3>, uint64_t> groups;
+    size_t visited = 0;
+    truncated = false;
+    if (play != nullptr) {
+        for (int category = 0; category < ACTORCAT_MAX && visited < kMaxActors; ++category) {
+            Actor* actor = play->actorCtx.actorLists[category].head;
+            while (actor != nullptr && visited < kMaxActors) {
+                ++groups[{ actor->id, actor->params, actor->room }];
+                ++visited;
+                actor = actor->next;
+            }
+            if (actor != nullptr) {
+                truncated = true;
+            }
+        }
+        if (visited == kMaxActors) {
+            truncated = true;
+        }
+    }
+    auto actors = nlohmann::json::array();
+    for (const auto& [identity, count] : groups) {
+        actors.push_back(
+            { { "actor_id", identity[0] }, { "params", identity[1] }, { "room", identity[2] }, { "count", count } });
+    }
+    return actors;
+}
+
+extern "C" void PreludeLoadProbe_EndStateReload() {
+    const int targetScene = gPlayState ? gPlayState->sceneNum : -1;
+    const int targetRoom = gPlayState ? gPlayState->roomCtx.curRoom.num : -1;
+    if (auto report = Prelude::LoadProbe::EndStateReload(targetScene, targetRoom)) {
+        bool actorSnapshotTruncated = false;
+        (*report)["actors_after_reload"] = PreludeLoadProbe_ActorSnapshot(gPlayState, actorSnapshotTruncated);
+        (*report)["actors_after_reload_truncated"] = actorSnapshotTruncated;
+        SPDLOG_INFO("[PreludeLoadProbe] {}", report->dump());
+    }
+}
+
 extern "C" void Graph_StartFrame() {
+    Prelude::LoadProbe::BeginFrame(
+        gPlayState ? gPlayState->sceneNum : -1, gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+        gPlayState ? gPlayState->roomCtx.prevRoom.num : -1, gPlayState ? gPlayState->gameplayFrames : 0,
+        CVarGetInteger(CVAR_SETTING("AltAssets"), 1) != 0,
+        CVarGetInteger(CVAR_DEVELOPER_TOOLS("PreludeLoadProbe"), 1) != 0);
 #ifndef __WIIU__
     using Ship::KbScancode;
 
@@ -2170,6 +2236,8 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
+    Prelude::LoadProbe::BeginRender(gPlayState ? gPlayState->roomCtx.curRoom.num : -1,
+                                    gPlayState ? gPlayState->roomCtx.prevRoom.num : -1);
     {
         std::unique_lock<std::mutex> Lock(audio.mutex);
         audio.processing = true;
@@ -2249,6 +2317,13 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
         gfx_texture_cache_clear();
         SOH::SkeletonPatcher::UpdateSkeletons();
         GameInteractor::Instance->ExecuteHooks<GameInteractor::OnAssetAltChange>();
+    }
+
+    if (auto report = Prelude::LoadProbe::EndFrame()) {
+        bool actorSnapshotTruncated = false;
+        (*report)["actors"] = PreludeLoadProbe_ActorSnapshot(gPlayState, actorSnapshotTruncated);
+        (*report)["actors_truncated"] = actorSnapshotTruncated;
+        SPDLOG_INFO("[PreludeLoadProbe] {}", report->dump());
     }
 
     // OTRTODO: FIGURE OUT END FRAME POINT

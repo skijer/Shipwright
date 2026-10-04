@@ -1,0 +1,28 @@
+{
+  "resource_count": 7,
+  "vertex_records": 3091,
+  "vertex_loads": 104,
+  "slug": "whip",
+  "name": "Whip A",
+  "entry": "objects/nei_gi_redesign/whip/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.0625,
+  "triangles": 3410,
+  "bounds_author": [
+    [
+      -36.0,
+      -53.0,
+      -34.0
+    ],
+    [
+      35.0,
+      54.0,
+      36.0
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Whip A checkpoint, based on skeijer unreleased screenshot; independently reconstructed, not his source mesh."
+  ],
+  "runtime_tested": false
+}

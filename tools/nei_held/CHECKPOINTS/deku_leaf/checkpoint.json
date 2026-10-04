@@ -1,0 +1,28 @@
+{
+  "resource_count": 5,
+  "vertex_records": 1508,
+  "vertex_loads": 49,
+  "slug": "deku_leaf",
+  "name": "Deku Leaf / gameplay deku_leaf",
+  "entry": "objects/nei_held_redesign/deku_leaf/gi_dl",
+  "draw_scale": 0.16,
+  "matrix_scale": 0.115631103515625,
+  "triangles": 1944,
+  "bounds_author": [
+    [
+      -43.0,
+      -50.25,
+      -2.5
+    ],
+    [
+      43.0,
+      53.0625,
+      5.9375
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Matches the original 160-unit canopy width; existing hold/attack/glide scaling and canopy offsets retained."
+  ],
+  "runtime_tested": false
+}

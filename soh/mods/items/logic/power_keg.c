@@ -19,6 +19,7 @@
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h" // EnBom (the visible fuse bomb's timer)
 
 // Current transformation form (mm_player_form.cpp, extern "C"). Values mirror MmPlayerTransformation.
+extern MmPlayerTransformation MmForm_GetCurrentForm(void);
 #define PK_FORM_FIERCE_DEITY 0
 #define PK_FORM_GORON 1
 #define PK_FORM_HUMAN 4

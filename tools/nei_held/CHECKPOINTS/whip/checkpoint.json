@@ -1,0 +1,40 @@
+{
+  "resource_count": 7,
+  "vertex_records": 3091,
+  "vertex_loads": 104,
+  "slug": "whip",
+  "name": "Whip",
+  "entry": "objects/nei_held_redesign/whip/gi_dl",
+  "draw_scale": 1.0,
+  "matrix_scale": 0.00390625,
+  "triangles": 3410,
+  "bounds_author": [
+    [
+      -172.8125,
+      -129.625,
+      -163.1875
+    ],
+    [
+      168.0,
+      384.0,
+      172.8125
+    ]
+  ],
+  "markers": {
+    "grip_world": [
+      0,
+      0,
+      0
+    ],
+    "rope_socket_world": [
+      0,
+      7.2,
+      0
+    ]
+  },
+  "notes": [
+    "Approved Whip A grip and ferrules; grip midpoint is the hand origin.",
+    "Whole coil is equipped-only; all source parts retain one consistent 0.30 world scale."
+  ],
+  "runtime_tested": false
+}

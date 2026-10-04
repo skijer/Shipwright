@@ -503,6 +503,34 @@ void ExtEquip_ValidateForAge(void) {
     }
 }
 
+void ExtEquip_ValidateForAgeWithoutProgression(u8 targetAge) {
+    for (s16 type = EQUIP_TYPE_SWORD; type <= EQUIP_TYPE_BOOTS; type++) {
+        u8 current = ExtEquip_GetCurrent(type);
+        u8 requirement = ExtEquip_GetAgeReq(type, current);
+        if (current == 0) {
+            continue;
+        }
+        if (!ExtEquip_HasItem(type, current) || (!CVarGetInteger("gCheats.TimelessEquipment", 0) &&
+                                                 requirement != AGE_REQ_NONE && requirement != targetAge)) {
+            ExtEquip_CleanupSlot(type, current);
+            ExtEquip_SetCurrentByType(type, 0);
+            // Scene teardown needs no icon/player refresh. The usual SetSlot
+            // path also writes INFTABLE_SWORDLESS, which is deliberately avoided.
+            u16 base = type >= EQUIP_TYPE_TUNIC ? 1 : 0;
+            gSaveContext.equips.equipment =
+                (gSaveContext.equips.equipment & ~(0xF << (type * 4))) | (base << (type * 4));
+            if (type == EQUIP_TYPE_SWORD) {
+                gSaveContext.equips.buttonItems[0] = ITEM_NONE;
+            }
+        } else if (type == EQUIP_TYPE_SWORD) {
+            // These weapons use their own B-button IDs, never an unowned vanilla
+            // sword as a base. Keep age-compatible owned extended swords usable.
+            gSaveContext.equips.equipment &= ~(0xF << (EQUIP_TYPE_SWORD * 4));
+            gSaveContext.equips.buttonItems[0] = ExtEquip_GetItemId(type, current);
+        }
+    }
+}
+
 // FleetSync writes Nei_Save()->extEquip* directly; pull that back into the RAM copy every
 // predicate/draw reads, without re-applying bases (the peer already did).
 void ExtEquip_ResyncFromSave(void) {
@@ -1477,6 +1505,8 @@ void ExtEquip_DrawShieldDL(void* playVoid) {
 
 // Draw the ext shield on Link's back (sheath position)
 void ExtEquip_DrawShieldBackDL(void* playVoid) {
+    if (CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0))
+        return;
     ExtEquip_DrawShieldCommon(playVoid, 1);
 }
 

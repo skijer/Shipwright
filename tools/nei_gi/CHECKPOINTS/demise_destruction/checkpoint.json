@@ -1,0 +1,29 @@
+{
+  "resource_count": 5,
+  "vertex_records": 826,
+  "vertex_loads": 33,
+  "xlu_entry": "objects/nei_gi_redesign/demise_destruction/gi_xlu_dl",
+  "slug": "demise_destruction",
+  "name": "Demise Destruction",
+  "entry": "objects/nei_gi_redesign/demise_destruction/gi_dl",
+  "draw_scale": 1.0,
+  "matrix_scale": 0.0462493896484375,
+  "triangles": 776,
+  "bounds_author": [
+    [
+      -30.125,
+      -50.0625,
+      -30.125
+    ],
+    [
+      30.125,
+      50.0625,
+      30.125
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Core before shell; neutral pale crystal for Demise. Demise core primitive RGB is exactly 0,0,0."
+  ],
+  "runtime_tested": false
+}

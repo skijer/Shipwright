@@ -221,7 +221,7 @@ static void Shovel_Stop(Player* p, PlayState* play) {
     shAnimating = 0;
     shAnimTimer = 0;
     p->stateFlags1 &= ~PLAYER_STATE1_INPUT_DISABLED;
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_SHOVEL);
 }
 
 static void Shovel_Start(Player* p, PlayState* play) {
@@ -241,7 +241,7 @@ static void Shovel_Start(Player* p, PlayState* play) {
     shAnimating = 1;
     shAnimTimer = 0;
     LinkAnimation_PlayOnce(play, &p->upperSkelAnime, anim);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_SHOVEL);
 }
 
 static void Shovel_UpdateAnimation(Player* p, PlayState* play) {

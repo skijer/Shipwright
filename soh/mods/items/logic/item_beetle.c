@@ -137,7 +137,7 @@ static void Beetle_Stop(Player* p, PlayState* play) {
     p->focusActor = NULL;
     // Stop looping fly sound
     Audio_StopSfxById(BEETLE_SFX_FLY);
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_BEETLE);
 }
 
 static void Beetle_Start(Player* p, PlayState* play) {
@@ -154,7 +154,7 @@ static void Beetle_Start(Player* p, PlayState* play) {
     LinkAnimation_PlayLoop(play, &p->upperSkelAnime, &gPlayerAnim_link_boom_throw_waitR);
 
     FirstPerson_Init(p, play);
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_BEETLE);
 }
 
 static void Beetle_Launch(Player* p, PlayState* play) {
@@ -342,7 +342,7 @@ static void Beetle_StateAiming(Player* p, PlayState* play, ItemInputState* in) {
             FirstPerson_Init(p, play);
             beetleFirstPerson = 1;
         }
-        ItemEquip_PlayEquipSFX(play, p);
+        ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_BEETLE);
         return;
     }
 

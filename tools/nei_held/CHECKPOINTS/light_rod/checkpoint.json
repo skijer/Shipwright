@@ -1,0 +1,39 @@
+{
+  "resource_count": 7,
+  "vertex_records": 3456,
+  "vertex_loads": 125,
+  "slug": "light_rod",
+  "name": "Light Rod / gameplay light_rod",
+  "entry": "objects/nei_held_redesign/light_rod/gi_dl",
+  "draw_scale": 0.05,
+  "matrix_scale": 0.25,
+  "triangles": 3752,
+  "bounds_author": [
+    [
+      -48.6875,
+      -24.625,
+      -12.125
+    ],
+    [
+      18.125,
+      70.8125,
+      12.125
+    ]
+  ],
+  "markers": {
+    "grip_native": [
+      0,
+      0,
+      0
+    ],
+    "tip_native": [
+      -139.89868575756608,
+      223.88469738529645,
+      0.0
+    ]
+  },
+  "notes": [
+    "Approved rod with GI lean removed; grip author Y=-25 at hand; shaft native 32 degrees; factor 4. No baked ice splinters."
+  ],
+  "runtime_tested": false
+}

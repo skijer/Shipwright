@@ -383,7 +383,8 @@ typedef struct {
     // ── Lantern ──────────────────────────────────────────────────────────
     u8 lanternFireType;    // LanternFireType enum (0-4)
     u8 lanternSwinging;    // 1 = in swing animation
-    u8 lanternEquipped;    // 1 = lantern is on a C-button (draw in hand always)
+    u8 lanternEquipped;    // 1 = lantern is carried in hand
+    u8 lanternStowed;      // Explicit put-away suppresses automatic carry until the next use (runtime only)
     s16 lanternSwingFrame; // Current swing anim frame
     u8 lanternCatchWindow; // 1 = catch frames active this frame
     u8 lanternCatchState;  // 0=none, 1=playing catch anim, 2=showing message
@@ -607,6 +608,14 @@ u8 CustomItems_IsCloneDraw(void);
  * @return 1 if blocked
  */
 s32 CustomItems_IsBlocked(Player* player, PlayState* play);
+
+// Native A/scripted stow bridge for custom item state that also owns an in-hand model.
+s32 CustomItems_HasStowableHeldItem(Player* player);
+void CustomItems_PutAwayHeldItems(Player* player, PlayState* play);
+void Lantern_PutAway(Player* player, PlayState* play);
+void FireRod_PutAway(Player* player, PlayState* play);
+void IceRod_PutAway(Player* player, PlayState* play);
+void LightRod_PutAway(Player* player, PlayState* play);
 
 // Item handlers
 void Handle_RocsFeather(Player* player, PlayState* play);

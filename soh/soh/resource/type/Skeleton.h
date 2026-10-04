@@ -71,6 +71,9 @@ class Skeleton : public Ship::Resource<SkeletonData> {
     std::vector<StandardLimb> standardLimbArray;
     std::vector<SkelCurveLimb> curveLimbArray;
     std::vector<std::string> limbTable;
+    // The header exposes raw pointers into these resources. Keep the exact limbs
+    // selected by the factory alive even when the resource cache is unloaded.
+    std::vector<std::shared_ptr<Ship::IResource>> limbResources;
     std::vector<void*> skeletonHeaderSegments;
 };
 

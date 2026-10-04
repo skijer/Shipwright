@@ -1,0 +1,28 @@
+{
+  "resource_count": 5,
+  "vertex_records": 1508,
+  "vertex_loads": 49,
+  "slug": "deku_leaf",
+  "name": "Deku Leaf",
+  "entry": "objects/nei_gi_redesign/deku_leaf/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.0812530517578125,
+  "triangles": 1944,
+  "bounds_author": [
+    [
+      -43.0,
+      -50.25,
+      -2.5
+    ],
+    [
+      43.0,
+      53.0625,
+      5.9375
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Green shimmer/dust; supersedes the earlier blue suggestion. Physical camber and shaped lobes."
+  ],
+  "runtime_tested": false
+}

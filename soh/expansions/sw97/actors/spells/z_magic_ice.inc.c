@@ -5,7 +5,10 @@
 
 #include "expansions/sw97/sw97_compat.h"
 #include "expansions/sw97/sw97_config.h"
+#include "sw97_spell_appearance.h"
 #include "overlays/actors/ovl_Bg_Ice_Shelter/z_bg_ice_shelter.h"
+
+static const char ALIGN_ASSET(2) sMedallionWaterTex[] = "__OTR__custom/medallion_magic/spells/water/sTex";
 
 // ============================================================
 // Struct (merged from z_magic_ice.h)
@@ -664,25 +667,51 @@ void MagicIce_Update(Actor* thisx, PlayState* play) {
 
 static s32 MagicIce_OverrideLimbDraw(PlayState* play, SkelAnimeCurve* skelCurve, s32 limbIndex, void* thisx) {
     MagicIce* this = THIS;
+    Color_RGB8 primary = { 150, 255, 255 };
+    Color_RGB8 secondary = { 0, limbIndex == 2 ? 150 : 100, 255 };
+    const u8 primaryChanged = CVarGetInteger(CVAR_COSMETIC("Magic.MedallionWaterPrimary.Changed"), 0);
+    const u8 secondaryChanged = CVarGetInteger(CVAR_COSMETIC("Magic.MedallionWaterSecondary.Changed"), 0);
+    if (primaryChanged) {
+        primary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionWaterPrimary.Value"), primary);
+    }
+    if (secondaryChanged) {
+        secondary = CVarGetColor24(CVAR_COSMETIC("Magic.MedallionWaterSecondary.Value"), secondary);
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
     if (limbIndex == 1) {
-        gSPSegment(POLY_XLU_DISP++, 8,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 8,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionWaterTex, sMedallionWaterTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
     } else if (limbIndex == 2) {
-        gSPSegment(POLY_XLU_DISP++, 9,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 9,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionWaterTex, sMedallionWaterTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
     } else if (limbIndex == 3) {
-        gSPSegment(POLY_XLU_DISP++, 0xA,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 0xA,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionWaterTex, sMedallionWaterTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
     } else if (limbIndex == 4) {
-        gSPSegment(POLY_XLU_DISP++, 0xB,
-                   Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20, 0x40, 1, 0,
-                                    (u8)(play->gameplayFrames * -15), 0x20, 0x40));
+        gSPSegment(
+            POLY_XLU_DISP++, 0xB,
+            Sw97_SpellScrollWithAppearance(play->state.gfxCtx,
+                                           Gfx_TwoTexScroll(play->state.gfxCtx, 0, play->gameplayFrames % 0x80, 0, 0x20,
+                                                            0x40, 1, 0, (u8)(play->gameplayFrames * -15), 0x20, 0x40),
+                                           sMedallionWaterTex, sMedallionWaterTex, G_IM_SIZ_8b,
+                                           primaryChanged ? &primary : NULL, secondaryChanged ? &secondary : NULL));
     }
 
     CLOSE_DISPS(play->state.gfxCtx);

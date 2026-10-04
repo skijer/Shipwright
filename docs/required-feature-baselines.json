@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "repository": "marsh6487/Shipwright",
+  "branch": "integration/nei-weather-static-actors",
+  "baselines": [
+    {
+      "feature": "NEI, concurrent weather and initial actor integration",
+      "commit": "792acce382b2fafa6dba28ec6caf21ceaa449e1f"
+    },
+    {
+      "feature": "Expanded static and MM actor catalogue",
+      "commit": "286a92d32d34eb11ae397d8c7ee067a316eaec91"
+    },
+    {
+      "feature": "MM vertex offsets and native draw setup",
+      "commit": "c8a3186eaefd9e2fa4ada24955742382b2b35eeb"
+    },
+    {
+      "feature": "Night music and enemy BGM handoff",
+      "commit": "fcc86528612ecabb192fe3642acaacf7c2766869"
+    },
+    {
+      "feature": "Streamed audio capacity",
+      "commit": "34102b42b8b2bee33fd494d0a77019f4f3ebc480"
+    },
+    {
+      "feature": "HD actor eye metadata and blinking",
+      "commit": "8092059a41fe757bc416bb55574d443f1a587442"
+    },
+    {
+      "feature": "Great Fairy mesh blinking",
+      "commit": "4658ac61c502ad37e2d4652776e4eaeb1b65c7e2"
+    },
+    {
+      "feature": "Actor resource retention across scene reentry",
+      "commit": "9f95b9fc9b6e39f69182adfed23da33109da2fcc"
+    },
+    {
+      "feature": "3DS Skull Kid, Tael and actor draw distance",
+      "commit": "e4e71eeea6e173a35405aa708507d5afbdea4089"
+    },
+    {
+      "feature": "Seated Anju and Kafei draw recovery",
+      "commit": "4773c4bb4f3f3c0e8536d61c28e0be461a7a28ec"
+    },
+    {
+      "feature": "Standing umbrella Anju",
+      "commit": "a89adb09c7fe62e32a028d3e7d9ad4d96fa2aba1"
+    },
+    {
+      "feature": "PAK selection and hide back equipment/scabbard",
+      "commit": "61bf5bad25fe2300b43c779b6c65047db08391c6"
+    },
+    {
+      "feature": "Native Prelude material scrolling",
+      "commit": "0a4dc0641c3a40925733bae2dafebe5f5b89e7de"
+    },
+    {
+      "feature": "Water Temple and Zora Domain caustics",
+      "commit": "8db6380f677f0b2ba0205e7d978170f20c09011e"
+    },
+    {
+      "feature": "Authored rain, Time Gate chest and child Ruto face",
+      "commit": "c433b6c7e0839d0bd8dddfd9b0de0bb228de76bd"
+    },
+    {
+      "feature": "Custom heart/magic model colors",
+      "commit": "8481c2575973cf6d66a90a42ae584b4369eb351d"
+    },
+    {
+      "feature": "Lost Woods material cache and independent pedestal skips",
+      "commit": "4a16cd05ce904bbc19ef2707ed22454c6d5bfe65"
+    },
+    {
+      "feature": "Pedestal sword, camera and stump clearance",
+      "commit": "6f03c439ab83cbf149c4a368b529e53724f6fc47"
+    },
+    {
+      "feature": "Pedestal prompt collision and child ceremonial grip",
+      "commit": "7eefc9986d4b641400b500f88c79a6abf8367895"
+    },
+    {
+      "feature": "Native sampling for HD spin/TorchFlame textures",
+      "commit": "51889826b9c0cea8b6bdbdeb45749de715e12ec0"
+    },
+    {
+      "feature": "Transformation cosmetics and shield scale",
+      "commit": "f8b87d2e1d010bceebae6292613194b3fb92b1a4"
+    },
+    {
+      "feature": "Contents-based chest sizing",
+      "commit": "d676a5ffd2f61677e45190259165005d51e17df3"
+    },
+    {
+      "feature": "RPG stat pickups on cumulative integration",
+      "commit": "0574f79cb3838fdf79a8466393bc73eda5ef2aa9"
+    },
+    {
+      "feature": "Midna POC3 draw, blink, cosmetics and idle audio",
+      "commit": "822f46b15dcae98b0a0564ec469a061f5106d4c4"
+    },
+    {
+      "feature": "Zora shield ground/swim anchoring",
+      "commit": "5d0b8384d4885b4e1f54c041afcc432542848257"
+    },
+    {
+      "feature": "Restored Midna/Zora continuity and cumulative regression gates",
+      "commit": "46d01e8ab7e7894102e782a72ba2e4ead65a50c4"
+    }
+  ]
+}

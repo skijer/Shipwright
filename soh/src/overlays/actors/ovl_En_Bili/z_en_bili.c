@@ -5,6 +5,7 @@
  */
 
 #include "z_en_bili.h"
+#include "din_fire_sword.h"
 #include "objects/object_bl/object_bl.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -593,7 +594,7 @@ void EnBili_UpdateDamage(EnBili* this, PlayState* play) {
                 EnBili_SetupBurnt(this);
             }
 
-            if (this->collider.info.acHitInfo->toucher.dmgFlags & 0x1F820) { // DMG_ARROW
+            if (DinFireSword_OriginalDamageFlags(play, this->collider.info.acHitInfo) & 0x1F820) { // DMG_ARROW
                 this->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
             }
         }

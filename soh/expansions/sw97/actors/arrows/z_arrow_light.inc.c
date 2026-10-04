@@ -5,6 +5,7 @@
 
 #include "expansions/sw97/sw97_compat.h"
 #include "expansions/sw97/sw97_config.h"
+#include "soh/Enhancements/cosmetics/ElementalArrowSfx.h"
 
 #include "z64.h"
 #include "global.h"
@@ -372,7 +373,7 @@ void ArrowLight_Fly(ArrowLight* this, PlayState* play) {
     ArrowLight_LerpPos(&this->unkPos, &this->actor.world.pos, 0.05f);
 
     if (arrow->hitFlags & 1) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_EXPLOSION_LIGHT);
+        Audio_PlayActorSound2(&this->actor, ElementalArrow_GetImpactSfx(NA_SE_IT_EXPLOSION_LIGHT));
         ArrowLight_SetupAction(this, ArrowLight_Hit);
         this->timer = 32;
         this->alpha = 255;
@@ -402,6 +403,15 @@ void ArrowLight_Draw(Actor* thisx, PlayState* play) {
     EnArrow* arrow;
     Actor* tranform;
 
+    Color_RGB8 primaryColor = { 255, 255, 255 };
+    if (CVarGetInteger(CVAR_COSMETIC("Arrows.MedallionLightPrimary.Changed"), 0)) {
+        primaryColor = CVarGetColor24(CVAR_COSMETIC("Arrows.MedallionLightPrimary.Value"), primaryColor);
+    }
+    Color_RGB8 secondaryColor = { 170, 170, 170 };
+    if (CVarGetInteger(CVAR_COSMETIC("Arrows.MedallionLightSecondary.Changed"), 0)) {
+        secondaryColor = CVarGetColor24(CVAR_COSMETIC("Arrows.MedallionLightSecondary.Value"), secondaryColor);
+    }
+
     stateFrames = play->state.frames;
     arrow = (EnArrow*)this->actor.parent;
 
@@ -428,8 +438,8 @@ void ArrowLight_Draw(Actor* thisx, PlayState* play) {
         }
 
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, 255, 255, 255, this->alpha);
-        gDPSetEnvColor(POLY_XLU_DISP++, 170, 170, 170, 128);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);
+        gDPSetEnvColor(POLY_XLU_DISP++, secondaryColor.r, secondaryColor.g, secondaryColor.b, 128);
         Matrix_RotateRPY(0x4000, 0x0, 0x0, MTXMODE_APPLY);
         if (this->timer != 0) {
             Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_APPLY);

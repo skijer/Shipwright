@@ -148,3 +148,6 @@ s32 Player_UpperAction_Net(Player* player, PlayState* play) {
 
     return result;
 }
+
+// Cleanup bridge needs the item implementations' existing teardown callbacks.
+#include "../custom_items_stow.c"

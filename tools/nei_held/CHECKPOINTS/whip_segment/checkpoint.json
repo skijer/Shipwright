@@ -1,0 +1,40 @@
+{
+  "resource_count": 4,
+  "vertex_records": 22,
+  "vertex_loads": 1,
+  "slug": "whip_segment",
+  "name": "Whip Segment",
+  "entry": "objects/nei_held_redesign/whip_segment/gi_dl",
+  "draw_scale": 0.015,
+  "matrix_scale": 0.2604217529296875,
+  "triangles": 20,
+  "bounds_author": [
+    [
+      -19.1875,
+      -18.25,
+      -120.0
+    ],
+    [
+      19.1875,
+      18.25,
+      120.0
+    ]
+  ],
+  "markers": {
+    "start_world": [
+      0,
+      0,
+      -7.5
+    ],
+    "end_world": [
+      0,
+      0,
+      7.5
+    ]
+  },
+  "notes": [
+    "Approved orange-braid material on a straight segment; runtime follows the existing whip path.",
+    "15-world-unit length, 1.2-unit radius; no coiled geometry is used during attacks."
+  ],
+  "runtime_tested": false
+}

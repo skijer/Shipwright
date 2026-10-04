@@ -1,0 +1,28 @@
+{
+  "resource_count": 7,
+  "vertex_records": 3846,
+  "vertex_loads": 126,
+  "slug": "gust_jar",
+  "name": "Gust Jar",
+  "entry": "objects/nei_gi_redesign/gust_jar/gi_dl",
+  "draw_scale": 5.0,
+  "matrix_scale": 0.0097503662109375,
+  "triangles": 4056,
+  "bounds_author": [
+    [
+      -49.0,
+      -45.0,
+      -34.375
+    ],
+    [
+      49.0,
+      50.0625,
+      34.375
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Upright hollow vessel, twin loop handles, blue wind band, porcelain lip ornaments."
+  ],
+  "runtime_tested": false
+}

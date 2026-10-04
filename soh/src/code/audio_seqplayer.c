@@ -978,6 +978,27 @@ void AudioSeq_SequenceChannelSetVolume(SequenceChannel* channel, u8 volume) {
     channel->volume = (f32)(s32)volume / 127.0f;
 }
 
+static void AudioSeq_SelectChannelFont(SequenceChannel* channel, u8 operand) {
+    SequencePlayer* seqPlayer = channel->seqPlayer;
+    s32 fontId = operand;
+    if (seqPlayer->defaultFont != AUDIO_FONT_NONE) {
+        // seqId is already resolved by the start command. A script must not
+        // resolve it again or consume a pending replacement for a future start.
+        if ((size_t)seqPlayer->seqId >= sequenceMapSize + 0xF || sequenceMap[seqPlayer->seqId] == NULL) {
+            return;
+        }
+        SequenceData sequence = ResourceMgr_LoadSeqByName(sequenceMap[seqPlayer->seqId]);
+        if (sequence.numFonts < 1 || sequence.numFonts > 16 || operand >= sequence.numFonts) {
+            return;
+        }
+        fontId = AudioSequence_GetFont(&sequence, sequence.numFonts - operand - 1);
+    }
+    if (fontId >= 0 && (size_t)fontId < fontMapSize &&
+        AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, fontId) != NULL) {
+        channel->fontId = fontId;
+    }
+}
+
 void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
     s32 i;
     u8* data;
@@ -1059,23 +1080,7 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                         }
                         break;
                     case 0xEB:
-                        result = (u8)parameters[0];
-                        command = (u8)parameters[0];
-
-                        if (seqPlayer->defaultFont != 0xFF) {
-                            if (gAudioContext.seqReplaced[seqPlayer->playerIdx]) {
-                                seqPlayer->seqId = gAudioContext.seqToPlay[seqPlayer->playerIdx];
-                                gAudioContext.seqReplaced[seqPlayer->playerIdx] = 0;
-                            }
-                            u16 seqId = AudioEditor_GetReplacementSeq(seqPlayer->seqId);
-                            SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
-                            command = sDat.fonts[sDat.numFonts - result - 1];
-                        }
-
-                        if (AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, command)) {
-                            channel->fontId = command;
-                        }
-
+                        AudioSeq_SelectChannelFont(channel, (u8)parameters[0]);
                         parameters[0] = parameters[1];
                         // NOTE: Intentional fallthrough
                     case 0xC1:
@@ -1174,29 +1179,7 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                         channel->reverb = command;
                         break;
                     case 0xC6:
-                        result = (u8)parameters[0];
-                        command = (u8)parameters[0];
-
-                        if (seqPlayer->defaultFont != 0xFF) {
-                            if (gAudioContext.seqReplaced[seqPlayer->playerIdx]) {
-                                seqPlayer->seqId = gAudioContext.seqToPlay[seqPlayer->playerIdx];
-                                gAudioContext.seqReplaced[seqPlayer->playerIdx] = 0;
-                            }
-                            u16 seqId = AudioEditor_GetReplacementSeq(seqPlayer->seqId);
-                            SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
-
-                            // The game apparantely would sometimes do negative array lookups, the result of which would
-                            // get rejected by AudioHeap_SearchCaches, never changing the actual fontid.
-                            if (result > sDat.numFonts)
-                                break;
-
-                            command = sDat.fonts[(sDat.numFonts - result - 1)];
-                        }
-
-                        if (AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, command)) {
-                            channel->fontId = command;
-                        }
-
+                        AudioSeq_SelectChannelFont(channel, (u8)parameters[0]);
                         break;
                     case 0xC7:
                         command = (u8)parameters[0];

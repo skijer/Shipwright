@@ -1,0 +1,35 @@
+{
+  "resource_count": 6,
+  "vertex_records": 2365,
+  "vertex_loads": 78,
+  "slug": "switch_hook_tip",
+  "name": "Switch Hook Tip",
+  "entry": "objects/nei_held_redesign/switch_hook_tip/gi_dl",
+  "draw_scale": 0.01,
+  "matrix_scale": 0.390625,
+  "triangles": 1388,
+  "bounds_author": [
+    [
+      -26.875,
+      -105.75,
+      -105.6875
+    ],
+    [
+      26.875,
+      105.8125,
+      105.75
+    ]
+  ],
+  "markers": {
+    "actor_origin_world": [
+      0,
+      0,
+      0
+    ]
+  },
+  "notes": [
+    "Approved hub, bezel and crescent jaws; actor +Z is forward.",
+    "Original hook actor, collision probes, chain endpoints and aim path are unchanged."
+  ],
+  "runtime_tested": false
+}

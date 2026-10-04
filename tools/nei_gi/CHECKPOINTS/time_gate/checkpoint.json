@@ -1,0 +1,28 @@
+{
+  "resource_count": 6,
+  "vertex_records": 4900,
+  "vertex_loads": 161,
+  "slug": "time_gate",
+  "name": "Time Gate",
+  "entry": "objects/nei_gi_redesign/time_gate/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.121246337890625,
+  "triangles": 2972,
+  "bounds_author": [
+    [
+      -50.0625,
+      -50.125,
+      -3.9375
+    ],
+    [
+      50.125,
+      50.5,
+      3.9375
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Upright. Both engraved faces use the supplied Time Gate icon; bevel and rim add depth."
+  ],
+  "runtime_tested": false
+}

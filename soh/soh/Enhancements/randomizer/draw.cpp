@@ -1,6 +1,6 @@
 #include "draw.h"
 #include "soh/OTRGlobals.h"
-#include <vector>          // MmDL_WithScopedVerts keeps patched DL copies alive
+#include <vector>
 #include <spdlog/spdlog.h> // SPDLOG_INFO (MmSoul debug instrumentation)
 #include "soh/cvar_prefixes.h"
 #include "randomizerTypes.h"
@@ -391,7 +391,7 @@ extern "C" void Randomizer_DrawDoubleDefense(PlayState* play, GetItemEntry* getI
 
     gSPGrayscale(POLY_XLU_DISP++, false);
 
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiHeartContainerDL);
+    POLY_XLU_DISP = GetItem_DrawDListWithCosmetics(POLY_XLU_DISP, gGiHeartContainerDL, GID_HEART_CONTAINER);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -1618,8 +1618,12 @@ void Randomizer_DrawCanePacci(PlayState* play, GetItemEntry* getItemEntry) {
     DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 255, 215, 70);
 }
 
-void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+void Randomizer_DrawCaneSomariaUpgradeFlame(PlayState* play) {
     DrawWeaponFlameOverlay(play, 255, 60, 60);
+}
+
+void Randomizer_DrawCaneSomariaUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    Randomizer_DrawCaneSomariaUpgradeFlame(play);
     DrawCustomItemDiamondTint(play, (Gfx*)gSomariaCaneGiveDL, NULL, 0.25f, 235, 55, 45);
 }
 
@@ -1814,78 +1818,6 @@ static Gfx* LoadMmDLOnce(const char* path, Gfx** cache, u8* tried) {
         }
     }
     return *cache;
-}
-
-// Private copy of an MM display list with its vertex loads re-pointed at mm.o2r's OWN vertex array.
-//
-// Needed when the vertex array's PATH exists in both archives (object_gi_hookshotVtx_000000 is the
-// case that forced this): a DL asks for vertices by hash, the handler turns that into a name and
-// loads it from the DEFAULT archive, and mm.o2r sits at the LOWEST priority on purpose, so OoT
-// always wins. Upstream 2Ship hit the mirror image of this and solved it the same way — its comment
-// on RI_HOOKSHOT says gGiHookshotDL "is shadowed by MM's same-path mesh", so it direct-loads off the
-// oot.o2r handle.
-//
-// The hook is gfx_vtx_hash_handler_custom: word1 of a G_VTX_OTR_HASH pair is normally a byte offset
-// into the array, but "an offset greater than one million is not a real offset, so it must be a real
-// pointer". Writing the resolved pointer there makes the handler use it and never consult the hash.
-// Textures are left alone — their names are MM-unique, so they already resolve to MM's. Skijer's NEI
-static Gfx* MmDL_WithScopedVerts(const char* dlPath, const char* vtxPath) {
-    // Two-word (expanded) commands: the second word is payload, never an opcode.
-    auto isTwoWord = [](uint8_t op) {
-        return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
-               op == 0x35 || op == 0x36 || op == 0x42;
-    };
-
-    Gfx* src = (Gfx*)MmAssets_LoadResourceStrict(dlPath);
-    char* vtx = (char*)MmAssets_LoadResourceStrict(vtxPath);
-    if (src == NULL || vtx == NULL) {
-        // Says WHICH one failed: a typo in either path is otherwise indistinguishable from
-        // "mm.o2r is not mounted", and that ambiguity cost several rounds on the Clawshot.
-        SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts FAILED  dl='{}' -> {}   vtx='{}' -> {}", dlPath,
-                     src != NULL ? "ok" : "NULL", vtxPath, vtx != NULL ? "ok" : "NULL");
-        return NULL;
-    }
-
-    size_t count = 0;
-    while (count < 4096) {
-        uint8_t op = (uint8_t)((src[count].words.w0 >> 24) & 0xFF);
-        count++;
-        if (op == 0xDF) { // G_ENDDL
-            break;
-        }
-        if (isTwoWord(op)) {
-            count++;
-        }
-    }
-
-    // Kept alive for the process: the returned Gfx* is handed straight to the interpreter.
-    static std::vector<std::vector<Gfx>> sPatched;
-    sPatched.emplace_back(src, src + count);
-    Gfx* dl = sPatched.back().data();
-
-    int patched = 0, vtxOps = 0;
-    for (size_t i = 0; i < count; i++) {
-        uint8_t op = (uint8_t)((dl[i].words.w0 >> 24) & 0xFF);
-        if (op == 0xDF) {
-            break;
-        }
-        if (op == 0x32) { // G_VTX_OTR_HASH
-            vtxOps++;
-            uintptr_t offset = (uintptr_t)dl[i].words.w1;
-            if (offset <= 0xFFFFF) { // still an offset, not an already-resolved pointer
-                dl[i].words.w1 = (uintptr_t)(vtx + offset);
-                patched++;
-            }
-            i++; // skip the hash word
-        } else if (isTwoWord(op)) {
-            i++;
-        }
-    }
-    // patched == 0 would mean this DL does NOT reference its vertices by hash (segment addressing
-    // instead), i.e. the whole approach misses and the vertices still come from whatever segment 6
-    // points at — which during a get-item is the OoT object the engine loaded.
-    SPDLOG_ERROR("[NEI] MmDL_WithScopedVerts '{}': {} instr, {} vtx ops, {} patched", dlPath, count, vtxOps, patched);
-    return dl;
 }
 
 // MM's OWN get-item sword models (object_gi_sword_2/3/4), drawn with MM's own draw code:
@@ -2196,7 +2128,7 @@ static Gfx* Pegasus_GetRecoloredBootsDL() {
     if (!sDL.empty()) {
         return sDL.data();
     }
-    // Same two-word (expanded) command set as MmDL_WithScopedVerts below.
+    // Same two-word (expanded) command set as MmAssets_LoadDisplayListGraphStrict.
     auto isTwoWord = [](uint8_t op) {
         return op == 0x20 || op == 0x24 || op == 0x25 || op == 0x27 || op == 0x31 || op == 0x32 || op == 0x33 ||
                op == 0x35 || op == 0x36 || op == 0x42;
@@ -2422,17 +2354,16 @@ void Randomizer_DrawClawshot(PlayState* play, GetItemEntry* getItemEntry) {
     // The one engine-level obstacle: BOTH archives own objects/object_gi_hookshot/, including the
     // single vertex array object_gi_hookshotVtx_000000. The DL asks for vertices by HASH, which
     // resolves hash -> name -> load from the DEFAULT archive, so they came back OoT's however the
-    // DL itself was loaded. MmDL_WithScopedVerts loads both strictly from mm.o2r and rewrites each
-    // vertex load to point straight at MM's array (gfx_vtx_hash_handler_custom treats word1 as a
-    // real pointer once it exceeds 0xFFFFF, and then never consults the hash).
+    // DL itself was loaded. MmAssets_LoadDisplayListGraphStrict loads the entire nested graph
+    // strictly from mm.o2r, converts nested list calls to direct pointers, and converts hashed
+    // vertex commands to ordinary G_VTX commands pointing straight at MM's array.
     //
     // Colour check, so this never needs guessing again: MM's DL sets PRIM 0xC3C300 (yellow), OoT's
     // sets 0x0A3CA0 / 0x3278D2 (blue). Yellow on screen = MM's. Skijer's NEI
     static Gfx* sBody = NULL;
     static u8 sTried = 0;
     if (!sTried && MmAssets_IsAvailable()) {
-        sBody = MmDL_WithScopedVerts("objects/object_gi_hookshot/gGiHookshotDL",
-                                     "objects/object_gi_hookshot/object_gi_hookshotVtx_000000");
+        sBody = MmAssets_LoadDisplayListGraphStrict("objects/object_gi_hookshot/gGiHookshotDL");
         if (sBody != NULL) {
             sTried = 1;
         }
@@ -4282,3 +4213,57 @@ void Randomizer_DrawMmGoldDustBottle(PlayState* play, GetItemEntry* getItemEntry
 }
 
 } // extern "C"
+
+extern "C" void Randomizer_DrawDefenseUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatDefenseDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+extern "C" void Randomizer_DrawSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatSpeedDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+extern "C" void Randomizer_DrawPowerUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatPowerDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+extern "C" void Randomizer_DrawCrawlSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatCrawlSpeedDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+extern "C" void Randomizer_DrawClimbSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatClimbSpeedDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+extern "C" void Randomizer_DrawPushSpeedUpgrade(PlayState* play, GetItemEntry* getItemEntry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
+              G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gStatPushSpeedDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}

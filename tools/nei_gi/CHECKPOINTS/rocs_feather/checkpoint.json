@@ -1,0 +1,28 @@
+{
+  "resource_count": 7,
+  "vertex_records": 2956,
+  "vertex_loads": 107,
+  "slug": "rocs_feather",
+  "name": "Roc's Feather",
+  "entry": "objects/nei_gi_redesign/rocs_feather/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.097503662109375,
+  "triangles": 3594,
+  "bounds_author": [
+    [
+      -15.25,
+      -48.5625,
+      -2.0
+    ],
+    [
+      26.0,
+      58.125,
+      3.8125
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Visual POC3: accepted open tuft clefts and vane geometry preserved exactly; coarser angled barb texture, clearer quill, and thicker tapered relief improve detail at GI preview size."
+  ],
+  "runtime_tested": false
+}

@@ -33,6 +33,10 @@ ResourceFactoryBinaryAudioSequenceV2::ReadResource(std::shared_ptr<Ship::File> f
     audioSequence->sequence.resolvedFont = -1; // set only for resolved streamed seqs in AudioLoad_Init
 
     audioSequence->sequence.numFonts = reader->ReadUInt32();
+    if (audioSequence->sequence.numFonts < 0 || audioSequence->sequence.numFonts > 16) {
+        SPDLOG_ERROR("Sequence '{}' has an invalid font count", initData->Path);
+        return nullptr;
+    }
     for (int32_t i = 0; i < 16; i++) {
         audioSequence->sequence.fonts[i] = 0;
     }
@@ -334,6 +338,10 @@ ResourceFactoryXMLAudioSequenceV0::ReadResource(std::shared_ptr<Ship::File> file
     tinyxml2::XMLElement* fontsElement = child->FirstChildElement();
     tinyxml2::XMLElement* fontElement = fontsElement->FirstChildElement();
     while (fontElement != nullptr) {
+        if (i >= 16) {
+            SPDLOG_ERROR("Sequence '{}' has more than 16 font operands", initData->Path);
+            return nullptr;
+        }
         sequence->sequence.fonts[i] = fontElement->IntAttribute("FontIdx");
         fontElement = fontElement->NextSiblingElement();
         i++;

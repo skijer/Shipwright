@@ -186,6 +186,14 @@ Color_RGBA8 ColorRGBA8(uint8_t r, uint8_t g, uint8_t b, uint8_t a) {
     colors were darker than the gDPSetPrimColor. You will see many more examples of this below in the `ApplyOrResetCustomGfxPatches` method
 */
 std::map<std::string, CosmeticOption> cosmeticOptions = {
+    // Share the tagged shield mod's keys so its controls and the native effect agree.
+    COSMETIC_OPTION("Custom.ZoraMagicShield",          "Zora Magic Shield",        COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0, 150, 255, 255), false, true, false),
+    COSMETIC_OPTION("Custom.ZoraMagicShieldGlow",             "Zora Shield Glow",         COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0,   0, 100, 255), false, true, false),
+    COSMETIC_OPTION("Custom.ZoraMagicShieldHighlights",       "Zora Shield Highlights",   COSMETICS_GROUP_MAGIC,        ColorRGBA8(170, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireShieldCore",        "Din Fire Shield Core",     COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 225, 122, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireShieldOuter",       "Din Fire Shield Outer",    COSMETICS_GROUP_MAGIC,        ColorRGBA8(255,  43,   3, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireSwordCore",         "Din Fire Sword Core",      COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 225, 122, 255), false, true, false),
+    COSMETIC_OPTION("Custom.DinFireSwordOuter",        "Din Fire Sword Outer",     COSMETICS_GROUP_MAGIC,        ColorRGBA8(255,  43,   3, 255), false, true, false),
     COSMETIC_OPTION("Link.KokiriTunic",             "Kokiri Tunic",             COSMETICS_GROUP_LINK,         ColorRGBA8( 30, 105,  27, 255), false, true, false),
     COSMETIC_OPTION("Link.GoronTunic",              "Goron Tunic",              COSMETICS_GROUP_LINK,         ColorRGBA8(100,  20,   0, 255), false, true, false),
     COSMETIC_OPTION("Link.ZoraTunic",               "Zora Tunic",               COSMETICS_GROUP_LINK,         ColorRGBA8(  0,  60, 100, 255), false, true, false),
@@ -381,12 +389,32 @@ std::map<std::string, CosmeticOption> cosmeticOptions = {
     COSMETIC_OPTION("Arrows.LightPrimary",          "Light Primary",            COSMETICS_GROUP_ARROWS,       ColorRGBA8(255, 255,   0, 255), false, true, false),
     COSMETIC_OPTION("Arrows.LightSecondary",        "Light Secondary",          COSMETICS_GROUP_ARROWS,       ColorRGBA8(255, 255, 170,   0), false, true, true),
 
+    COSMETIC_OPTION("Arrows.MedallionFirePrimary", "Fire Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(255, 200, 0, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionFireSecondary", "Fire Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(255, 0, 0, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionWaterPrimary", "Water Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(170, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionWaterSecondary", "Water Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(0, 0, 255, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionForestPrimary", "Forest Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(170, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionForestSecondary", "Forest Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(0, 255, 0, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionShadowPrimary", "Shadow Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(0, 0, 0, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionShadowSecondary", "Shadow Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(0, 0, 0, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionLightPrimary", "Light Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(255, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionLightSecondary", "Light Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(170, 170, 170, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionSpiritPrimary", "Spirit Medallion Arrow Primary", COSMETICS_GROUP_ARROWS, ColorRGBA8(255, 255, 170, 255), false, true, false),
+    COSMETIC_OPTION("Arrows.MedallionSpiritSecondary", "Spirit Medallion Arrow Secondary", COSMETICS_GROUP_ARROWS, ColorRGBA8(255, 255, 0, 255), false, true, false),
+
     COSMETIC_OPTION("Magic.DinsPrimary",            "Din's Primary",            COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 200,   0, 255), false, true, false),
     COSMETIC_OPTION("Magic.DinsSecondary",          "Din's Secondary",          COSMETICS_GROUP_MAGIC,        ColorRGBA8(255,   0,   0, 255), false, true, true),
     COSMETIC_OPTION("Magic.FaroresPrimary",         "Farore's Primary",         COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 255,   0, 255), false, true, false),
     COSMETIC_OPTION("Magic.FaroresSecondary",       "Farore's Secondary",       COSMETICS_GROUP_MAGIC,        ColorRGBA8(100, 200,   0, 255), false, true, true),
     COSMETIC_OPTION("Magic.NayrusPrimary",          "Nayru's Primary",          COSMETICS_GROUP_MAGIC,        ColorRGBA8(170, 255, 255, 255), false, true, false),
     COSMETIC_OPTION("Magic.NayrusSecondary",        "Nayru's Secondary",        COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0, 100, 255, 255), false, true, true),
+
+    COSMETIC_OPTION("Magic.MedallionFirePrimary",   "Fire Medallion Primary",   COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 200,   0, 255), false, true, false),
+    COSMETIC_OPTION("Magic.MedallionFireSecondary", "Fire Medallion Secondary", COSMETICS_GROUP_MAGIC,        ColorRGBA8(255,   0,   0, 255), false, true, false),
+    COSMETIC_OPTION("Magic.MedallionWaterPrimary",  "Water Medallion Primary",  COSMETICS_GROUP_MAGIC,        ColorRGBA8(150, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("Magic.MedallionWaterSecondary","Water Medallion Secondary",COSMETICS_GROUP_MAGIC,        ColorRGBA8(  0, 100, 255, 255), false, true, false),
+    COSMETIC_OPTION("Magic.MedallionForestPrimary", "Forest Medallion Primary", COSMETICS_GROUP_MAGIC,        ColorRGBA8(255, 255, 170, 255), false, true, false),
+    COSMETIC_OPTION("Magic.MedallionForestSecondary","Forest Medallion Secondary",COSMETICS_GROUP_MAGIC,       ColorRGBA8(150, 255,   0, 255), false, true, false),
 
     COSMETIC_OPTION("SpinAttack.Level1Primary",     "Level 1 Primary",          COSMETICS_GROUP_SPIN_ATTACK,  ColorRGBA8(170, 255, 255, 255), false, true, true),
     COSMETIC_OPTION("SpinAttack.Level1Secondary",   "Level 1 Secondary",        COSMETICS_GROUP_SPIN_ATTACK,  ColorRGBA8(  0, 100, 255, 255), false, true, false),
@@ -431,6 +459,12 @@ std::map<std::string, CosmeticOption> cosmeticOptions = {
     COSMETIC_OPTION("NPC.Gerudo",                   "Gerudo",                   COSMETICS_GROUP_NPC,          ColorRGBA8( 90,   0, 140, 255), false, true, false),
     COSMETIC_OPTION("NPC.MetalTrap",                "Metal Trap",               COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, true),
     COSMETIC_OPTION("NPC.IronKnuckles",             "Iron Knuckles",            COSMETICS_GROUP_NPC,          ColorRGBA8(245, 255, 205, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.Coat",               "Adult Epona Coat",         COSMETICS_GROUP_NPC,          ColorRGBA8(170,  58,   2, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.WhiteHair",          "Adult Epona White Hair",   COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("NPC.Epona.Eyes",               "Adult Epona Eyes",         COSMETICS_GROUP_NPC,          ColorRGBA8( 40,  24,  16, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.Coat",          "Young Epona Coat",         COSMETICS_GROUP_NPC,          ColorRGBA8(170,  58,   2, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.WhiteHair",     "Young Epona White Hair",   COSMETICS_GROUP_NPC,          ColorRGBA8(255, 255, 255, 255), false, true, false),
+    COSMETIC_OPTION("NPC.YoungEpona.Eyes",          "Young Epona Eyes",         COSMETICS_GROUP_NPC,          ColorRGBA8( 40,  24,  16, 255), false, true, false),
 };
 // clang-format on
 
@@ -2053,7 +2087,7 @@ void ToggleRainbow(CosmeticOption& cosmeticOption, bool state) {
 }
 
 void ApplySideEffects(CosmeticOption& cosmeticOption) {
-    if (CVarGetInteger(CVAR_COSMETIC("AdvancedMode"), 0)) {
+    if (cosmeticOption.group == COSMETICS_GROUP_MAX || CVarGetInteger(CVAR_COSMETIC("AdvancedMode"), 0)) {
         return;
     }
 
@@ -2080,7 +2114,7 @@ void ApplySideEffects(CosmeticOption& cosmeticOption) {
     }
 }
 
-void RandomizeColor(CosmeticOption& cosmeticOption, bool manual = true) {
+void RandomizeColor(CosmeticOption& cosmeticOption, bool manual) {
     ImVec4 randomColor;
 
     uint64_t local_seed_state = 0;
@@ -2373,6 +2407,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.lockedCvar, 1);
             }
         }
+        SetAllCustomCosmeticsLocked(true);
     }
     ImGui::SameLine();
     if (UIWidgets::Button("Unlock All", UIWidgets::ButtonOptions().Size(ImVec2(250.0f, 0.0f)).Color(THEME_COLOR))) {
@@ -2381,6 +2416,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.lockedCvar, 0);
             }
         }
+        SetAllCustomCosmeticsLocked(false);
     }
 
     ImGui::BeginDisabled(CVarGetInteger(CVAR_SETTING("DisableChanges"), 0));
@@ -2392,6 +2428,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.changedCvar, 1);
             }
         }
+        SetAllCustomCosmeticsRainbow(true);
     }
     ImGui::EndDisabled();
 
@@ -2403,6 +2440,7 @@ void CosmeticsEditorWindow::DrawElement() {
                 CVarSetInteger(cosmeticOption.rainbowCvar, 0);
             }
         }
+        SetAllCustomCosmeticsRainbow(false);
     }
 
     UIWidgets::Spacer(3.0f);
@@ -2456,6 +2494,14 @@ void CosmeticsEditorWindow::DrawElement() {
 
             DrawCosmeticGroup(COSMETICS_GROUP_MAGIC);
             DrawCosmeticGroup(COSMETICS_GROUP_ARROWS);
+            UIWidgets::CVarCheckbox(
+                "Elemental impact sounds", CVAR_COSMETIC("Arrows.ElementalImpactSounds"),
+                UIWidgets::CheckboxOptions()
+                    .Color(THEME_COLOR)
+                    .Tooltip(
+                        "Use flame ignition, ice breaking, and a light-arrow hit sound for elemental arrow impacts. "
+                        "Turn off to use the original impact sounds."));
+            UIWidgets::Spacer();
             DrawCosmeticGroup(COSMETICS_GROUP_SPIN_ATTACK);
             DrawCosmeticGroup(COSMETICS_GROUP_TRAILS);
             if (UIWidgets::CVarSliderInt("Trails Duration: %d", CVAR_COSMETIC("Trails.Duration.Value"),
@@ -2560,6 +2606,7 @@ void CosmeticsEditor_RandomizeAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
+    RandomizeAllCustomCosmetics(true);
 }
 
 void CosmeticsEditor_AutoRandomizeAll() {
@@ -2572,7 +2619,7 @@ void CosmeticsEditor_AutoRandomizeAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
-    ApplyCustomCosmetics();
+    RandomizeAllCustomCosmetics(false);
 }
 
 void CosmeticsEditor_RandomizeGroup(CosmeticGroup group) {
@@ -2597,6 +2644,7 @@ void CosmeticsEditor_ResetAll() {
 
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     ApplyOrResetCustomGfxPatches();
+    ResetAllCustomCosmetics();
 }
 
 void CosmeticsEditor_ResetGroup(CosmeticGroup group) {
@@ -2635,7 +2683,11 @@ void RegisterCosmeticHooks() {
               [](s16 sceneNum) { CosmeticsEditor_AutoRandomizeAll(); });
 
     COND_HOOK(OnGameFrameUpdate, true, CosmeticsUpdateTick);
-    COND_HOOK(OnAssetAltChange, true, []() { ApplyOrResetCustomGfxPatches(true); });
+    COND_HOOK(OnAssetAltChange, true, []() {
+        ScanCustomCosmetics();
+        ApplyOrResetCustomGfxPatches(true);
+        ApplyCustomCosmetics();
+    });
 }
 
 void RegisterCosmeticWidgets() {

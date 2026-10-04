@@ -8,6 +8,7 @@
  */
 
 #include "extended_inventory.h"
+#include "din_fire_shield.h"
 #include "extended_equipment.h"
 #include "z64.h"
 #include "macros.h"    // ARRAY_COUNT — z64.h does not pull it in
@@ -472,6 +473,9 @@ uint8_t Nei_CaneOwned(void);
 uint8_t Nei_CaneActiveSkill(void);
 
 void* ExtInv_GetItemIcon(uint16_t itemId) {
+    void* fireShieldIcon = DinFireShield_ItemIcon(itemId);
+    if (fireShieldIcon != NULL)
+        return fireShieldIcon;
 
     // Kafei lays SW97 landmines rather than throwing homing mice, so the slot has to read as one
     // while he is transformed and go back to the mouse the moment he is not. Skijer's NEI

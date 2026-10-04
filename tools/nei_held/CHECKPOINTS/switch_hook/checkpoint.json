@@ -1,0 +1,45 @@
+{
+  "resource_count": 8,
+  "vertex_records": 3868,
+  "vertex_loads": 128,
+  "slug": "switch_hook",
+  "name": "Switch Hook",
+  "entry": "objects/nei_held_redesign/switch_hook/gi_dl",
+  "draw_scale": 0.01,
+  "matrix_scale": 0.390625,
+  "triangles": 3184,
+  "bounds_author": [
+    [
+      -89.75,
+      -76.6875,
+      -36.0625
+    ],
+    [
+      121.8125,
+      368.1875,
+      34.1875
+    ]
+  ],
+  "markers": {
+    "grip_world": [
+      0,
+      0,
+      0
+    ],
+    "dock_world": [
+      1.0,
+      16.4,
+      0.0
+    ],
+    "chain_socket_world": [
+      1,
+      15,
+      0
+    ]
+  },
+  "notes": [
+    "Approved GI design, rigidly fitted between the native grip and hook-actor socket.",
+    "Complete mesh only while docked; grip/neck stay in hand during flight."
+  ],
+  "runtime_tested": false
+}

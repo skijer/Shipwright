@@ -1,3 +1,4 @@
+#include "soh/Enhancements/randomizer/NeiHeldPresentation.h"
 /**
  * object_beetle.c - Beetle 3D model and draw functions
  */
@@ -25,7 +26,12 @@ static void Beetle_DrawBody(PlayState* play, Vec3f* pos, Vec3s* rot, f32 scale) 
     Matrix_Scale(scale * 3.0f, scale * 3.0f, scale * 3.0f, MTXMODE_APPLY);
 
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_beetle_body_dl);
+    if (NeiHeld_HasResources(NEI_HELD_PATH("beetle_body"), NULL) &&
+        NeiHeld_HasResources(NEI_HELD_PATH("beetle_wings"), NULL)) {
+        NeiHeld_DrawModel(play, NEI_HELD_PATH("beetle_body"), NULL);
+    } else {
+        gSPDisplayList(POLY_OPA_DISP++, g_beetle_body_dl);
+    }
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -36,7 +42,12 @@ static void Beetle_DrawWings(PlayState* play, f32 wingScale) {
     Matrix_Push();
     Matrix_Scale(1.0f, wingScale, 1.0f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, g_beetle_wings_dl);
+    if (NeiHeld_HasResources(NEI_HELD_PATH("beetle_body"), NULL) &&
+        NeiHeld_HasResources(NEI_HELD_PATH("beetle_wings"), NULL)) {
+        NeiHeld_DrawModel(play, NEI_HELD_PATH("beetle_wings"), NULL);
+    } else {
+        gSPDisplayList(POLY_OPA_DISP++, g_beetle_wings_dl);
+    }
     Matrix_Pop();
 
     CLOSE_DISPS(play->state.gfxCtx);

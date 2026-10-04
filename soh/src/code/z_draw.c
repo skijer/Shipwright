@@ -1,4 +1,7 @@
 #include "global.h"
+#include "din_fire_shield.h"
+#include <libultraship/bridge/resourcebridge.h>
+#include "soh/Enhancements/randomizer/NeiGiPresentation.h"
 #include "objects/object_gi_key/object_gi_key.h"
 #include "objects/object_gi_jewel/object_gi_jewel.h"
 #include "objects/object_gi_melody/object_gi_melody.h"
@@ -399,6 +402,8 @@ DrawItemTableEntry sDrawItemTable[] = {
  * Calls the corresponding draw function for the given draw ID
  */
 void GetItem_Draw(PlayState* play, s16 drawId) {
+    if (DinFireShield_DrawItem(play, drawId))
+        return;
     sDrawItemTable[drawId].drawFunc(play, drawId);
 }
 
@@ -407,6 +412,9 @@ void GetItem_Draw(PlayState* play, s16 drawId) {
  * Uses the Custom Draw Function if it exists, or just calls `GetItem_Draw`
  */
 void GetItemEntry_Draw(PlayState* play, GetItemEntry getItemEntry) {
+    if (NeiGi_Draw(play, &getItemEntry)) {
+        return;
+    }
     if (getItemEntry.drawFunc != NULL) {
         getItemEntry.drawFunc(play, &getItemEntry);
     } else {
@@ -769,6 +777,39 @@ void GetItem_DrawFish(PlayState* play, s16 drawId) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Custom display lists do not have the native command offsets used by the
+// Cosmetic Editor. Tint their draw, as recovery hearts already do, without
+// changing the asset or allowing native-offset patches into custom geometry.
+Gfx* GetItem_DrawDListWithCosmetics(Gfx* gfx, const char* dlist, s16 drawId) {
+    Gfx drawCommand;
+    s32 tint = false;
+    Color_RGB8 color;
+
+    // Resolve through the normal bridge before classifying. On the first Alt
+    // draw, a preceding resource query can still see a cached native list.
+    gSPDisplayList(&drawCommand, (Gfx*)dlist);
+
+    if ((drawId == GID_MAGIC_SMALL || drawId == GID_MAGIC_LARGE) &&
+        CVarGetInteger(CVAR_COSMETIC("Consumable.Magic.Changed"), 0) && ResourceGetIsCustomByName(dlist)) {
+        color = CVarGetColor24(CVAR_COSMETIC("Consumable.Magic.Value"), (Color_RGB8){ 0, 200, 0 });
+        tint = true;
+    } else if ((drawId == GID_HEART_PIECE || drawId == GID_HEART_CONTAINER) &&
+               CVarGetInteger(CVAR_COSMETIC("Consumable.Hearts.Changed"), 0) && ResourceGetIsCustomByName(dlist)) {
+        color = CVarGetColor24(CVAR_COSMETIC("Consumable.Hearts.Value"), (Color_RGB8){ 255, 70, 50 });
+        tint = true;
+    }
+
+    if (tint) {
+        gDPSetGrayscaleColor(gfx++, color.r, color.g, color.b, 255);
+        gSPGrayscale(gfx++, true);
+    }
+    *gfx++ = drawCommand;
+    if (tint) {
+        gSPGrayscale(gfx++, false);
+    }
+    return gfx;
+}
+
 void GetItem_DrawOpa0(PlayState* play, s16 drawId) {
     s32 pad;
 
@@ -776,7 +817,8 @@ void GetItem_DrawOpa0(PlayState* play, s16 drawId) {
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gSPDisplayList(POLY_OPA_DISP++, sDrawItemTable[drawId].dlists[0]);
+    POLY_OPA_DISP =
+        GetItem_DrawDListWithCosmetics(POLY_OPA_DISP, (const char*)sDrawItemTable[drawId].dlists[0], drawId);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -830,7 +872,8 @@ void GetItem_DrawXlu01(PlayState* play, s16 drawId) {
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
     gSPDisplayList(POLY_XLU_DISP++, sDrawItemTable[drawId].dlists[0]);
-    gSPDisplayList(POLY_XLU_DISP++, sDrawItemTable[drawId].dlists[1]);
+    POLY_XLU_DISP =
+        GetItem_DrawDListWithCosmetics(POLY_XLU_DISP, (const char*)sDrawItemTable[drawId].dlists[1], drawId);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

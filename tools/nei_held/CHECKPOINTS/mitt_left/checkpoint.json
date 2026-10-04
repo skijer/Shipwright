@@ -1,0 +1,34 @@
+{
+  "resource_count": 8,
+  "vertex_records": 1622,
+  "vertex_loads": 59,
+  "slug": "mitt_left",
+  "name": "Mogma Mitts / gameplay mitt_left",
+  "entry": "objects/nei_held_redesign/mitt_left/gi_dl",
+  "draw_scale": 0.13,
+  "matrix_scale": 0.0625,
+  "triangles": 1236,
+  "bounds_author": [
+    [
+      -21.0625,
+      -42.0,
+      -18.0
+    ],
+    [
+      18.0,
+      41.0,
+      18.0
+    ]
+  ],
+  "markers": {
+    "palm_author": [
+      0,
+      0,
+      0
+    ]
+  },
+  "notes": [
+    "Single approved glove, palm at hand origin; +Y points along fingers. Paired drawing follows each forearm separately."
+  ],
+  "runtime_tested": false
+}

@@ -10,8 +10,10 @@
 #include <overlays/misc/ovl_kaleido_scope/z_kaleido_scope.h>
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/SwitchAge.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/Graphics/PreludeNativeMaterialScroll.h"
 #include "soh/SaveManager.h"
 #include "soh/framebuffer_effects.h"
 #include "mods/items/custom_items.h"
@@ -242,9 +244,9 @@ void Play_Destroy(GameState* thisx) {
     VisMono_Destroy(&gPlayVisMono);
 
     if (gSaveContext.linkAge != play->linkAgeOnLoad) {
-        Inventory_SwapAgeEquipment();
-        {
+        if (!SwitchAge_HandleNonLogicEquipmentSwap()) {
             extern void ExtEquip_ValidateForAge(void);
+            Inventory_SwapAgeEquipment();
             ExtEquip_ValidateForAge(); // NEI: age-restricted page-2 pieces come off with the swap
         }
         Player_SetEquipmentData(play, player);
@@ -1705,6 +1707,7 @@ void Play_Draw(PlayState* play) {
         // Draw Enhancements that need to be placed in the world. This happens before the PostWorldDraw
         // so that they aren't drawn when the pause menu is up (e.g. collision viewer, actor name tags)
         GameInteractor_ExecuteOnPlayDrawEnd();
+        PreludeNativeMaterialScroll_Update(play->state.gfxCtx, play->state.frames, play->gameplayFrames);
 
     Play_Draw_DrawOverlayElements:
         if ((HREG(80) != 10) || (HREG(89) != 0)) {
@@ -2284,7 +2287,8 @@ void Play_PerformSave(PlayState* play) {
         if (gSaveContext.equips.buttonItems[0] == ITEM_SLINGSHOT || gSaveContext.equips.buttonItems[0] == ITEM_BOW ||
             gSaveContext.equips.buttonItems[0] == ITEM_BOMBCHU ||
             gSaveContext.equips.buttonItems[0] == ITEM_FISHING_POLE ||
-            (gSaveContext.equips.buttonItems[0] == ITEM_NONE && !Flags_GetInfTable(INFTABLE_SWORDLESS))) {
+            (gSaveContext.equips.buttonItems[0] == ITEM_NONE && !Flags_GetInfTable(INFTABLE_SWORDLESS) &&
+             CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE)) {
 
             gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
             GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);

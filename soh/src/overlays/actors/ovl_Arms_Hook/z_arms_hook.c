@@ -2,11 +2,13 @@
 #include "objects/object_link_boy/object_link_boy.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 // Skijer's NEI: the switch hook's live "look at it to pick it" selection is now the shared
 // remote selector, so the Phantom Hourglass and friends reuse the exact same feel.
 #include "../../../../mods/items/helpers/target_select_helper.h"
 
 extern u8 TransformMasks_IsTransformed(void);
+extern u8 TransformMasks_IsTransformedAny(void);
 
 #define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
 
@@ -18,6 +20,8 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play);
 void ArmsHook_Wait(ArmsHook* this, PlayState* play);
 void ArmsHook_Shoot(ArmsHook* this, PlayState* play);
 void ArmsHook_SwitchSwap(ArmsHook* this, PlayState* play); // Skijer's NEI switchhook: OoA swap state
+static void ArmsHook_StartSwap(ArmsHook* this, PlayState* play, Player* player, Actor* target);
+static void ArmsHook_ReleaseAfterSwap(ArmsHook* this, Player* player);
 
 // Skijer's NEI switchhook — Oracle of Ages INSTANT position swap (one hook exists at a time, so module
 // statics are safe). StartSwap snapshots both actors' hitboxes and teleports them into each other's
@@ -63,12 +67,60 @@ static s32 ArmsHook_IsSwappable(Actor* actor) {
 
 // Skijer's NEI switchhook — Ultrahand-style CONTINUOUS selection: while the switch hook is in hand,
 // the swappable actor closest to Link's LOOK DIRECTION (yaw only — Y is ignored), within longshot
-// range, is the live selection. It's tinted blue every frame; firing auto-aims the hook at it, so
+// range, is the live selection. It's tinted blue every frame; firing swaps immediately, so
 // you can swap without precise aiming. The scan itself is TargetSelect_Scan.
 static Actor* sSwitchSelection = NULL;
 
 static Actor* ArmsHook_SelectSwapCandidate(PlayState* play) {
     return TargetSelect_Scan(play, TargetSelect_IsCommonTarget);
+}
+
+// Compare cached pointers with list members before reading actor memory: an
+// update can remove a target between the instant swap and its short hold.
+static s32 ArmsHook_IsLiveSwapTarget(PlayState* play, Actor* target) {
+    s32 i;
+    for (i = 0; i < TARGETSEL_DEFAULT_CAT_COUNT; i++) {
+        Actor* actor = play->actorCtx.actorLists[gTargetSelectDefaultCats[i]].head;
+        for (; actor != NULL; actor = actor->next) {
+            if (actor == target) {
+                return ArmsHook_IsSwappable(actor);
+            }
+        }
+    }
+    return false;
+}
+
+// Manual aim uses the launched hook's yaw AND pitch, resolving the old proximity
+// hit along the whole longshot-length ray in this frame. Scan live actor lists:
+// the previous frame's highlighted pointer may already have been despawned.
+static Actor* ArmsHook_SelectManualSwapCandidate(ArmsHook* this, PlayState* play) {
+    Vec3f direction = { Math_SinS(this->actor.world.rot.y) * Math_CosS(this->actor.world.rot.x),
+                        -Math_SinS(this->actor.world.rot.x),
+                        Math_CosS(this->actor.world.rot.y) * Math_CosS(this->actor.world.rot.x) };
+    f32 range = TARGETSEL_DEFAULT_RANGE * CVarGetFloat(CVAR_CHEAT("HookshotReachMultiplier"), 1.0f);
+    f32 nearest = range + 1.0f;
+    Actor* best = NULL;
+    s32 i;
+
+    for (i = 0; i < TARGETSEL_DEFAULT_CAT_COUNT; i++) {
+        Actor* actor = play->actorCtx.actorLists[gTargetSelectDefaultCats[i]].head;
+        for (; actor != NULL; actor = actor->next) {
+            if (ArmsHook_IsSwappable(actor)) {
+                f32 dx = actor->world.pos.x - this->actor.world.pos.x;
+                f32 dy = actor->world.pos.y - this->actor.world.pos.y;
+                f32 dz = actor->world.pos.z - this->actor.world.pos.z;
+                f32 along = dx * direction.x + dy * direction.y + dz * direction.z;
+                f32 perpendicularSq = dx * dx + dy * dy + dz * dz - along * along;
+                // Keep the old 45-unit proximity tolerance, but never auto-select
+                // behind the aimed ray or beyond its reach.
+                if ((along >= 0.0f) && (along <= range) && (along < nearest) && (perpendicularSq < 45.0f * 45.0f)) {
+                    nearest = along;
+                    best = actor;
+                }
+            }
+        }
+    }
+    return best;
 }
 
 // Nearest swappable actor within `range` of `pos` (scans only the swappable categories). The switch
@@ -160,7 +212,7 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
 
     // Skijer's NEI switchhook — Ultrahand-style live selection: every frame the hook is IN HAND,
     // pick the swappable actor in Link's look direction (Y ignored, longshot range) and tint it
-    // blue. Firing then auto-aims at it, so you can swap without precise aiming.
+    // blue. Firing swaps with a freshly resolved target, without projectile travel.
     if (this->actor.parent != NULL) {
         if (Nei_ArmsHookVariant(GET_PLAYER(play)) == 4) { // NEI_HOOK_VARIANT_SWITCHHOOK
             extern u8 SwitchHook_IsAimingManual(void);
@@ -187,7 +239,7 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
         // / 26 (Longshot).
         //   Hookshot (0): 20 * 13     Longshot (1): 20 * 26
         //   Ultrashot (2): 40 * 26 (2x speed)     Clawshot (3): 15 * 35 (0.75x speed)
-        //   Switch Hook (4): 20 * 26 (Longshot range; swaps on hit)
+        //   Switch Hook (4): instant swap (Longshot selection range)
         u8 variant = Nei_ArmsHookVariant(player);
         f32 speed = 20.0f;
         s32 timer = 26;
@@ -197,6 +249,28 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
         if (variant == 4) {
             extern s32 SwitchHook_ConsumeCharge(void);
             extern void SwitchHook_OnFired(Player * p);
+            extern u8 SwitchHook_IsAimingManual(void);
+            Actor* target;
+            u8 manualAim = SwitchHook_IsAimingManual();
+
+            // Resolve before OnFired drops manual aim. Never dereference the
+            // cached highlight: a target may have moved or despawned since Wait.
+            target = manualAim ? ArmsHook_SelectManualSwapCandidate(this, play) : ArmsHook_SelectSwapCandidate(play);
+            sSwitchSelection = NULL;
+            if (!manualAim && target != NULL) {
+                f32 dx = target->world.pos.x - this->actor.world.pos.x;
+                f32 dy = target->world.pos.y - this->actor.world.pos.y;
+                f32 dz = target->world.pos.z - this->actor.world.pos.z;
+                f32 range = TARGETSEL_DEFAULT_RANGE * CVarGetFloat(CVAR_CHEAT("HookshotReachMultiplier"), 1.0f);
+                // The forgiving highlight ignores height; the actual swap must
+                // still fit within longshot reach from the launched hook tip.
+                // Reject an unreachable selection before spending its charge.
+                if (range <= 0.0f || dx * dx + dy * dy + dz * dz > range * range) {
+                    this->actor.parent = &player->actor;
+                    ArmsHook_ReleaseAfterSwap(this, player);
+                    return;
+                }
+            }
 
             if (!SwitchHook_ConsumeCharge()) {
                 // Should not be reached (func_808350A4 blocks the launch player-side first), but if
@@ -209,9 +283,21 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
                 player->actor.child = &this->actor;
                 return;
             }
-            // Manual aim ends at the launch (drops the aim camera; the shot direction is already
-            // the player's aimed world.rot from the vanilla aim flow).
             SwitchHook_OnFired(player);
+            this->actor.parent = &player->actor;
+            this->actor.speedXZ = 0.0f;
+            this->actor.velocity = (Vec3f){ 0.0f, 0.0f, 0.0f };
+            this->timer = 0;
+            this->collider.info.toucher.dmgFlags = 0;
+            this->collider.info.toucher.damage = 0;
+            if (target != NULL) {
+                ArmsHook_StartSwap(this, play, player, target);
+            } else {
+                // A missed attempt still spends one charge, but has no flight or
+                // retract delay and restores all held-actor links immediately.
+                ArmsHook_ReleaseAfterSwap(this, player);
+            }
+            return;
         }
         switch (variant) {
             case 0: // NEI_HOOK_VARIANT_HOOKSHOT — dist 1
@@ -230,36 +316,9 @@ void ArmsHook_Wait(ArmsHook* this, PlayState* play) {
                 speed = 15.0f;
                 timer = 35;
                 break;
-            case 4: // NEI_HOOK_VARIANT_SWITCHHOOK — dist 2 (Longshot range; dist 1 was too short); swaps on hit
-                speed = 20.0f;
-                timer = 26;
-                break;
         }
-        // Switch Hook: the swap is a clean position exchange — kill the hook's attack damage so it
-        // doesn't BREAK the pot or damage/grab the actor it's supposed to swap with. Detection is by
-        // proximity in ArmsHook_Shoot, not by a collider hit. Other variants keep the hookshot dmg.
-        if (variant == 4) { // NEI_HOOK_VARIANT_SWITCHHOOK
-            this->collider.info.toucher.dmgFlags = 0;
-            this->collider.info.toucher.damage = 0;
-        } else {
-            this->collider.info.toucher.dmgFlags = 0x00000080; // DMG_HOOKSHOT
-            this->collider.info.toucher.damage = 1;
-        }
-
-        // Switch Hook auto-aim: fly straight at the live selection (Actor_SetProjectileSpeed builds
-        // velocity.y from world.rot.x, and speedXZ resolves along world.rot.y each move — so aim
-        // BEFORE it). Refresh its tint so it stays blue in flight.
-        if ((variant == 4) && (sSwitchSelection != NULL) && (sSwitchSelection->update != NULL)) {
-            f32 dx = sSwitchSelection->world.pos.x - this->actor.world.pos.x;
-            f32 dy = sSwitchSelection->focus.pos.y - this->actor.world.pos.y;
-            f32 dz = sSwitchSelection->world.pos.z - this->actor.world.pos.z;
-            f32 distXZ = sqrtf((dx * dx) + (dz * dz));
-
-            this->actor.world.rot.y = Math_Atan2S(dz, dx);
-            this->actor.world.rot.x = Math_Atan2S(distXZ, -dy);
-            this->actor.shape.rot = this->actor.world.rot;
-            TargetSelect_Highlight(sSwitchSelection, 30);
-        }
+        this->collider.info.toucher.dmgFlags = 0x00000080; // DMG_HOOKSHOT
+        this->collider.info.toucher.damage = 1;
 
         ArmsHook_SetupAction(this, ArmsHook_Shoot);
         Actor_SetProjectileSpeed(&this->actor, speed);
@@ -324,6 +383,10 @@ static void ArmsHook_StartSwap(ArmsHook* this, PlayState* play, Player* player, 
     sSwapTargetStart = target->world.pos;     // target's original spot = Link's destination
     sSwapTarget = target;
     sSwapTimer = 0;
+    // Place the hook at Link's destination on this frame too: there is no flying
+    // tip or room-length chain between launch and the first hold update.
+    this->actor.world.pos = sSwapTargetStart;
+    this->unk_1E8 = sSwapTargetStart;
     // Full player noclip (the NoClip cheat mechanism) through the swap + a few settle frames.
     sSwitchNoClipTimer = ARMSHOOK_SWAP_HOLD_FRAMES + 6;
 
@@ -655,7 +718,7 @@ void ArmsHook_SwitchSwap(ArmsHook* this, PlayState* play) {
     Actor* target = sSwapTarget;
 
     // Target vanished mid-swap (killed/despawned) — just release cleanly.
-    if ((target == NULL) || (target->update == NULL)) {
+    if (!ArmsHook_IsLiveSwapTarget(play, target)) {
         ArmsHook_ReleaseAfterSwap(this, player);
         return;
     }
@@ -728,6 +791,7 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
     Vec3f sp60;
     f32 sp5C;
     f32 sp58;
+    u8 useApprovedSwitch = !TransformMasks_IsTransformedAny() && NeiArticulated_UsesSwitchHook(player);
 
     if ((player->actor.draw != NULL) && (player->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT)) {
         // Transformed: OOT's right-hand limb matrix isn't set up (MM form draws instead),
@@ -769,7 +833,11 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         // z_player_lib.c) carries the model's silhouette on its own when
         // held. During shoot the actor IS at the flying position, so the
         // MM tip lines up correctly with the chain end.
-        {
+        if (useApprovedSwitch) {
+            // Only geometry changes: collision probes above used the original
+            // actor matrix. The returning head also draws when timer is zero.
+            NeiArticulated_DrawSwitchHookTip(play, player, &this->actor);
+        } else {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotTipDL(void);
             extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);
@@ -806,7 +874,11 @@ void ArmsHook_Draw(Actor* thisx, PlayState* play) {
         // Twilight Upgrade — Clawshot mode: swap chain DL to MM's gameplay_keep
         // hookshot chain so the visual matches the body DL swap in z_player_lib.c.
         // Fallback to OOT chain when mm.o2r isn't loaded.
-        {
+        if (useApprovedSwitch) {
+            // This item retains the native chain. A CustomEquipment hookshot
+            // override must not suppress it or replace the switch-hook head.
+            gSPDisplayList(POLY_OPA_DISP++, gLinkAdultHookshotChainDL);
+        } else {
             extern u8 TwilightUpgrade_IsClawshotActive(void);
             extern void* MmAssets_LoadHookshotChainDL(void);
             extern Gfx* MmDL_Or(Gfx * vanillaDL, Gfx * mmDL);

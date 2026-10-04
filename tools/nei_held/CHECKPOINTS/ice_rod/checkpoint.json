@@ -1,0 +1,39 @@
+{
+  "resource_count": 7,
+  "vertex_records": 2938,
+  "vertex_loads": 107,
+  "slug": "ice_rod",
+  "name": "Ice Rod / gameplay ice_rod",
+  "entry": "objects/nei_held_redesign/ice_rod/gi_dl",
+  "draw_scale": 0.05,
+  "matrix_scale": 0.25,
+  "triangles": 3168,
+  "bounds_author": [
+    [
+      -48.6875,
+      -24.625,
+      -12.125
+    ],
+    [
+      18.125,
+      72.125,
+      12.125
+    ]
+  ],
+  "markers": {
+    "grip_native": [
+      0,
+      0,
+      0
+    ],
+    "tip_native": [
+      -144.13803987143174,
+      230.66908215454785,
+      0.0
+    ]
+  },
+  "notes": [
+    "Approved rod with GI lean removed; grip author Y=-25 at hand; shaft native 32 degrees; factor 4. No baked ice splinters."
+  ],
+  "runtime_tested": false
+}

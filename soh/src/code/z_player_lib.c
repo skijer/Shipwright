@@ -1,15 +1,20 @@
 #include "global.h"
+#include "din_fire_shield.h"
+#include "din_fire_sword.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "objects/gameplay_field_keep/gameplay_field_keep.h"
 #include "objects/object_link_boy/object_link_boy.h"
 #include "objects/object_link_child/object_link_child.h"
 #include "overlays/actors/ovl_Demo_Effect/z_demo_effect.h"
+#include "overlays/actors/ovl_Bg_Toki_Swd/z_bg_toki_swd.h"
 
 #include <libultraship/bridge/resourcebridge.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/draw.h"
+#include "soh/Enhancements/randomizer/NeiArticulatedPresentation.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/customequipment.h"
 #include "mods/items/custom_items.h"
 #include "mods/items/custom_bottles.h" // Net catch-at-blade (Skijer's NEI)
 #include "mods/extended_player.h"
@@ -39,6 +44,7 @@ extern void KiteSurf_AdjustLimb(s32 limbIndex, Vec3s* rot);
 // The Sheikah Slate is pinned to the right fist and used to rebuild its pose from two bodyPartsPos
 // points, which give a direction and so cannot express the wrist twisting around it. Skijer's NEI
 extern void ItemEquip_CaptureHandMatrix(void);
+extern void ItemEquip_CaptureLeftHandMatrix(void);
 extern u8 ItemEquip_HoldsClosedFist(void);
 extern u8 ItemEquip_HoldsEmptyHand(void);
 
@@ -1723,6 +1729,76 @@ static Gfx* Player_ResolveLimbDLForDummyOrLocal(void* dlPathOrPtr) {
     return ResourceMgr_LoadGfxByName(dlPathOrPtr);
 }
 
+// Apply AFTER equipment and model overrides. The sheath limb carries the
+// stowed sword/shield and the empty scabbard; hand limbs are independent.
+// Only hide its display list: keep skeleton traversal and shield collision.
+static void Player_ApplyBackEquipmentVisibility(s32 limbIndex, Gfx** dList) {
+    if (limbIndex == PLAYER_LIMB_SHEATH && CVarGetInteger(CVAR_ENHANCEMENT("HideBackEquipment"), 0)) {
+        *dList = NULL;
+    }
+}
+
+// The lantern's accepted placement is at the left hand; only choose its
+// grasping mesh here, after ordinary model/equipment overrides. Keep the wrist
+// matrix, animation and lantern transform intact.
+static void Player_ApplyLanternGrip(Player* player, s32 limbIndex, Gfx** dList) {
+    if (limbIndex != PLAYER_LIMB_L_HAND || *dList == NULL ||
+        !(gCustomItemState.lanternEquipped || gCustomItemState.lanternSwinging) ||
+        (player->heldItemAction != PLAYER_IA_NONE && player->heldItemAction != PLAYER_IA_LANTERN)) {
+        return;
+    }
+    u8 equipped = 0;
+    for (u8 button = 1; button < ARRAY_COUNT(gSaveContext.equips.buttonItems); ++button) {
+        if (gSaveContext.equips.buttonItems[button] == ITEM_LANTERN) {
+            equipped = 1;
+            break;
+        }
+    }
+    if (!equipped) {
+        return;
+    }
+    // PAK uses the canonical adult resource name as its DL_LFIST (0x50A0)
+    // lookup key for either age. The selected model owns the returned fist.
+    const char* pakKey = sDListsLodOffset == 0 ? gLinkAdultLeftHandClosedNearDL : gLinkAdultLeftHandClosedFarDL;
+    Gfx* hand = PakLoader_GetDLOverride(pakKey);
+    if (hand == NULL || hand == PAK_DL_STUB) {
+        hand = Player_ResolveLimbDLForDummyOrLocal(gPlayerLeftHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+    }
+    if (hand != NULL) {
+        *dList = hand;
+        sLeftHandType = PLAYER_MODELTYPE_LH_CLOSED;
+    }
+}
+
+static void Player_ApplyTimePedestalSword(PlayState* play, Player* player, s32 limbIndex, Gfx** dList, Vec3s* rot) {
+    // Keep the animated wrist basis. CustomEquipment applies the native child
+    // ceremonial placement to the selected sword alone, inside its display list.
+    (void)rot;
+    if (limbIndex != PLAYER_LIMB_L_HAND) {
+        return;
+    }
+    s32 handState = BgTokiSwd_GetTimePedestalHandState(play, player);
+    if (handState != BG_TOKI_SWD_HAND_UNCHANGED) {
+        if (handState == BG_TOKI_SWD_HAND_CLOSED) {
+            Gfx* swordDL = PakLoader_GetEquipDL(player, limbIndex);
+            *dList = (swordDL != NULL && swordDL != PAK_DL_STUB)
+                         ? swordDL
+                         : Player_ResolveLimbDLForDummyOrLocal(player->leftHandDLists[sDListsLodOffset]);
+            return;
+        }
+        // Resolve the weapon independently of the current-age equipment cache,
+        // and compose it with this age's hand. The pedestal uses this source too.
+        if (CustomEquipment_OverrideMasterSwordHand(play, dList)) {
+            return;
+        }
+        // The native ceremonial resource already has the child animation's grip.
+        const char* nativeDL = !LINK_IS_ADULT            ? gLinkChildLeftHandHoldingMasterSwordDL
+                               : (sDListsLodOffset == 0) ? gLinkAdultLeftHandHoldingMasterSwordNearDL
+                                                         : gLinkAdultLeftHandHoldingMasterSwordFarDL;
+        *dList = Player_ResolveLimbDLForDummyOrLocal((void*)nativeDL);
+    }
+}
+
 s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot,
                                            void* thisx) {
     Player* this = (Player*)thisx;
@@ -1931,6 +2007,25 @@ s32 Player_OverrideLimbDrawGameplayDefault(PlayState* play, s32 limbIndex, Gfx**
         }
     }
 
+    // The Switch Hook shares the hookshot action/pose, but owns its item mesh.
+    // Apply after equipment/PAK hooks so an Alt hookshot cannot repaint it.
+    // Keep the selected skin's age/LOD-correct fist and all original limb math.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->actor.scale.y >= 0.0f &&
+        sRightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand =
+            Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + sDListsLodOffset]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
+
+    Player_ApplyLanternGrip(this, limbIndex, dList);
+
+    // The sword cue changes leftHandDLists without changing the child's open
+    // hand type. Preserve that handoff after ordinary hand/equipment overrides;
+    // resource resolution still honors alternate assets and the selected pak.
+    Player_ApplyTimePedestalSword(play, this, limbIndex, dList, rot);
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
+
     if (GameInteractor_InvisibleLinkActive()) {
         this->actor.shape.shadowDraw = NULL;
         *dList = NULL;
@@ -2014,6 +2109,16 @@ s32 Player_OverrideLimbDrawGameplayFirstPerson(PlayState* play, s32 limbIndex, G
 
     GameInteractor_Should(VB_PLAYER_OVERRIDE_LIMB_DRAW, true, limbIndex, dList, thisx, play);
 
+    // First-person has a distinct FAR hand path. Do not expose a limb hidden
+    // by its camera/transformation rules, and do not alter the aim transform.
+    if (limbIndex == PLAYER_LIMB_R_HAND && *dList != NULL && this->unk_6AD == 2 && this->actor.scale.y >= 0.0f &&
+        this->rightHandType == PLAYER_MODELTYPE_RH_HOOKSHOT && !TransformMasks_IsTransformedAny() &&
+        NeiArticulated_UsesSwitchHook(this)) {
+        Gfx* hand = Player_ResolveLimbDLForDummyOrLocal(sPlayerRightHandClosedDLs[gSaveContext.linkAge + 2]);
+        NeiArticulated_ApplySwitchHookHand(play, this, dList, hand);
+    }
+
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
 }
 
@@ -2023,6 +2128,7 @@ s32 Player_OverrideLimbDrawGameplayCrawling(PlayState* play, s32 limbIndex, Gfx*
         *dList = NULL;
     }
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return false;
 }
 
@@ -2273,7 +2379,7 @@ void Player_DrawGetItemIceTrap(PlayState* play, Player* this, Vec3f* refPos, s32
 
         // Draw fake item model.
         if (this->getItemEntry.drawFunc != NULL) {
-            this->getItemEntry.drawFunc(play, &this->getItemEntry);
+            GetItemEntry_Draw(play, this->getItemEntry);
         } else {
             GetItem_Draw(play, drawIdPlusOne - 1);
         }
@@ -2303,7 +2409,7 @@ void Player_DrawGetItemImpl(PlayState* play, Player* this, Vec3f* refPos, s32 dr
                (this->getItemEntry.getItemId == RG_TRIFORCE_PIECE || this->getItemEntry.getItemId == RG_TRIFORCE)) {
         Randomizer_DrawTriforcePieceGI(play, this->getItemEntry);
     } else if (this->getItemEntry.drawFunc != NULL) {
-        this->getItemEntry.drawFunc(play, &this->getItemEntry);
+        GetItemEntry_Draw(play, this->getItemEntry);
     } else {
         GetItem_Draw(play, drawIdPlusOne - 1);
     }
@@ -2462,14 +2568,24 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         MtxF sp14C;
         Actor* hookedActor;
 
+        // Capture the actual wrist before a native stick/sword draw changes
+        // this matrix. PAK/custom hand display lists keep the same bone frame.
+        ItemEquip_CaptureLeftHandMatrix();
         Math_Vec3f_Copy(&this->leftHandPos, D_80160000);
 
         // Boss Remains: draw Odolwa's sword on the hand bone (the native sword was hidden to a
         // closed fist in Player_OverrideLimbDrawGameplayDefault, so *dList != NULL means a hand DL
         // — where a sword would be — is drawing). Self-guards on Odolwa-worn + sword-in-hand; own
         // push/pop + transform. Mirrors the MM 2ship L_HAND post-limb hook.
-        if ((*dList != NULL) && (this->actor.scale.y >= 0.0f)) {
+        if ((*dList != NULL) && (this->actor.scale.y >= 0.0f) &&
+            BgTokiSwd_GetTimePedestalHandState(play, this) == BG_TOKI_SWD_HAND_UNCHANGED) {
             BossRemains_DrawOdolwaSword(play, this);
+            // Coat the selected ordinary sword without replacing its model.
+            // Other weapon owners change sLeftHandType; unrelated PAK slots
+            // must not suppress this overlay.
+            if (sLeftHandType == PLAYER_MODELTYPE_LH_SWORD || sLeftHandType == PLAYER_MODELTYPE_LH_BGS) {
+                DinFireSword_Draw(play, this);
+            }
         }
 
         if (this->itemAction == PLAYER_IA_DEKU_STICK || this->itemAction == PLAYER_IA_ROD_FIRE ||
@@ -2645,6 +2761,7 @@ void Player_PostLimbDrawGameplay(PlayState* play, s32 limbIndex, Gfx** dList, Ve
     } else if (limbIndex == PLAYER_LIMB_R_HAND) {
         Actor* heldActor = this->heldActor;
 
+        DinFireShield_Draw(play, this);
         ItemEquip_CaptureHandMatrix();
 
         if (this->rightHandType == PLAYER_MODELTYPE_RH_FF) {
@@ -2941,6 +3058,7 @@ s32 Player_OverrideLimbDrawPause(PlayState* play, s32 limbIndex, Gfx** dList, Ve
         // pakDL == NULL → keep the o2r/vanilla *dList from the hook above
     }
 
+    Player_ApplyBackEquipmentVisibility(limbIndex, dList);
     return 0;
 }
 

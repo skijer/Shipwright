@@ -42,7 +42,9 @@ typedef struct EnElf {
     /* 0x02C7 */ u8 unk_2C7;
     /* 0x02C8 */ EnElfUnkFunc func_2C8;
     /* 0x02CC */ EnElfActionFunc actionFunc;
-} EnElf; // size = 0x02D0
+    /* Presentation time while Navi is out; never drives gameplay movement. */
+    u16 midnaBlinkTimer;
+} EnElf;
 
 typedef enum {
     /* 0x00 */ FAIRY_NAVI,

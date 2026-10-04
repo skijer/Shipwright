@@ -483,7 +483,7 @@ static void BallChain_Stop(Player* p, PlayState* play) {
     // Stop looping sounds
     Audio_StopSfxById(NA_SE_IT_SWORD_SWING);
     Audio_StopSfxById(NA_SE_PL_WALK_GROUND);
-    ItemEquip_PlayUnequipSFX(play, p);
+    ItemEquip_PlayUnequipSFXForAction(play, p, PLAYER_IA_BALL_AND_CHAIN);
 }
 
 static void BallChain_Start(Player* p, PlayState* play) {
@@ -494,7 +494,7 @@ static void BallChain_Start(Player* p, PlayState* play) {
     bcSpinAngle = 0;
     bcFirstPerson = 0;
     bcState = BALLCHAIN_STATE_EQUIP;
-    ItemEquip_PlayEquipSFX(play, p);
+    ItemEquip_PlayEquipSFXForAction(play, p, PLAYER_IA_BALL_AND_CHAIN);
 }
 
 // =============================================================================
@@ -850,7 +850,9 @@ void Handle_BallAndChain(Player* p, PlayState* play) {
         return;
     }
     if (in.otherButtonPressed) {
-        BallChain_Stop(p, play);
+        // A slot assignment alone does not own the pose, shared timers, or unequip sound.
+        if (bcActive)
+            BallChain_Stop(p, play);
         return;
     }
 

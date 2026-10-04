@@ -1,0 +1,28 @@
+{
+  "resource_count": 8,
+  "vertex_records": 3777,
+  "vertex_loads": 140,
+  "slug": "beetle_body",
+  "name": "Beetle / gameplay beetle_body",
+  "entry": "objects/nei_held_redesign/beetle_body/gi_dl",
+  "draw_scale": 0.06,
+  "matrix_scale": 0.162506103515625,
+  "triangles": 2680,
+  "bounds_author": [
+    [
+      -55.0,
+      -15.6875,
+      -44.0625
+    ],
+    [
+      34.3125,
+      13.6875,
+      44.0625
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Undo GI display tilt; mechanical pincers point along native -X. Wing blades/inlays kept separate from stationary hinge axles. Existing flight/aim and wing animation retained."
+  ],
+  "runtime_tested": false
+}

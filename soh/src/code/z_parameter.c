@@ -11,6 +11,7 @@
 #include "soh/Enhancements/enhancementTypes.h"
 #include "soh/ShipUtils.h"
 #include "mods/extended_equipment.h"
+#include "mods/nei_save.h"
 
 #include <string.h>
 #include <stdlib.h>
@@ -21,6 +22,7 @@
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/audio/MidnaAudio.h"
 #include "soh/Enhancements/gameplaystats.h"
 #include "soh/ObjectExtension/ActorMaximumHealth.h"
 #include "mods/extended_inventory.h"
@@ -1061,7 +1063,8 @@ void func_80083108(PlayState* play) {
                         (gSaveContext.equips.buttonItems[0] == ITEM_NONE)) {
                         if (GameInteractor_Should(VB_TEMP_B_SHOULD_RESTORE,
                                                   (gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
-                                                      (gSaveContext.infTable[29] == 0))) {
+                                                      (gSaveContext.infTable[29] == 0 &&
+                                                       CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE))) {
                             gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
 
                             GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
@@ -1089,7 +1092,8 @@ void func_80083108(PlayState* play) {
                         (gSaveContext.equips.buttonItems[0] == ITEM_NONE)) {
                         if (GameInteractor_Should(VB_TEMP_B_SHOULD_RESTORE,
                                                   (gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
-                                                      (gSaveContext.infTable[29] == 0))) {
+                                                      (gSaveContext.infTable[29] == 0 &&
+                                                       CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE))) {
                             gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
 
                             GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
@@ -1821,7 +1825,8 @@ void func_80084BF4(PlayState* play, u16 flag) {
                 Interface_LoadItemIcon1(play, 0);
             }
         } else if (gSaveContext.equips.buttonItems[0] == ITEM_NONE) {
-            if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) || (gSaveContext.infTable[29] == 0)) {
+            if ((gSaveContext.equips.buttonItems[0] != ITEM_NONE) ||
+                (gSaveContext.infTable[29] == 0 && CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE)) {
                 gSaveContext.equips.buttonItems[0] = gSaveContext.buttonStatus[0];
                 GameInteractor_Should(VB_TEMP_B_RESTORE_SWORDLESS, true);
                 Interface_LoadItemIcon1(play, 0);
@@ -2032,6 +2037,7 @@ u8 Item_Give(PlayState* play, u8 item) {
             }
 
         } else if (item == ITEM_SWORD_MASTER) {
+            Nei_Save()->timePedestalNoMasterSwordRepair = 0;
             gSaveContext.equips.buttonItems[0] = ITEM_SWORD_MASTER;
             gSaveContext.equips.equipment &= (u16) ~(0xF << (EQUIP_TYPE_SWORD * 4));
             gSaveContext.equips.equipment |= EQUIP_VALUE_SWORD_MASTER << (EQUIP_TYPE_SWORD * 4);
@@ -2554,6 +2560,11 @@ u8 Item_Give(PlayState* play, u8 item) {
 }
 
 u8 Item_CheckObtainability(u8 item) {
+    // The fixed chest asks before its get-item sequence. Time Gate lives in the
+    // extended inventory, beyond both vanilla item-slot lookup tables below.
+    if (item == ITEM_TIME_GATE) {
+        return ExtInv_GetSlotItem(SLOT_TIME_GATE) == ITEM_TIME_GATE ? ITEM_TIME_GATE : ITEM_NONE;
+    }
     s16 i;
     s16 slot = SLOT(item);
     s32 temp;
@@ -2929,12 +2940,11 @@ void Interface_SetNaviCall(PlayState* play, u16 naviCallState) {
     if (((naviCallState == 0x1D) || (naviCallState == 0x1E)) && !interfaceCtx->naviCalling &&
         (play->csCtx.state == CS_STATE_IDLE)) {
         if (!CVarGetInteger(CVAR_AUDIO("DisableNaviCallAudio"), 0)) {
-            // clang-format off
-            if (naviCallState == 0x1E) { Audio_PlaySoundGeneral(NA_SE_VO_NAVY_CALL, &gSfxDefaultPos, 4,
-                                                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb); }
-            // clang-format on
-
-            if (naviCallState == 0x1D) {
+            if (naviCallState == 0x1E && !MidnaAudio_TryPlay(MIDNA_AUDIO_CALL)) {
+                Audio_PlaySoundGeneral(NA_SE_VO_NAVY_CALL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                       &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            }
+            if (naviCallState == 0x1D && !MidnaAudio_TryPlay(MIDNA_AUDIO_HINT)) {
                 func_800F4524(&gSfxDefaultPos, NA_SE_VO_NA_HELLO_2, 32);
             }
         }
@@ -3042,6 +3052,7 @@ s32 Health_ChangeBy(PlayState* play, s16 healthChange) {
             healthChange *= abs(giDefenseModifier);
         }
     }
+    GameInteractor_Should(VB_PLAYER_INCOMING_DAMAGE, true, play, &healthChange);
 
     gSaveContext.health += healthChange;
 
@@ -3188,7 +3199,9 @@ void Inventory_ChangeAmmo(s16 item, s16 ammoChange) {
 void Magic_Fill(PlayState* play) {
     if (gSaveContext.isMagicAcquired) {
         gSaveContext.prevMagicState = gSaveContext.magicState;
-        gSaveContext.magicFillTarget = (gSaveContext.isDoubleMagicAcquired + 1) * MAGIC_NORMAL_METER;
+        if (GameInteractor_Should(VB_MAGIC_FILL_TARGET, true, &gSaveContext.magicFillTarget)) {
+            gSaveContext.magicFillTarget = (gSaveContext.isDoubleMagicAcquired + 1) * MAGIC_NORMAL_METER;
+        }
         gSaveContext.magicState = MAGIC_STATE_FILL;
     }
 }
@@ -3349,7 +3362,9 @@ void Interface_UpdateMagicBar(PlayState* play) {
 
     switch (gSaveContext.magicState) {
         case MAGIC_STATE_STEP_CAPACITY:
-            temp = gSaveContext.magicLevel * MAGIC_NORMAL_METER;
+            if (GameInteractor_Should(VB_MAGIC_STEP_CAPACITY_TARGET, true, &temp)) {
+                temp = gSaveContext.magicLevel * MAGIC_NORMAL_METER;
+            }
             if (gSaveContext.magicCapacity != temp) {
                 if (gSaveContext.magicCapacity < temp) {
                     gSaveContext.magicCapacity += 8;

@@ -1,0 +1,28 @@
+{
+  "resource_count": 8,
+  "vertex_records": 3244,
+  "vertex_loads": 118,
+  "slug": "mogma_mitts",
+  "name": "Mogma Mitts",
+  "entry": "objects/nei_gi_redesign/mogma_mitts/gi_dl",
+  "draw_scale": 0.5,
+  "matrix_scale": 0.06500244140625,
+  "triangles": 2472,
+  "bounds_author": [
+    [
+      -47.25,
+      -44.625,
+      -18.0
+    ],
+    [
+      47.25,
+      40.875,
+      18.0
+    ]
+  ],
+  "markers": {},
+  "notes": [
+    "Paired mitts with four metal digging claws each and red/green ivory cuff markings."
+  ],
+  "runtime_tested": false
+}

@@ -1,0 +1,65 @@
+{
+  "resource_count": 7,
+  "vertex_records": 2450,
+  "vertex_loads": 84,
+  "slug": "cane_of_somaria",
+  "name": "Cane of Somaria",
+  "entry": "objects/nei_held_redesign/cane_of_somaria/gi_dl",
+  "draw_scale": 1,
+  "matrix_scale": 0.021881103515625,
+  "triangles": 2708,
+  "bounds_author": [
+    [
+      -26.25,
+      -27.5,
+      -4.0
+    ],
+    [
+      2.8125,
+      72.4375,
+      4.3125
+    ]
+  ],
+  "markers": {
+    "grip_author": [
+      0,
+      0,
+      0
+    ],
+    "tip_author": [
+      -11.5,
+      59.2,
+      0
+    ],
+    "canonical_shaft_axis": [
+      0,
+      1,
+      0
+    ],
+    "world_scale": 0.35009765625,
+    "hand": "right",
+    "pose_rotations_degrees": [
+      0,
+      0,
+      -90
+    ],
+    "grip_native_child": [
+      0,
+      216.22,
+      -4.5
+    ],
+    "grip_native_adult": [
+      0,
+      328,
+      77
+    ]
+  },
+  "notes": [
+    "Canonical upright source with grip-origin zero, fitted by the captured right palm pose; no GI tilt.",
+    "Captured hand matrix is divided by player scale; resource conversion supplies .35 world/author.",
+    "Only CANE_TYPE_SOMARIA is replaced. Other cane modes retain legacy geometry, tints and VFX.",
+    "Rotate canonical +Y onto right-wrist +X; native child/adult closed-fist grip offsets are [0,216.22,-4.5]/[0,328,77].",
+    "Universal child socket verified against native child and YoungDin meshes; custom mesh grip differs by only .187 world units."
+  ],
+  "runtime_tested": false
+}

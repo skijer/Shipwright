@@ -553,7 +553,7 @@ u32 func_800E5E20(u32* out) {
     return sp1C >> 0x18;
 }
 
-u8* func_800E5E84(s32 arg0, u32* arg1) {
+s32* func_800E5E84(s32 arg0, u32* arg1) {
     return AudioLoad_GetFontsForSequence(arg0, arg1);
 }
 

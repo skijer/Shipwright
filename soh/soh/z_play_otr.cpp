@@ -6,11 +6,24 @@
 #include <spdlog/spdlog.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "global.h"
+#include "soh/Enhancements/audio/SceneRainPolicy.h"
 
 extern "C" void Play_InitScene(PlayState* play, s32 spawn);
 extern "C" void Play_InitEnvironment(PlayState* play, s16 skyboxId);
 void OTRPlay_InitScene(PlayState* play, s32 spawn);
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene);
+
+extern "C" void ActorCatalogue_LogLifecycle(const char* stage, int params, int type, int pose, int modelObjectId,
+                                            int modelSlot, int animationObjectId, int animationSlot) {
+    SPDLOG_INFO(
+        "[ActorCatalogueProbe] stage={} params={:#06x} type={} pose={} modelObject={} modelSlot={} animationObject={} "
+        "animationSlot={}",
+        stage, params & 0xFFFF, type, pose, modelObjectId, modelSlot, animationObjectId, animationSlot);
+}
+
+extern "C" void GlobalOutdoorRain_Log(const char* message) {
+    SPDLOG_INFO("{}", message);
+}
 
 // LUS::OTRResource* OTRPlay_LoadFile(PlayState* play, RomFile* file) {
 Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName) {
@@ -58,6 +71,8 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
 
     osSyncPrintf("ROOM SIZE=%fK\n", roomSize / 1024.0f);
 
+    InitSceneRainPolicy(play, Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager().get(),
+                        gSaveContext.sceneLayer, gSaveContext.linkAge);
     GameInteractor_ExecuteOnSceneInit(play->sceneNum);
     SPDLOG_INFO("Scene Init - sceneNum: {0:#x}, entranceIndex: {1:#x}", play->sceneNum, gSaveContext.entranceIndex);
 }

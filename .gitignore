@@ -58,6 +58,7 @@ graphs/
 .extracted-assets.json
 
 !OTRExporter/assets/**/*.png
+!tools/nei_feedback_preview/art/*.png
 
 # Docs
 !docs/tutorial/
@@ -452,6 +453,7 @@ _deps
 _packages
 */extract_assets_cmake*
 /build*
+/.worktrees/
 
 soh/src/boot/build.c
 soh/properties.h

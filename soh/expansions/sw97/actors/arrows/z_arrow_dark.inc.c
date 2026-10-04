@@ -5,6 +5,7 @@
 
 #include "expansions/sw97/sw97_compat.h"
 #include "expansions/sw97/sw97_config.h"
+#include "sw97_arrow_textures.h"
 
 #include "z64.h"
 #include "global.h"
@@ -216,6 +217,8 @@ static Gfx sArrowDarkVertexDL[] = {
 // Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97DarkMatDL[] = "__OTR__overlays/ovl_Arrow_Fire/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97DarkMdlDL[] = "__OTR__overlays/ovl_Arrow_Fire/sModelDL";
+static const ALIGN_ASSET(2) char sSw97DarkTex1[] = "__OTR__custom/medallion_magic/arrows/shadow/s1Tex";
+static const ALIGN_ASSET(2) char sSw97DarkTex2[] = "__OTR__custom/medallion_magic/arrows/shadow/s2Tex";
 
 // ============================================================================
 // Actor code
@@ -402,6 +405,15 @@ void ArrowDark_Draw(Actor* thisx, PlayState* play) {
     EnArrow* arrow;
     Actor* tranform;
 
+    Color_RGB8 primaryColor = { 0, 0, 0 };
+    if (CVarGetInteger(CVAR_COSMETIC("Arrows.MedallionShadowPrimary.Changed"), 0)) {
+        primaryColor = CVarGetColor24(CVAR_COSMETIC("Arrows.MedallionShadowPrimary.Value"), primaryColor);
+    }
+    Color_RGB8 secondaryColor = { 0, 0, 0 };
+    if (CVarGetInteger(CVAR_COSMETIC("Arrows.MedallionShadowSecondary.Changed"), 0)) {
+        secondaryColor = CVarGetColor24(CVAR_COSMETIC("Arrows.MedallionShadowSecondary.Value"), secondaryColor);
+    }
+
     stateFrames = play->state.frames;
     arrow = (EnArrow*)this->actor.parent;
 
@@ -428,8 +440,8 @@ void ArrowDark_Draw(Actor* thisx, PlayState* play) {
         }
 
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, 0, 0, 0, this->alpha);
-        gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 0, 128);
+        gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, primaryColor.r, primaryColor.g, primaryColor.b, this->alpha);
+        gDPSetEnvColor(POLY_XLU_DISP++, secondaryColor.r, secondaryColor.g, secondaryColor.b, 128);
         Matrix_RotateRPY(0x4000, 0x0, 0x0, MTXMODE_APPLY);
         if (this->timer != 0) {
             Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_APPLY);
@@ -441,6 +453,7 @@ void ArrowDark_Draw(Actor* thisx, PlayState* play) {
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, "../z_arrow_dark.c", 660),
                   G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
         gSPDisplayList(POLY_XLU_DISP++, sSw97DarkMatDL);
+        POLY_XLU_DISP = Sw97_ArrowLoadMedallionTextures(POLY_XLU_DISP, sSw97DarkTex1, sSw97DarkTex2);
         gSPDisplayList(POLY_XLU_DISP++,
                        Gfx_TwoTexScroll(play->state.gfxCtx, 0, 511 - (stateFrames * 5) % 512, 0, 64, 32, 1,
                                         511 - (stateFrames * 20) % 512, 511 - (stateFrames * 5) % 512, 8, 16));

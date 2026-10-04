@@ -477,6 +477,10 @@ static void RunFrame() {
             hasSetupSkybox = true;
         }
 
+        // Finish after the replacement state is initialized and before its
+        // first Graph_StartFrame, including transitions to non-Play states.
+        PreludeLoadProbe_EndStateReload();
+
         uint64_t freq = GetFrequency();
 
         while (GameState_IsRunning(gGameState)) {
@@ -505,6 +509,8 @@ static void RunFrame() {
         }
 
         runFrameContext.nextOvl = Graph_GetNextGameState(gGameState);
+        // Capture source tags while the departing PlayState is still valid.
+        PreludeLoadProbe_BeginStateReload();
         GameState_Destroy(gGameState);
         SYSTEM_ARENA_FREE_DEBUG(gGameState);
         Overlay_FreeGameState(runFrameContext.ovl);
