@@ -1,0 +1,6 @@
+{
+    "name": "young_epona",
+    "author": "Skijer",
+    "version": "0.1",
+    "description": "Ride Epona as a child: play Epona's Song and a young Epona (the OoT child horse model with Majora's Mask clips) comes to you. Port of marsh6487's young Epona POC as a standalone actor; the jump, rear and mount clips come from the mm.o2r that mm_assets extracts."
+}
