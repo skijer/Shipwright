@@ -14,8 +14,11 @@
 //   0x7F0A adult Malon idle    0x7F2A / 0x7F3A adult Malon singing (0x7F1A, with the basket, shows idle)
 //   0x7E01 Darunia idle        0x7E11 Darunia dancing
 //   0x7E02 Nabooru hands on hips
+//   0x7F05 / 0x7F15 / 0x7F25 Sheik idle / arms crossed / harp
+//   0x7F06 / 0x7F16 / 0x7F26 adult Ruto idle / hands on hips / looking down left
+//   0x7F07 / 0x7F17 / 0x7F27 child Ruto hands behind / hands on hips / sitting
 // The models are OoT's own, loaded by path. Not ported yet: head and torso tracking, talking, soft collision, the
-// other characters (Impa, Zelda, Sheik, Ruto, Kokiri, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
+// other characters (Impa, Zelda, Kokiri, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
 
 #include "soh/ModApi/ModApi.h"
 
@@ -28,6 +31,9 @@
 #include "objects/object_sa/object_sa.h"
 #include "objects/object_du/object_du.h"
 #include "objects/object_nb/object_nb.h"
+#include "objects/object_ru1/object_ru1.h"
+#include "objects/object_ru2/object_ru2.h"
+#include "objects/object_xc/object_xc.h"
 #include "overlays/actors/ovl_En_Ma2/z_en_ma2.h"
 
 #define STORY_NPC_KEY "marsh6487.story_npc"
@@ -43,6 +49,9 @@ typedef enum {
     NPC_ADULT_MALON,
     NPC_DARUNIA,
     NPC_NABOORU,
+    NPC_SHEIK,
+    NPC_ADULT_RUTO,
+    NPC_CHILD_RUTO,
     NPC_COUNT,
 } NpcKind;
 
@@ -54,6 +63,7 @@ typedef struct {
     const char* mouth; // an open or neutral mouth texture, or NULL
     f32 scale;
     s32 hiddenLimbs[2];
+    bool segmentC; // the fixed-function segment 0x0C that some of these models read
 } NpcDefinition;
 
 static const NpcDefinition sNpcs[NPC_COUNT] = {
@@ -92,6 +102,30 @@ static const NpcDefinition sNpcs[NPC_COUNT] = {
                       NULL,
                       0.01f,
                       { -1, -1 } },
+    [NPC_SHEIK] = { gSheikSkel,
+                    { gSheikIdleAnim, gSheikArmsCrossedIdleAnim, gSheikPlayingHarpAnim },
+                    3,
+                    { gSheikEyeOpenTex, gSheikEyeHalfClosedTex, gSheikEyeShutTex },
+                    NULL,
+                    0.01f,
+                    { -1, -1 },
+                    true },
+    [NPC_ADULT_RUTO] = { gAdultRutoSkel,
+                         { gAdultRutoIdleAnim, gAdultRutoIdleHandsOnHipsAnim, gAdultRutoLookingDownLeftAnim },
+                         3,
+                         { gAdultRutoEyeOpenTex, gAdultRutoEyeHalfTex, gAdultRutoEyeClosedTex },
+                         NULL,
+                         0.01f,
+                         { -1, -1 },
+                         true },
+    [NPC_CHILD_RUTO] = { gRutoChildSkel,
+                         { gRutoChildWaitHandsBehindBackAnim, gRutoChildWaitHandsOnHipsAnim, gRutoChildWaitSittingAnim },
+                         3,
+                         { gRutoChildEyeOpenTex, gRutoChildEyeHalfTex, gRutoChildEyeClosedTex },
+                         gRutoChildMouthClosedTex,
+                         0.01f,
+                         { -1, -1 },
+                         true },
 };
 
 typedef struct StoryNpc {
@@ -132,6 +166,15 @@ static bool Decode(s16 params, NpcKind* kind, u8* pose) {
                 return true;
             case 3:
                 *kind = NPC_SARIA;
+                return true;
+            case 5:
+                *kind = NPC_SHEIK;
+                return true;
+            case 6:
+                *kind = NPC_ADULT_RUTO;
+                return true;
+            case 7:
+                *kind = NPC_CHILD_RUTO;
                 return true;
             case 0xA:
                 *kind = NPC_ADULT_MALON;
@@ -206,6 +249,9 @@ static void StoryNpc_Draw(Actor* thisx, PlayState* play) {
     gSPSegment(POLY_OPA_DISP++, 0x08, SEGMENTED_TO_VIRTUAL(eye));
     gSPSegment(POLY_OPA_DISP++, 0x09, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
     gSPSegment(POLY_OPA_DISP++, 0x0A, SEGMENTED_TO_VIRTUAL(definition->mouth != NULL ? definition->mouth : eye));
+    if (definition->segmentC) {
+        gSPSegment(POLY_OPA_DISP++, 0x0C, &D_80116280[2]);
+    }
     SkelAnime_DrawSkeletonOpa(play, &this->skelAnime, StoryNpc_OverrideLimbDraw, NULL, this);
     CLOSE_DISPS(play->state.gfxCtx);
 }
