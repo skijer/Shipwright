@@ -12,9 +12,16 @@
 //   * Rider: the saddle position is read from the skin's seat vertex instead of Epona's saddle limb.
 //   * Mounting: the vanilla mount action runs, then OnPlayerUpdate re-seats child Link with the MM child clips.
 //
+// Across scenes: while the horse exists its last place is remembered, and written to the mod's storage per save file
+// when Link leaves the scene or saves, so returning to that scene finds her where she was left. Riding through a
+// scene exit brings her along: the new scene spawns her under Link and mounts him, in the outdoor areas below.
+//
 // Without mm.o2r the horse still works: the four clips with no OoT child version fall back to the idle clip.
 
 #include "soh/ModApi/ModApi.h"
+
+#include <stdio.h>
+#include <string.h>
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -67,7 +74,7 @@ static const char* const sChildClips[ANIM_COUNT] = {
 // Child Link's offset from the saddle while mounting, per side (left, right): forward, sideways.
 static const f32 sMountOffsets[2][2] = { { 22.718237f, 2.3294117f }, { -22.0f, 1.9800001f } };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnSceneInit", "OnLoadGame" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnSceneInit", "OnLoadGame", "OnSaveFile" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -76,6 +83,20 @@ static int16_t sActorId = -1;
 static HorseData sAdultHorseData;
 static bool sHaveAdultHorseData;
 static bool sWasMounted;
+
+typedef struct {
+    s16 scene;
+    Vec3s pos;
+    s16 yaw;
+    u8 valid;
+} HorsePlace;
+
+static HorsePlace sLast;   // where the live horse was last frame
+static HorsePlace sSaved;  // the stored place for this save file
+static bool sRemount;      // Link was riding when he left the last scene
+static s16 sHandledScene = -1;
+
+static void RestoreHorse(PlayState* play, Player* player);
 
 static bool IsEnabled(void) {
     return CVarGetInteger(YOUNG_EPONA_CVAR, 1) && !LINK_IS_ADULT;
@@ -277,6 +298,7 @@ static void WatchLink(void) {
     if (horse == NULL) {
         sHaveAdultHorseData = false;
         sWasMounted = false;
+        RestoreHorse(play, player);
         if (DREG(53) != 0 && CanSummon(play) && player->rideActor == NULL) {
             sAdultHorseData = gSaveContext.horseData;
             sHaveAdultHorseData = true;
@@ -294,6 +316,20 @@ static void WatchLink(void) {
         return;
     }
 
+    sLast.valid = 1;
+    sLast.scene = play->sceneNum;
+    sLast.pos.x = (s16)horse->actor.world.pos.x;
+    sLast.pos.y = (s16)horse->actor.world.pos.y;
+    sLast.pos.z = (s16)horse->actor.world.pos.z;
+    sLast.yaw = horse->actor.shape.rot.y;
+    // In Lon Lon Ranch the native young Epona stays until ours is out and active, then gives the field to her.
+    if (play->sceneNum == SCENE_LON_LON_RANCH && horse->action != ENHORSE_ACT_INACTIVE) {
+        Actor* native = Actor_Find(&play->actorCtx, ACTOR_EN_HORSE_LINK_CHILD, ACTORCAT_BG);
+
+        if (native != NULL) {
+            Actor_Kill(native);
+        }
+    }
     mounted = (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) && player->rideActor == &horse->actor;
     if (mounted && !sWasMounted) {
         SeatChildLink(play, player, horse);
@@ -301,14 +337,102 @@ static void WatchLink(void) {
     sWasMounted = mounted;
 }
 
+static bool IsRideableScene(s16 scene) {
+    switch (scene) {
+        case SCENE_HYRULE_FIELD:
+        case SCENE_LAKE_HYLIA:
+        case SCENE_GERUDO_VALLEY:
+        case SCENE_GERUDOS_FORTRESS:
+        case SCENE_LON_LON_RANCH:
+        case SCENE_KAKARIKO_VILLAGE:
+        case SCENE_GRAVEYARD:
+        case SCENE_ZORAS_RIVER:
+        case SCENE_KOKIRI_FOREST:
+        case SCENE_SACRED_FOREST_MEADOW:
+        case SCENE_ZORAS_FOUNTAIN:
+        case SCENE_LOST_WOODS:
+        case SCENE_DESERT_COLOSSUS:
+        case SCENE_HAUNTED_WASTELAND:
+        case SCENE_HYRULE_CASTLE:
+        case SCENE_DEATH_MOUNTAIN_TRAIL:
+        case SCENE_DEATH_MOUNTAIN_CRATER:
+        case SCENE_OUTSIDE_GANONS_CASTLE:
+        case SCENE_MARKET_ENTRANCE_DAY:
+        case SCENE_MARKET_ENTRANCE_NIGHT:
+        case SCENE_MARKET_ENTRANCE_RUINS:
+        case SCENE_MARKET_DAY:
+        case SCENE_MARKET_NIGHT:
+        case SCENE_MARKET_RUINS:
+        case SCENE_BACK_ALLEY_DAY:
+        case SCENE_BACK_ALLEY_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_DAY:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_NIGHT:
+        case SCENE_TEMPLE_OF_TIME_EXTERIOR_RUINS:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void StorePlace(void) {
+    if (sApi != NULL && sLast.valid) {
+        char key[24];
+
+        snprintf(key, sizeof(key), "file%d.place", (int)gSaveContext.fileNum);
+        sApi->StorageSet("young_epona", key, &sLast, sizeof(sLast));
+        sSaved = sLast;
+    }
+}
+
 static void ForgetScene(int16_t sceneNum) {
+    // The scene that is ending: remember the horse's place, and whether Link was on her.
+    sRemount = sWasMounted && IsEnabled();
+    StorePlace();
+    sLast.valid = 0;
     sWasMounted = false;
-    sHaveAdultHorseData = false;
+    sHandledScene = -1;
 }
 
 static void ForgetFile(int32_t fileNum) {
+    char key[24];
+
     sWasMounted = false;
     sHaveAdultHorseData = false;
+    sRemount = false;
+    sHandledScene = -1;
+    sLast.valid = 0;
+    memset(&sSaved, 0, sizeof(sSaved));
+    snprintf(key, sizeof(key), "file%d.place", (int)fileNum);
+    if (sApi->StorageGetSize("young_epona", key) == sizeof(sSaved)) {
+        sApi->StorageGet("young_epona", key, &sSaved, sizeof(sSaved));
+    }
+}
+
+static void SaveGame(int32_t fileNum, int32_t sectionID) {
+    StorePlace();
+}
+
+// The first frame of a scene with no horse: bring back the one that was left here, or the one Link rode in on.
+static void RestoreHorse(PlayState* play, Player* player) {
+    Actor* horse;
+
+    if (sHandledScene == play->sceneNum || !IsEnabled() || !IsRideableScene(play->sceneNum) ||
+        gSaveContext.sceneSetupIndex > 3) {
+        return;
+    }
+    sHandledScene = play->sceneNum;
+    if (sRemount) {
+        sRemount = false;
+        horse = Actor_Spawn(&play->actorCtx, play, sActorId, player->actor.world.pos.x, player->actor.world.pos.y,
+                            player->actor.world.pos.z, 0, player->actor.shape.rot.y, 0, 1);
+        if (horse != NULL && horse->update != NULL) {
+            player->rideActor = horse;
+            Actor_MountHorse(play, player, horse);
+            func_8002DE74(play, player);
+        }
+    } else if (sSaved.valid && sSaved.scene == play->sceneNum) {
+        Actor_Spawn(&play->actorCtx, play, sActorId, sSaved.pos.x, sSaved.pos.y, sSaved.pos.z, 0, sSaved.yaw, 0, 1);
+    }
 }
 
 static void RegisterToggle(void) {
@@ -354,6 +478,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, WatchLink);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK(sApi, OnLoadGame, ForgetFile);
+    SOH_REGISTER_HOOK(sApi, OnSaveFile, SaveGame);
     if (SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
         RegisterToggle();
     }
