@@ -1,0 +1,6 @@
+{
+    "name": "story_npcs",
+    "author": "marsh6487",
+    "version": "0.1",
+    "description": "Static story NPCs for scenes: Malon (child and adult), Saria, Darunia and Nabooru standing, singing or dancing without any story logic. Place them with the original En_Viewer params (0x7F02, 0x7F03, 0x7E01, 0x7F0A, 0x7E02...) or spawn them by key. Port of the first part of marsh6487's static story actor catalogue."
+}
