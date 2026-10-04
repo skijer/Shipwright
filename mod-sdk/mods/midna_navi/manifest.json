@@ -1,6 +1,6 @@
 {
     "name": "midna_navi",
-    "author": "Skijer",
+    "author": "marsh6487",
     "version": "1.0",
     "description": "Midna as Navi: Navi's draw is replaced by a Midna model when a Midna asset pack is installed (objects/midna_navi/...). Without the pack Navi is untouched. Port of marsh6487's Midna companion POC."
 }

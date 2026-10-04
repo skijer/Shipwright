@@ -1,6 +1,6 @@
 {
     "name": "stat_upgrades",
-    "author": "Skijer",
+    "author": "marsh6487",
     "version": "1.0",
-    "description": "RPG stat pickups: Power, Defense and Speed upgrades that stack, plus Quarter Hearts. Shuffled into the randomizer pool. Based on the stat-item work in marsh6487's poc/soh-stat-items (HarbourMasters/Shipwright #6760)."
+    "description": "RPG stat pickups: Power, Defense and Speed upgrades that stack, plus Quarter Hearts. Shuffled into the randomizer pool. Based on marsh6487's port of the stat-item work by Jepvid (HarbourMasters/Shipwright #6760)."
 }

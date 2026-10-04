@@ -1,0 +1,25 @@
+<DisplayList Version="0">
+<PipeSync/>
+<Matrix Path="objects/nei_gi_redesign/zonai_permafrost/scale_mtx" Param="G_MTX_PUSH"/>
+<SetCycleType G_CYC_2CYCLE="1"/>
+<SetAlphaCompare Mode="0"/>
+<SetTextureLUT Mode="G_TT_NONE"/>
+<ClearGeometryMode G_CULL_FRONT="1" G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" G_FOG="1"/>
+<SetGeometryMode G_ZBUFFER="1" G_SHADE="1" G_SHADING_SMOOTH="1" G_LIGHTING="1" G_CULL_BACK="1"/>
+<PipeSync/>
+<SetRenderMode Mode1="G_RM_PASS" Mode2="G_RM_AA_ZB_XLU_SURF2"/>
+<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_PRIMITIVE" A1="G_CCMUX_0" B1="G_CCMUX_0" C1="G_CCMUX_0" D1="G_CCMUX_COMBINED" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+<SetPrimColor M="0" L="0" R="161" G="245" B="255" A="74"/>
+<Texture S="0" T="0" Level="0" Tile="0" On="0"/>
+<LoadVertices Path="objects/nei_gi_redesign/zonai_permafrost/mesh_xlu_vtx" VertexBufferIndex="0" VertexOffset="0" Count="24"/>
+<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="3" V11="4" V12="5" Flag1="0"/>
+<Triangles2 V00="6" V01="7" V02="8" Flag0="0" V10="9" V11="10" V12="11" Flag1="0"/>
+<Triangles2 V00="12" V01="13" V02="14" Flag0="0" V10="15" V11="16" V12="17" Flag1="0"/>
+<Triangles2 V00="18" V01="19" V02="20" Flag0="0" V10="21" V11="22" V12="23" Flag1="0"/>
+<PipeSync/>
+<SetRenderMode Mode1="G_RM_PASS" Mode2="G_RM_AA_ZB_OPA_SURF2"/>
+<Texture S="0" T="0" Level="0" Tile="0" On="0"/>
+<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+<PopMatrix Param="G_MTX_MODELVIEW"/>
+<EndDisplayList/>
+</DisplayList>

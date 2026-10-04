@@ -1,6 +1,6 @@
 {
     "name": "chest_size_matches_contents",
-    "author": "Skijer",
+    "author": "marsh6487",
     "version": "1.0",
     "description": "Chest Size Matches Contents: junk, small keys and Skulltula tokens come in small chests, everything else in large ones. Port of marsh6487's CSMC size option."
 }
