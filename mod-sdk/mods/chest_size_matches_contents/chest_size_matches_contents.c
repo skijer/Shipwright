@@ -10,6 +10,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "overlays/actors/ovl_En_Box/z_en_box.h"
 
 #define CSMC_CVAR "gMods.ChestSizeMatchesContents.Enabled"
