@@ -1,0 +1,6 @@
+{
+    "name": "outdoor_rain",
+    "author": "marsh6487",
+    "version": "1.0",
+    "description": "Rain without a rain actor: continuous rain in the Lost Woods, and optional persistent or intermittent rain across the outdoor areas. Port of marsh6487's actor-free outdoor rain."
+}

@@ -1,0 +1,6 @@
+{
+    "name": "hyrule_field_night_music",
+    "author": "marsh6487",
+    "version": "1.0",
+    "description": "Hyrule Field plays a music track at night instead of only ambience. The track is chosen in the menu (Kakariko by default). Port of marsh6487's HyruleFieldNightMusic."
+}
