@@ -14,13 +14,14 @@
 //   0x7F0A adult Malon idle    0x7F2A / 0x7F3A adult Malon singing (0x7F1A, with the basket, shows idle)
 //   0x7E01 Darunia idle        0x7E11 Darunia dancing
 //   0x7E02 Nabooru hands on hips
+//   0x7F01 Impa idle
 //   0x7F05 / 0x7F15 / 0x7F25 Sheik idle / arms crossed / harp
 //   0x7F06 / 0x7F16 / 0x7F26 adult Ruto idle / hands on hips / looking down left
 //   0x7F07 / 0x7F17 / 0x7F27 child Ruto hands behind / hands on hips / sitting
 //   0x7E0A / 0x7E1A / 0x7E2A Keaton idle / chuckle / celebrate   (Majora's Mask, needs mm.o2r)
 //   0x7E0D / 0x7E1D / 0x7E2D Anju idle / bow / sitting          (Majora's Mask, needs mm.o2r)
 // The models are OoT's own, loaded by path. Not ported yet: head and torso tracking, talking, soft collision, the
-// other characters (Impa, Zelda, Kokiri, Lulu, Skull Kid, Kafei, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
+// other characters (Zelda, Kokiri, Lulu, Skull Kid, Kafei, Fado, Great Fairy, Ganondorf and the Majora's Mask cast).
 
 #include "soh/ModApi/ModApi.h"
 
@@ -36,6 +37,7 @@
 #include "objects/object_ru1/object_ru1.h"
 #include "objects/object_ru2/object_ru2.h"
 #include "objects/object_xc/object_xc.h"
+#include "objects/object_im/object_im.h"
 #include "overlays/actors/ovl_En_Ma2/z_en_ma2.h"
 
 // Majora's Mask models, by the path the mm.o2r that mm_assets extracts stores them under. Without it they are skipped.
@@ -69,6 +71,7 @@ typedef enum {
     NPC_SHEIK,
     NPC_ADULT_RUTO,
     NPC_CHILD_RUTO,
+    NPC_IMPA,
     NPC_KEATON,
     NPC_ANJU,
     NPC_COUNT,
@@ -146,6 +149,14 @@ static const NpcDefinition sNpcs[NPC_COUNT] = {
                          0.01f,
                          { -1, -1 },
                          true },
+    [NPC_IMPA] = { gImpaSkel,
+                   { gImpaIdleAnim },
+                   1,
+                   { gImpaEyeOpenTex, gImpaEyeHalfTex, gImpaEyeClosedTex },
+                   NULL,
+                   0.01f,
+                   { -1, -1 },
+                   true },
     [NPC_KEATON] = { sKeatonSkel,
                      { sKeatonIdle, sKeatonChuckle, sKeatonCelebrate },
                      3,
@@ -208,6 +219,9 @@ static bool Decode(s16 params, NpcKind* kind, u8* pose) {
                 return true;
             case 3:
                 *kind = NPC_SARIA;
+                return true;
+            case 1:
+                *kind = NPC_IMPA;
                 return true;
             case 5:
                 *kind = NPC_SHEIK;
