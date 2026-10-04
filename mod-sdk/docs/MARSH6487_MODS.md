@@ -11,6 +11,8 @@ Status: **done** = in `mod-sdk/mods/`, builds to an `.o2r` on Linux and passes `
 **needs host** = needs an engine hook or table entry the ModApi does not have yet (per `mod-sdk/AGENTS.md`, ask
 for it, do not patch the engine from a mod); **not a mod** = engine, build or tooling work.
 
+Credits and provenance: see [CREDITS_MARSH6487.md](CREDITS_MARSH6487.md). These mods are marsh6487's; Skijer's items and branches are not modified.
+
 ## Features
 
 | # | Mod (proposed key) | Source branch / commit | What it does | Status |
@@ -31,7 +33,7 @@ for it, do not patch the engine from a mod); **not a mod** = engine, build or to
 | 14 | `mm_catalogue_actors` (Skull Kid + Tael, Anju umbrella, Kafei, HMS Keaton, Lulu, Shop Gal, Great Fairy blink) | `design/mm-catalogue-fountain`, `work/mm-*`, `fix/mm-*`, `fix/shop-gal-*`, `fix/lulu-*`, `feat/skull-kid-3ds-tael`, `feat/anju-umbrella-kafei` | MM NPCs in OoT scenes, bomb shop lady replaced by the treasure shop gal. | **portable** as actors; needs the player's private MM archive (strict texture binding) and HD blink heads. |
 | 15 | `young_fado_npc` | `poc/young-fado-npc-cloth-reviewed-20261002` (cd54719c) | Young Fado rig and seated cloth routing in Kokiri forest. | **needs host**: edits `En_Ko` model routing; portable once `OnActorDraw` covers it. |
 | 16 | `shadow_scepter_fix` | `poc/shadow-scepter-visibility-20260930` (7ba95d89) | Shadow Scepter visibility and homing stun targeting. | **done**, as a patch to `elemental_wand` (3D homing on focus points, live target validation, visible fallback puff, Boe eyes). |
-| 17 | `nei_gi_models` + rod effects | `feat/nei-gi-upgrade-recovered-20260927`, `bea6f438`…`2ce2e5a2` | Upgraded GI models, held-model fitting, rod effects, hidden rods in first person. | **portable** as asset replacements and patches to the existing NEI mods (200 files, mostly `tools/nei_gi` sources). |
+| 17 | `nei_gi_redesign` (+ held models and rod effects, pending) | `feat/nei-gi-upgrade-recovered-20260927`, `bea6f438`…`2ce2e5a2` | Upgraded GI models, held-model fitting, rod effects, hidden rods in first person. | **GI models done** as a separate mod on top of the NEI items (matched by the draw function each item registered; 20 of 21, Hylia's Grace has no item here). The shimmer/energy orbs and shop-shelf fitting are not ported. **Held models and rod effects not done**: they need the held-item state of another mod's items and are the next step. |
 
 ## Not mods
 
