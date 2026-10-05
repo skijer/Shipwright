@@ -44,8 +44,9 @@ static bool IsPlayerVisible(Player* player) {
 
 static void WreatheShield(PlayState* play, Player* player) {
     // The shield is held in the right hand; flames sit on the hand so they follow every guard pose.
-    // colorIntensity is the flame's colour scale: 0 would draw it black, 1 is the plain orange fire.
-    EffectSsFireTail_SpawnFlameOnPlayer(play, 0.012f, PLAYER_BODYPART_R_HAND, 1.0f);
+    // The engine's own burning Link uses scales around 0.2 for a whole body part. colorIntensity scales the
+    // colour: 0 would draw the flame black, 1 is the plain orange fire.
+    EffectSsFireTail_SpawnFlameOnPlayer(play, 0.1f, PLAYER_BODYPART_R_HAND, 1.0f);
     if (CVarGetInteger(DIN_SFX_CVAR, 0)) {
         Audio_PlayActorSound2(&player->actor, NA_SE_PL_ARROW_CHARGE_FIRE - SFX_FLAG);
     }
@@ -76,7 +77,7 @@ static void WreatheBlade(PlayState* play, Player* player) {
         pos.x -= player->actor.world.pos.x;
         pos.y -= player->actor.world.pos.y;
         pos.z -= player->actor.world.pos.z;
-        EffectSsFireTail_SpawnFlame(play, &player->actor, &pos, 0.007f, -1, 1.0f);
+        EffectSsFireTail_SpawnFlame(play, &player->actor, &pos, 0.07f, -1, 1.0f);
     }
 }
 
