@@ -186,7 +186,8 @@ static void YoungEpona_PostDraw(Actor* thisx, PlayState* play, Skin* skin) {
     // Hoof dust and the head position come from the vanilla routine, which indexes Epona's limbs.
     EnHorse_PostDraw(thisx, play, skin);
 
-    if (!(this->stateFlags & ENHORSE_CALC_RIDER_POS)) {
+    if (!(this->stateFlags & ENHORSE_CALC_RIDER_POS) && skin->vtxTable != NULL &&
+        skin->vtxTable[YOUNG_EPONA_SEAT_LIMB].buf[0] != NULL && skin->vtxTable[YOUNG_EPONA_SEAT_LIMB].buf[1] != NULL) {
         SkinLimbVtx* body = &skin->vtxTable[YOUNG_EPONA_SEAT_LIMB];
         // Skin_ApplyLimbModifications advances the index after it submits the buffer it just rendered.
         Vtx* seat = &body->buf[body->index ^ 1][YOUNG_EPONA_SEAT_VERTEX];
@@ -275,12 +276,15 @@ static void SeatChildLink(PlayState* play, Player* player, EnHorse* horse) {
     f32 cosYaw = Math_CosS(horse->actor.shape.rot.y);
     f32 sinYaw = Math_SinS(horse->actor.shape.rot.y);
 
-    if (!ResourceMgr_FileExists(clip)) {
+    // Null when the clip is missing or is not a player animation (mm.o2r absent or laid out differently).
+    LinkAnimationHeader* mountClip = ResourceMgr_LoadPlayerAnimAsHeader(clip);
+
+    if (mountClip == NULL) {
         return;
     }
     player->actor.world.pos.x = horse->actor.world.pos.x + horse->riderPos.x + (forward * cosYaw + sideways * sinYaw);
     player->actor.world.pos.z = horse->actor.world.pos.z + horse->riderPos.z + (sideways * cosYaw - forward * sinYaw);
-    LinkAnimation_PlayOnce(play, &player->skelAnime, ResourceMgr_LoadPlayerAnimAsHeader(clip));
+    LinkAnimation_PlayOnce(play, &player->skelAnime, mountClip);
 }
 
 static void WatchLink(void) {
