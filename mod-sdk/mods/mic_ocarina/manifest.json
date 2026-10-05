@@ -1,7 +1,0 @@
-{
-    "name": "mic_ocarina",
-    "author": "Skijer",
-    "version": "1.1",
-    "description": "Mic Ocarina: hum, sing or whistle a song into the microphone and the ocarina plays it.",
-    "permissions": ["microphone"]
-}
