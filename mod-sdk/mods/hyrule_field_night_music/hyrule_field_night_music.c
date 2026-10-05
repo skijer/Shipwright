@@ -82,8 +82,8 @@ static void RegisterMenu(void) {
     SOHModMenuWidget toggle = { sizeof(SOHModMenuWidget) };
     SOHModMenuWidget slider = { sizeof(SOHModMenuWidget) };
 
-    toggle.section = "Audio";
-    toggle.sidebar = "Music";
+    toggle.section = "Settings";
+    toggle.sidebar = "Audio";
     toggle.type = SOH_MOD_MENU_CHECKBOX;
     toggle.label = "Hyrule Field Night Music";
     toggle.cvar = CVAR_ENABLED;
@@ -91,8 +91,8 @@ static void RegisterMenu(void) {
     toggle.defaultInt = 1;
     sApi->RegisterMenuWidget(&toggle);
 
-    slider.section = "Audio";
-    slider.sidebar = "Music";
+    slider.section = "Settings";
+    slider.sidebar = "Audio";
     slider.type = SOH_MOD_MENU_INT_SLIDER;
     slider.label = "Night Track (sequence id)";
     slider.cvar = CVAR_TRACK;
