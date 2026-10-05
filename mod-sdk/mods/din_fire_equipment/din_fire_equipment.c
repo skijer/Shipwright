@@ -20,8 +20,7 @@
 #define DIN_SFX_CVAR "gMods.DinFire.ChargeSfx"
 #define DIN_DAMAGE_CVAR "gMods.DinFire.SwordDamage"
 #define FIRE_ROW 0x0B // damage-table row of DMG_ARROW_FIRE
-#define SHIELD_PERIOD 2
-#define SWORD_PERIOD 2
+#define SWORD_PERIOD 1
 #define BLADE_FLAMES 4
 
 static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnCollisionResolveDamage" };
@@ -45,9 +44,8 @@ static bool IsPlayerVisible(Player* player) {
 
 static void WreatheShield(PlayState* play, Player* player) {
     // The shield is held in the right hand; flames sit on the hand so they follow every guard pose.
-    if (play->gameplayFrames % SHIELD_PERIOD == 0) {
-        EffectSsFireTail_SpawnFlameOnPlayer(play, 0.012f, PLAYER_BODYPART_R_HAND, 0.0f);
-    }
+    // colorIntensity is the flame's colour scale: 0 would draw it black, 1 is the plain orange fire.
+    EffectSsFireTail_SpawnFlameOnPlayer(play, 0.012f, PLAYER_BODYPART_R_HAND, 1.0f);
     if (CVarGetInteger(DIN_SFX_CVAR, 0)) {
         Audio_PlayActorSound2(&player->actor, NA_SE_PL_ARROW_CHARGE_FIRE - SFX_FLAG);
     }
@@ -74,6 +72,11 @@ static void WreatheBlade(PlayState* play, Player* player) {
             pos.y += 10.0f + 6.0f * i;
         }
         EffectSsKiraKira_SpawnSmall(play, &pos, &vel, &accel, &prim, &env);
+        // The flame sits relative to its actor when no body part is given.
+        pos.x -= player->actor.world.pos.x;
+        pos.y -= player->actor.world.pos.y;
+        pos.z -= player->actor.world.pos.z;
+        EffectSsFireTail_SpawnFlame(play, &player->actor, &pos, 0.007f, -1, 1.0f);
     }
 }
 
