@@ -134,17 +134,27 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        BASE_REF: ${{ github.event.pull_request.base.ref }}
       run: |
+        # List only the mods this pull request adds or changes, not every mod in the tree.
+        git fetch --depth=1 origin "$BASE_REF"
+        mkdir listed
+        for MOD in $(git diff --name-only FETCH_HEAD HEAD -- mod-sdk/mods | cut -d/ -f3 | sort -u); do
+          if [ -f "mod-sdk/mods/$MOD/manifest.json" ]; then
+            mkdir "listed/$MOD"
+            cp "mod-sdk/mods/$MOD/manifest.json" "listed/$MOD/"
+          fi
+        done
         SIGNED=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName \
                  --jq '[.[] | select(.tagName | startswith("signed-mod-"))][0].tagName // empty')
         gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
         if [ -n "$SIGNED" ]; then
           STATUS="Signed by the sign-mod workflow ($SIGNED): each package carries its signature, checked by the game."
-          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md \
+          python3 mod-sdk/tools/list_mods.py listed --status "$STATUS" --update-body body.md \
                   --download-base "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$SIGNED"
         else
           STATUS="Downloads are published when a tag containing \`mods\` is pushed on this pull request's commit."
-          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md
+          python3 mod-sdk/tools/list_mods.py listed --status "$STATUS" --update-body body.md
         fi
         gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file body.md
 

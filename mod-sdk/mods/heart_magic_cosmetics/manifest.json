@@ -1,0 +1,6 @@
+{
+    "name": "heart_magic_cosmetics",
+    "author": "marsh6487",
+    "version": "1.0",
+    "description": "Custom heart and magic-jar models honour the Cosmetic Editor colours. Port of marsh6487's heart/magic cosmetics fix, as a draw-time tint instead of an engine patch."
+}
