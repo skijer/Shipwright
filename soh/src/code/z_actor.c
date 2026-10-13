@@ -1738,7 +1738,9 @@ void Actor_UpdateBgCheckInfo(PlayState* play, Actor* actor, f32 wallCheckHeight,
              BgCheck_EntitySphVsWall4(&play->colCtx, &sp64, &actor->world.pos, &actor->prevPos, wallCheckRadius,
                                       &actor->wallPoly, &bgId, actor, wallCheckHeight))) {
             wallPoly = actor->wallPoly;
-            Math_Vec3f_Copy(&actor->world.pos, &sp64);
+            if (GameInteractor_Should(VB_PUSH_ACTOR_OUT_OF_WALL, true, actor, &sp64)) {
+                Math_Vec3f_Copy(&actor->world.pos, &sp64);
+            }
             actor->wallYaw = Math_Atan2S(wallPoly->normal.z, wallPoly->normal.x);
             actor->bgCheckFlags |= 8;
             actor->wallBgId = bgId;

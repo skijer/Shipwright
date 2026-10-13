@@ -1949,6 +1949,17 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*Actor`
+    // - `*Vec3f` (the position the wall check moves the actor to)
+    // Whether Actor_UpdateBgCheckInfo moves an actor that touches a wall out of it. False leaves the actor where it
+    // is; the wall is still detected (wallPoly, wallYaw, bgCheckFlags 8).
+    VB_PUSH_ACTOR_OUT_OF_WALL,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnRd`
     VB_REDEAD_GIBDO_FREEZE_LINK,
 
