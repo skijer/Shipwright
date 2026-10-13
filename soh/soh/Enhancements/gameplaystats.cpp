@@ -11,6 +11,7 @@
 #include "soh/Enhancements/BunnyHood.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/gameplaystatswindow.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 extern "C" {
 #include "functions.h"
@@ -527,6 +528,9 @@ void DrawGameplayStatsCountsTab() {
         ImGui::TableNextColumn();
         if (ImGui::TreeNodeEx("Enemy Details...", ImGuiTreeNodeFlags_NoTreePushOnOpen)) {
             for (int i = COUNT_ENEMIES_DEFEATED_ANUBIS; i <= COUNT_ENEMIES_DEFEATED_WOLFOS; i++) {
+                if (!GameInteractor_Should(VB_SHOW_GAMEPLAY_STATS_COUNT, true, i)) {
+                    continue;
+                }
                 if (i == COUNT_ENEMIES_DEFEATED_FLOORMASTER) {
                     GameplayStatsRow(countMappings[i], formatIntGameplayStat(gSaveContext.ship.stats.count[i] / 3));
                 } else {
@@ -545,6 +549,9 @@ void DrawGameplayStatsCountsTab() {
         ImGui::TableNextColumn();
         if (ImGui::TreeNodeEx("Ammo Details...", ImGuiTreeNodeFlags_NoTreePushOnOpen)) {
             for (int i = COUNT_AMMO_USED_STICK; i <= COUNT_AMMO_USED_BEAN; i++) {
+                if (!GameInteractor_Should(VB_SHOW_GAMEPLAY_STATS_COUNT, true, i)) {
+                    continue;
+                }
                 GameplayStatsRow(countMappings[i], formatIntGameplayStat(gSaveContext.ship.stats.count[i]));
             }
         }
@@ -571,6 +578,9 @@ void DrawGameplayStatsCountsTab() {
         ImGui::TableNextColumn();
         if (ImGui::TreeNodeEx("Buttons...", ImGuiTreeNodeFlags_NoTreePushOnOpen)) {
             for (int i = COUNT_BUTTON_PRESSES_A; i <= COUNT_BUTTON_PRESSES_START; i++) {
+                if (!GameInteractor_Should(VB_SHOW_GAMEPLAY_STATS_COUNT, true, i)) {
+                    continue;
+                }
                 GameplayStatsRow(countMappings[i], formatIntGameplayStat(gSaveContext.ship.stats.count[i]));
             }
         }

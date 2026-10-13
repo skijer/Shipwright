@@ -2996,6 +2996,15 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `int32_t` (a `GameplayStatCount`)
+    // Whether the gameplay stats window lists this count's row in its Enemy Details, Ammo Details and Buttons lists.
+    VB_SHOW_GAMEPLAY_STATS_COUNT,
+
+    // #### `result`
+    // ```c
     // (interactedActor->id == ACTOR_BG_TOKI_SWD) && LINK_IS_ADULT
     // ```
     // #### `args`
