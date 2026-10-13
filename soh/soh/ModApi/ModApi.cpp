@@ -311,6 +311,11 @@ SOHModApi BuildTable() {
     api.ReportBossDefeated = BossRegistry_ReportDefeated;
     api.RegisterPickupVariant = CustomItemRegistry_RegisterPickupVariant;
     api.GetPickupVariant = CustomItemRegistry_GetPickupVariant;
+    api.SetLabel = ModLabels_Set;
+    api.SetTimeSplits = ModLabels_SetTimeSplits;
+    api.SetTimeSplitGroup = ModLabels_SetTimeSplitGroup;
+    api.ClearTimeSplitGroups = ModLabels_ClearTimeSplitGroups;
+    api.SetItemIcon = ModLabels_SetItemIcon;
     return api;
 }
 

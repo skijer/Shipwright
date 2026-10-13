@@ -9,6 +9,7 @@
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/util.h"
 #include "soh/Enhancements/BunnyHood.h"
+#include "soh/ModApi/Labels/ModLabels.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/gameplaystatswindow.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -983,6 +984,7 @@ void SetupDisplayColors() {
 
 void GameplayStatsWindow::InitElement() {
     SetupDisplayNames();
+    ModLabels_ApplyTimestamps();
     SetupDisplayColors();
 
     SaveManager::Instance->AddLoadFunction("sohStats", 1, LoadStatsVersion1);

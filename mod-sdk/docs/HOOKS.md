@@ -135,6 +135,15 @@ sApi->RegisterMenuWidget(&volume);
 sets default cells (also for vanilla entries, `vanilla.<kind>.<slot>`, to regroup the OoT grid into wheels), and
 `RegisterLayoutVanilla` shows a vanilla slot on your page. Players rearrange everything in *Mods Items Layout*.
 
+### SoH's windows
+
+The save editor, gameplay stats and time splits name things from SoH's own tables. `SetLabel(kind, language,
+index, name)` renames an item or quest item (per `LANGUAGE_*`), a scene or a stats timestamp (language ignored);
+`SetTimeSplits(splits, count)` replaces the Time Splits list (a split already in it keeps its times), and
+`SetTimeSplitGroup(id, members, count)` / `ClearTimeSplitGroups()` its popups. `SetItemIcon(item, source)` draws
+`item`'s icon in those windows as `source`'s; `SetItemIcon(item, item)` puts its own back. These are table entries,
+so they work on Windows too, where the host exports C names only.
+
 ### Services between mods
 
 Mods do not link against each other. A mod offers a function by name, and others look it up when they use it:
