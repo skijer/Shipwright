@@ -84,6 +84,17 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN)
+    // ```
+    // #### `args`
+    // - `*Player`
+    // Whether Link counts as a child holding the Hylian Shield, which he cannot hold up: he keeps it on his back and
+    // crouches under it to block, with no shield walk or shield hand. Asked by the player's shielding, blocking, model
+    // and draw code (Player_IsChildWithHylianShield).
+    VB_BE_CHILD_WITH_HYLIAN_SHIELD,
+
+    // #### `result`
+    // ```c
     // this->currentReward == 3
     // ```
     // #### `args`
