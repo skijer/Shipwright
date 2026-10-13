@@ -12186,7 +12186,11 @@ void Player_UpdateCommon(Player* this, PlayState* play, Input* input) {
         } else {
             sWaterSpeedFactor = 1.0f;
         }
-        GameInteractor_ExecuteOnPlayerResolveMotionScale(this, SOH_PLAYER_MOTION_WATER_SPEED, &sWaterSpeedFactor);
+        f32 waterSpeedFactor = sWaterSpeedFactor;
+        GameInteractor_ExecuteOnPlayerResolveMotionScale(this, SOH_PLAYER_MOTION_WATER_SPEED, &waterSpeedFactor);
+        if (waterSpeedFactor > 0.0f) {
+            sWaterSpeedFactor = waterSpeedFactor;
+        }
 
         sInvWaterSpeedFactor = 1.0f / sWaterSpeedFactor;
         sUseHeldItem = sHeldItemButtonIsHeldDown = 0;

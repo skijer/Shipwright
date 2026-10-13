@@ -196,7 +196,7 @@ The registry applies a form through generic hooks any mod can use, filtered by i
 | `OnPlayerResolveAnim` | group | Replacing any animation from an animation group. |
 | `OnPlayerResolveAnimSite` | site | The animations outside the groups: `HOP` (`direction * 3 + phase`), `DAMAGE`, `FIDGET` (`FidgetType * 2 + column`), `FALL`. |
 | `OnPlayerResolveAgeProperties` | — | The player's body. |
-| `OnPlayerResolveMotionScale` | kind | Speeds: `STICK_SPEED` is a multiplier, `SPEED_CAP` the cap itself in world units, `WATER_SPEED` the factor vanilla sets to 0.5 in water and 1 out of it, which scales Link's jumps, rolls, turn rate and some animations. |
+| `OnPlayerResolveMotionScale` | kind | Speeds: `STICK_SPEED` is a multiplier, `SPEED_CAP` the cap itself in world units, `WATER_SPEED` the factor vanilla sets to 0.5 in water and 1 out of it, which scales Link's jumps, rolls, turn rate and some animations (a factor of 0 or less is ignored). |
 | `OnPlayerResolveHeight` | — | The body's height. |
 | `OnPlayerFilterInput` | — | The copy of the pad vanilla Link reads. |
 | `OnPlayerResolveLimbDraw` / `OnPlayerResolveFaceTextures` | — | Link's meshes and face. |
