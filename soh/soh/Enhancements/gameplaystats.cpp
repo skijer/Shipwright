@@ -7,6 +7,7 @@
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/util.h"
+#include "soh/ModApi/Labels/ModLabels.h"
 
 #include <vector>
 #include <string>
@@ -902,6 +903,7 @@ void SetupDisplayColors() {
 
 void GameplayStatsWindow::InitElement() {
     SetupDisplayNames();
+    ModLabels_ApplyTimestamps();
     SetupDisplayColors();
 
     SaveManager::Instance->AddLoadFunction("sohStats", 1, LoadStatsVersion1);
