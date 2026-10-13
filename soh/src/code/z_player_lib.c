@@ -527,7 +527,8 @@ s32 Player_CheckHostileLockOn(Player* this) {
 }
 
 s32 Player_IsChildWithHylianShield(Player* this) {
-    return gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN);
+    return GameInteractor_Should(VB_BE_CHILD_WITH_HYLIAN_SHIELD,
+                                 gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN), this);
 }
 
 s32 Player_ActionToModelGroup(Player* this, s32 actionParam) {
