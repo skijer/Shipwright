@@ -372,10 +372,12 @@ std::map<RandomizerGet, RandomizerCheckArea> MapRGtoRandomizerCheckArea = {
 void SpoilAreaFromCheck(RandomizerCheck rc) {
     Rando::Location* loc = Rando::StaticData::GetLocation(rc);
     Rando::ItemLocation* itemLoc = Rando::Context::GetInstance()->GetItemLocation(rc);
-    if (itemLoc->GetPlacedItem().GetItemType() == ItemType::ITEMTYPE_MAP) {
-        RandomizerCheckArea area = MapRGtoRandomizerCheckArea[itemLoc->GetPlacedRandomizerGet()];
-        if (!IsAreaSpoiled(area)) {
-            SetAreaSpoiled(area);
+    // SOH [Unbound] a mod dungeon's map and checks belong to no tracker area.
+    auto mapArea = MapRGtoRandomizerCheckArea.find(itemLoc->GetPlacedRandomizerGet());
+    if (itemLoc->GetPlacedItem().GetItemType() == ItemType::ITEMTYPE_MAP &&
+        mapArea != MapRGtoRandomizerCheckArea.end()) {
+        if (!IsAreaSpoiled(mapArea->second)) {
+            SetAreaSpoiled(mapArea->second);
         }
     }
     if (itemLoc->GetPlacedItem().GetItemType() == ItemType::ITEMTYPE_SILVER) {
@@ -476,7 +478,7 @@ void SpoilAreaFromCheck(RandomizerCheck rc) {
                 break;
         }
     }
-    if (!IsAreaSpoiled(loc->GetArea())) {
+    if (loc->GetArea() != RCAREA_INVALID && !IsAreaSpoiled(loc->GetArea())) {
         SetAreaSpoiled(loc->GetArea());
     }
 }

@@ -25,6 +25,8 @@ mods/
 | Make icons, models and animations for my mod | [Assets](docs/ASSETS.md) |
 | React to the game: hooks, vanilla behaviours, time, input, audio, menus | [Hooks and services](docs/HOOKS.md) |
 | Put my item in the randomizer, change its logic | [Randomizer](docs/RANDOMIZER.md) |
+| Replace a boss fight, or the final battle | [Bosses](docs/BOSSES.md) |
+| Add a whole dungeon, shuffled with the vanilla ones | [Dungeons](docs/DUNGEONS.md) |
 | Ship one `.o2r` for Windows, Linux and macOS from CI | [Publishing](docs/PUBLISHING.md) |
 | Get my mod signed so release builds run it | [Signing](docs/SIGNING.md) |
 
@@ -48,9 +50,11 @@ No compiler? Push to your fork and download the `unbound-mods` artifact of the *
 | `templates/item_template` | A C-button item: a Heart Charm that trades rupees for hearts. |
 | `templates/form_template` | A mask and the form it grants: a faster Link who leaps instead of rolling. |
 | `templates/actor_template` | A new actor with a collider that bursts into rupees when hit. |
+| `templates/boss_template` | A boss that takes Queen Gohma's slot: the blue warp and heart container stay hers. |
 | `include/z64items` | Header-only helpers to fill a custom item definition. |
 | `include/z64wheel` | Header-only in-game wheel for items with several modes. |
 | `include/z64aiming` | Header-only first-person aiming for items that own the player. |
+| `include/z64boss` | Header-only end of a boss fight: blue warp, heart container, tower collapse or credits. |
 | `cmake/UnboundModSdk.cmake` | `unbound_add_mod()`: compiles a mod and packages it as `.o2r`. |
 | `tools/pack_mod.py` | Packages one binary plus `assets/` into an `.o2r`. |
 | `tools/merge_mod_packages.py` | Merges the per-platform packages of a mod into one universal `.o2r`. |

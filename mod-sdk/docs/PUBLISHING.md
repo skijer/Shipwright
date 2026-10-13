@@ -50,6 +50,11 @@ To release your mods, push a tag containing `mods` (e.g. `nei-mods-1.0`) on the 
 workflow builds them and publishes a GitHub release with one universal `.o2r` per mod. Tags containing `unbound`
 are for the game itself: they build and release Unbound (with `soh.lib`), not the mods.
 
+To share a pull request's mods before releasing them, add the `generate-mods` label to it. The workflow builds
+only the mods (not the game), publishes them as a public prerelease `pr<number>-mod-preview`, and writes the mod
+table into the pull request's description: each mod's name downloads its `.o2r`, plus a link to the zip with all
+of them. Every push to the pull request rebuilds it; closing the pull request deletes the prerelease.
+
 ## Keeping your mods in a repository of their own
 
 Once you have more than a few mods, keep them apart from the game: Unbound stays a clean fork you can update, and

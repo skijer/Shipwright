@@ -57,7 +57,8 @@ jobs:
 
   generate-soh-otr:
     # The build jobs below need this one, so skipping it on a tag push skips them too.
-    if: github.ref_type != 'tag'
+    # A pull request labelled generate-mods only builds its mods (build-mods.yml).
+    if: github.ref_type != 'tag' && !contains(github.event.pull_request.labels.*.name, 'generate-mods')
     runs-on: ubuntu-22.04
     steps:
     - name: Git Checkout

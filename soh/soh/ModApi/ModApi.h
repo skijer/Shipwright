@@ -37,6 +37,7 @@ extern "C" {
 #include "soh/ModApi/Microphone/Microphone.h"
 #include "soh/ModApi/UserFiles/UserFiles.h"
 #include "soh/ModApi/ModDialogs/ModDialogs.h"
+#include "soh/ModApi/ModDungeons/BossRegistry.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -147,7 +148,6 @@ typedef struct {
     bool (*RegisterRandoOption)(const SOHModRandoOption* option);
     uint8_t (*GetRandoOption)(const char* key);
     uint32_t (*ExportArchiveFiles)(const char* searchMask, const char* destinationDir);
-    bool (*ExtractRom)(const SOHO2rExtractRequest* request);
     void (*Log)(const char* message);
     bool (*RegisterCustomEquipment)(const SOHCustomEquipDefinition* definition);
     const char* (*GetWornEquipment)(uint8_t slot);
@@ -175,10 +175,17 @@ typedef struct {
     bool (*PickUserFile)(const char* title, const char* filterName, const char* filterPatterns, SOHUserFile* file);
     void (*FreeUserFile)(SOHUserFile* file);
     bool (*SaveToModsFolder)(const char* fileName, const void* data, uint64_t size);
-    bool (*ExtractRomToModsFolder)(const SOHRomExtractRequest* request);
+    uint32_t (*ReadArchiveFiles)(const char* searchMask, SOHArchiveFileFunc visit, void* userData);
     bool (*AskPlayer)(const char* title, const char* message);
     void (*TellPlayer)(const char* title, const char* message);
     bool (*RequestRestart)(const char* reason);
+    bool (*RegisterBoss)(const SOHBossDefinition* definition);
+    int32_t (*GetBossSlot)(const char* key);
+    const char* (*GetSceneBoss)(int16_t sceneNum);
+    int16_t (*GetBossSlotScene)(int32_t slot);
+    void (*ReportBossDefeated)(Actor* boss);
+    bool (*RegisterPickupVariant)(const SOHCustomPickupVariant* variant);
+    const SOHCustomPickupVariant* (*GetPickupVariant)(const char* key);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

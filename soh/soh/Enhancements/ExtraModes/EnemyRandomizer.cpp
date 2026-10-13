@@ -15,6 +15,7 @@
 #include "soh/ShipInit.hpp"
 #include "z64scene.h"
 #include "soh/SohGui/SohGui.hpp"
+#include "soh/SohGui/UIWidgets.hpp"
 #include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 
 extern "C" {

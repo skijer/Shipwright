@@ -12,6 +12,7 @@
 #include "soh/Enhancements/randomizer/location_access.h"
 #include "soh/Enhancements/randomizer/entrance.h"
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 bool gRandoLogicHasCapabilityGrants = false;
 
@@ -369,6 +370,9 @@ bool RandoLogic_IsCapabilityGranted(RandoLogicCapability capability) {
 }
 
 bool RandoLogic_ResolveLocation(int32_t check, bool vanillaResult) {
+    if (DungeonRegistry_IsModCheck(check)) {
+        return DungeonRegistry_EvaluateCheck(check);
+    }
     if (!sHasLocationRules || check < 0 || check >= RC_MAX) {
         return vanillaResult;
     }
@@ -376,6 +380,9 @@ bool RandoLogic_ResolveLocation(int32_t check, bool vanillaResult) {
 }
 
 bool RandoLogic_ResolveEntrance(int32_t fromRegion, int32_t toRegion, bool vanillaResult) {
+    if (fromRegion >= RR_MAX || toRegion >= RR_MAX) {
+        return DungeonRegistry_EvaluateExit(fromRegion, toRegion);
+    }
     if (sEntranceRules.empty()) {
         return vanillaResult;
     }
@@ -387,6 +394,9 @@ bool RandoLogic_ResolveEntrance(int32_t fromRegion, int32_t toRegion, bool vanil
 }
 
 bool RandoLogic_ResolveEvent(int32_t logicEvent, bool vanillaResult) {
+    if (DungeonRegistry_IsModEvent(logicEvent)) {
+        return DungeonRegistry_EvaluateEvent(logicEvent);
+    }
     if (!sHasEventRules || logicEvent < 0 || logicEvent >= LOGIC_MAX) {
         return vanillaResult;
     }

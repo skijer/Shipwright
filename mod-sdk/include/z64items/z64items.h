@@ -112,6 +112,21 @@ static inline bool Z64Items_Register(const SOHModApi* api, const SOHCustomItemDe
     return SOH_MOD_API_HAS(api, RegisterCustomItem) && api->RegisterCustomItem(definition);
 }
 
+// acquisitionKey is what the seed stores; itemKey must already be registered.
+static inline SOHCustomPickupVariant Z64Items_DefinePickup(const char* itemKey, const char* variantKey,
+                                                         const char* acquisitionKey) {
+    SOHCustomPickupVariant pickup = { 0 };
+    pickup.structSize = sizeof(pickup);
+    pickup.key = acquisitionKey;
+    pickup.itemKey = itemKey;
+    pickup.variantKey = variantKey;
+    return pickup;
+}
+
+static inline bool Z64Items_RegisterPickup(const SOHModApi* api, const SOHCustomPickupVariant* pickup) {
+    return SOH_MOD_API_HAS(api, RegisterPickupVariant) && api->RegisterPickupVariant(pickup);
+}
+
 static inline const char* Z64Items_Texture(const SOHModApi* api, const char* key, SOHItemIconSurface surface) {
     return SOH_MOD_API_HAS(api, ResolveCustomItemTexture) ? api->ResolveCustomItemTexture(key, surface) : NULL;
 }

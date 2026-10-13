@@ -98,7 +98,7 @@ std::string Setting(const std::string& key, const char* field) {
 }
 
 void SaveLayout() {
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 std::string NativeKey(uint8_t kind, int source) {
@@ -428,6 +428,10 @@ std::vector<const Entry*> CellEntries(const std::vector<Entry>& entries, const P
     return result;
 }
 
+int CellCount(const Page& page) {
+    return static_cast<int>(page.cells.size());
+}
+
 std::string CellKey(const Page& page, int cell) {
     return std::to_string(page.kind) + "." + page.key + "." + std::to_string(cell);
 }
@@ -493,12 +497,12 @@ void DrawGrid(const Page& page, const std::vector<Entry>& entries) {
     const float width = std::max(280.0f, ImGui::GetContentRegionAvail().x - 8);
     const float scale = std::min(width / 256.0f, 3.0f);
     const auto origin = ImGui::GetCursorScreenPos();
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto& bounds = page.cells[cell];
         const ImVec2 pos(origin.x + (bounds.x + 120) * scale, origin.y + (70 - bounds.y) * scale);
         const ImVec2 size(std::max(18.0f, bounds.width * scale), std::max(18.0f, bounds.height * scale));
         ImGui::SetCursorScreenPos(pos);
-        ImGui::PushID(static_cast<int>(cell));
+        ImGui::PushID(cell);
         if (ImGui::InvisibleButton("cell", size)) {
             ImGui::OpenPopup("Edit cell");
         }
@@ -511,7 +515,7 @@ void DrawGrid(const Page& page, const std::vector<Entry>& entries) {
                 auto found =
                     std::find_if(entries.begin(), entries.end(), [&](const Entry& entry) { return entry.key == key; });
                 if (found != entries.end()) {
-                    SetPlacement(*found, { page.key, static_cast<int>(cell) });
+                    SetPlacement(*found, { page.key, cell });
                 }
             }
             ImGui::EndDragDropTarget();
@@ -534,7 +538,7 @@ void DrawGrid(const Page& page, const std::vector<Entry>& entries) {
             draw->AddText(ImVec2(pos.x + 3, pos.y + 3), ImGui::GetColorU32(ImGuiCol_TextDisabled), "+");
         }
         if (ImGui::BeginPopup("Edit cell")) {
-            DrawCellEditor(page, static_cast<int>(cell), entries);
+            DrawCellEditor(page, cell, entries);
             ImGui::EndPopup();
         }
         ImGui::PopID();
@@ -645,7 +649,7 @@ void MoveCursor(PlayState* play, const Page& page, const std::vector<Entry>& ent
     const auto& origin = page.cells[sCursor[page.kind]];
     float score = 1e9f;
     int next = -1;
-    for (size_t i = 0; i < page.cells.size(); ++i) {
+    for (int i = 0; i < CellCount(page); ++i) {
         if (CellEntries(entries, page, i, true).empty()) {
             continue;
         }
@@ -747,11 +751,12 @@ bool IsTradeEntry(const Entry& entry) {
 }
 
 void SelectTradeItem(PlayState* play, const Entry& entry) {
-    gSaveContext.inventory.items[entry.source] = entry.item;
+    const uint8_t tradeItem = static_cast<uint8_t>(entry.item);
+    gSaveContext.inventory.items[entry.source] = tradeItem;
     for (int button = 1; button < ARRAY_COUNT(gSaveContext.equips.buttonItems); ++button) {
         if (gSaveContext.equips.cButtonSlots[button - 1] == entry.source &&
             CustomItemRegistry_GetEquippedKey(button) == nullptr) {
-            gSaveContext.equips.buttonItems[button] = entry.item;
+            gSaveContext.equips.buttonItems[button] = tradeItem;
             Interface_LoadItemIcon1(play, button);
         }
     }
@@ -782,7 +787,7 @@ void EquipEntry(PlayState* play, const Entry& entry, const SOHLayoutCell& cell) 
 
 void TurnCell(PlayState* play, const Page& page, const std::vector<const Entry*>& entries, int direction) {
     const auto* previous = SelectedEntry(entries, page, sCursor[page.kind]);
-    const int index = std::find(entries.begin(), entries.end(), previous) - entries.begin();
+    const size_t index = static_cast<size_t>(std::find(entries.begin(), entries.end(), previous) - entries.begin());
     const auto* next = entries[(index + (direction > 0 ? 1 : entries.size() - 1)) % entries.size()];
     sSelected[CellKey(page, sCursor[page.kind])] = next->key;
     if (IsTradeEntry(*next) && IsTradeEntry(*previous) && next->source == previous->source) {
@@ -889,7 +894,7 @@ static void DrawEquippedOutlines(PlayState* play, const Page& page, const std::v
     gDPPipeSync(POLY_OPA_DISP++);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, ZREG(39), ZREG(40), ZREG(41), pause.alpha);
     gDPSetEnvColor(POLY_OPA_DISP++, ZREG(43), ZREG(44), ZREG(45), 0);
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto contents = CellEntries(entries, page, cell, true);
         const auto* selected = SelectedEntry(contents, page, cell);
 
@@ -937,7 +942,7 @@ static void DrawItemEquippedOutlines(PlayState* play, const Page& page, const st
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, pause.alpha);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 0);
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto contents = CellEntries(entries, page, cell, true);
         if (std::none_of(contents.begin(), contents.end(),
                          [](const Entry* entry) { return IsItemEntryEquipped(*entry); })) {
@@ -967,7 +972,7 @@ static void DrawItemAmmoCounts(PlayState* play, const Page& page, const std::vec
     gDPSetCombineLERP(POLY_OPA_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0, PRIMITIVE,
                       ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
     CLOSE_DISPS(play->state.gfxCtx);
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto* selected = SelectedEntry(CellEntries(entries, page, cell, true), page, cell);
         if (selected == nullptr || selected->sourceKind != SOH_LAYOUT_ITEMS) {
             continue;
@@ -1000,7 +1005,7 @@ static void DrawItemAmmoCounts(PlayState* play, const Page& page, const std::vec
 
 static void DrawItemCellWheels(PlayState* play, const Page& page, const std::vector<Entry>& entries) {
     const auto& pause = play->pauseCtx;
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto contents = CellEntries(entries, page, cell, true);
         if (contents.size() < 2) {
             continue;
@@ -1075,7 +1080,7 @@ bool ModLayout_CyclePage(PlayState* play, uint8_t kind) {
     sShown[kind] = current == visible.end() || ++current == visible.end() ? visible.front() : *current;
     const auto& page = FindPage(pages, sShown[kind]);
     sCursor[kind] = 0;
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         if (!CellEntries(entries, page, cell, true).empty()) {
             sCursor[kind] = cell;
             break;
@@ -1134,7 +1139,7 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
     gDPPipeSync(POLY_OPA_DISP++);
     gDPSetCombineMode(POLY_OPA_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
-    for (size_t cell = 0; cell < page.cells.size(); ++cell) {
+    for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto contents = CellEntries(entries, page, cell, true);
         const auto* selected = SelectedEntry(contents, page, cell);
         const bool quest =
@@ -1374,7 +1379,7 @@ void ModLayout_DrawEditor(uint8_t kind) {
 
 void ModLayout_DrawWindowButton() {
     if (ModLayout_HasMods() && ImGui::Button("Mods Items Layout")) {
-        auto window = Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow("Mods Items Layout");
+        auto window = Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Mods Items Layout");
         if (window != nullptr) {
             window->ToggleVisibility();
         }
@@ -1382,7 +1387,7 @@ void ModLayout_DrawWindowButton() {
 }
 
 void ModLayout_Init(void) {
-    auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     gui->AddGuiWindow(std::make_shared<LayoutWindow>(WindowCvar, "Mods Items Layout", ImVec2(760, 640)));
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnKaleidoResolveName>(ResolveName);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {

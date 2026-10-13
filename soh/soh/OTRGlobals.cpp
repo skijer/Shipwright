@@ -932,7 +932,7 @@ static bool IsForeignGameArchive(const std::shared_ptr<Ship::Archive>& archive) 
 }
 
 static void SinkForeignGameArchives() {
-    auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     auto mounted = archiveManager->GetArchives();
     auto ordered = std::make_shared<std::vector<std::shared_ptr<Ship::Archive>>>();
     std::vector<std::shared_ptr<Ship::Archive>> foreign;

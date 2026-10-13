@@ -1,6 +1,5 @@
 #include "ModDialogs.h"
 
-#include <filesystem>
 #include <string>
 
 #include <libultraship/libultraship.h>
@@ -8,10 +7,6 @@
 #include <SDL2/SDL_messagebox.h>
 
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
-
-#if defined(_WIN32)
-#include <windows.h>
-#endif
 
 namespace {
 
@@ -46,58 +41,20 @@ void TellFor(const ModIdentity* mod, const char* title, const std::string& messa
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, fullTitle.c_str(), message.c_str(), nullptr);
 }
 
-#if defined(_WIN32)
-std::wstring GetOriginalArguments() {
-    const wchar_t* line = GetCommandLineW();
-    if (*line == L'"') {
-        line = wcschr(line + 1, L'"');
-        return line == nullptr ? L"" : line + 1;
-    }
-    line = wcschr(line, L' ');
-    return line == nullptr ? L"" : line;
-}
-
-// The new process starts once this one has had time to close, so it finds the mods folder free.
-bool ScheduleRelaunch() {
-    wchar_t executable[MAX_PATH];
-    if (GetModuleFileNameW(nullptr, executable, MAX_PATH) == 0) {
-        return false;
-    }
-    std::wstring command = L"cmd.exe /c ping -n 6 127.0.0.1 >nul & start \"\" \"" + std::wstring(executable) + L"\"" +
-                           GetOriginalArguments();
-    const std::wstring directory = std::filesystem::path(executable).parent_path().wstring();
-    STARTUPINFOW startup = {};
-    startup.cb = sizeof(startup);
-    PROCESS_INFORMATION process = {};
-    if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS, nullptr,
-                        directory.c_str(), &startup, &process)) {
-        return false;
-    }
-    CloseHandle(process.hProcess);
-    CloseHandle(process.hThread);
-    return true;
-}
-#endif
-
+// The game only closes: relaunching would need a helper process, and a console flashing up looks alarming.
 bool RequestRestartFor(const ModIdentity* mod, const char* reason) {
     if (mod == nullptr) {
         return false;
     }
     const std::string message = "'" + mod->name + "' (" + mod->trustLabel + ") needs Unbound to restart" +
                                 (reason != nullptr ? std::string(": ") + reason : std::string(".")) +
-                                "\n\nRestart now?";
-    if (!AskFor(mod, "Restart", message, "Restart now", "Later")) {
+                                "\n\nClose Unbound now? Open it again afterwards.";
+    if (!AskFor(mod, "Restart", message, "Close now", "Later")) {
         return false;
     }
-#if defined(_WIN32)
-    if (ScheduleRelaunch()) {
-        SPDLOG_INFO("[ModApi] Restarting for '{}'", mod->name);
-        Ship::Context::GetInstance()->GetWindow()->Close();
-        return true;
-    }
-#endif
-    TellFor(mod, "Restart", "Close Unbound and open it again to finish.");
-    return false;
+    SPDLOG_INFO("[ModApi] Closing for '{}' to restart", mod->name);
+    Ship::Context::GetRawInstance()->GetWindow()->Close();
+    return true;
 }
 
 } // namespace

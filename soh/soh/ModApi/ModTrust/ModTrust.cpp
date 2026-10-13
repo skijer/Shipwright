@@ -16,8 +16,8 @@
 #include <ship/resource/File.h>
 #include <ship/resource/archive/Archive.h>
 
-#include "monocypher/monocypher.h"
-#include "monocypher/monocypher-ed25519.h"
+#include <monocypher.h>
+#include <monocypher-ed25519.h>
 
 namespace {
 

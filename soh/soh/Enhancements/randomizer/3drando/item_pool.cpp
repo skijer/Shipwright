@@ -9,6 +9,7 @@
 #include "soh/Enhancements/randomizer/Traps.h"
 #include "soh/ModApi/VanillaItems/VanillaItems.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "z64item.h"
 #include <spdlog/spdlog.h>
 
@@ -1090,6 +1091,7 @@ void GenerateItemPool() {
     }
 
     RandoItems_AddToPool();
+    DungeonRegistry_AddToPool();
 
     std::erase(junkPool, RG_NONE);
     std::erase(itemPool, RG_NONE);

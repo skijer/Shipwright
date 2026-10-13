@@ -15,7 +15,6 @@
 
 #include "soh/ModApi/ModApi.h"
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
-#include "soh/ModApi/O2rExtractor/O2rExtractor.h"
 
 #if !defined(__SWITCH__) && !defined(__WIIU__) && !defined(__EMSCRIPTEN__)
 #define USER_FILES_HAS_DIALOGS 1
@@ -27,8 +26,6 @@ namespace {
 constexpr uint64_t kMaxPickedFileSize = 1ULL << 30;
 constexpr size_t kMaxFileNameLength = 128;
 constexpr const char* kPendingSuffix = ".pending";
-constexpr const char* kExtractWorkspace = ".mod-extract";
-constexpr const char* kExtractRomName = "rom.z64";
 
 // Letters, digits, '.', '_' and '-', not starting with '.': no folders, and none of the game's own dotfiles.
 bool IsPlainFileName(const char* name) {
@@ -40,18 +37,6 @@ bool IsPlainFileName(const char* name) {
         return std::isalnum(character) || character == '.' || character == '_' || character == '-';
     });
     return plain && std::filesystem::path(text).extension() != kPendingSuffix;
-}
-
-bool IsRelativeInside(const char* path) {
-    if (path == nullptr || path[0] == '\0') {
-        return false;
-    }
-    const std::filesystem::path relative(path);
-    if (relative.is_absolute() || relative.has_root_name()) {
-        return false;
-    }
-    return std::none_of(relative.begin(), relative.end(),
-                        [](const std::filesystem::path& part) { return part == ".."; });
 }
 
 std::string DescribeSize(uint64_t bytes) {
@@ -149,45 +134,6 @@ bool SaveFor(const ModIdentity* mod, const char* fileName, const void* data, uin
     return WriteBytes(temporary, data, size) && PlaceInModsFolder(temporary, fileName);
 }
 
-bool IsValidExtractRequest(const SOHRomExtractRequest* request) {
-    return request != nullptr && request->structSize >= SOH_ROM_EXTRACT_REQUEST_MIN_SIZE && request->rom != nullptr &&
-           request->romSize > 0 && request->zapdAssetMask != nullptr && IsRelativeInside(request->zapdAssetRoot) &&
-           IsRelativeInside(request->xmlDir) && IsRelativeInside(request->configPath) &&
-           IsRelativeInside(request->filelistDir) && IsPlainFileName(request->outputFileName);
-}
-
-bool ExtractFor(const ModIdentity* mod, const SOHRomExtractRequest* request) {
-    if (!CanUseFiles(mod)) {
-        return false;
-    }
-    if (!IsValidExtractRequest(request)) {
-        SPDLOG_ERROR("[UserFiles] '{}' sent an invalid extraction request", mod->name);
-        return false;
-    }
-    if (!ModPermissions_ConfirmNow(*mod, "Extract assets",
-                                   std::string("wants to create '") + request->outputFileName +
-                                       "' in your mods folder out of the ROM you chose. It takes a few minutes, "
-                                       "and the game looks frozen while it runs.")) {
-        return false;
-    }
-
-    const std::filesystem::path workspace =
-        std::filesystem::path(Ship::Context::GetAppDirectoryPath("soh")) / kExtractWorkspace;
-    std::error_code error;
-    std::filesystem::remove_all(workspace, error);
-    std::filesystem::create_directories(workspace, error);
-    const std::filesystem::path romPath = workspace / kExtractRomName;
-    const std::filesystem::path outputPath = workspace / request->outputFileName;
-    const bool prepared = O2rExtractor_ExportMatching(request->zapdAssetMask, workspace) > 0 &&
-                          WriteBytes(romPath, request->rom, request->romSize);
-    const bool extracted = prepared &&
-                           O2rExtractor_RunZapd({ romPath, workspace / request->zapdAssetRoot, request->xmlDir,
-                                                  request->configPath, request->filelistDir, outputPath }) &&
-                           PlaceInModsFolder(outputPath, request->outputFileName);
-    std::filesystem::remove_all(workspace, error);
-    return extracted;
-}
-
 } // namespace
 
 extern "C" bool UserFiles_Pick(const char* title, const char* filterName, const char* filterPatterns,
@@ -206,10 +152,6 @@ extern "C" void UserFiles_Free(SOHUserFile* file) {
 
 extern "C" bool UserFiles_SaveToMods(const char* fileName, const void* data, uint64_t size) {
     return SaveFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), fileName, data, size);
-}
-
-extern "C" bool UserFiles_ExtractRomToMods(const SOHRomExtractRequest* request) {
-    return ExtractFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), request);
 }
 
 void UserFiles_ApplyPending(const std::filesystem::path& modsDirectory) {

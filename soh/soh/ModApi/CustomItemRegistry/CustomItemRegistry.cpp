@@ -24,6 +24,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/custom-message/CustomMessageManager.h"
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
+#include "objects/object_gi_fire/object_gi_fire.h"
 
 extern "C" {
 #include "macros.h"
@@ -61,11 +62,20 @@ struct RegisteredCustomItem {
     std::string hintKey;
     std::string progressionGroup;
     std::string poolCountOption;
+    std::string poolModeOption;
     SOHCustomItemRandomizer randomizer = {};
     SOHCustomItemDefinition definition = {};
     uint16_t runtimeId = 0;
 };
 
+struct RegisteredPickupVariant {
+    std::string key;
+    std::string itemKey;
+    std::string variantKey;
+    SOHCustomPickupVariant definition = {};
+};
+
+std::unordered_map<std::string, std::unique_ptr<RegisteredPickupVariant>> sPickupVariants;
 std::string sCurrentMod;
 std::unordered_map<std::string, std::unique_ptr<RegisteredCustomItem>> sCustomItems;
 std::unordered_map<uint16_t, RegisteredCustomItem*> sRuntimeItems;
@@ -156,7 +166,7 @@ const char* EquippedSaveKey(size_t age) {
     return age == LINK_AGE_CHILD ? "equippedChild" : "equippedAdult";
 }
 
-void SaveState(SaveContext* saveContext, int sectionId, bool fullSave) {
+void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
     std::vector<std::string> owned(sOwnedItems.begin(), sOwnedItems.end());
     SaveManager::Instance->SaveArray("owned", owned.size(),
                                      [&owned](size_t index) { SaveManager::Instance->SaveData("", owned[index]); });
@@ -200,6 +210,21 @@ uint16_t ParseVanillaItem(const std::string& argument) {
     return (uint16_t)item;
 }
 
+// `"<key>"` or `"<key>" <variant>`: the variant names one of that item's pickups.
+std::string ResolveConsoleKey(const std::vector<std::string>& args) {
+    const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    if (args.size() < 4) {
+        return key;
+    }
+    const std::string variant = ModApi_UnquoteConsoleArgument(args[3]);
+    const char* pickup = CustomItemRegistry_FindPickupKey(key.c_str(), variant.c_str());
+    return pickup != nullptr ? pickup : std::string();
+}
+
+bool IsCustomItemCommand(const std::vector<std::string>& args) {
+    return (args.size() == 3 || args.size() == 4) && args[1] == "custom_item";
+}
+
 int32_t DropCommand(std::shared_ptr<Ship::Console> console, std::vector<std::string> args, std::string* output) {
     if (args.size() == 2) {
         const uint16_t item = ParseVanillaItem(args[1]);
@@ -209,13 +234,13 @@ int32_t DropCommand(std::shared_ptr<Ship::Console> console, std::vector<std::str
         }
         return dropped ? 0 : 1;
     }
-    if (args.size() != 3 || args[1] != "custom_item") {
+    if (!IsCustomItemCommand(args)) {
         if (output != nullptr) {
-            *output = "Usage: drop custom_item \"<key>\" | drop <vanilla item id>";
+            *output = "Usage: drop custom_item \"<key>\" [variant] | drop <vanilla item id>";
         }
         return 1;
     }
-    const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    const std::string key = ResolveConsoleKey(args);
     const auto* definition = CustomItemRegistry_Find(key.c_str());
     if (definition == nullptr || gPlayState == nullptr) {
         if (output != nullptr) {
@@ -264,12 +289,12 @@ int32_t EquipCommand(std::shared_ptr<Ship::Console> console, std::vector<std::st
 }
 
 void RegisterConsole() {
-    Ship::Context::GetInstance()->GetConsole()->AddCommand("equip", { EquipCommand,
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand("equip", { EquipCommand,
                                                                       "Equips an owned custom item on a button",
                                                                       { { "custom_item", Ship::ArgumentType::TEXT },
                                                                         { "key", Ship::ArgumentType::TEXT },
                                                                         { "button", Ship::ArgumentType::TEXT } } });
-    Ship::Context::GetInstance()->GetConsole()->AddCommand(
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "give", { [](std::shared_ptr<Ship::Console>, std::vector<std::string> args, std::string* output) -> int32_t {
                      if (args.size() == 2) {
                          const uint16_t item = ParseVanillaItem(args[1]);
@@ -279,13 +304,13 @@ void RegisterConsole() {
                          }
                          return given ? 0 : 1;
                      }
-                     if (args.size() != 3) {
+                     if (args.size() != 3 && !IsCustomItemCommand(args)) {
                          if (output != nullptr) {
-                             *output = "Usage: give custom_item \"<key>\" | give <vanilla item id>";
+                             *output = "Usage: give custom_item \"<key>\" [variant] | give <vanilla item id>";
                          }
                          return 1;
                      }
-                     const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+                     const std::string key = ResolveConsoleKey(args);
                      bool handled = false;
                      bool given = false;
                      GameInteractor::Instance->ExecuteHooks<GameInteractor::OnConsoleGive>(
@@ -299,11 +324,15 @@ void RegisterConsole() {
                      return given ? 0 : 1;
                  },
                   "Gives a registered custom item, or a vanilla item by id",
-                  { { "custom_item|item id", Ship::ArgumentType::TEXT }, { "key", Ship::ArgumentType::TEXT, true } } });
-    Ship::Context::GetInstance()->GetConsole()->AddCommand(
+                  { { "custom_item|item id", Ship::ArgumentType::TEXT },
+                    { "key", Ship::ArgumentType::TEXT, true },
+                    { "variant", Ship::ArgumentType::TEXT, true } } });
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "drop", { DropCommand,
                   "Drops an item in front of Link, by custom key or vanilla item id",
-                  { { "custom_item|item id", Ship::ArgumentType::TEXT }, { "key", Ship::ArgumentType::TEXT, true } } });
+                  { { "custom_item|item id", Ship::ArgumentType::TEXT },
+                    { "key", Ship::ArgumentType::TEXT, true },
+                    { "variant", Ship::ArgumentType::TEXT, true } } });
 }
 
 SOHItemIconSurface ButtonIconSurface(uint8_t button) {
@@ -385,7 +414,10 @@ const SOHCustomItemDefinition* GetShownItem() {
 }
 
 void DrawShownGetItemModel(PlayState* play, GetItemEntry* entry) {
-    const SOHCustomItemDefinition* definition = GetShownItem();
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    if (definition == nullptr) {
+        definition = GetShownItem();
+    }
     if (definition != nullptr && definition->getItemModelPath != nullptr) {
         DrawModelPath(play, definition->getItemModelPath, true);
     }
@@ -455,6 +487,85 @@ void PutAwayOnItemActionChange(int8_t itemAction, PlayerItemActionInitFunc* init
 }
 
 void DrawNoGetItemModel(PlayState* play, GetItemEntry* entry) {
+}
+
+} // namespace
+
+// The randomizer's boss-soul flame (Randomizer_DrawBossSoul), tinted per variant. Outside the namespace, like
+// DrawModelPath: OPEN_DISPS declares the frame interpolation functions, which must keep C linkage.
+static void DrawPickupSoulFlame(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const SOHCustomPickupVariant* pickup =
+        definition != nullptr ? CustomItemRegistry_GetPickupVariant(definition->key) : nullptr;
+    if (pickup == nullptr) {
+        return;
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 8,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
+                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
+    Matrix_Push();
+    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, pickup->flameRed, pickup->flameGreen, pickup->flameBlue, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBlueFireFlameDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+namespace {
+
+void ReceivePickupVariant(const char* key) {
+    const SOHCustomPickupVariant* pickup = CustomItemRegistry_GetPickupVariant(key);
+    if (pickup == nullptr) {
+        return;
+    }
+    CustomItemRegistry_SetOwned(pickup->itemKey, true);
+    if (pickup->onReceive != nullptr) {
+        pickup->onReceive(pickup->itemKey, pickup->variantKey);
+    }
+}
+
+bool IsValidPickupVariant(const SOHCustomPickupVariant* variant) {
+    if (variant == nullptr || variant->structSize < SOH_CUSTOM_PICKUP_VARIANT_MIN_SIZE || variant->key == nullptr ||
+        variant->itemKey == nullptr || variant->variantKey == nullptr || variant->variantKey[0] == '\0') {
+        SPDLOG_ERROR("[CustomItemRegistry] Mod '{}' supplied an invalid pickup variant", sCurrentMod);
+        return false;
+    }
+    if (FindDefinition(variant->itemKey) == nullptr || sPickupVariants.contains(variant->itemKey)) {
+        SPDLOG_ERROR("[CustomItemRegistry] Pickup variant '{}' needs '{}' registered as an inventory item first",
+                     variant->key, variant->itemKey);
+        return false;
+    }
+    return true;
+}
+
+// The acquisition borrows what the variant leaves out from its item, and its get-item draws like the item's.
+SOHCustomItemDefinition BuildPickupDefinition(const SOHCustomPickupVariant& variant,
+                                              const SOHCustomItemDefinition& parent) {
+    SOHCustomItemDefinition definition = {};
+    definition.structSize = sizeof(definition);
+    definition.key = variant.key;
+    definition.flags = SOH_CUSTOM_ITEM_INSTANT;
+    definition.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO | SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
+    definition.iconPath = variant.iconPath != nullptr ? variant.iconPath : parent.iconPath;
+    definition.getItemModelPath = variant.getItemModelPath != nullptr ? variant.getItemModelPath : parent.getItemModelPath;
+    definition.getItemText = variant.getItemText != nullptr ? variant.getItemText : parent.getItemText;
+    definition.getItemEntry = parent.getItemEntry;
+    if (variant.getItemModelPath != nullptr) {
+        definition.getItemEntry.drawFunc = nullptr;
+    }
+    if (variant.structSize > SOH_CUSTOM_PICKUP_VARIANT_MIN_SIZE && variant.drawSoulFlame) {
+        definition.getItemEntry.drawFunc = DrawPickupSoulFlame;
+    }
+    definition.randomizer = variant.randomizer;
+    definition.onReceive = ReceivePickupVariant;
+    return definition;
 }
 
 void CompleteGetItemEntry(GetItemEntry& entry) {
@@ -556,6 +667,9 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     item->definition.key = item->key.c_str();
     item->definition.getItemEntry.itemId = ITEM_CUSTOM;
     item->definition.getItemEntry.getItemId = GI_CUSTOM;
+    // Every copy of the entry (randomizer checks, drops, shops) names its item: no custom entry is ever looked up
+    // in a table, so tableId is free to carry the runtime id.
+    item->definition.getItemEntry.tableId = item->runtimeId;
     SetString(item->definition.iconPath, item->iconPath, definition->iconPath);
     SetString(item->definition.namePath, item->namePath, definition->namePath);
     SetString(item->definition.pauseText, item->pauseText, definition->pauseText);
@@ -579,6 +693,7 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
         SetString(item->randomizer.hintKey, item->hintKey, item->randomizer.hintKey);
         SetString(item->randomizer.progressionGroup, item->progressionGroup, item->randomizer.progressionGroup);
         SetString(item->randomizer.poolCountOption, item->poolCountOption, item->randomizer.poolCountOption);
+        SetString(item->randomizer.poolModeOption, item->poolModeOption, item->randomizer.poolModeOption);
         item->definition.randomizer = &item->randomizer;
     }
 
@@ -602,6 +717,51 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     SPDLOG_INFO("[CustomItemRegistry] Mod '{}' registered custom item '{}' as {}", registered->owner, registered->key,
                 registered->runtimeId);
     return true;
+}
+
+bool CustomItemRegistry_RegisterPickupVariant(const SOHCustomPickupVariant* variant) {
+    if (!IsValidPickupVariant(variant)) {
+        return false;
+    }
+    const SOHCustomItemDefinition acquisition = BuildPickupDefinition(*variant, *FindDefinition(variant->itemKey));
+    if (!CustomItemRegistry_Register(&acquisition)) {
+        return false;
+    }
+
+    auto stored = std::make_unique<RegisteredPickupVariant>();
+    stored->key = variant->key;
+    stored->itemKey = variant->itemKey;
+    stored->variantKey = variant->variantKey;
+    std::memcpy(&stored->definition, variant, std::min<size_t>(variant->structSize, sizeof(stored->definition)));
+    stored->definition.structSize = sizeof(stored->definition);
+    stored->definition.key = stored->key.c_str();
+    stored->definition.itemKey = stored->itemKey.c_str();
+    stored->definition.variantKey = stored->variantKey.c_str();
+    // The caller's strings and randomizer block may live on its stack; the registered acquisition owns copies.
+    const SOHCustomItemDefinition* registered = FindDefinition(stored->key);
+    stored->definition.iconPath = registered->iconPath;
+    stored->definition.getItemModelPath = registered->getItemModelPath;
+    stored->definition.getItemText = registered->getItemText;
+    stored->definition.randomizer = registered->randomizer;
+    sPickupVariants.emplace(stored->key, std::move(stored));
+    return true;
+}
+
+const SOHCustomPickupVariant* CustomItemRegistry_GetPickupVariant(const char* key) {
+    const auto found = sPickupVariants.find(key != nullptr ? key : "");
+    return found == sPickupVariants.end() ? nullptr : &found->second->definition;
+}
+
+const char* CustomItemRegistry_FindPickupKey(const char* itemKey, const char* variantKey) {
+    if (itemKey == nullptr || variantKey == nullptr) {
+        return nullptr;
+    }
+    for (const auto& [key, pickup] : sPickupVariants) {
+        if (pickup->itemKey == itemKey && pickup->variantKey == variantKey) {
+            return key.c_str();
+        }
+    }
+    return nullptr;
 }
 
 const SOHCustomItemDefinition* CustomItemRegistry_Find(const char* key) {
@@ -989,9 +1149,11 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
         }
         return true;
     }
-    const char* key = actor != nullptr          ? CustomItemRegistry_GetActorItem(actor)
-                      : sPendingGetItem.empty() ? nullptr
-                                                : sPendingGetItem.c_str();
+    const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
+    if (key == nullptr) {
+        const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+        key = named != nullptr ? named->key : sPendingGetItem.empty() ? nullptr : sPendingGetItem.c_str();
+    }
     GameInteractor_ExecuteOnResolveCustomGetItem(actor, play, entry, &key);
     const auto* definition = CustomItemRegistry_Find(key);
     if (definition == nullptr) {
@@ -1037,10 +1199,12 @@ bool CustomItemRegistry_DrawDrop(Actor* actor, PlayState* play) {
     if (definition == nullptr) {
         return true;
     }
-    constexpr f32 dropModelScale = 10.0f;
+    // The scale the randomizer's own get-item drops use, so a mod item lies as large as a vanilla one.
+    const f32 dropModelScale = CVarGetFloat(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimationScale"), 10.0f);
     Matrix_Scale(dropModelScale, dropModelScale, dropModelScale, MTXMODE_APPLY);
     func_8002EBCC(actor, play, 0);
     func_8002ED80(actor, play, 0);
+    EnItem00_CustomItemsParticles(actor, play, definition->getItemEntry);
     if (definition->getItemEntry.drawFunc == DrawShownGetItemModel) {
         DrawModelPath(play, definition->getItemModelPath, true);
     } else {

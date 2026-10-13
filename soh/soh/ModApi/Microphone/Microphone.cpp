@@ -111,7 +111,7 @@ void CloseFor(const ModIdentity* mod) {
 } // namespace
 
 void Microphone_Init() {
-    auto gui = Ship::Context::GetInstance()->GetWindow()->GetGui();
+    auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     sIndicator = std::make_shared<MicrophoneIndicatorWindow>(CVAR_WINDOW("MicrophoneIndicator"), "Microphone");
     gui->AddGuiWindow(sIndicator);
 }

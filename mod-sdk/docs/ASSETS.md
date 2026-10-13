@@ -147,6 +147,7 @@ ROM by another mod) lists them in its manifest; if any is missing the mod is not
 
 For content that is only *nice to have*, check at runtime instead: `sApi->HasResource(path)`.
 
-The host can run its built-in ZAPD over a ROM for a mod that brings the XML description of that ROM
-(`ExtractRom`), and write files from mounted archives to disk for tools (`ExportArchiveFiles`). ROM data is never
-distributed: only the XML offsets are.
+The game ships no ZAPD. A mod that extracts a ROM brings its own, working in memory: the ROM comes from
+`PickUserFile`, the XML description from its own archive through `ReadArchiveFiles` (read-only, no permission),
+and the finished archive goes to `SaveToModsFolder`. `mm_assets` is the reference. `ExportArchiveFiles` writes files
+from mounted archives to disk for tools. ROM data is never distributed: only the XML offsets are.

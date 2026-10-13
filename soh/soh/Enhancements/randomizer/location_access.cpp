@@ -4,6 +4,7 @@
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/entrance.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 #include <fstream>
 #include <spdlog/spdlog.h>
@@ -566,7 +567,7 @@ void Region::printAgeTimeAccess() {
                    std::to_string(adultNight);
 }
 
-std::array<Region, RR_MAX> areaTable;
+std::vector<Region> areaTable(RR_MAX);
 
 /*
     * This logic covers checks that exist in the shared areas of Spirit
@@ -879,7 +880,8 @@ void RegionTable_Init() {
     };
     // Clear the array from any previous playthrough attempts. This is important so that
     // locations which appear in both MQ and Vanilla dungeons don't get set in both areas.
-    areaTable.fill(Region("Invalid Region", SCENE_ID_MAX, {}, {}, {}));
+    // Sized once per init: entrances hold pointers into the regions, so the table must not reallocate later.
+    areaTable.assign(RR_MAX + DungeonRegistry_GetRegionCount(), Region("Invalid Region", SCENE_ID_MAX, {}, {}, {}));
 
     RegionTable_Init_Root();
     // Overworld
@@ -918,9 +920,10 @@ void RegionTable_Init() {
     RegionTable_Init_IceCavern();
     RegionTable_Init_GerudoTrainingGround();
     RegionTable_Init_GanonsCastle();
+    DungeonRegistry_AddRegions();
 
     // Set parent regions
-    for (uint32_t i = RR_ROOT; i < RR_MAX; i++) {
+    for (uint32_t i = RR_ROOT; i < areaTable.size(); i++) {
         areaTable[i].randomizerRegionKey = (RandomizerRegion)i;
         for (LocationAccess& locPair : areaTable[i].locations) {
             RandomizerCheck location = locPair.GetLocation();
@@ -975,17 +978,15 @@ std::string CleanConditionString(std::string condition) {
 }
 
 namespace Regions {
-auto GetAllRegions() {
-    static const size_t regionCount = RR_MAX - (RR_NONE + 1);
+const std::vector<RandomizerRegion>& GetAllRegions() {
+    static std::vector<RandomizerRegion> allRegions;
 
-    static std::array<RandomizerRegion, regionCount> allRegions = {};
-
-    static bool initialized = false;
-    if (!initialized) {
+    const size_t regionCount = areaTable.size() - (RR_NONE + 1);
+    if (allRegions.size() != regionCount) {
+        allRegions.resize(regionCount);
         for (size_t i = 0; i < regionCount; i++) {
             allRegions[i] = (RandomizerRegion)((RR_NONE + 1) + i);
         }
-        initialized = true;
     }
 
     return allRegions;
@@ -1102,7 +1103,7 @@ void DumpWorldGraph(std::string str) {
 } // namespace Regions
 
 Region* RegionTable(const RandomizerRegion regionKey) {
-    assert(regionKey < RR_MAX);
+    assert(regionKey < areaTable.size());
     return &areaTable[regionKey];
 }
 

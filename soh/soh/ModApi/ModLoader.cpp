@@ -125,7 +125,15 @@ class ModLibrary {
         }
 
 #if defined(_WIN32)
+        // A mod built against another soh.lib imports names this exe lacks: fail the load, not a system dialog.
+        DWORD previousErrorMode = 0;
+        SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previousErrorMode);
         mHandle = LoadLibraryA(path.c_str());
+        const DWORD loadError = mHandle == nullptr ? GetLastError() : ERROR_SUCCESS;
+        SetThreadErrorMode(previousErrorMode, nullptr);
+        if (loadError == ERROR_PROC_NOT_FOUND) {
+            SPDLOG_ERROR("[ModApi] The mod imports a function this game does not export; rebuild it with this game's SDK");
+        }
         mFileToDelete = path;
 #elif defined(__APPLE__) || defined(__linux__)
         mHandle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
@@ -512,7 +520,7 @@ void ModLoader_LoadMods() {
         return;
     }
 
-    auto archives = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
+    auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
     std::vector<NativeModPackage> packages;
     for (const auto& archive : *archives) {
         try {

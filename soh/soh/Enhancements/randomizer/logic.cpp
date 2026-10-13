@@ -6,6 +6,7 @@
 #include "soh/Enhancements/randomizer/randomizerEnums.h"
 #include "soh/ModApi/RandoLogic/RandoLogic.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 #include <string>
 #include <vector>
@@ -32,6 +33,9 @@ static SOHRandoInfBank ModItemBank(const SaveContext* saveContext) {
 }
 
 bool Logic::HasItem(RandomizerGet itemName) {
+    if (DungeonRegistry_IsDungeonItem(itemName)) {
+        return DungeonRegistry_HasItem(itemName, ModItemBank(mSaveContext) == SOH_RANDO_INF_SAVE);
+    }
     if (RandoItems_IsModItem(itemName)) {
         return RandoItems_IsOwned(itemName, ModItemBank(mSaveContext));
     }
@@ -2256,6 +2260,10 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
+    if (DungeonRegistry_IsDungeonItem(randoGet)) {
+        DungeonRegistry_ApplyLogicItem(randoGet, state);
+        return;
+    }
     if (RandoItems_IsModItem(randoGet)) {
         RandoItems_SetOwned(randoGet, ModItemBank(mSaveContext), state);
         return;
@@ -3003,10 +3011,17 @@ void Logic::SetContext(std::shared_ptr<Context> _ctx) {
 }
 
 bool Logic::Get(LogicVal logicVal) {
+    if (logicVal > LOGIC_MAX) {
+        return DungeonRegistry_GetEvent(logicVal);
+    }
     return inLogic[logicVal];
 }
 
 void Logic::Set(LogicVal logicVal, bool value) {
+    if (logicVal > LOGIC_MAX) {
+        DungeonRegistry_SetEvent(logicVal, value);
+        return;
+    }
     inLogic[logicVal] = value;
 }
 
@@ -3171,6 +3186,7 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
     }
     StartPerformanceTimer(PT_LOGIC_RESET);
     memset(inLogic, false, sizeof(inLogic));
+    DungeonRegistry_ResetLogic(resetSaveContext);
 
     if (resetSaveContext) {
         // Ocarina C Buttons

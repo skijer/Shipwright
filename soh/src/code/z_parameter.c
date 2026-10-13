@@ -24,6 +24,7 @@
 #include "soh/Enhancements/speedrun/Speedrun.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/Layout/ModLayout.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 #include "message_data_static.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -5333,7 +5334,7 @@ void Interface_Draw(PlayState* play) {
             }
 
             if (GameInteractor_Should(VB_RENDER_KEY_COUNTER, true)) {
-                switch (play->sceneNum) {
+                switch (DungeonRegistry_ResolveKeyScene(play->sceneNum)) {
                     case SCENE_FOREST_TEMPLE:
                     case SCENE_FIRE_TEMPLE:
                     case SCENE_WATER_TEMPLE:

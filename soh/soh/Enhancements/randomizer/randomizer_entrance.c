@@ -12,6 +12,9 @@
 #include "randomizer_grotto.h"
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
+#include "soh/unbound/SceneDB.h"
+#include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "functions.h"
@@ -50,7 +53,9 @@ s16 dynamicExitList[] = {
 
 // Owl Flights : 0x492064 and 0x492080
 
-static s16 entranceOverrideTable[ENTRANCE_TABLE_SIZE] = { 0 };
+// Covers the custom entrances SceneDB appends after ENTR_MAX, so a mod dungeon's door can be shuffled.
+static s16* entranceOverrideTable = NULL;
+static s32 entranceOverrideCount = 0;
 // Boss scenes (normalize boss scene range to 0 on lookup) mapped to save/death warp entrance
 static s16 bossSceneSaveDeathWarps[SHUFFLEABLE_BOSS_COUNT] = { 0 };
 static ActorEntry modifiedLinkActorEntry = { 0 };
@@ -168,7 +173,10 @@ void Entrance_Init(void) {
 
     // Initialize the entrance override table with each index leading to itself. An
     // index referring to itself means that the entrance is not currently shuffled.
-    for (s16 i = 0; i < ENTRANCE_TABLE_SIZE; i++) {
+    entranceOverrideCount = EntranceDB_GetEntryCount();
+    entranceOverrideTable = realloc(entranceOverrideTable, entranceOverrideCount * sizeof(s16));
+    assert(entranceOverrideTable != NULL);
+    for (s32 i = 0; i < entranceOverrideCount; i++) {
         entranceOverrideTable[i] = i;
     }
 
@@ -223,6 +231,9 @@ void Entrance_Init(void) {
         }
 
         // Overwrite the indices which we want to shuffle, leaving the rest as they are
+        if (originalIndex < 0 || originalIndex >= entranceOverrideCount) {
+            continue;
+        }
         entranceOverrideTable[originalIndex] = overrideIndex;
 
         // Override both land and water entrances for Hyrule Field -> ZR Front and vice versa
@@ -267,7 +278,7 @@ s16 Entrance_GetOverride(s16 index) {
     // The game sometimes uses special indices from 0x7FF9 -> 0x7FFF for exiting
     // grottos and fairy fountains. These aren't handled here since the game
     // naturally handles them later.
-    if (index >= ENTRANCE_TABLE_SIZE) {
+    if (index < 0 || index >= entranceOverrideCount) {
         return index;
     }
 

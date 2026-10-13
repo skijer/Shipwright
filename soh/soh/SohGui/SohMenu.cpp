@@ -55,7 +55,8 @@ bool SohMenu::HasModWidgetPath(const WidgetPath& path) const {
         return false;
     }
     auto sidebar = section->second.sidebars.find(path.sidebarName);
-    return sidebar != section->second.sidebars.end() && path.column < sidebar->second.columnCount;
+    return sidebar != section->second.sidebars.end() &&
+           static_cast<uint32_t>(path.column) < sidebar->second.columnCount;
 }
 
 void SohMenu::AddSidebarEntry(std::string sectionName, std::string sidebarName, uint32_t columnCount) {

@@ -1,5 +1,6 @@
 #include "ResourceManagerHelpers.h"
 #include "soh/unbound/SceneDB.h"
+#include "soh/ModApi/ModDungeons/BossRegistry.h"
 #include <libultraship/libultraship.h>
 #include "soh/resource/type/Scene.h"
 #include <ship/Context.h>
@@ -26,8 +27,9 @@ Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName) {
 }
 
 extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
-    // SOH [Unbound] scene identity comes from SceneDB
-    SceneDB::Entry& scene = SceneDB::Instance->RetrieveEntry(sceneId);
+    // SOH [Unbound] scene identity comes from SceneDB; a custom boss's arena loads under its slot's scene id
+    s32 sourceSceneId = BossRegistry_ResolveSceneSource(sceneId);
+    SceneDB::Entry& scene = SceneDB::Instance->RetrieveEntry(sourceSceneId);
 
     if (!scene.valid) {
         SPDLOG_ERROR("[Unbound] spawn requested for unknown scene id {:#x}; defaulting to Dodongo's Cavern", sceneId);
@@ -38,7 +40,7 @@ extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
     play->sceneNum = sceneId;
     play->sceneConfig = scene.drawConfig < SDC_MAX ? scene.drawConfig : SDC_DEFAULT;
 
-    std::string scenePath = SceneDB::Instance->GetScenePath(sceneId);
+    std::string scenePath = SceneDB::Instance->GetScenePath(sourceSceneId);
     play->sceneSegment = OTRPlay_LoadFile(play, scenePath.c_str());
 
     // Failed to load scene... default to doodongs cavern

@@ -148,6 +148,25 @@ The get-item textbox opens before the item is received. A pickup that is not alw
 rune, the next level of a progressive item) decides what it is in `OnResolveCustomGetItem`, which repeats every
 frame Link is in range, and grants it in `onReceive`.
 
+### One item, several pickups
+
+When each part of an item is found on its own (a rune, a season, an element), register the item once and then a
+pickup variant per part. Every variant is its own randomizer item and get-item, hidden from the pause screen;
+receiving it grants the item and calls `onReceive(itemKey, variantKey)`. Logic that asks for the item is satisfied
+by any of its variants, so give the item `poolCount` 0 and each variant 1:
+
+```c
+SOHCustomPickupVariant pickup = Z64Items_DefinePickup(SLATE_KEY, "stasis", "nei.slate.stasis");
+pickup.getItemText = "You unlocked %yStasis%w for the %rSheikah Slate%w!";
+pickup.onReceive = ReceiveRune;
+pickup.randomizer = &runeLogic; // logicKey and hintKey: the variant's own key
+pickup.drawSoulFlame = true;    // optional: a tinted soul flame instead of the item's model
+pickup.flameRed = 255;
+Z64Items_RegisterPickup(sApi, &pickup);
+```
+
+Fields left out (icon, model, text) come from the item.
+
 ## Drawing in Link's hand
 
 `heldModelPath` covers the simple case. For anything else, draw from `OnPlayerPostLimbDraw` using the limb's own
@@ -229,8 +248,8 @@ Query it with `IsEquipmentWorn(key)`, `GetWornEquipment(slot)`, `IsEquipmentTogg
 ## Console
 
 ```
-give custom_item "<key>"                       the full get-item sequence
-drop custom_item "<key>"                       a pickup in front of Link
+give custom_item "<key>" [variant]             the full get-item sequence
+drop custom_item "<key>" [variant]             a pickup in front of Link
 equip custom_item "<key>" <b|cleft|cdown|cright|dup|ddown|dleft|dright>
 give 36 / drop 36                              a vanilla ItemID, through whatever replaces it today
 ```

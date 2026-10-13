@@ -262,7 +262,7 @@ extern "C" bool ResourceMgr_IsOcarinaOfTimeVersion(uint32_t version) {
 }
 
 extern "C" uint8_t ResourceMgr_IsBaseGameFile(const char* filePath) {
-    auto archives = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
+    auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
     for (const auto& archive : *archives) {
         if (archive->HasGameVersion() && ResourceMgr_IsOcarinaOfTimeVersion(archive->GetGameVersion()) &&
             archive->HasFile(filePath)) {
@@ -273,7 +273,7 @@ extern "C" uint8_t ResourceMgr_IsBaseGameFile(const char* filePath) {
 }
 
 extern "C" int32_t ResourceMgr_GetFileArchiveIndex(const char* filePath) {
-    auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     if (!archiveManager->HasFile(filePath)) {
         return -1;
     }

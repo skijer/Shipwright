@@ -8,6 +8,10 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifdef _MSC_VER
+#define strdup _strdup
+#endif
+
 // audio_load.c's table: sequence id -> the archive path the id was built from (vanilla and custom alike).
 // The allocation over-reserves 0xF slots because custom-id assignment can push past sequenceMapSize.
 extern "C" char** sequenceMap;

@@ -33,11 +33,12 @@ KNOWN_PERMISSIONS = {"microphone", "files"}
 SERVICE_PERMISSIONS = {
     "OpenMicrophone": "microphone", "ReadMicrophone": "microphone", "CloseMicrophone": "microphone",
     "Microphone_Open": "microphone", "Microphone_Read": "microphone", "Microphone_Close": "microphone",
-    "PickUserFile": "files", "SaveToModsFolder": "files", "ExtractRomToModsFolder": "files",
-    "UserFiles_Pick": "files", "UserFiles_SaveToMods": "files", "UserFiles_ExtractRomToMods": "files",
-    "ExportArchiveFiles": "files", "ExtractRom": "files", "O2rExtractor_ExportFiles": "files",
-    "O2rExtractor_Run": "files",
+    "PickUserFile": "files", "SaveToModsFolder": "files", "UserFiles_Pick": "files", "UserFiles_SaveToMods": "files",
+    "ExportArchiveFiles": "files", "O2rExtractor_ExportFiles": "files",
 }
+BUILD_SETTINGS = {"includeDirectories", "definitions"}
+INCLUDE_DIRECTORY = re.compile(r"^[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*$")
+DEFINITION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(=[0-9]+)?$")
 INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]', re.MULTILINE)
 PRAGMA = re.compile(r"^\s*#\s*pragma\s+(.*)$", re.MULTILINE)
 LINE_MARKER = re.compile(r'^#\s*\d+\s+"((?:\\.|[^"\\])*)"')
@@ -128,16 +129,44 @@ def preprocess_command(entry):
     return result + ["-E"]
 
 
+def read_manifest(mod_directory):
+    return json.loads((mod_directory / "manifest.json").read_text(encoding="utf-8"))
+
+
 def read_declared_permissions(mod_directory):
-    permissions = json.loads((mod_directory / "manifest.json").read_text(encoding="utf-8")).get("permissions", [])
+    permissions = read_manifest(mod_directory).get("permissions", [])
     if not isinstance(permissions, list) or not all(isinstance(permission, str) for permission in permissions):
         return None
     return set(permissions)
 
 
+def is_list_of_strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def check_build_settings(mod):
+    """The manifest's 'build' block mirrors what UnboundModSdk.cmake accepts: folders of the mod, plain macros."""
+    build = read_manifest(mod).get("build", {})
+    if not isinstance(build, dict) or set(build) - BUILD_SETTINGS:
+        return [f"{mod.name}/manifest.json: 'build' only takes {', '.join(sorted(BUILD_SETTINGS))}"]
+    problems = []
+    directories = build.get("includeDirectories", [])
+    definitions = build.get("definitions", [])
+    if not is_list_of_strings(directories) or not is_list_of_strings(definitions):
+        return [f"{mod.name}/manifest.json: the 'build' settings must be lists of strings"]
+    for directory in directories:
+        if not INCLUDE_DIRECTORY.match(directory) or not (mod / directory).is_dir():
+            problems.append(f"{mod.name}/manifest.json: '{directory}' is not a folder inside the mod")
+    for definition in definitions:
+        if not DEFINITION.match(definition):
+            problems.append(f"{mod.name}/manifest.json: '{definition}' is not a NAME or NAME=number definition")
+    return problems
+
+
 def check_manifests(mods_directory):
     problems = []
     for mod in find_mod_directories(mods_directory):
+        problems += check_build_settings(mod)
         declared = read_declared_permissions(mod)
         if declared is None:
             problems.append(f"{mod.name}/manifest.json: 'permissions' must be a list of names")

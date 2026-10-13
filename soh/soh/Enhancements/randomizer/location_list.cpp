@@ -3,6 +3,7 @@
 #include "z64save.h"
 #include "SeedContext.h"
 #include "dungeon.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include <cassert>
 #include <spdlog/spdlog.h>
 
@@ -1036,6 +1037,9 @@ void Rando::StaticData::InitHashMaps() {
 }
 
 Location* Rando::StaticData::GetLocation(RandomizerCheck locKey) {
+    if (locKey > RC_MAX) {
+        return DungeonRegistry_GetLocation(locKey);
+    }
     return &locationTable[locKey];
 }
 

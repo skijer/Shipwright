@@ -181,6 +181,9 @@ class Option {
     const std::string& GetName() const;
     const std::string& GetDescription() const;
 
+    // SOH [Unbound] a mod's option has no RandomizerSettingKey name to translate, so it brings its own text.
+    Option& SetModText(std::string name, std::string description);
+
     /**
      * @brief Get the text of the Option value of the selected index.
      *
@@ -290,6 +293,8 @@ class Option {
     bool hidden = false;
     OptionCategory category = OptionCategory::Setting;
     std::string cvarName;
+    std::string modName;
+    std::string modDescription;
     WidgetType widgetType;
     uint8_t defaultOption = false;
     bool defaultHidden = false;

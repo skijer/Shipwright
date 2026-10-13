@@ -770,9 +770,9 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         (this->actor.params >= ITEM00_ARROWS_SMALL && this->actor.params <= ITEM00_SMALL_KEY) ||
         this->actor.params == ITEM00_BOMBS_A || this->actor.params == ITEM00_ARROWS_SINGLE ||
         this->actor.params == ITEM00_BOMBS_SPECIAL ||
-        (this->actor.params >= ITEM00_BOMBCHU && this->actor.params <= ITEM00_SOH_GIVE_ITEM_ENTRY_GI)) {
+        (this->actor.params >= ITEM00_BOMBCHU && this->actor.params <= ITEM00_SOH_CUSTOM)) {
         if (CVarGetInteger(CVAR_ENHANCEMENT("NewDrops"), 0) ||
-            (this->actor.params >= ITEM00_SOH_DUMMY && this->actor.params <= ITEM00_SOH_GIVE_ITEM_ENTRY_GI)) {
+            (this->actor.params >= ITEM00_SOH_DUMMY && this->actor.params <= ITEM00_SOH_CUSTOM)) {
             this->actor.shape.rot.y += 960;
         } else {
             this->actor.shape.rot.y = 0;
@@ -1216,6 +1216,7 @@ void EnItem00_CustomItemsParticles(Actor* Parent, PlayState* play, GetItemEntry 
                 case ITEM_BOTTLE:
                 case ITEM_MILK_BOTTLE:
                 case ITEM_LETTER_RUTO:
+                case ITEM_CUSTOM:
                     colorIndex = PARTICLE_WHITE;
                     break;
                 default:

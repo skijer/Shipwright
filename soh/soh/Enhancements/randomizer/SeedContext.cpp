@@ -17,6 +17,8 @@
 #include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/trial.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 
 #include <algorithm>
 #include <vector>
@@ -86,15 +88,18 @@ void Context::AddHint(const RandomizerHint hintId, const Hint hint) {
 }
 
 ItemLocation* Context::GetItemLocation(const RandomizerCheck locKey) {
+    if (locKey > RC_MAX) {
+        return DungeonRegistry_GetItemLocation(locKey);
+    }
     return &itemLocationTable[locKey];
 }
 
 ItemLocation* Context::GetItemLocation(size_t locKey) {
-    return &itemLocationTable[static_cast<RandomizerCheck>(locKey)];
+    return GetItemLocation(static_cast<RandomizerCheck>(locKey));
 }
 
 bool Context::IsLocationShuffled(const RandomizerCheck locKey) {
-    return itemLocationTable[locKey].GetPlacedRandomizerGet() != RG_NONE;
+    return GetItemLocation(locKey)->GetPlacedRandomizerGet() != RG_NONE;
 }
 
 ItemOverride& Context::GetItemOverride(RandomizerCheck locKey) {
@@ -270,6 +275,7 @@ void Context::GenerateLocationPool() {
             }
         }
     }
+    DungeonRegistry_AddLocations(allLocations);
 }
 
 void Context::AddExcludedOptions() {
@@ -306,6 +312,7 @@ void Context::ClearItemLocations() {
     for (size_t i = 0; i < itemLocationTable.size(); i++) {
         GetItemLocation(static_cast<RandomizerCheck>(i))->ResetVariables();
     }
+    DungeonRegistry_ForEachItemLocation([](ItemLocation& location) { location.ResetVariables(); });
 }
 
 void Context::ItemReset() {
@@ -325,6 +332,7 @@ void Context::LocationReset() {
     for (auto& il : itemLocationTable) {
         il.RemoveFromPool();
     }
+    DungeonRegistry_ForEachItemLocation([](ItemLocation& location) { location.RemoveFromPool(); });
 }
 
 void Context::HintReset() {
@@ -421,6 +429,7 @@ void Context::ParseSpoiler(const char* spoilerFileName) {
         ParseHintJson(spoilerFileJson);
         mDungeons->ParseJson(spoilerFileJson);
         mTrials->ParseJson(spoilerFileJson);
+        BossRegistry_ParseSpoiler(spoilerFileJson);
         mSpoilerLoaded = true;
         mSeedGenerated = false;
     } catch (...) { SPDLOG_ERROR("Failed to load Spoiler File: {}", spoilerFileName); }
@@ -443,9 +452,9 @@ void Context::ParseItemLocationsJson(const nlohmann::json& spoilerFileJson) {
             nlohmann::json itemJson = *it;
             for (auto itemit = itemJson.begin(); itemit != itemJson.end(); ++itemit) {
                 if (itemit.key() == "item") {
-                    itemLocationTable[rc].SetPlacedItem(StaticData::itemNameToEnum[itemit.value().get<std::string>()]);
+                    GetItemLocation(rc)->SetPlacedItem(StaticData::itemNameToEnum[itemit.value().get<std::string>()]);
                 } else if (itemit.key() == "price") {
-                    itemLocationTable[rc].SetCustomPrice(itemit.value().get<uint16_t>());
+                    GetItemLocation(rc)->SetCustomPrice(itemit.value().get<uint16_t>());
                 } else if (itemit.key() == "model") {
                     overrides[rc] = ItemOverride(rc, StaticData::itemNameToEnum[itemit.value().get<std::string>()]);
                 } else if (itemit.key() == "trickName") {
@@ -455,7 +464,7 @@ void Context::ParseItemLocationsJson(const nlohmann::json& spoilerFileJson) {
                 }
             }
         } else {
-            itemLocationTable[rc].SetPlacedItem(StaticData::itemNameToEnum[it.value().get<std::string>()]);
+            GetItemLocation(rc)->SetPlacedItem(StaticData::itemNameToEnum[it.value().get<std::string>()]);
         }
     }
 }
@@ -542,7 +551,7 @@ OptionValue& Context::GetTrickOption(const RandomizerTrick key) {
 }
 
 OptionValue& Context::GetLocationOption(const RandomizerCheck key) {
-    return itemLocationTable[key].GetExcludedOption();
+    return GetItemLocation(key)->GetExcludedOption();
 }
 
 RandoOptionCheckTrigger Context::GBKCondition() const {

@@ -79,6 +79,11 @@ typedef struct {
     const char* hintKey;
     const char* progressionGroup;
     const char* poolCountOption;
+    // Optional: the item joins the seed's pool only while this rando option equals poolModeValue (or, inverted,
+    // only while it does not).
+    const char* poolModeOption;
+    int32_t poolModeValue;
+    bool poolModeInvert;
 } SOHCustomItemRandomizer;
 
 typedef struct {
@@ -116,6 +121,32 @@ typedef struct {
     uint8_t meleeWeapon;
     SOHCustomItemAmmoFunc getAmmo;
 } SOHCustomItemDefinition;
+
+typedef void (*SOHPickupVariantReceiveFunc)(const char* itemKey, const char* variantKey);
+
+// One of several ways to find a single inventory item: its own randomizer item and get-item, hidden from the
+// pause screen. Receiving it grants itemKey and tells the mod which variant arrived.
+typedef struct {
+    uint32_t structSize;
+    const char* key;
+    const char* itemKey;
+    const char* variantKey;
+    const char* iconPath;
+    const char* getItemModelPath;
+    const char* getItemText;
+    SOHPickupVariantReceiveFunc onReceive;
+    const SOHCustomItemRandomizer* randomizer;
+    bool drawSoulFlame;
+    uint8_t flameRed;
+    uint8_t flameGreen;
+    uint8_t flameBlue;
+} SOHCustomPickupVariant;
+
+#define SOH_CUSTOM_PICKUP_VARIANT_MIN_SIZE offsetof(SOHCustomPickupVariant, drawSoulFlame)
+
+bool CustomItemRegistry_RegisterPickupVariant(const SOHCustomPickupVariant* variant);
+const SOHCustomPickupVariant* CustomItemRegistry_GetPickupVariant(const char* key);
+const char* CustomItemRegistry_FindPickupKey(const char* itemKey, const char* variantKey);
 
 #define SOH_CUSTOM_ITEM_RANDOMIZER_MIN_SIZE \
     (offsetof(SOHCustomItemRandomizer, progressionGroup) + sizeof(((SOHCustomItemRandomizer*)0)->progressionGroup))

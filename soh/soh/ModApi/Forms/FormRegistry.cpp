@@ -447,7 +447,7 @@ void ResetSaveState(bool isDebug) {
     sPendingForm.clear();
 }
 
-void SaveState(SaveContext* saveContext, int sectionId, bool fullSave) {
+void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
     std::string active = sActiveForm != nullptr ? sActiveForm->key : sPendingForm;
     SaveManager::Instance->SaveData("active", active);
     SaveStash();
@@ -496,7 +496,7 @@ void FormRegistry_Init() {
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDraw>(ACTOR_PLAYER, DrawTakeoverForm);
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDrawEnd>(ACTOR_PLAYER, DrawLinkFormOverlay);
 
-    Ship::Context::GetInstance()->GetConsole()->AddCommand(
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "form", { FormCommand, "Switches the player to a registered form", { { "key", Ship::ArgumentType::TEXT } } });
 }
 

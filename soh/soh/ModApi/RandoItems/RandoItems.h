@@ -23,6 +23,8 @@ void RandoItems_SetOwned(int32_t randoGet, SOHRandoInfBank bank, bool state);
 }
 
 int32_t RandoItems_Register(const char* key);
+// A host item has no custom item definition: its registry builds the item table row itself.
+int32_t RandoItems_RegisterHostItem(const char* key);
 void RandoItems_BuildItemTable();
 void RandoItems_AddToPool();
 #endif

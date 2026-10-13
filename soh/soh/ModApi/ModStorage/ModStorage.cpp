@@ -90,7 +90,7 @@ void Reset(bool isDebug) {
     sStorage.clear();
 }
 
-void Save(SaveContext* saveContext, int sectionId, bool fullSave) {
+void Save(const SaveContext& saveContext, int sectionId, bool fullSave) {
     struct Entry {
         const std::string* mod;
         const std::string* key;

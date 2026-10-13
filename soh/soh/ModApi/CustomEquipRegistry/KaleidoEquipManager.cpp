@@ -1,5 +1,6 @@
 #include "CustomEquipRegistry.h"
 
+#include <algorithm>
 #include <optional>
 #include <string>
 #include <vector>

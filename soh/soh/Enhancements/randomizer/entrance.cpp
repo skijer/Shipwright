@@ -10,6 +10,7 @@
 #include "soh/util.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ModApi/RandoLogic/RandoLogic.h"
+#include "soh/ModApi/ModDungeons/DungeonEntrancePairs.h"
 #include "z64camera.h"
 #include "z64scene.h"
 
@@ -607,6 +608,7 @@ void SetAllEntrancesData() {
           NO_RETURN_ENTRANCE },
         // clang-format on
     };
+    DungeonRegistry_AppendEntrancePairs(entranceShuffleTable);
 
     auto ctx = Rando::Context::GetInstance();
     for (auto& entrancePair : entranceShuffleTable) {

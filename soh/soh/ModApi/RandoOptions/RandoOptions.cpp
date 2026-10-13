@@ -94,10 +94,12 @@ bool RandoOptions_Register(const SOHModRandoOption* option) {
     const bool isSlider = option->structSize >= offsetof(SOHModRandoOption, widget) + sizeof(option->widget) &&
                           option->widget == SOH_MOD_RANDO_WIDGET_SLIDER;
 
-    registered.settingKey = settings->AddModOption(Rando::Option::U8(
-        static_cast<RandomizerSettingKey>(nextKey), option->label, values, Rando::OptionCategory::Setting,
-        registered.cvar, option->tooltip == nullptr ? "" : option->tooltip,
-        isSlider ? WIDGET_CVAR_SLIDER_INT : WIDGET_CVAR_COMBOBOX, option->defaultValue));
+    Rando::Option modOption = Rando::Option::U8(static_cast<RandomizerSettingKey>(nextKey), values,
+                                                Rando::OptionCategory::Setting, registered.cvar,
+                                                isSlider ? WIDGET_CVAR_SLIDER_INT : WIDGET_CVAR_COMBOBOX,
+                                                option->defaultValue);
+    modOption.SetModText(option->label, option->tooltip == nullptr ? "" : option->tooltip);
+    registered.settingKey = settings->AddModOption(std::move(modOption));
     sOptions.push_back(std::move(registered));
 
     if (IsMenuBuilt()) {

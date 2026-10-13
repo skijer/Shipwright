@@ -92,6 +92,23 @@ flag): change both together.
 - Rules are held in a `std::list` because the index keeps pointers and mods register after the first index.
   Capability selectors match `Name(` so `CanBreakPots` never matches `CanBreakPotsSomething`.
 
+## Bosses and dungeons
+
+- A custom boss replaces a vanilla slot by scene substitution: `OTRPlay_SpawnScene` loads the arena under the
+  slot's scene id, so every check keyed on `play->sceneNum` (blue warp, heart container flag `0x1F`, boss souls,
+  Boss Rush, save and death warps) keeps working. `ReportBossDefeated` runs the ID-filtered `OnBossDefeat` hooks
+  with the slot's vanilla actor id. A seed's assignment is drawn after `Random_Init`, written to the spoiler and
+  copied into the file by `Randomizer_InitSaveFile`.
+- Mod dungeon checks, regions and events live above `RC_MAX`, `RR_MAX` and `LOGIC_MAX`. Checks sit in a side table
+  reached only through `StaticData::GetLocation` and `Context::GetItemLocation`, so vanilla loops never see them;
+  `areaTable` is a vector sized once per `RegionTable_Init` (entrances keep pointers into it). Their conditions are
+  `LogicExpr` programs evaluated from the `RandoLogic_Resolve*` dispatch: the `ConditionFn` is a placeholder.
+- A mod dungeon borrows `dungeonKeys`/`dungeonItems[SCENE_DODONGOS_CAVERN_BOSS]`, an index no vanilla `mapIndex`
+  takes, swapped on scene init and saved by dungeon id. The base section is loaded first, so a save made inside
+  the dungeon restores the slot's own value on load.
+- The rando save stores entrance overrides as numbers; mod entrances also go by name in `unboundDungeons`, which
+  sorts after `randomizer` and fixes them up on load. `entranceOverrideTable` covers every SceneDB entrance.
+
 ## Audio
 
 - `AudioMix` callbacks run on the audio thread. Gains are refreshed on the game thread and read through

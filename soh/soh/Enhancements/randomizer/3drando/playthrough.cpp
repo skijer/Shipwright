@@ -11,6 +11,7 @@
 #include "soh/cvar_prefixes.h"
 #include "../option.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 
 namespace Playthrough {
 
@@ -64,6 +65,7 @@ int Playthrough_Init(uint32_t seed, std::set<RandomizerCheck> excludedLocations,
     uint32_t finalHash = SohUtils::Hash(std::to_string(ctx->GetSeed()) + settingsStr);
     Random_Init(finalHash);
     ctx->SetHash(std::to_string(finalHash));
+    BossRegistry_AssignForSeed();
 
     int ret = Fill();
     if (ret < 0) {

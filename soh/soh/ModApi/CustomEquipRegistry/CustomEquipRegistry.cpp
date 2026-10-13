@@ -9,10 +9,12 @@
 #include <vector>
 
 #include <spdlog/spdlog.h>
+#include <libultraship/bridge.h>
 #include <ship/Context.h>
 #include <ship/debug/Console.h>
 
 #include "soh/SaveManager.h"
+#include "soh/cvar_prefixes.h"
 #include "soh/ModApi/ConsoleArguments.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 
@@ -88,10 +90,10 @@ bool IsAgeAllowed(const SOHCustomEquipDefinition* definition) {
     if (definition == nullptr) {
         return false;
     }
-    if (definition->ageRequirement == 0) {
+    if (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || definition->ageRequirement == SOH_CUSTOM_ITEM_AGE_ANY) {
         return true;
     }
-    return (definition->ageRequirement == 1) == (gSaveContext.linkAge == LINK_AGE_CHILD);
+    return (definition->ageRequirement == SOH_CUSTOM_ITEM_AGE_CHILD) == (gSaveContext.linkAge == LINK_AGE_CHILD);
 }
 
 void SetWorn(uint8_t slot, RegisteredEquip* entry, bool writesVanilla) {
@@ -167,7 +169,7 @@ void LoadKeySet(const char* name, std::unordered_set<std::string>& keys) {
     });
 }
 
-void SaveState(SaveContext* saveContext, int sectionId, bool fullSave) {
+void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
     SaveKeySet("owned", sOwned);
     SaveKeySet("toggled", sToggled);
     SaveManager::Instance->SaveArray("worn", sWorn.size(),
@@ -376,7 +378,7 @@ void CustomEquipRegistry_Init(void) {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerUpdate>(WatchWornEquipment);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnConsoleGive>(GiveFromConsole);
 
-    Ship::Context::GetInstance()->GetConsole()->AddCommand(
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "wear", { WearCommand, "Wears an owned piece of custom equipment", { { "key", Ship::ArgumentType::TEXT } } });
 }
 

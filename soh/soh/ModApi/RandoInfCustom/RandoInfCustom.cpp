@@ -8,6 +8,8 @@
 #include <spdlog/spdlog.h>
 
 #include "soh/SaveManager.h"
+#include "soh/OTRGlobals.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
 
 namespace {
 
@@ -38,7 +40,7 @@ void ClaimUnresolvedKey(const std::string& key, uint16_t flag) {
     }
 }
 
-void SaveState(SaveContext* saveContext, int sectionId, bool fullSave) {
+void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
     std::vector<std::string> set = sKeysOfUnloadedMods;
     for (uint16_t flag = 1; flag <= sKeys.size(); flag++) {
         if (sBanks[SOH_RANDO_INF_SAVE][flag - 1]) {
@@ -142,6 +144,11 @@ bool RandoInfCustom_GetByKey(const char* key) {
 
 void RandoInfCustom_SetByKey(const char* key, bool state) {
     RandoInfCustom_Set(SOH_RANDO_INF_SAVE, RandoInfCustom_Register(key), state);
+}
+
+// SOH [Unbound] C entry point for mods: SoH 9.3.0 dropped its own wrapper around this lookup.
+extern "C" RandomizerInf Randomizer_GetRandomizerInfFromCheck(RandomizerCheck check) {
+    return OTRGlobals::Instance->gRandomizer->GetRandomizerInfFromCheck(check);
 }
 
 void RandoInfCustom_Init() {

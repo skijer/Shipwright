@@ -47,7 +47,7 @@ the game's services:
 | Permission | Services | What the player sees |
 | --- | --- | --- |
 | `microphone` | `OpenMicrophone`, `ReadMicrophone`, `CloseMicrophone` | Asked once per mod (the answer is kept in `mods/.unbound-mod-permissions.json`); a microphone icon with the mod's name stays in the corner while it records |
-| `files` | `PickUserFile`, `SaveToModsFolder`, `ExtractRomToModsFolder`, and the older `ExportArchiveFiles`, `ExtractRom` | Asked every time: a file is only read once the player picks it, and nothing is written without a yes. Writes only land in `mods/` |
+| `files` | `PickUserFile`, `SaveToModsFolder`, and the older `ExportArchiveFiles` | Asked every time: a file is only read once the player picks it, and nothing is written without a yes. Writes only land in `mods/` |
 
 `AskPlayer`, `TellPlayer` and `RequestRestart` need no permission; their dialogs carry the mod's name.
 
@@ -64,6 +64,7 @@ uses Unbound's own `mod-sdk/ci/signing/CMakeLists.txt`, which compiles each mod 
 | Step | Refuses |
 | --- | --- |
 | Layout | Build scripts, executables, symbolic links, files other than sources, docs and `manifest.json` outside `assets/` |
+| Manifest | Unknown permissions; `build` include folders outside the mod, and definitions other than `NAME` or `NAME=number` |
 | Directives | Includes that leave the mod's folder or reach the operating system (`windows.h`, `unistd.h`, `<filesystem>`, `<fstream>`, `<thread>`, sockets…), any `#pragma` but `once`, `pack`, `warning`, `region` and diagnostics |
 | Preprocessed code | Inline assembly, process-environment intrinsics, and calls that open files, start processes or threads, load libraries or use the network, even when built by macros |
 | [Cppcheck](https://cppcheck.sourceforge.io/) | Any error |

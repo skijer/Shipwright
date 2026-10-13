@@ -15,6 +15,8 @@
 #include <libultraship/libultraship.h>
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/unbound/UnboundAudio.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 
 extern "C" PlayState* gPlayState;
 
@@ -37,7 +39,7 @@ uint8_t HasResource(const char* path) {
     if (name.rfind("__OTR__", 0) == 0) {
         name = name.substr(7);
     }
-    auto archives = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
 
     return archives != nullptr && archives->HasFile(name);
 }
@@ -271,7 +273,6 @@ SOHModApi BuildTable() {
     api.RegisterRandoOption = RandoOptions_Register;
     api.GetRandoOption = RandoOptions_Get;
     api.ExportArchiveFiles = O2rExtractor_ExportFiles;
-    api.ExtractRom = O2rExtractor_Run;
     api.Log = LogFromMod;
     api.RegisterCustomEquipment = CustomEquipRegistry_Register;
     api.GetWornEquipment = CustomEquipRegistry_GetWorn;
@@ -299,10 +300,17 @@ SOHModApi BuildTable() {
     api.PickUserFile = UserFiles_Pick;
     api.FreeUserFile = UserFiles_Free;
     api.SaveToModsFolder = UserFiles_SaveToMods;
-    api.ExtractRomToModsFolder = UserFiles_ExtractRomToMods;
+    api.ReadArchiveFiles = O2rExtractor_ReadFiles;
     api.AskPlayer = ModDialogs_Ask;
     api.TellPlayer = ModDialogs_Tell;
     api.RequestRestart = ModDialogs_RequestRestart;
+    api.RegisterBoss = BossRegistry_Register;
+    api.GetBossSlot = BossRegistry_GetSlot;
+    api.GetSceneBoss = BossRegistry_GetSceneBoss;
+    api.GetBossSlotScene = BossRegistry_GetSlotScene;
+    api.ReportBossDefeated = BossRegistry_ReportDefeated;
+    api.RegisterPickupVariant = CustomItemRegistry_RegisterPickupVariant;
+    api.GetPickupVariant = CustomItemRegistry_GetPickupVariant;
     return api;
 }
 
@@ -324,7 +332,10 @@ void ModApi_Init() {
     TimeControl_Init();
     Timers_Init();
     Microphone_Init();
+    BossRegistry_Init();
+    DungeonRegistry_Init();
     ModLoader_LoadMods();
+    DungeonRegistry_Load();
 }
 
 const SOHModApi* ModApi_Get() {
@@ -336,12 +347,14 @@ void ModApi_SetCurrentMod(const std::string& name) {
     sCurrentMod = name;
     CustomItemRegistry_SetCurrentMod(name);
     CustomEquipRegistry_SetCurrentMod(name);
+    BossRegistry_SetCurrentMod(name);
 }
 
 void ModApi_ClearCurrentMod() {
     sCurrentMod.clear();
     CustomItemRegistry_ClearCurrentMod();
     CustomEquipRegistry_SetCurrentMod(std::string());
+    BossRegistry_SetCurrentMod(std::string());
 }
 
 bool ModApi_HasHook(const char* name) {

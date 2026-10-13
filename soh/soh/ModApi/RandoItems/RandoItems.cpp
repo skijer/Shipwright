@@ -1,5 +1,6 @@
 #include "soh/ModApi/RandoItems/RandoItems.h"
 
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -20,6 +21,7 @@ struct ModItem {
     std::string key;
     int32_t randoGet;
     uint16_t flag;
+    bool isHostItem;
 };
 
 std::vector<ModItem> sItems;
@@ -41,18 +43,20 @@ const SOHCustomItemRandomizer* GetRandomizerBlock(const ModItem& item) {
 Rando::Item BuildItem(const ModItem& item, const SOHCustomItemDefinition& definition) {
     const SOHCustomItemRandomizer& block = *definition.randomizer;
     bool advancement = (block.flags & SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT) != 0;
-    bool progressive = (block.flags & SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE) != 0;
     GetItemCategory category = advancement ? ITEM_CATEGORY_MAJOR : ITEM_CATEGORY_LESSER;
 
     Rando::Item built(static_cast<RandomizerGet>(item.randoGet), Text{ item.key, item.key, item.key },
                       static_cast<ItemType>(block.type), GI_NONE, advancement, LOGIC_NONE, RHT_NONE, ITEM_CUSTOM,
                       OBJECT_INVALID, GID_MAXIMUM, TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_LONG, category,
-                      MOD_RANDOMIZER, {}, "%g", progressive, block.price);
+                      MOD_RANDOMIZER, {}, "%g", block.price);
     *built.GetGIEntry() = definition.getItemEntry;
     return built;
 }
 
 void BuildRow(const ModItem& item) {
+    if (item.isHostItem) {
+        return;
+    }
     const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(item.key.c_str());
     if (definition == nullptr || definition->randomizer == nullptr) {
         SPDLOG_ERROR("Randomizer item {} lost its definition", item.key);
@@ -71,7 +75,7 @@ bool IsItemTableBuilt() {
 
 } // namespace
 
-int32_t RandoItems_Register(const char* key) {
+static int32_t RegisterItem(const char* key, bool isHostItem) {
     if (key == nullptr || key[0] == '\0') {
         SPDLOG_ERROR("Rejected a randomizer item with no key");
         return 0;
@@ -88,11 +92,19 @@ int32_t RandoItems_Register(const char* key) {
     }
     int32_t randoGet = ModRandoGetBase + static_cast<int32_t>(sItems.size());
     sKeysToIndex[name] = sItems.size();
-    sItems.push_back({ name, randoGet, flag });
+    sItems.push_back({ name, randoGet, flag, isHostItem });
     if (IsItemTableBuilt()) {
         BuildRow(sItems.back());
     }
     return randoGet;
+}
+
+int32_t RandoItems_Register(const char* key) {
+    return RegisterItem(key, false);
+}
+
+int32_t RandoItems_RegisterHostItem(const char* key) {
+    return RegisterItem(key, true);
 }
 
 int32_t RandoItems_GetRandoGet(const char* key) {
@@ -128,7 +140,14 @@ bool RandoItems_IsOwned(int32_t randoGet, SOHRandoInfBank bank) {
     if (bank == SOH_RANDO_INF_SAVE) {
         return CustomItemRegistry_IsOwned(item->key.c_str());
     }
-    return RandoInfCustom_Get(bank, item->flag);
+    if (RandoInfCustom_Get(bank, item->flag)) {
+        return true;
+    }
+    // Logic asks for the inventory item; the seed places its pickup variants, and any one of them grants it.
+    return std::any_of(sItems.begin(), sItems.end(), [&](const ModItem& candidate) {
+        const SOHCustomPickupVariant* pickup = CustomItemRegistry_GetPickupVariant(candidate.key.c_str());
+        return pickup != nullptr && item->key == pickup->itemKey && RandoInfCustom_Get(bank, candidate.flag);
+    });
 }
 
 void RandoItems_SetOwned(int32_t randoGet, SOHRandoInfBank bank, bool state) {
@@ -154,6 +173,12 @@ void RandoItems_AddToPool() {
         const SOHCustomItemRandomizer* block = GetRandomizerBlock(item);
         if (block == nullptr) {
             continue;
+        }
+        if (block->poolModeOption != nullptr) {
+            const bool isModeMatched = RandoOptions_GetForSeed(block->poolModeOption) == block->poolModeValue;
+            if (isModeMatched == block->poolModeInvert) {
+                continue;
+            }
         }
         const uint32_t count =
             block->poolCount +

@@ -18,6 +18,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ModApi/VanillaItems/VanillaItems.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "settings.h"
 #include "soh/util.h"
 #include "randomizerTypes.h"
@@ -1193,7 +1194,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
 
-    if (VanillaItems_GrantRandoItem(item)) {
+    if (VanillaItems_GrantRandoItem(item) || DungeonRegistry_GrantItem(item)) {
         return Return_Item_Entry(giEntry, RG_NONE);
     }
 

@@ -4,6 +4,7 @@
 #include "soh/SohGui/SohGui.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <ship/Context.h>
@@ -19,6 +20,7 @@ extern PlayState* gPlayState;
 }
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/unbound/SceneDB.h"
 #include "entrance.h"
 #include "soh/SohGui/UIWidgets.hpp"
 
@@ -466,8 +468,21 @@ const EntranceData* GetEntranceData(s16 index) {
             return &entranceData[i];
         }
     }
-    // Shouldn't be reached
-    return nullptr;
+    // SOH [Unbound] a mod's entrance (a mod dungeon's door) is not in the table: list it as one-way by its name.
+    static std::unordered_map<s16, EntranceData> modEntrances;
+    auto [modEntrance, isNew] = modEntrances.try_emplace(index);
+    if (isNew) {
+        std::string name = EntranceDB_RetrieveName(index);
+        modEntrance->second.index = index;
+        modEntrance->second.reverseIndex = -1;
+        modEntrance->second.source = name.empty() ? "Unknown entrance" : name;
+        modEntrance->second.destination = modEntrance->second.source;
+        modEntrance->second.srcGroup = ENTRANCE_GROUP_ONE_WAY;
+        modEntrance->second.dstGroup = ENTRANCE_GROUP_ONE_WAY;
+        modEntrance->second.type = ENTRANCE_TYPE_ONE_WAY;
+        modEntrance->second.oneExit = 0;
+    }
+    return &modEntrance->second;
 }
 
 void LoadFromPreset(const nlohmann::json& info) {

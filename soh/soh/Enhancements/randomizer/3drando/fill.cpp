@@ -11,7 +11,9 @@
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
 #include "soh/util.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
+#include <algorithm>
 #include <vector>
 #include <list>
 #include <set>
@@ -694,7 +696,7 @@ void SetAreas() {
     auto ctx = Rando::Context::GetInstance();
     // RANDOTODO give entrances an enum like RandomizerCheck, then give them all areas here,
     // then use those areas to not need to recursively find ItemLocation areas when identifying entrance's area
-    for (int regionType = 0; regionType < RR_MAX; regionType++) {
+    for (size_t regionType = 0; regionType < areaTable.size(); regionType++) {
         Region* region = &areaTable[regionType];
         std::set<RandomizerArea> areas = region->GetAllAreas();
         std::set<Region*> regionsToSet = { region };
@@ -1122,6 +1124,54 @@ static void RandomizeOwnDungeon(const Rando::DungeonInfo* dungeon) {
     }
 }
 
+static void PlaceVanillaModDungeonItems(std::vector<RandomizerGet>& items, RandomizerGet kind,
+                                        const std::vector<RandomizerCheck>& locations) {
+    auto ctx = Rando::Context::GetInstance();
+    for (RandomizerCheck location : locations) {
+        auto item = std::find(items.begin(), items.end(), kind);
+        if (item == items.end()) {
+            return;
+        }
+        if (location == RC_UNKNOWN_CHECK) {
+            continue;
+        }
+        ctx->PlaceItemInLocation(location, *item);
+        items.erase(item);
+    }
+}
+
+// Mod dungeons have no DungeonInfo. Their items stay in their own checks unless the option sends them
+// to any dungeon, the overworld or anywhere, which the general fill handles.
+static void PlaceModDungeonItems(const ModDungeonFillInfo& dungeon, RandomizerSettingKey setting,
+                                 const std::vector<std::pair<RandomizerGet, std::vector<RandomizerCheck>>>& kinds) {
+    auto ctx = Rando::Context::GetInstance();
+    const bool isVanilla = ctx->GetOption(setting).Is(RO_DUNGEON_ITEM_LOC_VANILLA);
+    if (!isVanilla && !ctx->GetOption(setting).Is(RO_DUNGEON_ITEM_LOC_OWN_DUNGEON) &&
+        !ctx->GetOption(setting).Is(RO_DUNGEON_ITEM_LOC_STARTWITH)) {
+        return;
+    }
+    std::vector<RandomizerGet> items = FilterAndEraseFromPool(itemPool, [&kinds](const RandomizerGet item) {
+        return std::any_of(kinds.begin(), kinds.end(),
+                           [item](const auto& kind) { return kind.first != RG_NONE && kind.first == item; });
+    });
+    if (isVanilla) {
+        for (const auto& [kind, locations] : kinds) {
+            PlaceVanillaModDungeonItems(items, kind, locations);
+        }
+    }
+    AssumedFill(items, dungeon.locations);
+}
+
+static void RandomizeModDungeonItems() {
+    for (const ModDungeonFillInfo& dungeon : DungeonRegistry_GetFillInfo()) {
+        PlaceModDungeonItems(dungeon, RSK_KEYSANITY, { { dungeon.smallKey, dungeon.vanillaSmallKeyLocations } });
+        PlaceModDungeonItems(dungeon, RSK_BOSS_KEYSANITY, { { dungeon.bossKey, { dungeon.vanillaBossKeyLocation } } });
+        PlaceModDungeonItems(dungeon, RSK_SHUFFLE_MAPANDCOMPASS,
+                             { { dungeon.map, { dungeon.vanillaMapLocation } },
+                               { dungeon.compass, { dungeon.vanillaCompassLocation } } });
+    }
+}
+
 /*Randomize items restricted to a certain set of locations.
   The fill order of location groups is as follows:
     - Own Dungeon
@@ -1421,6 +1471,7 @@ int Fill() {
         for (auto dungeon : ctx->GetDungeons()->GetDungeonList()) {
             RandomizeOwnDungeon(dungeon);
         }
+        RandomizeModDungeonItems();
         StopPerformanceTimer(PT_OWN_DUNGEON);
 
         StartPerformanceTimer(PT_LIMITED_CHECKS);

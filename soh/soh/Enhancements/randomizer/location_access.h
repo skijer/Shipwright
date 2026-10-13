@@ -255,7 +255,8 @@ class Region {
     static std::map<RandomizerRegion, SpiritLogicData> spiritLogicData;
 };
 
-extern std::array<Region, RR_MAX> areaTable;
+// RR_MAX vanilla regions, then the mod dungeons' (DungeonRegistry).
+extern std::vector<Region> areaTable;
 extern std::vector<EventAccess> grottoEvents;
 
 bool AnyAgeTime(ConditionFn condition);

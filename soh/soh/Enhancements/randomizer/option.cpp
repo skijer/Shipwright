@@ -114,7 +114,16 @@ static const std::string& MakeTrickDescription(RandomizerTrick key) {
 
 #pragma endregion
 
+Option& Option::SetModText(std::string name, std::string description) {
+    modName = std::move(name);
+    modDescription = std::move(description);
+    return *this;
+}
+
 const std::string& Option::GetName() const {
+    if (!modName.empty()) {
+        return modName;
+    }
     switch (this->GetCategory()) {
         case OptionCategory::Setting:
         case OptionCategory::Toggle:
@@ -130,6 +139,9 @@ const std::string& Option::GetName() const {
 }
 
 const std::string& Option::GetDescription() const {
+    if (!modName.empty()) {
+        return modDescription;
+    }
     switch (this->GetCategory()) {
         case OptionCategory::Setting:
         case OptionCategory::Toggle:

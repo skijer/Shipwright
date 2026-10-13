@@ -83,9 +83,18 @@ spawn custom_actor "template.rupee_sprite"
 3. Run `python mod-sdk/build_mods.py --game <game> --mod lantern`.
 
 Every folder in `mod-sdk/mods/` with a `manifest.json` is a mod: all its `.c`/`.cpp` files are compiled (except
-`*.inc.c` and `assets/`) with every SDK helper available. A mod that needs more control ships its own
-`CMakeLists.txt` calling `unbound_add_mod(...)`. To keep your mods in a repository of their own instead, see
-[Publishing](PUBLISHING.md).
+`*.inc.c` and `assets/`) with every SDK helper available. A mod that vendors a library adds its folders to the
+include path, and plain macros, in its manifest; a `CMakeLists.txt` of its own cannot be signed:
+
+```json
+"build": {
+    "includeDirectories": ["lib/tinyxml2"],
+    "definitions": ["GAME_OOT", "LEVEL=2"]
+}
+```
+
+Folders are relative to the mod and stay inside it; a definition is `NAME` or `NAME=number`. To keep your mods in
+a repository of their own instead, see [Publishing](PUBLISHING.md).
 
 ## 5. Anatomy of a mod
 

@@ -12345,7 +12345,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
                 input.cur.button &= ~(BTN_A | BTN_B | BTN_CUP);
                 input.press.button &= ~(BTN_A | BTN_B | BTN_CUP);
             }
-            GameInteractor_ExecuteOnPlayerFilterInput(this, &sp44);
+            GameInteractor_ExecuteOnPlayerFilterInput(this, &input);
         }
 
         if (CVarGetFloat(CVAR_CHEAT("SpeedModifier.Value"), 1.0f) != 1.0f &&
@@ -14140,6 +14140,9 @@ s32 func_8084DFF4(PlayState* play, Player* this) {
                 if (definition != NULL) {
                     CustomItemRegistry_ReceiveGetItem(definition->key);
                 }
+                // SOH [Unbound] Item_Give is what reports a vanilla item; without this the randomizer never sees
+                // a mod item arrive and gives it again forever.
+                GameInteractor_ExecuteOnItemReceiveHooks(giEntry);
             } else if (giEntry.modIndex == MOD_NONE) {
                 // RANDOTOD: Move this into Item_Give() or some other more central location
                 if (giEntry.getItemId == GI_SWORD_BGS) {

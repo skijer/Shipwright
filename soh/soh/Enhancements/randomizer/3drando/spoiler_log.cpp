@@ -7,6 +7,7 @@
 #include "../trial.h"
 #include "pool_functions.hpp"
 #include "soh/Enhancements/randomizer/randomizer_entrance_tracker.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -313,6 +314,7 @@ void SpoilerLog_Write() {
     WriteStartingInventory();
     WriteEnabledTricks();
     WriteMasterQuestDungeons();
+    BossRegistry_WriteSpoiler(jsonData);
     WriteChosenOptions();
     WritePlaythrough();
 

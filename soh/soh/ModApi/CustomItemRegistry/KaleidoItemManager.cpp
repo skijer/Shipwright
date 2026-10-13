@@ -15,6 +15,9 @@
 #include <utility>
 #include <vector>
 #include <spdlog/spdlog.h>
+#include <ship/Context.h>
+#include <ship/window/Window.h>
+#include <ship/window/gui/Gui.h>
 
 extern "C" {
 #include "functions.h"
@@ -93,7 +96,7 @@ void DrawLayoutEditor(SaveContext*) {
         if (changed && page >= 0 && page <= UINT16_MAX) {
             placement = { static_cast<uint16_t>(page), static_cast<uint8_t>(slot - 1) };
             KaleidoItemManager_SetPlacement(definition->key, &placement);
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
         }
         ImGui::PopID();
     }
@@ -105,7 +108,7 @@ void DrawLayoutEditor(SaveContext*) {
             int cell = CVarGetInteger(VanillaCellCvar(slot).c_str(), slot) + 1;
             if (ImGui::SliderInt(std::to_string(slot + 1).c_str(), &cell, 1, 24)) {
                 CVarSetInteger(VanillaCellCvar(slot).c_str(), cell - 1);
-                Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             }
             ImGui::PopID();
         }

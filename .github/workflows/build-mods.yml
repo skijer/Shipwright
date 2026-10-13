@@ -6,10 +6,9 @@ on:
     paths:
       - 'mod-sdk/mods/**'
       - '!mod-sdk/mods/README.md'
+  # A pull request builds its mods only while it carries the generate-mods label.
   pull_request:
-    paths:
-      - 'mod-sdk/mods/**'
-      - '!mod-sdk/mods/README.md'
+    types: [labeled, synchronize, reopened, closed]
   workflow_dispatch:
     inputs:
       release_repository:
@@ -19,16 +18,23 @@ on:
         description: Release tag to take soh.lib from (empty = newest Unbound release)
         default: ''
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Events that build nothing (another label, a close) get their own group so they never cancel a build.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ (github.event.action == 'closed' || (github.event.action == 'labeled' && github.event.label.name != 'generate-mods')) && github.run_id || 'build' }}
   cancel-in-progress: true
 env:
   RELEASE_REPOSITORY: ${{ inputs.release_repository || vars.UNBOUND_RELEASE_REPOSITORY || 'skijer/Shipwright' }}
   RELEASE_TAG: ${{ inputs.release_tag }}
   SOH_LIB_ARTIFACT: unbound-mod-sdk-windows
   ALL_MODS_PACKAGE: unbound-mods-all.zip
+  PREVIEW_TAG: pr${{ github.event.pull_request.number }}-mod-preview
 jobs:
 
   build:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'closed' &&
+       contains(github.event.pull_request.labels.*.name, 'generate-mods') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'generate-mods'))
     strategy:
       fail-fast: false
       matrix:
@@ -119,34 +125,56 @@ jobs:
         name: unbound-mods
         path: universal/
 
-  describe-pr:
+  # A public prerelease per pull request, so the table links work without a GitHub login.
+  preview:
+    needs: universal
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
     - name: Git Checkout
       uses: actions/checkout@v6
       with:
         sparse-checkout: mod-sdk
+    - name: Download universal packages
+      uses: actions/download-artifact@v7
+      with:
+        name: unbound-mods
+        path: universal
+    - name: Publish the preview prerelease
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        gh release delete "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
+        gh release create "$PREVIEW_TAG" universal/* --repo "$GITHUB_REPOSITORY" --target "$HEAD_SHA" \
+          --prerelease --latest=false --title "Mods of pull request #$PR_NUMBER (${HEAD_SHA::7})" \
+          --notes "Unsigned preview of #$PR_NUMBER, rebuilt on every push while it carries the generate-mods label."
     - name: List the mods in the pull request description
       env:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
       run: |
-        SIGNED=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --json tagName \
-                 --jq '[.[] | select(.tagName | startswith("signed-mod-"))][0].tagName // empty')
+        DOWNLOAD_BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$PREVIEW_TAG"
+        STATUS="Built from ${HEAD_SHA::7} by [build-mods]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID). Unsigned: the game loads them under the \`open\` policy."
         gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body -q .body > body.md
-        if [ -n "$SIGNED" ]; then
-          STATUS="Signed by the sign-mod workflow ($SIGNED): each package carries its signature, checked by the game."
-          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md \
-                  --download-base "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$SIGNED"
-        else
-          STATUS="Downloads are published when a tag containing \`mods\` is pushed on this pull request's commit."
-          python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --update-body body.md
-        fi
+        python3 mod-sdk/tools/list_mods.py mod-sdk/mods --status "$STATUS" --download-base "$DOWNLOAD_BASE" --update-body body.md
         gh pr edit "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body-file body.md
+
+  remove-preview:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+    - name: Delete the preview prerelease
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release delete "$PREVIEW_TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes || true
 
   release:
     needs: universal

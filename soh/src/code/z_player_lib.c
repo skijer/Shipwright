@@ -873,7 +873,7 @@ s32 func_8008F128(Player* this) {
 s32 Player_ActionToMeleeWeapon(s32 itemAction) {
     s32 sword = itemAction - PLAYER_IA_FISHING_POLE;
 
-    if (actionParam == PLAYER_IA_CUSTOM) {
+    if (itemAction == PLAYER_IA_CUSTOM) {
         return CustomItemRegistry_GetActiveMeleeWeapon();
     }
 

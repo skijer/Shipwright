@@ -10,7 +10,9 @@
 #include "soh/Enhancements/randomizer/dungeon.h"
 #include "soh/Enhancements/randomizer/fishsanity.h"
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/SohGui/ImGuiUtils.h"
 #include "soh/Notification/Notification.h"
 #include "soh/SaveManager.h"
@@ -125,7 +127,7 @@ RandomizerCheck GetRandomizerCheckFromSceneFlag(int16_t sceneNum, int16_t flagTy
         }
     }
 
-    return RC_UNKNOWN_CHECK;
+    return DungeonRegistry_FindCheckBySceneFlag(sceneNum, flagType, flag);
 }
 
 bool MeetsGBKRequirements() {

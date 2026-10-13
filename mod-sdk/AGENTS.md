@@ -10,7 +10,7 @@ talks to the game only through the ModApi and the game's exported C symbols. The
 
 ## What you must never edit
 
-- The game: `soh/`, `libultraship/`, `ZAPDTR/`, `OTRExporter/`, the root CMake files.
+- The game: `soh/`, `libultraship/`, `torch/`, the root CMake files.
 - The SDK: `mod-sdk/cmake`, `mod-sdk/include`, `mod-sdk/tools`, the docs, other mods' folders.
 
 If the mod needs something the game does not expose (a hook, a global, a table entry), do not patch the engine to
@@ -48,7 +48,8 @@ Syntax-check a C mod from the Unbound root without building anything:
 clang -fsyntax-only -std=c11 -Wno-everything -Werror=implicit-function-declaration \
     -DF3DEX_GBI_2 -DNOMINMAX -DUNBOUND_MOD -DGBI_S32_VTX=1 -DGBI_FLOAT_MTX=1 -DCONTROLLERBUTTONS_T=uint32_t \
     -Isoh -Isoh/include -Isoh/src -Isoh/assets -Ilibultraship/include \
-    -Imod-sdk/include/z64items -Imod-sdk/include/z64aiming -Imod-sdk/include/z64wheel path/to/mod.c
+    -Imod-sdk/include/z64items -Imod-sdk/include/z64aiming -Imod-sdk/include/z64wheel \
+    -Imod-sdk/include/z64boss path/to/mod.c
 ```
 
 Build only mods, never the game: `cmake --build <mods build dir> --config Release --target <mod>`.

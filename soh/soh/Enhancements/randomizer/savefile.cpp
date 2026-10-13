@@ -8,6 +8,7 @@
 #include "soh/Enhancements/randomizer/logic.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizerEnumStrings.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 
 extern "C" {
 #include "variables.h"
@@ -441,6 +442,7 @@ void SetStartingItems() {
 extern "C" void Randomizer_InitSaveFile() {
     auto ctx = Rando::Context::GetInstance();
     ctx->GetLogic()->SetSaveContext(&gSaveContext);
+    BossRegistry_InitSaveFile();
 
     // Starts pending ice traps out at 0 before potentially incrementing them down the line.
     gSaveContext.ship.pendingIceTrapCount = 0;
