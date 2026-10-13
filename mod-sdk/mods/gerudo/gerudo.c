@@ -382,8 +382,8 @@ static bool CanAct(Player* player) {
 
 static bool CanJumpFromFloor(PlayState* play, Player* player) {
     return play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2 && player->actor.floorPoly != NULL &&
-           func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
-           SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
+           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
+           SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
 }
 
 // 1..3 are the swords (Master, Kokiri, Biggoron); a stick or the hammer is not a pair of scimitars.
@@ -1243,7 +1243,7 @@ static void SpawnFuryImpact(PlayState* play, Player* player) {
         EffectSsKiraKira_SpawnFocused(play, &arc, &velocity, &accel, prim, &sFury.white, 420, 18);
     }
     ShakeGround(play, 7, 22);
-    func_800AA000(0.0f, 255, 20, 150);
+    Rumble_Request(0.0f, 255, 20, 150);
     Audio_PlayActorSound2(&player->actor, NA_SE_EV_LIGHTNING);
     Audio_PlayActorSound2(&player->actor, NA_SE_IT_HAMMER_HIT);
 }
@@ -1282,7 +1282,7 @@ static void TickFuryVfx(PlayState* play, Player* player, f32 frame) {
 
     Environment_AdjustLights(play, GetFuryDarkness(frame), 850.0f, 0.2f, 0.9f);
     if (frame >= 34.0f && frame < FURY_STRIKE_FRAME) {
-        func_8002F974(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_SPARK - SFX_FLAG);
     }
     for (s32 burst = 0; burst < 6; burst++) {
         if (HasCrossed(prev, frame, 36.0f + burst * 7.0f)) {
@@ -1747,7 +1747,7 @@ static void UpdateOcarinaVoice(PlayState* play, Player* player) {
         sIsOcarinaOut = true;
     } else if (!isSessionOpen) {
         if (sIsOcarinaOut) {
-            Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+            AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         }
         sIsOcarinaOut = false;
     }
@@ -1755,7 +1755,7 @@ static void UpdateOcarinaVoice(PlayState* play, Player* player) {
         return;
     }
     // Re-applied every frame: the message system sets the instrument again around opening, and the last write wins.
-    Audio_OcaSetInstrument(OCARINA_INSTRUMENT_MALON);
+    AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_MALON);
     PoseSinging(play, player);
 }
 
@@ -1947,7 +1947,7 @@ static bool sIsConeArmed;
 
 // En_M_Thunder sets its target scale only on the release, so a non-zero one tells a release from a charge.
 static bool IsThunderReleased(EnMThunder* thunder) {
-    return thunder->unk_1C9 != 0;
+    return thunder->targetScale != 0;
 }
 
 static bool IsReleaseSwinging(void) {
@@ -1960,9 +1960,9 @@ static bool ShouldArmCone(Player* player) {
 
 // Undoes the tick the actor just ran, so its 16-frame life only starts with the throw.
 static void HoldCone(EnMThunder* thunder) {
-    thunder->unk_1AC = 1.0f;
-    thunder->unk_1B0 = 0.0f;
-    thunder->unk_1C4 = 8;
+    thunder->spinAttackTimer = 1.0f;
+    thunder->spinAttackAlpha = 0.0f;
+    thunder->followPlayerTimer = 8;
     Actor_SetScale(&thunder->actor, 0.0f);
     thunder->collider.base.atFlags &= ~AT_ON;
     sConeWaitFrames++;
@@ -2055,16 +2055,16 @@ static Vtx* BuildConeWall(PlayState* play, f32 scroll) {
 // gameplay_keep exports no symbol for the ring's texture, so its DLs run squashed to a point first: nothing is
 // rasterised, but they leave the ring's texture, tiles and combiner loaded for the arc drawn after them.
 static void DrawCone(EnMThunder* thunder, PlayState* play) {
-    Vtx* vertices = BuildConeWall(play, thunder->unk_1B4);
-    bool isGreat = thunder->unk_1C6 == 0;
-    u8 alpha = (u8)(thunder->unk_1B0 * 255.0f);
+    Vtx* vertices = BuildConeWall(play, thunder->spinTrailTexScroll);
+    bool isGreat = thunder->attackStrength == 0;
+    u8 alpha = (u8)(thunder->spinAttackAlpha * 255.0f);
 
     if (vertices == NULL) {
         return;
     }
     uintptr_t scrollDL = (uintptr_t)Gfx_TwoTexScrollEx(
-        play->state.gfxCtx, 0, 0xFF - ((u8)(s32)(thunder->unk_1B4 * 30) & 0xFF), 0, 0x40, 0x20, 1,
-        0xFF - ((u8)(s32)(thunder->unk_1B4 * 20) & 0xFF), 0, 8, 8, -30, 0, -20, 0);
+        play->state.gfxCtx, 0, 0xFF - ((u8)(s32)(thunder->spinTrailTexScroll * 30) & 0xFF), 0, 0x40, 0x20, 1,
+        0xFF - ((u8)(s32)(thunder->spinTrailTexScroll * 20) & 0xFF), 0, 8, 8, -30, 0, -20, 0);
     Gfx* ringWall = (Gfx*)(isGreat ? gSpinAttack3DL : gSpinAttack1DL);
     Gfx* ringRim = (Gfx*)(isGreat ? gSpinAttack4DL : gSpinAttack2DL);
 
@@ -2131,7 +2131,7 @@ static void ExitGerudo(PlayState* play, Player* player) {
     RestoreFuryLights(play);
     sRageMeter = 0;
     if (sIsOcarinaOut) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsOcarinaOut = false;
     }
     if (sIsDesertPromptShown) {
@@ -2205,6 +2205,11 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
 
 GetItemEntry ItemTable_RetrieveEntry(s16 modIndex, s16 getItemID);
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GERUDO_MASK_KEY, GERUDO_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(GERUDO_MASK_KEY, sIconTex, sNameTex);
 
@@ -2222,6 +2227,7 @@ static void RegisterMask(void) {
                                  "%y\x9F%w: sprint  %y\xA3%w+%y\xA0%w: Urbosa's Fury");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

@@ -161,7 +161,7 @@ void Player_AnimPlayLoop(PlayState* play, Player* player, LinkAnimationHeader* a
 LinkAnimationHeader* Player_GetIdleAnim(Player* player);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -281,8 +281,8 @@ static void DestroySwingCamera(PlayState* play) {
     if (sCameraId == SUBCAM_FREE) {
         return;
     }
-    Camera_ChangeMode(Play_GetCamera(play, MAIN_CAM), CAM_MODE_NORMAL);
-    Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+    Camera_RequestMode(Play_GetCamera(play, CAM_ID_MAIN), CAM_MODE_NORMAL);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
     Play_ClearCamera(play, sCameraId);
     sCameraId = SUBCAM_FREE;
 }
@@ -292,7 +292,7 @@ static void CreateSwingCamera(PlayState* play) {
         return;
     }
     sCameraId = Play_CreateSubCamera(play);
-    Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
     Play_ChangeCameraStatus(play, sCameraId, CAM_STAT_ACTIVE);
     sCameraYaw = sSwingYaw;
 }
@@ -555,7 +555,7 @@ static void UpdatePulling(Player* player) {
     sPulledEnemy->world.pos.y += (destination.y - sPulledEnemy->world.pos.y) * step;
     sPulledEnemy->world.pos.z += (destination.z - sPulledEnemy->world.pos.z) * step;
     sPulledEnemy->speedXZ = 0.0f;
-    func_8002F974(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
 }
 
 static void UpdateRetracting(Player* player) {
@@ -573,7 +573,7 @@ static void UpdateRetracting(Player* player) {
     sTipPos.x += (hand->x - sTipPos.x) * step;
     sTipPos.y += (hand->y - sTipPos.y) * step;
     sTipPos.z += (hand->z - sTipPos.z) * step;
-    func_8002F974(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
 }
 
 static void AnimateArm(Player* player, PlayState* play) {
@@ -1074,6 +1074,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, WHIP_KEY, WHIP_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1103,6 +1108,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     whip.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     whip.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&whip, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &whip)) {
         return;
     }

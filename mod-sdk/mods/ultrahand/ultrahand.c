@@ -1271,7 +1271,7 @@ static void Pacci_UltrahandBeginDrop(void) {
     if (sUltrahand.traits &
         (PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_LOCKED)) {
         Pacci_UltrahandLetGo();
-        Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
@@ -1307,7 +1307,7 @@ static void Pacci_UltrahandBeginDrop(void) {
         actor->velocity.y *= scale;
         actor->velocity.z *= scale;
     }
-    Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -1596,7 +1596,7 @@ u8 Pacci_CastUltrahand(PlayState* play, Player* player) {
 
     if (Pacci_BackRiderActive()) {
         Pacci_BackRiderDrop();
-        Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return 1;
     }
@@ -2429,7 +2429,7 @@ u8 Pacci_FuseTryAttach(PlayState* play) {
     sFusePv.valid = 0;
     sFusePv.target = NULL;
 
-    Audio_PlaySoundGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     return 1;
 }
@@ -2468,7 +2468,7 @@ void Pacci_FuseWiggleDetach(PlayState* play, Player* player, Input* input) {
     if (!Pacci_FuseDetachPart(Pacci_ResolveUltrahandTarget(play, player))) {
         Pacci_FuseRelease();
     }
-    Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -2487,7 +2487,7 @@ void Pacci_FuseHoldDetach(PlayState* play, Player* player, u8 rHeld) {
     if (!Pacci_FuseDetachPart(Pacci_ResolveUltrahandTarget(play, player))) {
         Pacci_FuseRelease();
     }
-    Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3358,7 +3358,7 @@ static void Pacci_UhHeightInput(Actor* actor, u8 edge) {
     // Clamped to something the spout can actually be. It smooth-steps currentHeight toward this,
     // so the growing and shrinking is its own animation and not a jump.
     spout->targetHeight = CLAMP(spout->targetHeight, 0.0f, PACCI_UH_HEIGHT_MAX);
-    Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3393,7 +3393,7 @@ static void Pacci_UhLockedInput(PlayState* play, u8 edge) {
     } else {
         Flags_UnsetSwitch(play, flag);
     }
-    Audio_PlaySoundGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3446,7 +3446,7 @@ static void Pacci_UhFlagTick(PlayState* play, Actor* actor) {
     } else {
         Flags_UnsetSwitch(play, flag);
     }
-    Audio_PlaySoundGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3684,7 +3684,7 @@ u8 Pacci_BlueprintStored(void) {
 }
 
 static void Pacci_BlueprintDeny(void) {
-    Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3751,7 +3751,7 @@ u8 Pacci_BlueprintSave(PlayState* play) {
     sBlueprint.used = 1;
     sBlueprint.count = n;
     sBlueprint.scene = play->sceneNum;
-    Audio_PlaySoundGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     return 1;
 }
@@ -3836,7 +3836,7 @@ void Pacci_UltrahandModeEnter(PlayState* play, Player* player) {
     sUhMode.prevDpad = 0;
     sUhMode.summonHold = 0;
     sUhHighlightTarget = NULL;
-    Audio_PlaySoundGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -3852,7 +3852,7 @@ void Pacci_UltrahandModeExit(PlayState* play) {
     sUhMode.prevDpad = 0;
     sUhMode.summonHold = 0;
     sUhHighlightTarget = NULL;
-    Audio_PlaySoundGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -4013,7 +4013,7 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
         }
         // Only the snapped rotations click; a continuous move would machine-gun it.
         if (withL && (edge & 15)) {
-            Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+            Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                    &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         }
     }
@@ -4022,7 +4022,7 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
     // TotK's ZL. Untangling a piece you have over-rotated is otherwise seven more presses.
     if (Pacci_IsHoldingUltrahand() && CHECK_BTN_ALL(input->press.button, BTN_Z)) {
         sUltrahand.baseRot = sUltrahand.grabRot;
-        Audio_PlaySoundGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }
 

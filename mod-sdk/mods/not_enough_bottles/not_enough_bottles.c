@@ -704,6 +704,14 @@ static void DrawBottomlessCount(PlayState* play) {
     }
 }
 
+// Each bottle tool is shuffled once by the randomizer; no vanilla logic needs them.
+static const SOHCustomItemRandomizer sNetRandomizer = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, NEB_NET_KEY, NEB_NET_KEY, "",
+};
+static const SOHCustomItemRandomizer sBottomlessRandomizer = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, NEB_BOTTOMLESS_KEY, NEB_BOTTOMLESS_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -724,6 +732,7 @@ static bool RegisterNet(void) {
     Z64Items_SetAction(&net, TakeOutNet, SwingNet);
     Z64Items_SetHeldModel(&net, sNetDL, PLAYER_MODELGROUP_DEFAULT);
     net.getItemEntry.drawFunc = DrawNetGetItem;
+    Z64Items_SetLogic(&net, &sNetRandomizer);
     return Z64Items_Register(sApi, &net);
 }
 
@@ -739,6 +748,7 @@ static bool RegisterBottomless(void) {
                         "it lasts for&several uses: the number on its&button counts them down.");
     Z64Items_SetPauseText(&bottomless, "%rBottomless Bottle&%wIt holds one content for several&uses. The number "
                                        "counts them down.");
+    Z64Items_SetLogic(&bottomless, &sBottomlessRandomizer);
     return Z64Items_Register(sApi, &bottomless);
 }
 
@@ -754,6 +764,10 @@ static bool RegisterExtraBottle(int8_t bottle) {
     extra.getItemEntry.textId = 0;
     Z64Items_SetTextbox(&extra, "You got an %rEmpty Bottle%w!&You can put something in this&bottle.");
     Z64Items_SetPauseText(&extra, "%rBottle&%wWhatever it holds, %y\xA1%w uses it&like any other bottle.");
+    const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, sBottleKeys[bottle], sBottleKeys[bottle], "",
+    };
+    Z64Items_SetLogic(&extra, &randomizer);
     return Z64Items_Register(sApi, &extra);
 }
 

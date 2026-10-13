@@ -600,7 +600,7 @@ static void TickUpdraft(PlayState* play, bool isHolding, f32 fill) {
     sUpdraft.cone.color.a = (u8)(WIND_ALPHA * sUpdraft.fade);
     sUpdraft.cone.spin += WIND_SPIN;
     sUpdraft.cone.scrollT = (s16)((sUpdraft.cone.scrollT + WIND_SCROLL) % (TORNADO_TEX_HEIGHT * 4));
-    Audio_PlaySoundGeneral(WIND_LOOP_SFX, &sUpdraft.cone.origin, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(WIND_LOOP_SFX, &sUpdraft.cone.origin, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     FeedRibbons(play);
     OrbitMotes(isBursting);
@@ -665,7 +665,7 @@ static void TakeOff(PlayState* play, Player* player, u8 move) {
     StartMove(play, player, move);
     player->actor.bgCheckFlags &= ~BG_ON_GROUND;
     KeepAirborne(player);
-    Camera_ChangeMode(GET_ACTIVE_CAM(play), CAM_MODE_JUMP);
+    Camera_RequestMode(GET_ACTIVE_CAM(play), CAM_MODE_JUMP);
     sGlideYaw = player->actor.shape.rot.y;
 }
 
@@ -1584,7 +1584,7 @@ static void UpdateHarp(PlayState* play, Player* player) {
         sIsOcarinaOut = true;
     } else if (!isSessionOpen) {
         if (sIsOcarinaOut) {
-            Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+            AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         }
         sIsOcarinaOut = false;
         sHarpPhase = HARP_IDLE;
@@ -1600,7 +1600,7 @@ static void UpdateHarp(PlayState* play, Player* player) {
     if (isSessionOpen) {
         // Re-applied every frame: the message system sets the instrument again around opening, and the last
         // write wins.
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_HARP);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_HARP);
     }
     // A raise that ended hands over to the plucking even before an actor opens the session it was played for.
     if (isSessionOpen || sHarpPhase == HARP_RAISING) {
@@ -1765,7 +1765,7 @@ static void ExitRito(PlayState* play, Player* player) {
 
     ResetState(play);
     if (sIsOcarinaOut) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsOcarinaOut = false;
     }
     player->actor.gravity = JUMP_GRAVITY;
@@ -1905,6 +1905,11 @@ static void WearMask(PlayState* play, Player* player) {
     sApi->ToggleForm(RITO_FORM_KEY);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, RITO_MASK_KEY, RITO_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(RITO_MASK_KEY, sIconTex, sNameTex);
 
@@ -1918,6 +1923,7 @@ static void RegisterMask(void) {
                                  "%y\x9F%w in the air: glide&%y\xA0%w: bow, tap for a seed  %y\xA3%w: shield");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

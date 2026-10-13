@@ -111,7 +111,6 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
                                               "OnActorDrawEnd",
                                               "OnSceneInit",
                                               "OnPlayerPostLimbDraw",
-                                              "OnResolveCustomGetItem",
                                               "OnPlayDrawEnd",
                                               "OnActorDraw",
                                               "OnActorResolveGrayscale",
@@ -121,7 +120,7 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// One item and one slot, found four times over: every copy is the same tablet, and what it hands over is a rune.
+// One item and one slot, found four times over: each rune pickup copies this with its own key.
 static const SOHCustomItemRandomizer sSlateLogic = {
     sizeof(SOHCustomItemRandomizer),
     SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT | SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
@@ -138,9 +137,7 @@ static bool sIsSlateDrawn;
 static MtxF sHandMatrix;
 static bool sHasHandMatrix;
 static s16 sWheelHoldTimer;
-static u8 sPendingRune;
 static u8 sShownRune = SLATE_RUNE_COUNT;
-static char sPickupText[SLATE_TEXT_LENGTH];
 static char sPauseText[SLATE_TEXT_LENGTH];
 static Actor* sRemoteBomb;
 static u32 sCastFrame;
@@ -152,7 +149,7 @@ void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCt
                                 ColliderInfo* info);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 // Which rune the tablet wears, and which ones Link has found at all, both live in the wheel, and the wheel
@@ -165,37 +162,6 @@ static u8 CurrentRune(void) {
 
 static bool IsRuneOwned(u8 rune) {
     return rune != SLATE_RUNE_NONE && Z64Wheel_IsEntryUnlocked(rune);
-}
-
-static u8 CountLockedRunes(void) {
-    u8 locked = 0;
-
-    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
-        locked += IsRuneOwned(rune) ? 0 : 1;
-    }
-    return locked;
-}
-
-// Whichever one turns up: each pickup teaches a rune the slate is missing, so the four of them add up to the
-// whole tablet however the seed spreads them out.
-static u8 PickMissingRune(void) {
-    u8 locked = CountLockedRunes();
-
-    if (locked == 0) {
-        return SLATE_RUNE_NONE;
-    }
-    u8 wanted = (u8)(Rand_ZeroOne() * locked);
-
-    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
-        if (IsRuneOwned(rune)) {
-            continue;
-        }
-        if (wanted == 0) {
-            return rune;
-        }
-        wanted--;
-    }
-    return SLATE_RUNE_NONE;
 }
 
 // Locked runes are not offered: the tablet turns through what it has learned, plus the blank.
@@ -244,54 +210,68 @@ static void DescribeRune(u8 rune) {
     sShownRune = rune;
 }
 
-// The pickup is one item every time; what changes is the rune it wakes, so the textbox that announces it has to
-// be written before it opens.
-static void AnnounceRune(u8 rune, bool isFirstSlate) {
-    const SlateRuneText* text = &sRuneTexts[rune];
-
-    if (rune == SLATE_RUNE_NONE) {
-        snprintf(
-            sPickupText, sizeof(sPickupText),
-            "You got the %%rSheikah Slate%%w!&An ancient tablet of the Sheikah,&and every rune it holds is awake.");
-    } else if (isFirstSlate) {
-        snprintf(sPickupText, sizeof(sPickupText),
-                 "You got the %%rSheikah Slate%%w!&An ancient tablet of the Sheikah, and&the %s rune wakes on its "
-                 "face.^%s^%s Hold %%y\xA2%%w for the rune wheel.",
-                 text->name, text->loreLine, text->castLine);
-    } else {
-        snprintf(sPickupText, sizeof(sPickupText),
-                 "Your %%rSheikah Slate%%w learned the&%s rune!^%s^%s Hold %%y\xA2%%w for the rune wheel.", text->name,
-                 text->loreLine, text->castLine);
-    }
-    Z64Items_UpdateText(sApi, SLATE_KEY, SOH_ITEM_TEXT_GET_ITEM, sPickupText);
-}
-
-/**
- * Runs while Link is still reaching for the item, and runs again every frame he stays in range, so the rune is
- * drawn once and kept: the textbox opens before the item is ever received (z_player.c, func_8084DFF4).
- */
-static void ResolvePickup(Actor* actor, PlayState* play, GetItemEntry* entry, const char** key) {
-    if (key == NULL || *key == NULL || strcmp(*key, SLATE_KEY) != 0) {
-        return;
-    }
-    if (IsRuneOwned(sPendingRune)) {
-        sPendingRune = SLATE_RUNE_NONE;
-    }
-    if (sPendingRune != SLATE_RUNE_NONE) {
-        return;
-    }
-    sPendingRune = PickMissingRune();
-    AnnounceRune(sPendingRune, !sApi->IsCustomItemOwned(SLATE_KEY));
-}
+// Each rune is its own pickup variant of the tablet, so the seed places and the logic tracks them one by one.
+static const char* const sPickupKeys[SLATE_RUNE_COUNT] = {
+    "", "nei.slate.bomb", "nei.slate.stasis", "nei.slate.cryonis", "nei.slate.master_cycle",
+};
+static const char* const sVariantNames[SLATE_RUNE_COUNT] = { "", "bomb", "stasis", "cryonis", "master_cycle" };
+static const u8 sRuneFlameColors[SLATE_RUNE_COUNT][3] = {
+    { 0, 0, 0 }, { 100, 235, 220 }, { 255, 220, 40 }, { 175, 205, 220 }, { 255, 135, 35 },
+};
 
 // The rune the textbox just named. Taking it also makes it the live one, so the tablet comes out wearing it.
-static void GrantRune(const char* key) {
-    if (sPendingRune == SLATE_RUNE_NONE) {
-        return;
+static void ReceiveSlateRune(const char* itemKey, const char* variantKey) {
+    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
+        if (strcmp(variantKey, sVariantNames[rune]) == 0) {
+            Z64Wheel_SetEntryUnlocked(rune, true);
+            Z64Wheel_SetSelection(rune);
+            DescribeRune(rune);
+            return;
+        }
     }
-    Z64Wheel_SetEntryUnlocked(sPendingRune, true);
-    Z64Wheel_SetSelection(sPendingRune);
-    sPendingRune = SLATE_RUNE_NONE;
+}
+
+// The tablet itself, given outside its variants (vanilla placement, the console), comes with every rune.
+static void GrantAllRunes(const char* key) {
+    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
+        Z64Wheel_SetEntryUnlocked(rune, true);
+    }
+}
+
+// A rune received while another save was loaded, or before the wheel existed, still unlocks on the next frame.
+static void SyncReceivedRunes(void) {
+    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
+        if (sApi->IsCustomItemOwned(sPickupKeys[rune])) {
+            Z64Wheel_SetEntryUnlocked(rune, true);
+        }
+    }
+}
+
+static bool RegisterRunePickups(void) {
+    for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
+        SOHCustomPickupVariant pickup = Z64Items_DefinePickup(SLATE_KEY, sVariantNames[rune], sPickupKeys[rune]);
+        SOHCustomItemRandomizer logic = sSlateLogic;
+        char text[SLATE_TEXT_LENGTH];
+
+        snprintf(text, sizeof(text), "You unlocked %s for the %%rSheikah Slate%%w!^%s^%s Hold %%y\xA2%%w for the "
+                 "rune wheel.", sRuneTexts[rune].name, sRuneTexts[rune].loreLine, sRuneTexts[rune].castLine);
+        logic.flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
+        logic.poolCount = 1;
+        logic.logicKey = sPickupKeys[rune];
+        logic.hintKey = sPickupKeys[rune];
+        pickup.iconPath = sWheelEntries[rune].itemIconPath;
+        pickup.getItemText = text;
+        pickup.onReceive = ReceiveSlateRune;
+        pickup.randomizer = &logic;
+        pickup.drawSoulFlame = true;
+        pickup.flameRed = sRuneFlameColors[rune][0];
+        pickup.flameGreen = sRuneFlameColors[rune][1];
+        pickup.flameBlue = sRuneFlameColors[rune][2];
+        if (!Z64Items_RegisterPickup(sApi, &pickup)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 // ── Remote Bomb ──────────────────────────────────────────────────────────────
@@ -3179,7 +3159,11 @@ static void RunSlate(void) {
     PlayState* play = gPlayState;
     Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
 
-    if (play == NULL || player == NULL || !sApi->IsCustomItemOwned(SLATE_KEY)) {
+    if (play == NULL || player == NULL) {
+        return;
+    }
+    SyncReceivedRunes();
+    if (!sApi->IsCustomItemOwned(SLATE_KEY)) {
         return;
     }
     DescribeRune(CurrentRune());
@@ -3390,17 +3374,22 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetHeldCallbacks(&slate, CastRune, StowSlate, NULL);
     slate.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     slate.getItemEntry.drawFunc = DrawGetItem;
-    slate.onReceive = GrantRune;
-    Z64Items_SetLogic(&slate, &sSlateLogic);
+    slate.onReceive = GrantAllRunes;
+    // The seed places the runes, never the bare tablet; logic asking for the tablet is met by any rune.
+    SOHCustomItemRandomizer slateLogic = sSlateLogic;
+    slateLogic.poolCount = 0;
+    Z64Items_SetLogic(&slate, &slateLogic);
 
     if (!Z64Items_Register(sApi, &slate)) {
         return;
     }
     Z64Wheel_Register(sApi, SLATE_KEY, SLATE_KEY, sWheelEntries, ARRAY_COUNT(sWheelEntries), true);
+    if (!RegisterRunePickups()) {
+        return;
+    }
     sApi->RegisterVB(VB_THROW_OR_PUT_DOWN_HELD_ITEM, HoldOntoRemoteBomb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, RunSlate);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetRunes);
-    SOH_REGISTER_HOOK(sApi, OnResolveCustomGetItem, ResolvePickup);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureHandMatrix);
     SOH_REGISTER_HOOK(sApi, OnBgCheckResolveWallFlags, ResolveRuneWallFlags);
     SOH_REGISTER_HOOK(sApi, OnActorResolveGrayscale, TintFrozenBody);

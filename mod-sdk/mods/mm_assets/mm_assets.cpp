@@ -1,15 +1,21 @@
-// Los recursos de Majora's Mask para Unbound. Al arrancar, si ningún archivo cargado los trae, pide la ROM
-// y la extrae entera con el ZAPD que ya va dentro del exe, el mismo que saca oot.o2r. El mod solo pone lo
-// que a ZAPD le falta: el árbol de XML que describe la ROM, que viaja dentro de su propio .o2r. Leer la ROM,
-// escribir mm.o2r y reiniciar lo hace el juego, que se lo pregunta antes al jugador.
+// Los recursos de Majora's Mask para Unbound. Si ningún archivo cargado los trae, pide la ROM y la extrae
+// entera con el ZAPD que lleva dentro, que nunca toca el disco: la ROM y el árbol de XML de su propio .o2r
+// van a memoria, y el mm.o2r resultante lo guarda el juego en mods/ tras preguntárselo al jugador.
 #include "soh/ModApi/ModApi.h"
 #include "sfx/mm_sfx_service.h"
+#include "Utils/VirtualFileSystem.h"
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
+#include <exception>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
+
+extern "C" int zapd_report(int argc, char* argv[], std::atomic<size_t>* extractCount,
+                           std::atomic<size_t>* totalExtract);
 
 // An archive extracted before the icons were is missing them, so it has to prove it has both kinds.
 static const char* const kMarkerResources[] = {
@@ -18,9 +24,9 @@ static const char* const kMarkerResources[] = {
 };
 #define INSTALLED_ARCHIVE_NAME "mm.o2r"
 #define DIALOG_TITLE "Majora's Mask assets"
-// Los XML que el mod trae dentro; el juego los deja en disco bajo ZAPD_ASSET_ROOT para que ZAPD los lea.
 #define ZAPD_ASSET_MASK "mm_zapd/*"
-#define ZAPD_ASSET_ROOT "mm_zapd"
+#define ZAPD_ASSET_PREFIX "mm_zapd/"
+#define ZAPD_ROM_PATH "rom.z64"
 
 // Palabra 4 de la cabecera de la ROM: la que distingue las versiones que ZAPD sabe leer.
 #define MM_VERSION_US_10 0x5354631C
@@ -211,33 +217,87 @@ bool HasExtractedAssets() {
     return true;
 }
 
-// El juego deja los XML en disco, escribe la ROM, corre ZAPD y pone mm.o2r en mods/ (al lado, si el viejo
-// está montado, y lo cambia al siguiente arranque).
+bool PutZapdAsset(const char* path, const uint8_t* data, uint64_t size, void* userData) {
+    const std::string archivePath(path);
+    if (archivePath.rfind(ZAPD_ASSET_PREFIX, 0) == 0) {
+        VirtualFileSystem::Put(archivePath.substr(strlen(ZAPD_ASSET_PREFIX)), std::vector<uint8_t>(data, data + size));
+    }
+    return true;
+}
+
+// portVersion is [endianness u8, 1 = big][major u16][minor u16][patch u16].
+bool ReadPortVersion(const char* path, const uint8_t* data, uint64_t size, void* userData) {
+    if (size < 7) {
+        return false;
+    }
+    const bool isBigEndian = data[0] == 1;
+    auto readU16 = [&](size_t at) {
+        return isBigEndian ? (data[at] << 8) | data[at + 1] : data[at] | (data[at + 1] << 8);
+    };
+    *static_cast<std::string*>(userData) =
+        std::to_string(readU16(1)) + "." + std::to_string(readU16(3)) + "." + std::to_string(readU16(5));
+    return false;
+}
+
+// The game's version, stamped the way its own extractor stamps oot.o2r: the mounted portVersion file.
+std::string ReadGameVersion() {
+    std::string version = "0.0.0";
+    sApi->ReadArchiveFiles("portVersion", ReadPortVersion, &version);
+    return version;
+}
+
+// ZAPD reports a malformed ROM or XML by throwing, which must not cross into the game.
+bool RunZapd(const RomLayout& layout) {
+    const std::string xmlDirectory = std::string("assets/xml/") + layout.xmlVersion;
+    const std::string configPath = std::string("assets/Config_") + layout.xmlVersion + ".xml";
+    const std::string portVersion = ReadGameVersion();
+    const char* argv[] = {
+        "ZAPD",      "ed",
+        "-i",        xmlDirectory.c_str(),
+        "-b",        ZAPD_ROM_PATH,
+        "-fl",       "assets/filelists",
+        "-gsf",      "0",
+        "-rconf",    configPath.c_str(),
+        "-se",       "OTR",
+        "--otrfile", INSTALLED_ARCHIVE_NAME,
+        "--portVer", portVersion.c_str(),
+        "-o",        "placeholder",
+        "-osf",      "placeholder",
+    };
+    try {
+        return zapd_report(static_cast<int>(std::size(argv)), const_cast<char**>(argv), nullptr, nullptr) == 0;
+    } catch (const std::exception& exception) {
+        sApi->Log((std::string("mm_assets: ZAPD stopped: ") + exception.what()).c_str());
+    } catch (...) { sApi->Log("mm_assets: ZAPD stopped"); }
+    return false;
+}
+
 bool BuildArchiveFromRom(std::vector<uint8_t>& rom, const RomLayout& layout) {
     if (!UnpackYarArchives(rom, layout)) {
         sApi->TellPlayer(DIALOG_TITLE, "Could not unpack the icon archives of that ROM.");
         return false;
     }
 
-    const std::string xmlDirectory = std::string("assets/xml/") + layout.xmlVersion;
-    const std::string configPath = std::string("assets/Config_") + layout.xmlVersion + ".xml";
-    SOHRomExtractRequest request = {};
+    VirtualFileSystem::Clear();
+    if (sApi->ReadArchiveFiles(ZAPD_ASSET_MASK, PutZapdAsset, nullptr) == 0) {
+        sApi->Log("mm_assets: its own archive holds no ZAPD description of the ROM");
+        return false;
+    }
+    VirtualFileSystem::Put(ZAPD_ROM_PATH, std::move(rom));
+    const bool extracted = RunZapd(layout);
+    const std::vector<uint8_t> archive = VirtualFileSystem::Take(INSTALLED_ARCHIVE_NAME);
+    VirtualFileSystem::Clear();
 
-    request.structSize = sizeof(request);
-    request.rom = rom.data();
-    request.romSize = rom.size();
-    request.zapdAssetMask = ZAPD_ASSET_MASK;
-    request.zapdAssetRoot = ZAPD_ASSET_ROOT;
-    request.xmlDir = xmlDirectory.c_str();
-    request.configPath = configPath.c_str();
-    request.filelistDir = "assets/filelists";
-    request.outputFileName = INSTALLED_ARCHIVE_NAME;
-    return sApi->ExtractRomToModsFolder(&request);
+    if (!extracted || archive.empty()) {
+        return false;
+    }
+    return sApi->SaveToModsFolder(INSTALLED_ARCHIVE_NAME, archive.data(), archive.size());
 }
 
 void ExtractFromRom() {
     if (!sApi->AskPlayer(DIALOG_TITLE, "Some installed mods need assets from Majora's Mask, and they are not here "
-                                       "yet.\n\nRead them out of your Majora's Mask ROM now?")) {
+                                       "yet.\n\nRead them out of your Majora's Mask ROM now? It takes a few "
+                                       "minutes, and the game looks frozen while it runs.")) {
         return;
     }
 
@@ -259,7 +319,7 @@ void ExtractFromRom() {
         sApi->TellPlayer(DIALOG_TITLE, INSTALLED_ARCHIVE_NAME " was not created. The log says why.");
         return;
     }
-    sApi->RequestRestart(INSTALLED_ARCHIVE_NAME " is ready, and the mods waiting for it load after a restart");
+    sApi->RequestRestart(INSTALLED_ARCHIVE_NAME " is ready, and the mods waiting for it load on the next start");
 }
 
 } // namespace
@@ -273,7 +333,7 @@ extern "C" SOH_MOD_EXPORT void ModInit(void) {
     if (HasExtractedAssets()) {
         return;
     }
-    if (!SOH_MOD_API_HAS(sApi, RequestRestart)) {
+    if (!SOH_MOD_API_HAS(sApi, ReadArchiveFiles)) {
         sApi->Log("mm_assets: this Unbound is too old to extract Majora's Mask assets");
         return;
     }

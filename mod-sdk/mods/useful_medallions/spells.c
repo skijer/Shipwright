@@ -43,7 +43,7 @@ void Player_ProcessAnimSfxList(Player* player, SpellAnimSfx* entry);
 s32 Player_DecelerateToZero(Player* player);
 s32 func_808332B8(Player* player);
 void func_80832224(Player* player);
-void func_80835EA4(PlayState* play, s32 cameraArg);
+void Player_SetTurnAroundCamera(PlayState* play, s32 cameraArg);
 void func_80839FFC(Player* player, PlayState* play);
 
 static const ALIGN_ASSET(2) char sTameAnim[] = GAMEPLAY_KEEP_ANIM("gPlayerAnim_link_magic_tame");
@@ -186,9 +186,9 @@ static void StartCast(PlayState* play, Player* player, Sw97Spell spell) {
     Magic_RequestChange(play, sSpellCosts[spell], MAGIC_CONSUME_WAIT_PREVIEW);
     PlayCastAnim(play, player, sTameAnim, isFast);
     if (!isFast && spell == SW97_SPELL_FIRE) {
-        player->subCamId = OnePointCutscene_Init(play, 1100, -101, NULL, MAIN_CAM);
+        player->subCamId = OnePointCutscene_Init(play, 1100, -101, NULL, CAM_ID_MAIN);
     } else if (!isFast) {
-        func_80835EA4(play, 10);
+        Player_SetTurnAroundCamera(play, 10);
     }
     func_80832224(player);
 }

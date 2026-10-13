@@ -163,11 +163,11 @@ void Sw97_MagicDark_DiamondUpdate(Actor* thisx, PlayState* play) {
 
     if (nayrusLoveTimer < 1100) {
         Sw97_MagicDark_DimLighting(play, 1.0f);
-        Audio_PlaySoundGeneral(NA_SE_EV_FANTOM_WARP_L - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_EV_FANTOM_WARP_L - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     } else {
         Sw97_MagicDark_DimLighting(play, -0.0075f * (-1199.0f + nayrusLoveTimer));
-        Audio_PlaySoundGeneral(NA_SE_EV_FANTOM_WARP_S - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_EV_FANTOM_WARP_S - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }
 }

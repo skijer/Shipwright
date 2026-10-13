@@ -66,7 +66,7 @@ static bool IsShieldInHand(Player* player) {
 }
 
 static void PlaySfx(Player* player, u16 sfxId) {
-    Audio_PlaySoundGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -151,7 +151,7 @@ static void SaveFromDeath(int16_t amount) {
     play->envCtx.screenFillColor[2] = 120;
     play->envCtx.screenFillColor[3] = 200;
     sIkana.flashTimer = REVIVE_FLASH_FRAMES;
-    Audio_PlaySoundGeneral(NA_SE_EN_FANTOM_LAUGH, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_EN_FANTOM_LAUGH, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 

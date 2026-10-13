@@ -104,7 +104,7 @@ void func_80839FFC(Player* player, PlayState* play);
 static void SwingAction(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u16 FindEquippedButtonMask(void) {
@@ -351,7 +351,7 @@ static void UpdateGlide(Player* player, PlayState* play) {
         Math_StepToF(&player->linearVelocity, DEKU_LEAF_GLIDE_SPEED, DEKU_LEAF_GLIDE_ACCEL);
     }
     // The rustle of the bean plant's own leaf, asked for every frame the way that plant asks for it.
-    func_8002F974(&player->actor, NA_SE_PL_PLANT_MOVE - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_PLANT_MOVE - SFX_FLAG);
 }
 
 static bool WasJustHurt(Player* player) {
@@ -479,6 +479,11 @@ static void DropGlideOnSceneChange(int16_t sceneNum) {
     sPreviousInvincibility = 0;
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEKU_LEAF_KEY, DEKU_LEAF_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -508,6 +513,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     leaf.flags |= SOH_CUSTOM_ITEM_INSTANT;
     leaf.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&leaf, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &leaf)) {
         return;
     }

@@ -37,7 +37,7 @@ static bool sIsArmed;
 static TrackedArrow sTrackedArrows[BOMB_ARROWS_TRACKED];
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -87,7 +87,7 @@ static void SparkAlongArrow(Actor* arrow, PlayState* play) {
     }
     EffectSsGSpk_SpawnAccel(play, arrow, &arrow->world.pos, &zero, &zero, &prim, &env, BOMB_ARROWS_SPARK_SCALE,
                             BOMB_ARROWS_SPARK_STEP);
-    func_8002F974(arrow, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
+    Actor_PlaySfx_Flagged(arrow, NA_SE_IT_BOMB_IGNIT - SFX_FLAG);
 }
 
 static bool HasArrowLanded(EnArrow* arrow) {
@@ -158,6 +158,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BOMB_ARROWS_KEY, BOMB_ARROWS_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -185,6 +190,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     arrows.flags |= SOH_CUSTOM_ITEM_INSTANT;
     arrows.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&arrows, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &arrows)) {
         return;
     }

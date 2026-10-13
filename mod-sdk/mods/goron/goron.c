@@ -357,7 +357,7 @@ static void PlayMmSfx(u16 mmSfx, u16 fallback, Vec3f* pos) {
     MmSfxPlayFunc play = GetMmSfxPlayer();
 
     if (play == NULL || !play(mmSfx, pos)) {
-        Audio_PlaySoundGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultReverb);
     }
 }
@@ -1252,7 +1252,7 @@ static void GoronRollAction(Player* player, PlayState* play) {
     // the fall, the running jump or the ledge grab (MM's restricted handler list never lets that happen).
     player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
     if (player->actor.floorPoly != NULL &&
-        SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
+        SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
         player->pushedSpeed = 0.0f;
     }
     if (sMove != GORON_MOVE_ROLL) {
@@ -1821,6 +1821,11 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GORON_MASK_KEY, GORON_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(GORON_MASK_KEY, sIconTex, sNameTex);
 
@@ -1839,6 +1844,7 @@ static void RegisterMask(void) {
                                  "roll  %y\xA0%w rolling: pound  Hold %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

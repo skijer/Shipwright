@@ -41,8 +41,8 @@ static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gIt
 static const ALIGN_ASSET(2) char sName[] = "__OTR__textures/item_name_custom/gPegasusBootsNameTex";
 
 void func_80853080(Player* player, PlayState* play);
-void func_8002F974(Actor* actor, u16 sfxId);
-void func_800AA000(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
+void Actor_PlaySfx_Flagged(Actor* actor, u16 sfxId);
+void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
 
 typedef enum {
     PEGASUS_IDLE,
@@ -128,7 +128,7 @@ static bool IsDashing(void) {
 }
 
 static void PlaySfx(Player* player, u16 sfxId) {
-    Audio_PlaySoundGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -260,7 +260,7 @@ static void Bonk(Player* player, PlayState* play) {
     player->linearVelocity = -player->linearVelocity;
     player->stateFlags1 &= ~PLAYER_STATE1_CHARGING_SPIN_ATTACK;
     Quake_Add(Play_GetCamera(play, 0), 3);
-    func_800AA000(255.0f, 20, 150, 0);
+    Rumble_Request(255.0f, 20, 150, 0);
     PlaySfx(player, NA_SE_PL_BODY_HIT);
     PlaySfx(player, NA_SE_VO_LI_CLIMB_END);
     sWindCollider.base.atFlags &= ~AT_ON;
@@ -318,7 +318,7 @@ static void UpdateRunning(Player* player, PlayState* play, Input* input) {
 
     PoseDash(player, play);
     PayForWind(player, play);
-    func_8002F974(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
     if (HitsObstacle(player, play)) {
         Bonk(player, play);
     }

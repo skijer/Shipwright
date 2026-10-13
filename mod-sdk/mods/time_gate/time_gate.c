@@ -54,7 +54,7 @@ void Player_ZeroSpeedXZ(Player* player);
 void func_80839FFC(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -134,7 +134,7 @@ static void BeginCasting(PlayState* play, Player* player) {
     Player_SetupAction(play, player, TimeGateAction, 0);
     Player_ZeroSpeedXZ(player);
     player->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
-    Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+    Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
     Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
     ResetGate();
     sPhase = TIME_GATE_CASTING;
@@ -200,7 +200,7 @@ static void HoldLastHoverFrames(Player* player) {
 
 static void TravelThroughTime(Player* player, PlayState* play) {
     SpendMagic(play);
-    func_800AA000(400.0f, 200, 30, 100);
+    Rumble_Request(400.0f, 200, 30, 100);
     PlaySfxAt(NA_SE_SY_WHITE_OUT_T, &player->actor.world.pos);
     ReleasePlayer(player, play);
     SwitchAge();
@@ -362,6 +362,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, TIME_GATE_KEY, TIME_GATE_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -388,6 +393,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     gate.flags |= SOH_CUSTOM_ITEM_INSTANT;
     gate.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&gate, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &gate)) {
         return;
     }

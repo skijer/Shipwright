@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 
 #include "soh/ResourceManagerHelpers.h"
 #include "z64items.h"
@@ -118,7 +119,7 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// One item and one slot, found four times over: the seed spreads the copies, and each one wakes a season.
+// One item and one slot, found four times over: each season pickup copies this with its own key.
 static const SOHCustomItemRandomizer sRodLogic = {
     sizeof(SOHCustomItemRandomizer),
     SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT | SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
@@ -136,7 +137,6 @@ static bool sIsTurningSeason;
 static bool sOwnsPrecipitation;
 static bool sOwnsRain;
 static bool sOwnsSky;
-static u8 sWokenSeason;
 static u8 sAppliedSeason;
 static MtxF sHandMatrix;
 static bool sHasHandMatrix;
@@ -147,7 +147,7 @@ void BgMizuWater_SetWaterBoxesHeight(WaterBox* waterBoxes, s32 height);
 static void ReloadSceneInPlace(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 // Which seasons Link carries, and which one the world is wearing, both live in the wheel, and the wheel
@@ -713,37 +713,6 @@ static void CloseRodHand(Player* player, int32_t limbIndex, Gfx** dList, Gfx* li
     *dList = (Gfx*)(LINK_IS_ADULT ? gLinkAdultRightHandClosedNearDL : gLinkChildRightHandClosedNearDL);
 }
 
-static u8 CountLockedSeasons(void) {
-    u8 locked = 0;
-
-    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
-        locked += IsSeasonOwned(season) ? 0 : 1;
-    }
-    return locked;
-}
-
-// Whichever one turns up: each pickup hands over a season Link is missing, so the four of them add up to
-// the whole year however the seed spreads them out.
-static u8 PickMissingSeason(void) {
-    u8 locked = CountLockedSeasons();
-
-    if (locked == 0) {
-        return SEASON_OFF;
-    }
-    u8 wanted = (u8)(Rand_ZeroOne() * locked);
-
-    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
-        if (IsSeasonOwned(season)) {
-            continue;
-        }
-        if (wanted == 0) {
-            return season;
-        }
-        wanted--;
-    }
-    return SEASON_OFF;
-}
-
 #define DEKU_FLOWER_KEY "nei.deku_flower"
 #define DEKU_FLOWER_LIMB_MAX 11
 #define DEKU_FLOWER_REST_SCALE 0.01f
@@ -1285,19 +1254,38 @@ static void RaiseSoftSoil(void* refActor) {
     }
 }
 
-static void GrantSeason(void) {
-    u8 season = PickMissingSeason();
+// Each season is its own pickup variant of the rod, so the seed places and the logic tracks them one by one.
+static const char* const sPickupKeys[SEASON_COUNT] = {
+    "", "nei.seasons.spring", "nei.seasons.summer", "nei.seasons.autumn", "nei.seasons.winter",
+};
+static const char* const sVariantNames[SEASON_COUNT] = { "", "spring", "summer", "autumn", "winter" };
+static const u8 sSeasonFlameColors[SEASON_COUNT][3] = {
+    { 0, 0, 0 }, { 40, 185, 55 }, { 255, 60, 50 }, { 225, 165, 0 }, { 0, 80, 180 },
+};
 
-    if (season == SEASON_OFF) {
-        return;
+static void ReceiveSeason(const char* itemKey, const char* variantKey) {
+    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
+        if (strcmp(variantKey, sVariantNames[season]) == 0) {
+            Z64Wheel_SetEntryUnlocked(season, true);
+            Z64Wheel_SetSelection(season);
+            return;
+        }
     }
-    Z64Wheel_SetEntryUnlocked(season, true);
-    sWokenSeason = season;
 }
 
-// Every copy of the rod in the pool is this same item: what a copy hands over is a season, not a second rod.
-static void WakeSeason(const char* key) {
-    GrantSeason();
+// The rod itself, given outside its variants (vanilla placement, the console), is woken to every season.
+static void WakeAllSeasons(const char* key) {
+    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
+        Z64Wheel_SetEntryUnlocked(season, true);
+    }
+}
+
+static void SyncReceivedSeasons(void) {
+    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
+        if (sApi->IsCustomItemOwned(sPickupKeys[season])) {
+            Z64Wheel_SetEntryUnlocked(season, true);
+        }
+    }
 }
 
 static const char* WakeMessage(u8 season) {
@@ -1315,16 +1303,28 @@ static const char* WakeMessage(u8 season) {
     }
 }
 
-// The pickup has its own textbox running, so the season it woke waits until Link has the screen back.
-static void AnnounceWokenSeason(PlayState* play) {
-    Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
+static bool RegisterSeasonPickups(void) {
+    for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
+        SOHCustomPickupVariant pickup = Z64Items_DefinePickup(SEASONS_KEY, sVariantNames[season], sPickupKeys[season]);
+        SOHCustomItemRandomizer logic = sRodLogic;
 
-    if (player == NULL || play->msgCtx.msgMode != MSGMODE_NONE ||
-        (player->stateFlags1 & (PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_IN_ITEM_CS))) {
-        return;
+        logic.flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
+        logic.poolCount = 1;
+        logic.logicKey = sPickupKeys[season];
+        logic.hintKey = sPickupKeys[season];
+        pickup.iconPath = sWheelEntries[season].itemIconPath;
+        pickup.getItemText = WakeMessage(season);
+        pickup.onReceive = ReceiveSeason;
+        pickup.randomizer = &logic;
+        pickup.drawSoulFlame = true;
+        pickup.flameRed = sSeasonFlameColors[season][0];
+        pickup.flameGreen = sSeasonFlameColors[season][1];
+        pickup.flameBlue = sSeasonFlameColors[season][2];
+        if (!Z64Items_RegisterPickup(sApi, &pickup)) {
+            return false;
+        }
     }
-    sApi->ShowTextbox(play, WakeMessage(sWokenSeason), false);
-    sWokenSeason = SEASON_OFF;
+    return true;
 }
 
 // The season is world state, not a spell: it keeps running whether or not the rod sits on a button.
@@ -1332,15 +1332,12 @@ static void KeepSeasonRunning(void) {
     PlayState* play = gPlayState;
     u8 season;
 
-    if (play == NULL || !sApi->IsCustomItemOwned(SEASONS_KEY)) {
+    if (play == NULL) {
         return;
     }
-    // Carrying the rod means carrying at least one season, whichever way it arrived.
-    if (CountLockedSeasons() == SEASON_COUNT - 1) {
-        GrantSeason();
-    }
-    if (sWokenSeason != SEASON_OFF) {
-        AnnounceWokenSeason(play);
+    SyncReceivedSeasons();
+    if (!sApi->IsCustomItemOwned(SEASONS_KEY)) {
+        return;
     }
     season = CurrentSeason();
     if (season != sAppliedSeason && !Z64Wheel_IsOpen()) {
@@ -1426,20 +1423,25 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetButtons(&rod, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&rod, 0, 23, 0);
     Z64Items_SetTextbox(&rod, "You got the %rRod of Seasons%w!&A staff the old spirits answer to.^Press %y\xA1%w to "
-                              "turn the world through&the seasons it has woken to, or hold&%y\xA2%w to pick one.^"
-                              "It wakes to one more season each&time you find it again.");
+                              "turn the world through&the seasons it has woken to, or hold&%y\xA2%w to pick one.");
     Z64Items_SetPauseText(&rod, "%rRod of Seasons&%wPress %y\xA1%w for the next season,&%y\xA2%w to pick one.");
     Z64Items_SetAction(&rod, TakeOutRod, HoldRod);
     Z64Items_SetHeldCallbacks(&rod, TurnSeason, StowRod, NULL);
     rod.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     rod.getItemEntry.drawFunc = DrawGetItem;
-    rod.onReceive = WakeSeason;
-    Z64Items_SetLogic(&rod, &sRodLogic);
+    rod.onReceive = WakeAllSeasons;
+    // The seed places the seasons, never the bare rod; logic asking for the rod is met by any season.
+    SOHCustomItemRandomizer rodLogic = sRodLogic;
+    rodLogic.poolCount = 0;
+    Z64Items_SetLogic(&rod, &rodLogic);
 
     if (!Z64Items_Register(sApi, &rod)) {
         return;
     }
     Z64Wheel_Register(sApi, SEASONS_KEY, SEASONS_KEY, sWheelEntries, ARRAY_COUNT(sWheelEntries), true);
+    if (!RegisterSeasonPickups()) {
+        return;
+    }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, KeepSeasonRunning);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, SyncSeasonOnSceneInit);
     SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, PaintGround);

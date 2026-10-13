@@ -271,7 +271,7 @@ static ColliderCylinderInit sShotCylinderInit = {
 };
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -506,7 +506,7 @@ static void UpdateClimb(PlayState* play, Player* player) {
     // Query the surface without our own permission, preserving the user's cheats and other mods.
     if (player->actor.wallPoly != NULL) {
         sReadingNaturalWall = true;
-        const bool freeSurface = (func_80041DB8(&play->colCtx, player->actor.wallPoly, player->actor.wallBgId) & 8) != 0;
+        const bool freeSurface = (SurfaceType_GetWallFlags(&play->colCtx, player->actor.wallPoly, player->actor.wallBgId) & 8) != 0;
         sReadingNaturalWall = false;
         if (freeSurface) {
             LendClimbEverything(false);
@@ -1608,18 +1608,18 @@ static void UpdateFluteVoice(PlayState* play, Player* player) {
         sIsFluteOut = true;
     } else if (!isSessionOpen) {
         if (sIsFluteOut) {
-            Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+            AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         }
         sIsFluteOut = false;
     }
     if (sIsFluteOut && isSessionOpen) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_FLUTE);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_FLUTE);
     }
 }
 
 static void PutFluteAway(void) {
     if (sIsFluteOut) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsFluteOut = false;
     }
 }
@@ -1718,6 +1718,11 @@ static void DrawKeatonGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, KEATON_MASK_KEY, KEATON_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(KEATON_MASK_KEY, sIconTex, sNameTex);
 
@@ -1740,6 +1745,7 @@ static void RegisterMask(void) {
     Z64Items_SetAction(&mask, WearMask, NULL);
     mask.onAcquire = GrantGuardReward;
 
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

@@ -285,7 +285,7 @@ static EnMThunder* FindSpinCharge(PlayState* play) {
     for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_ITEMACTION].head; actor != NULL; actor = actor->next) {
         EnMThunder* thunder = (EnMThunder*)actor;
 
-        if (actor->id == ACTOR_EN_M_THUNDER && thunder->unk_1C6 != THUNDER_SWORD_BEAM && thunder->unk_1C8 != 0) {
+        if (actor->id == ACTOR_EN_M_THUNDER && thunder->attackStrength != THUNDER_SWORD_BEAM && thunder->chargeAlpha != 0) {
             return thunder;
         }
     }
@@ -1046,7 +1046,7 @@ static void PushAnyBlock(bool* should, va_list args) {
 static void WidenTotemCamera(Camera* camera, Vec3f* eye, Vec3f* at, Vec3f* up) {
     PlayState* play = gPlayState;
 
-    if (play == NULL || camera != Play_GetCamera(play, MAIN_CAM) || !IsTotemCarried()) {
+    if (play == NULL || camera != Play_GetCamera(play, CAM_ID_MAIN) || !IsTotemCarried()) {
         return;
     }
     eye->x = at->x + (eye->x - at->x) * TOTEM_CAMERA_SCALE;
@@ -1074,7 +1074,7 @@ static void GlowOnClones(Actor* actor, PlayState* play) {
     Player* player = GET_PLAYER(play);
     MtxF linkHand;
 
-    if (!IsWorn() || thunder->unk_1C6 == THUNDER_SWORD_BEAM || thunder->unk_1C8 == 0 || thunder->unk_1B0 != 0.0f) {
+    if (!IsWorn() || thunder->attackStrength == THUNDER_SWORD_BEAM || thunder->chargeAlpha == 0 || thunder->spinAttackAlpha != 0.0f) {
         return;
     }
     linkHand = player->mf_9E0;

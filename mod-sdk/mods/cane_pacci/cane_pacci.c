@@ -206,7 +206,7 @@ void Player_ZeroSpeedXZ(Player* player);
 LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -1130,6 +1130,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, PACCI_KEY, PACCI_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1158,6 +1163,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetHeldModel(&cane, sCaneDL, PLAYER_MODELGROUP_DEFAULT);
     cane.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&cane, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &cane)) {
         return;
     }

@@ -26,7 +26,7 @@ static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gIt
 static const ALIGN_ASSET(2) char sName[] = "__OTR__textures/item_name_custom/gMagicTunicNameTex";
 
 void Player_SetIntangibility(Player* player, s32 timer);
-void func_800AA000(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
+void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
 
 static const SOHModApi* sApi;
 static s16 sDrainTimer;
@@ -87,7 +87,7 @@ static void PayForHit(PlayState* play, Player* player, s16 damage) {
 
 static void FeelAbsorbedHit(Player* player) {
     Player_SetIntangibility(player, ABSORB_INTANGIBILITY);
-    func_800AA000(0.0f, 180, 20, 100);
+    Rumble_Request(0.0f, 180, 20, 100);
 }
 
 // Runs before Player_UpdateCommon consumes the hit: paid for, it plays like a block, with no knockback, no hurt

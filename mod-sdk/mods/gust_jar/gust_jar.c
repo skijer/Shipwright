@@ -149,13 +149,13 @@ s32 Player_UpdateUpperBody(Player* player, PlayState* play);
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
 // z_bg_ice_shelter internals: the melt that its blue fire starts.
-void func_808911BC(BgIceShelter* ice);
+void BgIceShelter_SetupMelt(BgIceShelter* ice);
 
 static void GustAimAction(Player* player, PlayState* play);
 static void HoldJarWithBothHands(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u8 CurrentMode(void) {
@@ -470,7 +470,7 @@ static void MeltRedIce(BgIceShelter* ice) {
     if (((ice->dyna.actor.params >> 8) & 7) == 4 && ice->dyna.actor.parent != NULL) {
         ice->dyna.actor.parent->freezeTimer = 50;
     }
-    func_808911BC(ice);
+    BgIceShelter_SetupMelt(ice);
     Audio_PlayActorSound2(&ice->dyna.actor, NA_SE_EV_ICE_MELT);
 }
 
@@ -722,6 +722,11 @@ static void DropAimOnSceneChange(int16_t sceneNum) {
     sFairiesPaidCount = 0;
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GUST_JAR_KEY, GUST_JAR_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -750,6 +755,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     jar.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     jar.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&jar, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &jar)) {
         return;
     }

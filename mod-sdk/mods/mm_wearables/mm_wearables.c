@@ -1187,6 +1187,10 @@ static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     Z64Items_SetTextbox(&definition, mask->getItemText);
     Z64Items_SetPauseText(&definition, mask->pauseText);
     Z64Items_SetAction(&definition, wear, NULL);
+    const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, mask->key, mask->key, "",
+    };
+    Z64Items_SetLogic(&definition, &randomizer);
     Z64Items_Register(sApi, &definition);
 }
 

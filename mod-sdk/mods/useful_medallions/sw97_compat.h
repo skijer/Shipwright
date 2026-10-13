@@ -34,13 +34,6 @@ typedef PlayState GlobalContext;
 #define Gfx_CallSetupDL Gfx_SetupDL
 #define Audio_PlaySoundAtPosition SoundSource_PlaySfxAtFixedWorldPos
 
-// Later decomp names the NEI tree already used; this fork still spells them the old way.
-#define Actor_PlaySfx_Flagged func_8002F974
-#define Camera_RequestSetting Camera_ChangeSetting
-#define Rumble_Request func_800AA000
-#define CAM_ID_MAIN MAIN_CAM
-#define BGCHECKFLAG_GROUND 1
-
 // The decomp's debug prints need a log level the SDK does not expose.
 #undef LOG_STRING
 #define LOG_STRING(string) ((void)0)

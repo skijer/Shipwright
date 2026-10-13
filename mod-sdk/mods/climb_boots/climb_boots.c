@@ -45,7 +45,7 @@ static bool IsGrounded(Player* player) {
 static bool IsOnSteepSlope(Player* player, PlayState* play) {
     CollisionPoly* floor = player->actor.floorPoly;
 
-    return floor != NULL && SurfaceType_GetSlope(&play->colCtx, floor, player->actor.floorBgId) == SLOPE_STEEP;
+    return floor != NULL && SurfaceType_GetFloorEffect(&play->colCtx, floor, player->actor.floorBgId) == SLOPE_STEEP;
 }
 
 // Skipping the assignment keeps the previous, non-ice floor type: that is what stops the skid.
@@ -56,7 +56,7 @@ static void KeepGripOnIce(bool* should, va_list args) {
     if (!IsWorn() || play == NULL || !IsGrounded(player) || player->actor.floorPoly == NULL) {
         return;
     }
-    if (func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == FLOOR_TYPE_ICE) {
+    if (SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == FLOOR_TYPE_ICE) {
         *should = false;
     }
 }

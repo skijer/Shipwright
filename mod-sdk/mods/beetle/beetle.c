@@ -97,7 +97,7 @@ void Player_ZeroSpeedXZ(Player* player);
 void Player_PlayVoiceSfx(Player* player, u16 sfxId);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -127,8 +127,8 @@ static void DestroyFlightCamera(PlayState* play) {
     if (sCameraId == SUBCAM_FREE) {
         return;
     }
-    Camera_ChangeMode(Play_GetCamera(play, MAIN_CAM), CAM_MODE_NORMAL);
-    Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+    Camera_RequestMode(Play_GetCamera(play, CAM_ID_MAIN), CAM_MODE_NORMAL);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
     Play_ClearCamera(play, sCameraId);
     sCameraId = SUBCAM_FREE;
 }
@@ -138,7 +138,7 @@ static void CreateFlightCamera(PlayState* play) {
         return;
     }
     sCameraId = Play_CreateSubCamera(play);
-    Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+    Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
     Play_ChangeCameraStatus(play, sCameraId, CAM_STAT_ACTIVE);
 }
 
@@ -418,7 +418,7 @@ static void AdvanceFlight(Player* player, PlayState* play, f32 speed) {
     CollisionCheck_SetAT(play, &play->colChkCtx, &sCollider.base);
     BeatWings();
     CarryCargo();
-    func_8002F974(&player->actor, NA_SE_EN_BIRI_FLY - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_FLY - SFX_FLAG);
     if (hasStruck || HasHitGeometry(play, &previousPos) || HasFlownTooFar()) {
         StartReturn(player, play);
     }
@@ -493,7 +493,7 @@ static void UpdateReturning(Player* player, PlayState* play) {
     sBeetlePos.z += (hand.z - sBeetlePos.z) * step;
     sBeetleRot.y = Math_Vec3f_Yaw(&sBeetlePos, &hand);
     sBeetleRot.x = Math_Vec3f_Pitch(&sBeetlePos, &hand);
-    func_8002F974(&player->actor, NA_SE_EN_BIRI_FLY - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_BIRI_FLY - SFX_FLAG);
 }
 
 static void AnimateArm(Player* player, PlayState* play) {
@@ -709,6 +709,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BEETLE_KEY, BEETLE_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -737,6 +742,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     beetle.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     beetle.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&beetle, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &beetle)) {
         return;
     }

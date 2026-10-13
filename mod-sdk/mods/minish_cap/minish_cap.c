@@ -241,7 +241,7 @@ static s16 sVanillaCylinderRadius;
 static u8 sVanillaLedgeGrabState;
 
 static void PlaySfx(u16 sfxId) {
-    Audio_PlaySoundGeneral(sfxId, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -349,7 +349,7 @@ static void UpdateCrawlspaceWindow(Player* player, PlayState* play) {
         return;
     }
     if ((player->actor.bgCheckFlags & 0x200) &&
-        (func_80041DB8(&play->colCtx, player->actor.wallPoly, player->actor.wallBgId) & 0x30)) {
+        (SurfaceType_GetWallFlags(&play->colCtx, player->actor.wallPoly, player->actor.wallBgId) & 0x30)) {
         sCrawlspaceTimer = CRAWLSPACE_LINGER;
         return;
     }
@@ -858,7 +858,7 @@ static void ResolveCameraView(Camera* camera, Vec3f* eye, Vec3f* at, Vec3f* up) 
     Player* player;
     f32 rigScale;
 
-    if (camera == NULL || camera->thisIdx != MAIN_CAM || !IsTiny()) {
+    if (camera == NULL || camera->thisIdx != CAM_ID_MAIN || !IsTiny()) {
         return;
     }
     player = camera->player;
@@ -1002,6 +1002,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, MINISH_CAP_KEY, MINISH_CAP_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1031,6 +1036,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     cap.flags |= SOH_CUSTOM_ITEM_INSTANT;
     cap.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&cap, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &cap)) {
         return;
     }

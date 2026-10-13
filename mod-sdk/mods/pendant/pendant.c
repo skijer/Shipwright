@@ -45,7 +45,7 @@ static const ALIGN_ASSET(2) char sGetItemDL[] = "__OTR__objects/object_gi_reserv
 
 int Player_IsZTargeting(Player* player);
 void func_80837948(PlayState* play, Player* player, s32 meleeWeaponAnim);
-void func_800AA000(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
+void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
 
 typedef enum {
     PENDANT_IDLE,
@@ -101,7 +101,7 @@ static bool IsBPressed(PlayState* play) {
 }
 
 static void PlaySfx(Player* player, u16 sfxId) {
-    Audio_PlaySoundGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -229,7 +229,7 @@ static void UpdateMortalDraw(Player* player, PlayState* play) {
         sPendant.state = PENDANT_DRAW_HITSTOP;
         sPendant.timer = 0;
         ShakeCamera(play, 20000, 8, 0, 0, MORTAL_DRAW_HITSTOP);
-        func_800AA000(0.0f, 180, 14, 100);
+        Rumble_Request(0.0f, 180, 14, 100);
         PlaySfx(player, NA_SE_IT_SWORD_STRIKE);
         return;
     }
@@ -307,7 +307,7 @@ static void LandGroundPound(Player* player, PlayState* play) {
     sPendant.state = PENDANT_GPOUND_LANDING;
     sPendant.timer = 0;
     StrikeAround(play, player, &player->actor.world.pos);
-    func_800AA000(0.0f, 255, 20, 150);
+    Rumble_Request(0.0f, 255, 20, 150);
     ShakeCamera(play, 28000, 14, 2, 100, 16);
     PlaySfx(player, NA_SE_IT_HAMMER_HIT);
     ChangeAnim(play, player, gPlayerAnim_link_normal_landing, 1.0f, 0.0f, GetLastFrame(gPlayerAnim_link_normal_landing),

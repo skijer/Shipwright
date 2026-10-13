@@ -103,7 +103,7 @@ static void StandOnDeadlyFloors(bool* should, va_list args) {
     if (!IsWorn() || play == NULL || !IsGrounded(player) || player->actor.floorPoly == NULL) {
         return;
     }
-    if (IsDeadlyFloor(func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId))) {
+    if (IsDeadlyFloor(SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId))) {
         *should = false;
     }
 }

@@ -395,7 +395,7 @@ static void EnMolmauk_SetupDamage(EnMolmauk* this, PlayState* play) {
     this->faceIndex = MOLMAUK_FACE_NORMAL;
     Actor_SetColorFilter(&this->actor, COLORFILTER_RED, 255, COLORFILTER_OPA, 8);
     Actor_ApplyDamage(&this->actor);
-    Audio_PlaySoundGeneral(NA_SE_EN_STALKID_DAMAGE, &this->actor.world.pos, 4, &sDamagePitch,
+    Audio_PlaySfxGeneral(NA_SE_EN_STALKID_DAMAGE, &this->actor.world.pos, 4, &sDamagePitch,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     EnMolmauk_ChangeAnimation(this, MOLMAUK_ANIMATION_DAMAGE);
     EnMolmauk_SetupAction(this, EnMolmauk_Damage);
@@ -495,7 +495,7 @@ static void EnMolmauk_SetupFlex(EnMolmauk* this, PlayState* play) {
     this->actor.speedXZ = 0.0f;
     this->genericAnimationTimer = 10;
     this->faceIndex = MOLMAUK_FACE_LAUGH;
-    Audio_PlaySoundGeneral(NA_SE_EN_FANTOM_VOICE, &this->actor.world.pos, 4, &sFlexPitch, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_EN_FANTOM_VOICE, &this->actor.world.pos, 4, &sFlexPitch, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
     EnMolmauk_ChangeAnimation(this, MOLMAUK_ANIMATION_FLEX);
     EnMolmauk_SetupAction(this, EnMolmauk_Flex);
@@ -538,7 +538,7 @@ static void EnMolmauk_Explosion(EnMolmauk* this, PlayState* play) {
     if (this->explosionCollider.base.atFlags & AT_HIT) {
         this->explosionCollider.base.atFlags &= ~AT_HIT;
         this->playerHit = true;
-        func_8002F71C(play, &this->actor, 10.0f, this->actor.shape.rot.y, 5.0f);
+        Actor_SetPlayerKnockbackLargeNoDamage(play, &this->actor, 10.0f, this->actor.shape.rot.y, 5.0f);
         Player_PlaySfx(&GET_PLAYER(play)->actor, NA_SE_PL_BODY_HIT);
     }
     if (this->explosionRadiusIncrease) {
@@ -597,14 +597,14 @@ static void EnMolmauk_SetupInfuse(EnMolmauk* this, PlayState* play) {
 
 static void EnMolmauk_ShakeGround(EnMolmauk* this, PlayState* play) {
     EnMolmauk_DefuseHammers(this, play);
-    Audio_PlaySoundGeneral(NA_SE_EV_WALL_BROKEN, &GET_PLAYER(play)->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_EV_WALL_BROKEN, &GET_PLAYER(play)->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     for (s32 i = 0; i < 10; i++) {
         Actor_SpawnFloorDustRing(play, &this->actor, &this->actor.world.pos, i * 100.0f, 4, 4.0f, i * 500, i * 110,
                                  true);
     }
     if (this->actor.xzDistToPlayer < MOLMAUK_SHOCKWAVE_RANGE) {
-        func_8002F6D4(play, &this->actor, 20.0f, (s16)(GET_PLAYER(play)->actor.world.rot.y + 0x8000), 10.0f, 0x30);
+        Actor_SetPlayerKnockbackLarge(play, &this->actor, 20.0f, (s16)(GET_PLAYER(play)->actor.world.rot.y + 0x8000), 10.0f, 0x30);
     }
 }
 
@@ -687,7 +687,7 @@ static void EnMolmauk_SlamL(EnMolmauk* this, PlayState* play) {
         if (this->leftHammerInfused) {
             EnMolmauk_DefuseLeftHammer(this, play);
         } else {
-            func_8002F71C(play, &this->actor, 0.0f, this->actor.shape.rot.y, 0.0f);
+            Actor_SetPlayerKnockbackLargeNoDamage(play, &this->actor, 0.0f, this->actor.shape.rot.y, 0.0f);
         }
         Player_PlaySfx(&GET_PLAYER(play)->actor, NA_SE_PL_BODY_HIT);
     }
@@ -706,7 +706,7 @@ static void EnMolmauk_SlamR(EnMolmauk* this, PlayState* play) {
             EnMolmauk_DefuseRightHammer(this, play);
             EnMolmauk_SetPlayerAblaze(GET_PLAYER(play));
         }
-        func_8002F71C(play, &this->actor, 0.0f, this->actor.shape.rot.y, 0.0f);
+        Actor_SetPlayerKnockbackLargeNoDamage(play, &this->actor, 0.0f, this->actor.shape.rot.y, 0.0f);
         Player_PlaySfx(&GET_PLAYER(play)->actor, NA_SE_PL_BODY_HIT);
     }
     EnMolmauk_SwingHammer(this, play, &this->hammerRightCollider);
@@ -822,7 +822,7 @@ static void EnMolmauk_Update(Actor* thisx, PlayState* play) {
     EnMolmauk_UpdateCollision(this, play);
     this->fireHammerIndex = EnMolmauk_GetHammerLook(this->fireHammerIndex, this->rightHammerInfused, play);
     this->iceHammerIndex = EnMolmauk_GetHammerLook(this->iceHammerIndex, this->leftHammerInfused, play);
-    func_80038290(play, &this->actor, &this->headRot, &this->upperBodyRot, this->actor.focus.pos);
+    Actor_TrackPlayer(play, &this->actor, &this->headRot, &this->upperBodyRot, this->actor.focus.pos);
 }
 
 static s32 EnMolmauk_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx,

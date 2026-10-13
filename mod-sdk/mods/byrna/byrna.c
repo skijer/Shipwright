@@ -89,7 +89,7 @@ void func_80090A28(Player* player, Vec3f* vecs);
 void func_800906D4(PlayState* play, Player* player, Vec3f* newTipPos);
 void Player_PlayVoiceSfx(Player* player, u16 sfxId);
 int Player_IsZTargeting(Player* player);
-void func_800AA000(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
+void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
 
 typedef enum {
     CLIP_COMBO_1,
@@ -421,7 +421,7 @@ static void FireFinisher(PlayState* play, Player* player) {
     sFinisherTimer = FINISHER_TICKS;
     sFinisher.base.atFlags &= ~AT_HIT;
     Sfx_PlaySfxCentered(NA_SE_IT_MAGIC_ARROW_SHOT);
-    func_800AA000(80.0f, 110, 6, 16);
+    Rumble_Request(80.0f, 110, 6, 16);
 }
 
 // One enemy may overlap more than one sphere: once the collider lands, the glow stays but no second pass hits.
@@ -682,7 +682,7 @@ static void LandDescend(PlayState* play, Player* player) {
     ArmSwing(player, &sDescendLand);
     EnterAirState(play, player, GLAIVE_DESCEND_LAND, CLIP_DESCEND_LAND, false);
     Sfx_PlaySfxCentered(NA_SE_IT_HAMMER_HIT);
-    func_800AA000(0.0f, 180, 10, 40);
+    Rumble_Request(0.0f, 180, 10, 40);
 }
 
 static void UpdateAir(PlayState* play, Player* player, Input* input) {
@@ -952,7 +952,7 @@ static void TraceCaneSwing(PlayState* play, Player* player) {
     Matrix_RotateZ(M_PI / 2.0f, MTXMODE_APPLY);
     Matrix_Translate(CANE_AXIS_MIN * CANE_SCALE_Y, 0.0f, 0.0f, MTXMODE_APPLY);
     D_80126080.x = (CANE_AXIS_MAX - CANE_AXIS_MIN) * CANE_SCALE_Y;
-    EffectBlure_ChangeType(Effect_GetByIndex(player->meleeWeaponEffectIndex), TRAIL_TYPE_BIGGORON_SWORD);
+    EffectBlureShip_ChangeType(Effect_GetByIndex(player->meleeWeaponEffectIndex), TRAIL_TYPE_BIGGORON_SWORD);
     func_80090A28(player, edges);
     func_800906D4(play, player, edges);
     Matrix_Pop();

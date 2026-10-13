@@ -89,7 +89,7 @@ static void FreezeRoom(Player* player, PlayState* play) {
             EffectSsKiraKira_SpawnSmall(play, &pos, &vel, &accel, &prim, &env);
         }
     }
-    Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 

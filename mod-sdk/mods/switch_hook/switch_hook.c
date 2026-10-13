@@ -106,7 +106,7 @@ void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc action
 void func_80839FFC(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -516,7 +516,7 @@ static void FlyHook(Player* player, PlayState* play) {
     sHookPos.x += Math_SinS(sShotYaw) * reach;
     sHookPos.y -= Math_SinS(sShotPitch) * SWITCH_HOOK_SPEED;
     sHookPos.z += Math_CosS(sShotYaw) * reach;
-    func_8002F974(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
 
     bool isArmed = Math_Vec3f_DistXYZ(&sHookPos, &player->actor.world.pos) > SWITCH_HOOK_ARMED_DISTANCE;
     Actor* target = NULL;
@@ -551,7 +551,7 @@ static void ReelHookIn(Player* player, PlayState* play) {
     sHookPos.x += (hand.x - sHookPos.x) * step;
     sHookPos.y += (hand.y - sHookPos.y) * step;
     sHookPos.z += (hand.z - sHookPos.z) * step;
-    func_8002F974(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_HOOKSHOT_CHAIN - SFX_FLAG);
 }
 
 static void ShotAction(Player* player, PlayState* play) {
@@ -792,6 +792,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SWITCH_HOOK_KEY, SWITCH_HOOK_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -821,6 +826,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     hook.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     hook.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&hook, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &hook)) {
         return;
     }

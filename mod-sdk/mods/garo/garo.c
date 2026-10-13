@@ -296,7 +296,7 @@ void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc action
 void func_80839FFC(Player* player, PlayState* play);
 s32 func_80837B18(PlayState* play, Player* player, s32 damage);
 int Player_IsZTargeting(Player* player);
-void func_808911BC(BgIceShelter* ice);
+void BgIceShelter_SetupMelt(BgIceShelter* ice);
 
 static const SOHModApi* sApi;
 static MmSfxPlayFunc sPlayMmSfx;
@@ -782,7 +782,7 @@ static void BurstOrb(PlayState* play, RodOrb* source) {
         EffectSsFhgFlash_SpawnLightBall(play, &source->pos, &velocity, &zero, (s16)(Rand_ZeroOne() * 60.0f) + 110,
                                         sOrbWakeColor[element]);
     }
-    Audio_PlaySoundGeneral(NA_SE_IT_MAGIC_ARROW_SHOT, &source->pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_IT_MAGIC_ARROW_SHOT, &source->pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     for (s32 i = 0; i < ORB_SEEKERS; i++) {
         Actor* target = FindNearestUnclaimed(play, &source->pos, claimed, claimedCount);
@@ -866,7 +866,7 @@ static void MeltRedIce(PlayState* play, RodOrb* orb) {
         if (actor->id != ACTOR_BG_ICE_SHELTER || ice->actionFunc == NULL || sqrtf(SQ(dx) + SQ(dz)) >= ORB_MELT_RADIUS) {
             continue;
         }
-        func_808911BC(ice);
+        BgIceShelter_SetupMelt(ice);
         Audio_PlayActorSound2(actor, NA_SE_EV_ICE_MELT);
     }
 }
@@ -975,7 +975,7 @@ static void ReflectShot(Player* player, Actor* shot) {
     sReflectedShot = shot;
     sReflectTimer = REFLECT_FRAMES;
     player->invincibilityTimer = REFLECT_INVULNERABILITY;
-    Audio_PlaySoundGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -1192,7 +1192,7 @@ static void RunRodAim(PlayState* play, Player* player) {
     sMoveTimer++;
     if (sRodCharge < ROD_CHARGE_MAX) {
         sRodCharge++;
-        func_8002F974(&player->actor, GetChargeSfx(sRodElement) - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&player->actor, GetChargeSfx(sRodElement) - SFX_FLAG);
     }
     GrowRodBall();
     if (!sIsRodChimed && sRodCharge >= ROD_CHARGE_TIER3) {
@@ -1393,7 +1393,7 @@ static void RunBanishShadow(PlayState* play, Player* player) {
     sShadowPos.x = sShadowStart.x + (sShadowEnd.x - sShadowStart.x) * t;
     sShadowPos.y = sShadowStart.y + (sShadowEnd.y - sShadowStart.y) * t;
     sShadowPos.z = sShadowStart.z + (sShadowEnd.z - sShadowStart.z) * t;
-    func_8002F974(&player->actor, NA_SE_EV_FANTOM_WARP_L - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_FANTOM_WARP_L - SFX_FLAG);
     DropShadowWake(play);
     if (++sShadowTimer < BANISH_SHADOW_FRAMES) {
         return;
@@ -2319,6 +2319,11 @@ static void PassAsGerudo(bool* should, va_list args) {
     }
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GARO_MASK_KEY, GARO_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(GARO_MASK_KEY, sIconTex, sNameTex);
 
@@ -2333,6 +2338,7 @@ static void RegisterMask(void) {
                                  "(%y\xA2%w/%y\xA3%w element)  %y\x9F%w: dash  %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

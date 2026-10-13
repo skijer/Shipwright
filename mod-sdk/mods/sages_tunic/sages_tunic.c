@@ -105,7 +105,7 @@ static void ResistBurningFloors(bool* should, va_list args) {
         player->actor.floorPoly == NULL) {
         return;
     }
-    floorType = func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId);
+    floorType = SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId);
     if (func_80838144(floorType) >= 0) {
         Flash(SAGES_RESIST_FIRE);
         *should = false;
@@ -130,7 +130,7 @@ static void ResistElementalHit(Actor* victim, ColliderInfo* attack, float* damag
 
 // An enemy shoving Link with a shock (a Beamos, a Biri) leaves the same knockback without the jolt.
 static void ResistShockingKnockback(Player* player, Input* input) {
-    if (player->knockbackType == PLAYER_KNOCKBACK_LARGE_SHOCK && Resists(SAGES_RESIST_THUNDER)) {
+    if (player->knockbackType == PLAYER_KNOCKBACK_LARGE_ELECTRIFIED && Resists(SAGES_RESIST_THUNDER)) {
         player->knockbackType = PLAYER_KNOCKBACK_LARGE;
     }
 }

@@ -56,7 +56,7 @@ static const u16 sItemButtons[MM_ITEMS_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN
 static const SOHModApi* sApi;
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -590,7 +590,7 @@ static void EnterLens(void) {
     sLensFrames = 0;
     sIsLensPending = true;
     HoldPictoInput(false);
-    Interface_ChangeAlpha(PICTO_HUD_HIDE);
+    Interface_ChangeHudVisibilityMode(PICTO_HUD_HIDE);
 }
 
 static void LeaveBox(Player* player, PlayState* play) {
@@ -602,7 +602,7 @@ static void LeaveBox(Player* player, PlayState* play) {
     sIsLensPending = false;
     sIsPromptShown = false;
     ReleasePictoInput();
-    Interface_ChangeAlpha(PICTO_HUD_SHOW);
+    Interface_ChangeHudVisibilityMode(PICTO_HUD_SHOW);
 }
 
 // The world stops at the shutter, MM's own halt, so the print and the world behind the prompt agree. The
@@ -633,7 +633,7 @@ static void EmitCapture(void) {
 static void ShowPhotoPrompt(void) {
     sPictoState = PICTO_PHOTO;
     sIsPromptShown = false;
-    Interface_ChangeAlpha(PICTO_HUD_HIDE);
+    Interface_ChangeHudVisibilityMode(PICTO_HUD_HIDE);
     sApi->RequestTimeControl(MM_ITEMS_MOD, PICTO_TIME_PRIORITY, 0.0f, true);
     HoldPictoInput(true);
 }
@@ -916,6 +916,14 @@ static void ReloadSave(int32_t fileNum) {
     LoadPictoSave();
 }
 
+// Each is shuffled once by the randomizer; no vanilla logic needs them.
+static const SOHCustomItemRandomizer sKegRandomizer = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, POWER_KEG_KEY, POWER_KEG_KEY, "",
+};
+static const SOHCustomItemRandomizer sPictoRandomizer = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, PICTO_BOX_KEY, PICTO_BOX_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -959,6 +967,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     picto.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     picto.getItemEntry.drawFunc = DrawPictoGetItem;
 
+    Z64Items_SetLogic(&keg, &sKegRandomizer);
+    Z64Items_SetLogic(&picto, &sPictoRandomizer);
     if (!Z64Items_Register(sApi, &keg) || !Z64Items_Register(sApi, &picto)) {
         return;
     }

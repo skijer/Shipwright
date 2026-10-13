@@ -50,7 +50,7 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 // z_bg_ice_shelter internals: the melt its blue fire starts.
-void func_808911BC(BgIceShelter* ice);
+void BgIceShelter_SetupMelt(BgIceShelter* ice);
 
 const SOHModApi* gSw97Api;
 
@@ -73,7 +73,7 @@ void Sw97_MeltRedIce(Actor* thisx, PlayState* play) {
     if (((ice->dyna.actor.params >> 8) & 7) == 4 && ice->dyna.actor.parent != NULL) {
         ice->dyna.actor.parent->freezeTimer = 50;
     }
-    func_808911BC(ice);
+    BgIceShelter_SetupMelt(ice);
     ice->alpha = 25;
     Audio_PlayActorSound2(&ice->dyna.actor, NA_SE_EV_ICE_MELT);
 }

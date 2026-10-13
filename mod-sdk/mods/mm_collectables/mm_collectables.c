@@ -499,14 +499,14 @@ static bool MatchesTail(const SongDefinition* song) {
 }
 
 static void ForgetPlayedNotes(void) {
-    memset(sPlayedNotes, OCARINA_NOTE_INVALID, sizeof(sPlayedNotes));
+    memset(sPlayedNotes, OCARINA_PITCH_NONE, sizeof(sPlayedNotes));
     sPlayedCount = 0;
 }
 
 static void RecognizeSong(u8 note, f32 modulator, s8 bend) {
     // The hook also fires on release, where the note is invalid: dropping those is what keeps a
     // melody's two identical notes in a row from collapsing into one.
-    if ((gPlayState == NULL) || (note == OCARINA_NOTE_INVALID)) {
+    if ((gPlayState == NULL) || (note == OCARINA_PITCH_NONE)) {
         return;
     }
     memmove(sPlayedNotes, sPlayedNotes + 1, SONG_MAX_NOTES - 1);
@@ -520,7 +520,7 @@ static void RecognizeSong(u8 note, f32 modulator, s8 bend) {
         if (!IsSongOwned(song) || !MatchesTail(song)) {
             continue;
         }
-        Audio_PlaySoundGeneral(NA_SE_SY_CORRECT_CHIME, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_SY_CORRECT_CHIME, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         ForgetPlayedNotes();
         return;
@@ -545,6 +545,10 @@ static void RegisterRemains(void) {
         Z64Items_SetPauseText(&definition, source->pauseText);
         Z64Items_SetAction(&definition, sRemainsToggle[i], NULL);
         definition.onRemove = ForgetWornRemains;
+        const SOHCustomItemRandomizer randomizer = {
+            sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, source->key, source->key, "",
+        };
+        Z64Items_SetLogic(&definition, &randomizer);
 
         Z64Items_Register(sApi, &definition);
     }
@@ -559,6 +563,11 @@ static void RegisterSongs(void) {
         Z64Items_SetPlacement(&definition, MM_COLLECTABLES_PAGE, cells[i], 0);
         Z64Items_SetTextbox(&definition, source->getItemText);
         Z64Items_SetPauseText(&definition, source->pauseText);
+        // An item, not a song: the song pool is sized for OoT's twelve and would leave these without a spot.
+        const SOHCustomItemRandomizer randomizer = {
+            sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, source->key, source->key, "",
+        };
+        Z64Items_SetLogic(&definition, &randomizer);
 
         Z64Items_Register(sApi, &definition);
     }

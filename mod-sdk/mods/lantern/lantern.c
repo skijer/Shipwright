@@ -168,7 +168,7 @@ void func_80839FFC(Player* player, PlayState* play);
 static void SwingAction(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u8 CurrentFlame(void) {
@@ -466,7 +466,7 @@ static void CatchFire(Player* player, PlayState* play, Actor* source, u8 fire) {
     SwallowPoe(play, source);
     player->stateFlags1 |= PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_IN_CUTSCENE;
     LinkAnimation_PlayOnce(play, &player->skelAnime, (LinkAnimationHeader*)sCatchAnim);
-    Camera_ChangeSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
+    Camera_RequestSetting(Play_GetCamera(play, 0), CAM_SET_TURN_AROUND);
     Camera_SetCameraData(Play_GetCamera(play, 0), 4, NULL, NULL, 10, 0, 0);
 }
 
@@ -768,6 +768,11 @@ static void ForgetSceneState(int16_t sceneNum) {
     }
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, LANTERN_KEY, LANTERN_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -795,6 +800,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     lantern.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     lantern.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&lantern, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &lantern)) {
         return;
     }

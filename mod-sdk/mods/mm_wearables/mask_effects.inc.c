@@ -3,20 +3,20 @@
 #include "overlays/actors/ovl_En_Gs/z_en_gs.h"
 #include "overlays/actors/ovl_En_Elf/z_en_elf.h"
 #include "objects/object_rd/object_rd.h"
-extern void func_80AE269C(EnRd* redead);
+extern void EnRd_SetupIdle(EnRd* redead);
 bool GameInteractor_Should(GIVanillaBehavior flag, uint32_t result, ...);
 
 static void FriendlyRedeadDance(EnRd* rd, PlayState* play) {
     if (!IsWearing(MASK_GIBDO)) {
         rd->collider.base.acFlags |= AC_ON;
-        func_80AE269C(rd);
+        EnRd_SetupIdle(rd);
         return;
     }
     SkelAnime_Update(&rd->skelAnime);
     if (!sApi->HasResource("__OTR__objects/object_rd/gGibdoRedeadClappingDanceAnim"))
         rd->actor.shape.rot.y = rd->actor.home.rot.y + (int16_t)(0x1000 * Math_SinS(play->gameplayFrames * 0x800));
-    Math_SmoothStepToS(&rd->unk_30E, 0, 1, 0x64, 0);
-    Math_SmoothStepToS(&rd->unk_310, 0, 1, 0x64, 0);
+    Math_SmoothStepToS(&rd->headYRotation, 0, 1, 0x64, 0);
+    Math_SmoothStepToS(&rd->upperBodyYRotation, 0, 1, 0x64, 0);
 }
 
 static void MakeRedeadDance(void* actorRef) {
@@ -27,7 +27,7 @@ static void MakeRedeadDance(void* actorRef) {
         "__OTR__objects/object_rd/gGibdoRedeadPirouetteAnim",
     };
     if (!IsWearing(MASK_GIBDO) || rd->actionFunc == FriendlyRedeadDance ||
-        rd->actor.colChkInfo.health <= 0 || rd->unk_31B == 8 ||
+        rd->actor.colChkInfo.health <= 0 || rd->action == 8 ||
         (GET_PLAYER(gPlayState)->stateFlags2 & PLAYER_STATE2_GRABBED_BY_ENEMY)) return;
     const char* path = paths[((uintptr_t)rd >> 4) % 3];
     AnimationHeader* anim = sApi->HasResource(path) ? (AnimationHeader*)ResourceMgr_LoadAnimByName(path) :
@@ -35,7 +35,7 @@ static void MakeRedeadDance(void* actorRef) {
     Animation_Change(&rd->skelAnime, anim, 1.0f, 0, Animation_GetLastFrame(anim), ANIMMODE_LOOP, -8.0f);
     rd->collider.base.acFlags &= ~(AC_ON | AC_HIT);
     rd->actor.speedXZ = 0;
-    rd->unk_31B = 0;
+    rd->action = 0;
     rd->actionFunc = FriendlyRedeadDance;
 }
 

@@ -339,7 +339,7 @@ static void PlayMmSfx(u16 mmSfx, u16 fallback, Vec3f* pos) {
         sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
     }
     if (sPlayMmSfx == NULL || !sPlayMmSfx(mmSfx, pos)) {
-        Audio_PlaySoundGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultReverb);
     }
 }
@@ -552,7 +552,7 @@ static void SpawnSpinFloorEffect(PlayState* play, Player* player) {
         Actor_SpawnFloorDustRing(play, &player->actor, &player->actor.world.pos, 2.0f, 1, 2.5f, 10, 18, true);
     }
     AddSpinMark(player);
-    func_8002F974(&player->actor, (u16)(NA_SE_PL_SLIP_LEVEL + player->floorSfxOffset - SFX_FLAG));
+    Actor_PlaySfx_Flagged(&player->actor, (u16)(NA_SE_PL_SLIP_LEVEL + player->floorSfxOffset - SFX_FLAG));
 }
 
 static void DekuSpinAction(Player* player, PlayState* play) {
@@ -2017,6 +2017,11 @@ static void WearMask(PlayState* play, Player* player) {
     sApi->ToggleForm(DEKU_FORM_KEY);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEKU_MASK_KEY, DEKU_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(DEKU_MASK_KEY, sIconTex, sNameTex);
     Z64Items_SetButtons(&mask, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
@@ -2031,6 +2036,7 @@ static void RegisterMask(void) {
                                  "aim bubble  Hold %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

@@ -203,7 +203,7 @@ LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath);
 u8 ResourceMgr_FileExists(const char* resourcePath);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void PlayErrorSfx(void) {
@@ -1099,6 +1099,11 @@ static bool RegisterSummonActors(void) {
     return sStatueId >= 0 && sCrateId >= 0 && sBirdId >= 0 && sPlatformId >= 0;
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SOMARIA_KEY, SOMARIA_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1132,6 +1137,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     cane.onReceive = RaiseLevel;
     cane.onRemove = ForgetLevel;
 
+    Z64Items_SetLogic(&cane, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &cane)) {
         return;
     }

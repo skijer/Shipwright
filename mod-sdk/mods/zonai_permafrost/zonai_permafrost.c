@@ -46,14 +46,14 @@ static f32 sReleasePitch = ZONAI_RELEASE_PITCH_END;
 // The ice samples carry SFX_FLAG, which parks a one-shot in PLAYING until the same position stops it.
 static void PlayOwnSfx(Player* player, u16 sfxId) {
     sSfxPos = player->actor.world.pos;
-    Audio_PlaySoundGeneral(sfxId - SFX_FLAG, &sSfxPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId - SFX_FLAG, &sSfxPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
 // The sound bank rereads the pitch pointer every audio frame, so walking it down bends a cue already ringing.
 static void PlayReleaseChime(void) {
     sReleasePitch = ZONAI_RELEASE_PITCH_START;
-    Audio_PlaySoundGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &sReleasePitch, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &sReleasePitch, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -120,7 +120,7 @@ static void StartTime(Player* player, PlayState* play) {
     SpawnRuneBurst(player, play);
     FlashScreen();
     TintScreen(play, 0);
-    func_800AA000(200.0f, 100, 15, 40);
+    Rumble_Request(200.0f, 100, 15, 40);
     Audio_StopSfxByPos(&sSfxPos);
     PlayOwnSfx(player, NA_SE_EV_ICE_MELT);
     PlayReleaseChime();
@@ -128,7 +128,7 @@ static void StartTime(Player* player, PlayState* play) {
 
 static void StopTime(Player* player, PlayState* play) {
     if (!HasMagic(ZONAI_MAGIC_TO_START)) {
-        Audio_PlaySoundGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+        Audio_PlaySfxGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
@@ -139,10 +139,10 @@ static void StopTime(Player* player, PlayState* play) {
     SpawnRuneBurst(player, play);
     FlashScreen();
     TintScreen(play, ZONAI_TINT_ALPHA);
-    func_800AA000(300.0f, 150, 20, 60);
+    Rumble_Request(300.0f, 150, 20, 60);
     Audio_StopSfxByPos(&sSfxPos);
     PlayOwnSfx(player, NA_SE_EV_ICE_FREEZE);
-    Audio_PlaySoundGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -235,6 +235,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, ZONAI_KEY, ZONAI_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -263,6 +268,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     zonai.flags |= SOH_CUSTOM_ITEM_INSTANT;
     zonai.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&zonai, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &zonai)) {
         return;
     }

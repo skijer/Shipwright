@@ -24,8 +24,6 @@ typedef struct {
     s32 savedNoClip;
 } FairyMode;
 
-extern HOST_DATA s16 gEnPartnerId;
-
 static const u16 sItemButtons[ITEM_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                      BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
@@ -103,18 +101,18 @@ static void BreakFairyMode(Player* player, PlayState* play) {
 
 static void LeaveFairyMode(Player* player, PlayState* play) {
     RestoreLink(player, play);
-    func_800AA000(200.0f, 150, 20, 80);
+    Rumble_Request(200.0f, 150, 20, 80);
     Audio_PlayActorSound2(&player->actor, NA_SE_EV_TRIFORCE_FLASH);
     EndFairyMode();
 }
 
 static void SpawnIvan(Player* player, PlayState* play) {
-    sFairy.ivan = Actor_Spawn(&play->actorCtx, play, gEnPartnerId, player->actor.world.pos.x,
+    sFairy.ivan = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_PARTNER, player->actor.world.pos.x,
                               player->actor.world.pos.y + Player_GetHeight(player) + IVAN_HEIGHT_ABOVE_LINK,
                               player->actor.world.pos.z, 0, 0, 0, 0);
     sFairy.linkDraw = player->actor.draw;
     player->actor.draw = NULL;
-    func_800AA000(200.0f, 150, 20, 80);
+    Rumble_Request(200.0f, 150, 20, 80);
     Audio_PlayActorSound2(&player->actor, NA_SE_EV_TRIFORCE_FLASH);
 }
 

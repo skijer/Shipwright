@@ -494,8 +494,8 @@ static int32_t SprintInsteadOfRoll(PlayState* play, Player* player) {
 
 static bool CanJumpFromFloor(PlayState* play, Player* player) {
     return play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2 && player->actor.floorPoly != NULL &&
-           func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
-           SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
+           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
+           SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
 }
 
 // A under Z-target is a plain jump, never a jump slash: vanilla's own jump, with its animation and launch.
@@ -609,7 +609,7 @@ static void StopWhistling(PlayState* play, Player* player) {
     sWasNoteStruck = false;
     // The ocarina session already closed, and vanilla leaves the instrument off between sessions.
     if (sIsInstrumentLent) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsInstrumentLent = false;
     }
 }
@@ -640,7 +640,7 @@ static void UpdateWhistle(PlayState* play, Player* player) {
     if (isSessionOpen) {
         // Re-applied every frame: the message system sets the instrument again around opening, and the last
         // write wins.
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_WHISTLE);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_WHISTLE);
         sIsInstrumentLent = true;
     }
     // A raise that ended hands over to the gesture even before an actor opens the session it was played for.
@@ -897,7 +897,7 @@ static void ForgetScene(int16_t sceneNum) {
     sWasNoteStruck = false;
     sLastNote = OCARINA_NOTE_NONE;
     if (sIsInstrumentLent) {
-        Audio_OcaSetInstrument(OCARINA_INSTRUMENT_OFF);
+        AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsInstrumentLent = false;
     }
 }
@@ -912,6 +912,11 @@ static bool CanWearMask(Player* player, PlayState* play) {
 static void WearMask(PlayState* play, Player* player) {
     sApi->ToggleForm(KAFEI_FORM_KEY);
 }
+
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, KAFEI_MASK_KEY, KAFEI_MASK_KEY, "",
+};
 
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(KAFEI_MASK_KEY, sIconTex, sNameTex);
@@ -932,6 +937,7 @@ static void RegisterMask(void) {
                                  "still, his shield guards on its own.");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

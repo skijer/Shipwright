@@ -391,7 +391,7 @@ static void RideGaleAction(Player* player, PlayState* play);
 // ---- shared helpers ---------------------------------------------------------------------------------------
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u8 CurrentMode(void) {
@@ -411,10 +411,28 @@ static u8 OwnedRodBits(void) {
     return rods;
 }
 
+// Each rod is its own pickup variant of the staff, placed by the seed only under "A rod per pickup".
+static const char* const sRodPickupKeys[WAND_MODE_MAX] = {
+    "nei.wand.sand", "nei.wand.tornado", "nei.wand.water", "nei.wand.meteor", "nei.wand.storm", "nei.wand.shadow",
+};
+static const char* const sVariantNames[WAND_MODE_MAX] = { "sand", "tornado", "water", "meteor", "storm", "shadow" };
+static const char* const sRodTexts[WAND_MODE_MAX] = {
+    "You got the %ySand Rod%w!&Its sand raises a road beneath you.",
+    "You got the %gTornado Rod%w!&Raise an updraft or launch toward&a locked-on target.",
+    "You got the %bWater Rod%w!&Call up a column of water.",
+    "You got the %rMeteor Rod%w!&Call down a blazing meteor.",
+    "You got the %yStorm Rod%w!&Channel the power of a storm.",
+    "You got the %pShadow Scepter%w!&Command the shadows.",
+};
+
+// Saves from before the rods were separate pickups kept them as bits in the mod's storage.
+static bool IsRodPickupOwned(u8 mode) {
+    return sApi->IsCustomItemOwned(sRodPickupKeys[mode]) || (OwnedRodBits() & (1 << mode)) != 0;
+}
+
 // Which rods answer. The three treatments differ only in what lights an entry, never in what the staff is.
 static void SyncUnlockedRods(void) {
     u8 rule = ShuffleRule();
-    u8 rods = rule == WAND_SHUFFLE_RODS ? OwnedRodBits() : 0;
     bool hasStaff = rule == WAND_SHUFFLE_SINGLE && sApi->IsCustomItemOwned(WAND_KEY);
 
     for (u8 mode = 0; mode < WAND_MODE_MAX; mode++) {
@@ -425,28 +443,27 @@ static void SyncUnlockedRods(void) {
                 isOwned = hasStaff;
                 break;
             case WAND_SHUFFLE_RODS:
-                isOwned = (rods & (1 << mode)) != 0;
+                isOwned = IsRodPickupOwned(mode);
                 break;
             default:
-                isOwned = CHECK_QUEST_ITEM(sRods[mode].questItem) != 0;
+                isOwned = CHECK_QUEST_ITEM(sRods[mode].questItem) != 0 || IsRodPickupOwned(mode);
                 break;
         }
         Z64Wheel_SetEntryUnlocked(mode, isOwned);
     }
 }
 
-// Every pickup of the staff lights the next rod in order, which is what "a rod per pickup" means until the
-// randomizer can place a mod's items separately.
-static void LightNextRod(const char* key) {
-    u8 rods = OwnedRodBits();
-
+static void ReceiveRod(const char* itemKey, const char* variantKey) {
     for (u8 mode = 0; mode < WAND_MODE_MAX; mode++) {
-        if ((rods & (1 << mode)) == 0) {
-            rods |= 1 << mode;
-            break;
+        if (strcmp(variantKey, sVariantNames[mode]) == 0) {
+            Z64Wheel_SetEntryUnlocked(mode, true);
+            Z64Wheel_SetSelection(mode);
+            return;
         }
     }
-    sApi->StorageSet(WAND_KEY, WAND_RODS_FIELD, &rods, sizeof(rods));
+}
+
+static void LightOwnedRods(const char* key) {
     SyncUnlockedRods();
 }
 
@@ -869,7 +886,7 @@ static void TickUpdraft(PlayState* play, bool isHolding, f32 fill) {
         }
     }
     sWindSpin += WIND_SPIN;
-    Audio_PlaySoundGeneral(WIND_LOOP_SFX, &sWindOrigin, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(WIND_LOOP_SFX, &sWindOrigin, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
     FeedWindRibbons(play);
 
@@ -1732,13 +1749,25 @@ static void DrawWand(Actor* actor, PlayState* play) {
     DrawWandInHand(player, play);
 }
 
+// A rod pickup shows its own rod; the staff shows the one it is tuned to.
+static u8 GetItemMode(const GetItemEntry* getItemEntry) {
+    const SOHCustomItemDefinition* shown = sApi->FindCustomItemByRuntimeId(getItemEntry->tableId);
+
+    for (u8 mode = 0; shown != NULL && mode < WAND_MODE_MAX; mode++) {
+        if (strcmp(shown->key, sRodPickupKeys[mode]) == 0) {
+            return mode;
+        }
+    }
+    return CurrentMode();
+}
+
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Scale(WAND_GIVE_SCALE, WAND_GIVE_SCALE, WAND_GIVE_SCALE, MTXMODE_APPLY);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sRods[CurrentMode()].opaModel);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sRods[GetItemMode(getItemEntry)].opaModel);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -1759,6 +1788,33 @@ static void ReloadRods(int32_t fileNum) {
     SyncUnlockedRods();
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, WAND_KEY, WAND_KEY, "",
+};
+
+// The staff joins the pool unless the seed places its rods; each rod joins it only then.
+static bool RegisterRodPickups(void) {
+    for (u8 mode = 0; mode < WAND_MODE_MAX; mode++) {
+        SOHCustomPickupVariant pickup = Z64Items_DefinePickup(WAND_KEY, sVariantNames[mode], sRodPickupKeys[mode]);
+        SOHCustomItemRandomizer logic = sRandomizerItem;
+
+        logic.flags |= SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
+        logic.logicKey = sRodPickupKeys[mode];
+        logic.hintKey = sRodPickupKeys[mode];
+        logic.poolModeOption = WAND_SHUFFLE_OPTION;
+        logic.poolModeValue = WAND_SHUFFLE_RODS;
+        pickup.iconPath = sWheelEntries[mode].iconPath;
+        pickup.getItemText = sRodTexts[mode];
+        pickup.onReceive = ReceiveRod;
+        pickup.randomizer = &logic;
+        if (!Z64Items_RegisterPickup(sApi, &pickup)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1772,7 +1828,7 @@ SOH_MOD_EXPORT void ModInit(void) {
                                   WAND_SHUFFLE_OPTION,
                                   "Elemental Wand Rods",
                                   "Which of the six rods the staff can be tuned to: one per medallion, all "
-                                  "six from the staff itself, or one more rod for every staff you find.",
+                                  "six from the staff itself, or each rod as its own pickup.",
                                   sShuffleValues,
                                   ARRAY_COUNT(sShuffleValues),
                                   WAND_SHUFFLE_MEDALLIONS };
@@ -1793,9 +1849,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetCanUse(&wand, CanUseWand);
     wand.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     wand.getItemEntry.drawFunc = DrawGetItem;
-    wand.onReceive = LightNextRod;
+    wand.onReceive = LightOwnedRods;
 
-    if (!Z64Items_Register(sApi, &wand)) {
+    SOHCustomItemRandomizer wandLogic = sRandomizerItem;
+    wandLogic.flags |= SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
+    wandLogic.poolModeOption = WAND_SHUFFLE_OPTION;
+    wandLogic.poolModeValue = WAND_SHUFFLE_RODS;
+    wandLogic.poolModeInvert = true;
+    Z64Items_SetLogic(&wand, &wandLogic);
+    if (!Z64Items_Register(sApi, &wand) || !RegisterRodPickups()) {
         return;
     }
     sApi->RegisterRandoOption(&shuffle);

@@ -210,6 +210,12 @@ static bool RegisterTier(SOHCustomItemDefinition* tier, CustomDrawFunc draw, int
     return Z64Items_Register(sApi, tier);
 }
 
+// The randomizer shuffles the progressive item twice: the first copy is the feather, the second the cape.
+static const SOHCustomItemRandomizer sProgressiveRandomizer = {
+    sizeof(SOHCustomItemRandomizer), SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 2,
+    ROCS_PROGRESSIVE_KEY, ROCS_PROGRESSIVE_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -239,6 +245,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOHCustomItemDefinition progressive = Z64Items_Define(ROCS_PROGRESSIVE_KEY, NULL, NULL);
     progressive.presentationFlags |= SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
     progressive.getItemEntry.drawFunc = DrawProgressive;
+    Z64Items_SetLogic(&progressive, &sProgressiveRandomizer);
 
     if (!RegisterTier(&feather, DrawFeather, 0) || !RegisterTier(&cape, DrawCape, 1) ||
         !Z64Items_Register(sApi, &progressive)) {

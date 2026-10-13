@@ -178,7 +178,7 @@ s32 Player_ActionToModelGroup(Player* player, s32 itemAction);
 s32 Player_GetMovementSpeedAndYaw(Player* player, f32* outSpeedTarget, s16* outYawTarget, f32 speedMode,
                                   PlayState* play);
 int Player_IsZTargeting(Player* player);
-void func_8002F974(Actor* actor, u16 sfxId);
+void Actor_PlaySfx_Flagged(Actor* actor, u16 sfxId);
 
 typedef enum {
     CLIP_SLASH_1,
@@ -974,7 +974,7 @@ static void UpdateFlight(PlayState* play, Player* player, Input* input) {
     player->actor.minVelocityY = POUND_FALL;
     player->fallStartHeight = (s16)player->actor.world.pos.y;
     player->fallDistance = 0;
-    func_8002F974(&player->actor, NA_SE_EN_FANTOM_FLOAT - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_FANTOM_FLOAT - SFX_FLAG);
     sLance.timer++;
     isClipDone = LinkAnimation_Update(play, &player->skelAnime);
     switch (sLance.state) {
@@ -1067,7 +1067,7 @@ static void UpdateDash(PlayState* play, Player* player, Input* input) {
     player->actor.speedXZ = player->linearVelocity;
     LinkAnimation_Update(play, &player->skelAnime);
     HoldUpperPose(play, player, CLIP_DASH_POSE, (u32)play->gameplayFrames);
-    func_8002F974(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
 }
 
 static void StartDash(PlayState* play, Player* player) {
@@ -1963,7 +1963,7 @@ static void TraceLanceSwing(PlayState* play, Player* player) {
     }
     if (player->meleeWeaponState != 0 && player->actor.scale.y >= 0.0f) {
         D_80126080.x = TRAIL_TIP - TRAIL_BASE;
-        EffectBlure_ChangeType(Effect_GetByIndex(player->meleeWeaponEffectIndex), TRAIL_TYPE_MASTER_SWORD);
+        EffectBlureShip_ChangeType(Effect_GetByIndex(player->meleeWeaponEffectIndex), TRAIL_TYPE_MASTER_SWORD);
         func_80090A28(player, edges);
         func_800906D4(play, player, edges);
     }

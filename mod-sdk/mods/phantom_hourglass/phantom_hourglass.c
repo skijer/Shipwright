@@ -277,7 +277,7 @@ static void MixCues(s16* samples, u32 frameCount) {
 }
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -868,7 +868,7 @@ static void BeginRecall(Player* player, PlayState* play, Actor* target) {
     StartCastPose(player, play);
     PlayCue(HOURGLASS_CUE_TARGET);
     StartCueLoop();
-    func_800AA000(300.0f, 150, 20, 60);
+    Rumble_Request(300.0f, 150, 20, 60);
 }
 
 // Holding R rewinds Link himself, watched from behind, while the world stays stopped around him.
@@ -1195,6 +1195,11 @@ static void ForgetSceneState(int16_t sceneNum) {
     Z64Aiming_Drop();
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, HOURGLASS_KEY, HOURGLASS_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1223,6 +1228,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     hourglass.flags |= SOH_CUSTOM_ITEM_INSTANT;
     hourglass.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&hourglass, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &hourglass)) {
         return;
     }

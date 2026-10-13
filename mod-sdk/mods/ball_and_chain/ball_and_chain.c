@@ -141,12 +141,12 @@ void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc action
 void Player_ZeroSpeedXZ(Player* player);
 void func_80839FFC(Player* player, PlayState* play);
 void Player_PlayVoiceSfx(Player* player, u16 sfxId);
-void func_808911BC(BgIceShelter* ice);
+void BgIceShelter_SetupMelt(BgIceShelter* ice);
 void EnFz_SetupMelt(EnFz* freezard);
 void BgIceTurara_Break(BgIceTurara* icicle, PlayState* play, f32 scale);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -241,7 +241,7 @@ static void MeltRedIce(PlayState* play, Actor* actor) {
 
     if (sqrtf(SQ(dx) + SQ(dz)) < reach && dy > -BALL_COLLIDER_RADIUS &&
         dy < ice->cylinder1.dim.height + BALL_COLLIDER_RADIUS && ice->actionFunc != NULL) {
-        func_808911BC(ice);
+        BgIceShelter_SetupMelt(ice);
         Audio_PlayActorSound2(actor, NA_SE_EV_ICE_MELT);
     }
 }
@@ -540,7 +540,7 @@ static void UpdateSpinning(Player* player, PlayState* play) {
     SwingBall(player);
     StrikeAndBreak(player, play);
     FeedTrail(play);
-    func_8002F974(&player->actor, NA_SE_IT_SWORD_SWING - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_SWORD_SWING - SFX_FLAG);
     if (IsButtonHeld(play)) {
         return;
     }
@@ -656,7 +656,7 @@ static void ReelBallIn(Player* player, PlayState* play) {
     sBallPos.x += (hands.x - sBallPos.x) * step;
     sBallPos.y += (hands.y - sBallPos.y) * step;
     sBallPos.z += (hands.z - sBallPos.z) * step;
-    func_8002F974(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_WALK_GROUND - SFX_FLAG);
 }
 
 static void BallThrownAction(Player* player, PlayState* play) {
@@ -933,6 +933,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BALL_KEY, BALL_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -964,6 +969,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     ball.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     ball.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&ball, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &ball)) {
         return;
     }

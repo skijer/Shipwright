@@ -59,7 +59,7 @@ static s16 sSceneNum = -1;
 static u32 sLastFrame;
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -273,7 +273,7 @@ static void UpdateWindupEffects(Player* player, PlayState* play) {
         RequestQuake(play, 20000, 3, 8);
     }
     if ((sTimer % 2) == 0) {
-        func_800AA000(200.0f, 180, 20, 10);
+        Rumble_Request(200.0f, 180, 20, 10);
     }
 }
 
@@ -284,7 +284,7 @@ static void Detonate(Player* player, PlayState* play) {
     SpawnExplosionAt(play, pos, 1.0f);
     PlaySfxAt(NA_SE_IT_HAMMER_HIT, pos);
     PlaySfxAt(NA_SE_IT_BOMB_EXPLOSION, pos);
-    func_800AA000(800.0f, 0xFF, 0x28, 0xC8);
+    Rumble_Request(800.0f, 0xFF, 0x28, 0xC8);
     ShakeGroundLikeHammer(play);
 }
 
@@ -294,7 +294,7 @@ static void UpdateWindup(Player* player, PlayState* play) {
     if (sTimer == -1) {
         Camera* camera = Play_GetCamera(play, 0);
 
-        Camera_ChangeSetting(camera, CAM_SET_TURN_AROUND);
+        Camera_RequestSetting(camera, CAM_SET_TURN_AROUND);
         Camera_SetCameraData(camera, 4, NULL, NULL, 10, 0, 0);
     }
 
@@ -390,6 +390,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEMISE_KEY, DEMISE_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -416,6 +421,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     demise.flags |= SOH_CUSTOM_ITEM_INSTANT;
     demise.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&demise, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &demise)) {
         return;
     }

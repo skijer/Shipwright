@@ -99,7 +99,7 @@ static s16 sSummonIds[ARRAY_COUNT(sSummonKeys)] = { -1, -1, -1, -1 };
 s32 Player_IsZTargeting(Player* player);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -359,7 +359,7 @@ static void UpdateFlying(Player* player, PlayState* play) {
         StartReturn();
         return;
     }
-    func_8002F974(&player->actor, NA_SE_EN_FANTOM_FIRE - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_FANTOM_FIRE - SFX_FLAG);
 }
 
 static void UpdateReturning(Player* player, PlayState* play) {
@@ -382,7 +382,7 @@ static void UpdateReturning(Player* player, PlayState* play) {
     sOrbRot.x = Math_Vec3f_Pitch(&sOrbPos, &hand);
     MoveLight();
     SparkleEvery(play, 4);
-    func_8002F974(&player->actor, NA_SE_EN_FANTOM_FIRE - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&player->actor, NA_SE_EN_FANTOM_FIRE - SFX_FLAG);
 }
 
 static void UpdateCatching(PlayState* play) {
@@ -675,6 +675,11 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DOMROD_KEY, DOMROD_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -704,6 +709,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     rod.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     rod.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&rod, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &rod)) {
         return;
     }

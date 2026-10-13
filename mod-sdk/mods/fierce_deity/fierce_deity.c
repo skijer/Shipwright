@@ -294,8 +294,8 @@ static s32 CheckSwordRebound(PlayState* play, Player* player) {
 
 static bool CanJumpFromFloor(PlayState* play, Player* player) {
     return play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2 && player->actor.floorPoly != NULL &&
-           func_80041D4C(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
-           SurfaceType_GetSlope(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
+           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
+           SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
 }
 
 static bool IsJumpSlash(s32 mwa) {
@@ -339,7 +339,7 @@ static void InitBeam(Actor* actor, PlayState* play) {
     Collider_SetCylinder(play, &beam->collider, actor, &sBeamColliderInit);
     PlaceBeamLight(beam);
     beam->light = LightContext_InsertLight(play, &play->lightCtx, &beam->lightInfo);
-    Audio_PlaySoundGeneral(NA_SE_IT_ROLLING_CUT_LV1, &player->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_IT_ROLLING_CUT_LV1, &player->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
@@ -839,7 +839,7 @@ static void StretchBrokenBlade(PlayState* play, Player* player) {
     func_80090480(play, NULL, &player->meleeWeaponInfo[0], &tip, &base);
     RetipNewestTrailVertex(trail, &knifeTip, &player->meleeWeaponInfo[0].tip);
     if (trail != NULL) {
-        EffectBlure_ChangeType(trail, TRAIL_TYPE_BIGGORON_SWORD);
+        EffectBlureShip_ChangeType(trail, TRAIL_TYPE_BIGGORON_SWORD);
     }
     if (player->meleeWeaponState <= 0 || (player->meleeWeaponAnimation >= PLAYER_MWA_SPIN_ATTACK_1H &&
                                           !(player->stateFlags2 & PLAYER_STATE2_SPIN_ATTACKING))) {
@@ -1183,6 +1183,11 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, FD_MASK_KEY, FD_MASK_KEY, "",
+};
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(FD_MASK_KEY, sIconTex, sNameTex);
 
@@ -1197,6 +1202,7 @@ static void RegisterMask(void) {
                                  "two-handed sword  With %y\xA4%w: sword beams (magic)");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
+    Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
 }
 

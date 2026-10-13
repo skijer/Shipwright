@@ -289,7 +289,7 @@ static void EnMiniblin_SetupFlee(EnMiniblin* this, PlayState* play) {
 
     this->timer = 100;
     EnMiniblin_ChangeAnimation(this, MINIBLIN_ANIMATION_JUMP);
-    Audio_PlaySoundGeneral(NA_SE_VO_IN_LOST, &this->actor.world.pos, 4, &sFleePitch, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(NA_SE_VO_IN_LOST, &this->actor.world.pos, 4, &sFleePitch, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
     EnMiniblin_SetupAction(this, EnMiniblin_Flee);
 }
@@ -365,7 +365,7 @@ static void EnMiniblin_SetupLaugh(EnMiniblin* this, PlayState* play) {
     this->actor.shape.rot.y = this->actor.yawTowardsPlayer;
     this->eyeIndex = MINIBLIN_EYES_LAUGH;
     EnMiniblin_ChangeAnimation(this, MINIBLIN_ANIMATION_LAUGH);
-    Audio_PlaySoundGeneral(NA_SE_EN_STAL_WARAU, &this->actor.world.pos, 4, &sLaughPitch, &sLaughVolume,
+    Audio_PlaySfxGeneral(NA_SE_EN_STAL_WARAU, &this->actor.world.pos, 4, &sLaughPitch, &sLaughVolume,
                            &gSfxDefaultReverb);
     EnMiniblin_SetupAction(this, EnMiniblin_Laugh);
 }

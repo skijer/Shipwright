@@ -52,7 +52,7 @@ void func_80839FFC(Player* this, PlayState* play);
 void Player_ZeroSpeedXZ(Player* this);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySoundGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultReverb);
 }
 
@@ -296,6 +296,11 @@ static void UseShovel(Player* player, PlayState* play) {
     StartDigging(player, play);
 }
 
+// Shuffled once by the randomizer; no vanilla logic needs it.
+static const SOHCustomItemRandomizer sRandomizerItem = {
+    sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SHOVEL_KEY, SHOVEL_KEY, "",
+};
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -322,6 +327,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     shovel.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     shovel.getItemEntry.drawFunc = DrawGetItem;
 
+    Z64Items_SetLogic(&shovel, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &shovel)) {
         return;
     }

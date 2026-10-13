@@ -22,12 +22,12 @@ int16_t OTRGetRectDimensionFromLeftEdge(float v);
 int16_t OTRGetRectDimensionFromRightEdge(float v);
 
 // The ocarina recognition state (code_800EC960.c), owned by the audio thread and only touched from it.
-extern HOST_DATA u16 sOcarinaAvailSongs;
-extern HOST_DATA u8 sOcarinaSongNoteStartIdx;
-extern HOST_DATA u8 sOcarinaSongCnt;
-extern HOST_DATA u8 D_80131878;
-extern HOST_DATA u8 sOcarinaInpEnabled;
-extern HOST_DATA u32 D_80130F3C;
+extern HOST_DATA u16 sAvailOcarinaSongFlags;
+extern HOST_DATA u8 sFirstOcarinaSongIndex;
+extern HOST_DATA u8 sLastOcarinaSongIndex;
+extern HOST_DATA u8 sPlayedOcarinaSongIndexPlusOne;
+extern HOST_DATA u8 sIsOcarinaInputEnabled;
+extern HOST_DATA u32 sOcarinaFlags;
 }
 
 namespace {
@@ -324,16 +324,16 @@ bool IsSongAccepted(int songIndex) {
 // transposition that best fits. Subtracting the mean residual IS that best fit,
 // and it is what makes the score independent of the key the player hums in.
 float PhraseError(const float* cents, int count, int songIndex) {
-    const OcarinaSongInfo& song = gOcarinaSongNotes[songIndex];
-    if ((count < 2) || (song.len != count)) {
+    const OcarinaSongButtons& song = gOcarinaSongButtons[songIndex];
+    if ((count < 2) || (song.numButtons != count)) {
         return kNoMatchError;
     }
 
     float residual[kMaxPhraseNotes];
     float mean = 0.0f;
     for (int i = 0; i < count; i++) {
-        int degree = song.notesIdx[i];
-        if ((degree < OCARINA_NOTE_D4) || (degree > OCARINA_NOTE_D5)) {
+        int degree = song.buttonsIndex[i];
+        if ((degree < OCARINA_BTN_A) || (degree > OCARINA_BTN_C_UP)) {
             return kNoMatchError;
         }
         residual[i] = cents[i] - (100.0f * kScaleDegrees[degree]);
@@ -394,7 +394,7 @@ MatchCandidates RankSongs() {
         if (!IsSongAccepted(songIndex)) {
             continue;
         }
-        float error = SuffixError(songIndex, gOcarinaSongNotes[songIndex].len);
+        float error = SuffixError(songIndex, gOcarinaSongButtons[songIndex].numButtons);
         if (error < ranked.bestError) {
             ranked.runnerUpError = ranked.bestError;
             ranked.bestError = error;
@@ -682,9 +682,9 @@ void TickMicOcarina() {
 // Fires on the audio thread every tick the ocarina takes input: the thread that owns the globals below.
 void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
     sRequested.store(true, std::memory_order_relaxed);
-    sAvailableSongFlags.store(sOcarinaAvailSongs, std::memory_order_relaxed);
-    sFirstSongIndex.store(sOcarinaSongNoteStartIdx, std::memory_order_relaxed);
-    sLastSongIndex.store(sOcarinaSongCnt, std::memory_order_relaxed);
+    sAvailableSongFlags.store(sAvailOcarinaSongFlags, std::memory_order_relaxed);
+    sFirstSongIndex.store(sFirstOcarinaSongIndex, std::memory_order_relaxed);
+    sLastSongIndex.store(sLastOcarinaSongIndex, std::memory_order_relaxed);
 
     uint32_t sequence = sMatchSequence.load(std::memory_order_acquire);
     if (sequence == sLastSeenMatch) {
@@ -693,14 +693,15 @@ void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
     sLastSeenMatch = sequence;
 
     int song = sMatchedSong.load(std::memory_order_relaxed);
-    if ((song < sOcarinaSongNoteStartIdx) || (song >= sOcarinaSongCnt) || !(sOcarinaAvailSongs & (1u << song))) {
+    if ((song < sFirstOcarinaSongIndex) || (song >= sLastOcarinaSongIndex) ||
+        !(sAvailOcarinaSongFlags & (1u << song))) {
         return;
     }
 
     // The three writes the native staff check makes on a match: the game runs the fanfare and the effect.
-    D_80131878 = static_cast<u8>(song + 1);
-    sOcarinaInpEnabled = 0;
-    D_80130F3C = 0;
+    sPlayedOcarinaSongIndexPlusOne = static_cast<u8>(song + 1);
+    sIsOcarinaInputEnabled = 0;
+    sOcarinaFlags = 0;
 }
 
 float SemisToY(float originY, float semis, float pixelsPerSemi) {

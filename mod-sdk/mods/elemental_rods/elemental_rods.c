@@ -190,7 +190,7 @@ static const RodConfig* sRodInHand;
 void func_80837948(PlayState* play, Player* player, s32 meleeWeaponAnim);
 void func_80837C0C(PlayState* play, Player* player, s32 hitResponse, f32 damageSpeed, f32 damageRot, s16 damageRotType,
                    s32 invincibility);
-void func_8002F698(PlayState* play, Actor* actor, f32 speed, s16 rot, f32 yVelocity, u32 type, u32 damage);
+void Actor_SetPlayerKnockback(PlayState* play, Actor* actor, f32 speed, s16 rot, f32 yVelocity, u32 type, u32 damage);
 void func_8083821C(Player* player);
 void Player_PlayVoiceSfx(Player* player, u16 sfxId);
 s32 Player_IsZTargeting(Player* player);
@@ -327,7 +327,7 @@ static void LineLight(PlayState* play, Player* player, Vec3f* pos, f32 scale) {
 static void BackfireFire(PlayState* play, Player* player) {
     Player_PlayVoiceSfx(player, NA_SE_VO_LI_FALL_L);
     func_8083821C(player);
-    func_8002F698(play, &player->actor, 4.0f, player->actor.shape.rot.y + 0x8000, 6.0f, 2, 0);
+    Actor_SetPlayerKnockback(play, &player->actor, 4.0f, player->actor.shape.rot.y + 0x8000, 6.0f, 2, 0);
 }
 
 static void BackfireIce(PlayState* play, Player* player) {
@@ -1702,6 +1702,10 @@ static bool RegisterRod(const RodConfig* cfg, u8 slot, SOHCustomItemInitFunc tak
     Z64Items_SetMeleeWeapon(&rod, 2);
     rod.modelGroup = PLAYER_MODELGROUP_10;
     rod.getItemEntry.drawFunc = drawGive;
+    const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, cfg->key, cfg->key, "",
+    };
+    Z64Items_SetLogic(&rod, &randomizer);
     return Z64Items_Register(sApi, &rod);
 }
 
