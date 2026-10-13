@@ -37,6 +37,7 @@ extern "C" {
 #include "soh/ModApi/Microphone/Microphone.h"
 #include "soh/ModApi/UserFiles/UserFiles.h"
 #include "soh/ModApi/ModDialogs/ModDialogs.h"
+#include "soh/ModApi/Labels/ModLabels.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -179,6 +180,11 @@ typedef struct {
     bool (*AskPlayer)(const char* title, const char* message);
     void (*TellPlayer)(const char* title, const char* message);
     bool (*RequestRestart)(const char* reason);
+    bool (*SetLabel)(SOHLabelKind kind, int32_t language, int32_t index, const char* name);
+    bool (*SetTimeSplits)(const SOHTimeSplit* splits, uint32_t count);
+    bool (*SetTimeSplitGroup)(uint32_t id, const uint32_t* members, uint32_t count);
+    void (*ClearTimeSplitGroups)(void);
+    bool (*SetItemIcon)(uint32_t item, uint32_t source);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

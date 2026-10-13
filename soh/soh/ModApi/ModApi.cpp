@@ -303,6 +303,11 @@ SOHModApi BuildTable() {
     api.AskPlayer = ModDialogs_Ask;
     api.TellPlayer = ModDialogs_Tell;
     api.RequestRestart = ModDialogs_RequestRestart;
+    api.SetLabel = ModLabels_Set;
+    api.SetTimeSplits = ModLabels_SetTimeSplits;
+    api.SetTimeSplitGroup = ModLabels_SetTimeSplitGroup;
+    api.ClearTimeSplitGroups = ModLabels_ClearTimeSplitGroups;
+    api.SetItemIcon = ModLabels_SetItemIcon;
     return api;
 }
 
