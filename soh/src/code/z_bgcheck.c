@@ -3973,6 +3973,12 @@ u16 BgCheck_GetBgCamSettingImpl(CollisionContext* colCtx, u32 bgCamIndex, s32 bg
     }
 
     bgCamList = colHeader->cameraDataList;
+    // SOH [Unbound] SEGMENTED_TO_VIRTUAL is the identity on PC, so a header with no camera data (an actor's collision
+    // built in code, as a mod's can be) keeps a real NULL here, which the gSegments[0] checks elsewhere never match.
+    // Treat it as "no setting", as they mean to.
+    if (bgCamList == NULL) {
+        return CAM_SET_NONE;
+    }
     camSetting = bgCamList[bgCamIndex].cameraSType;
 
     return camSetting;
@@ -4012,7 +4018,7 @@ u16 func_80041B24(CollisionContext* colCtx, u32 camId, s32 bgId) {
     }
 
     camData = colHeader->cameraDataList;
-    if (camData == PHYSICAL_TO_VIRTUAL(gSegments[0])) {
+    if (camData == NULL || camData == PHYSICAL_TO_VIRTUAL(gSegments[0])) { // SOH [Unbound] see BgCheck_GetBgCamSettingImpl
         return 0;
     }
     return camData[camId].numCameras;
@@ -4052,7 +4058,8 @@ Vec3s* BgCheck_GetBgCamFuncDataImpl(CollisionContext* colCtx, s32 bgCamIndex, s3
     }
 
     bgCamList = colHeader->cameraDataList;
-    if (bgCamList == PHYSICAL_TO_VIRTUAL(gSegments[0])) {
+    // SOH [Unbound] NULL: see BgCheck_GetBgCamSettingImpl
+    if (bgCamList == NULL || bgCamList == PHYSICAL_TO_VIRTUAL(gSegments[0])) {
         return NULL;
     }
 
