@@ -13,7 +13,9 @@ typedef enum {
 } SOHLabelKind;
 
 typedef struct {
-    uint32_t type;    // TimeSplits' SplitTypes: SPLIT_TYPE_ITEM (an ITEM_*), _SCENE (a SCENE_*), _BOSS (the boss's ACTOR_*)
+    // TimeSplits' SplitTypes: SPLIT_TYPE_ITEM (id: an ITEM_*), SPLIT_TYPE_SCENE (a SCENE_*),
+    // SPLIT_TYPE_BOSS (the boss's ACTOR_*)
+    uint32_t type;
     uint32_t id;      // what the split waits for
     const char* name; // the label (the time splits draw the image for the type and id themselves)
 } SOHTimeSplit;

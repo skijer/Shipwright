@@ -4018,7 +4018,8 @@ u16 func_80041B24(CollisionContext* colCtx, u32 camId, s32 bgId) {
     }
 
     camData = colHeader->cameraDataList;
-    if (camData == NULL || camData == PHYSICAL_TO_VIRTUAL(gSegments[0])) { // SOH [Unbound] see BgCheck_GetBgCamSettingImpl
+    // SOH [Unbound] NULL: see BgCheck_GetBgCamSettingImpl
+    if (camData == NULL || camData == PHYSICAL_TO_VIRTUAL(gSegments[0])) {
         return 0;
     }
     return camData[camId].numCameras;
