@@ -20,7 +20,7 @@ extern std::vector<std::string> questItemNamesEng;
 extern std::vector<std::string> questItemNamesGer;
 extern std::vector<std::string> questItemNamesFra;
 extern std::vector<std::string> sceneNames;
-extern char itemTimestampDisplayName[TIMESTAMP_MAX][21];
+extern char itemTimestampDisplayName[TIMESTAMP_MAX][24]; // as gameplaystats.cpp defines it (MSVC links by type)
 
 namespace {
 
