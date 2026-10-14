@@ -139,8 +139,9 @@ sets default cells (also for vanilla entries, `vanilla.<kind>.<slot>`, to regrou
 
 The save editor, gameplay stats and time splits name things from SoH's own tables. `SetLabel(kind, language,
 index, name)` renames an item or quest item (per `LANGUAGE_*`), a scene or a stats timestamp (language ignored);
-`SetTimeSplits(splits, count)` replaces the Time Splits list (a split already in it keeps its times), and
-`SetTimeSplitGroup(id, members, count)` / `ClearTimeSplitGroups()` its popups. `SetItemIcon(item, source)` draws
+`SetTimeSplits(splits, count)` replaces the splits the Time Splits window offers (items and bosses, and scenes, by
+`SPLIT_TYPE_*`; a split already offered keeps its times), and `SetTimeSplitGroup(id, members, count)` /
+`ClearTimeSplitGroups()` the items an item split's popup offers. `SetItemIcon(item, source)` draws
 `item`'s icon in those windows as `source`'s; `SetItemIcon(item, item)` puts its own back. These are table entries,
 so they work on Windows too, where the host exports C names only.
 

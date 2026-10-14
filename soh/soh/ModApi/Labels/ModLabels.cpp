@@ -21,8 +21,6 @@ extern std::vector<std::string> questItemNamesGer;
 extern std::vector<std::string> questItemNamesFra;
 extern std::vector<std::string> sceneNames;
 extern char itemTimestampDisplayName[TIMESTAMP_MAX][21];
-extern std::vector<SplitObject> splitObjectList;
-extern std::map<uint32_t, std::vector<uint32_t>> popupList;
 
 namespace {
 
@@ -83,56 +81,58 @@ extern "C" void ModLabels_ApplyTimestamps(void) {
     }
 }
 
-// Replaces SoH's list; a split already in it (same type and id) keeps its times
+// Replaces the splits SoH offers (its item and boss list, and its scene list); a split already offered (same type and
+// id) keeps its times
 extern "C" bool ModLabels_SetTimeSplits(const SOHTimeSplit* splits, uint32_t count) {
-    std::vector<SplitObject> list;
+    std::vector<TimeSplits::TimesplitObject> objects;
+    std::vector<TimeSplits::TimesplitObject> scenes;
 
     if ((splits == nullptr) || (count == 0)) {
         return false;
     }
     for (uint32_t i = 0; i < count; i++) {
         const SOHTimeSplit& split = splits[i];
-        SplitObject object = {};
+        TimeSplits::TimesplitObject object = {};
+        std::vector<TimeSplits::TimesplitObject>& current =
+            (split.type == TimeSplits::SPLIT_TYPE_SCENE) ? TimeSplits::sceneObjectList : TimeSplits::splitObjectList;
 
-        if (split.type > SPLIT_TYPE_MISC) {
+        if (split.type > TimeSplits::SPLIT_TYPE_BOSS) {
             return false;
         }
         object.splitType = split.type;
-        object.splitID = split.id;
+        object.splitId = split.id;
         object.splitName = (split.name != nullptr) ? split.name : "";
-        object.splitImage = (split.image != nullptr) ? split.image : "";
-        object.splitTint = ImVec4(split.tint[0], split.tint[1], split.tint[2], split.tint[3]);
-        for (const SplitObject& current : splitObjectList) {
-            if ((current.splitType == object.splitType) && (current.splitID == object.splitID)) {
-                object.splitTimeCurrent = current.splitTimeCurrent;
-                object.splitTimeBest = current.splitTimeBest;
-                object.splitTimePreviousBest = current.splitTimePreviousBest;
-                object.splitTimeStatus = current.splitTimeStatus;
-                object.splitSkullTokenCount = current.splitSkullTokenCount;
+        object.splitStatus = TimeSplits::SPLIT_INACTIVE;
+        for (const TimeSplits::TimesplitObject& old : current) {
+            if ((old.splitType == object.splitType) && (old.splitId == object.splitId)) {
+                object.splitCurrentTime = old.splitCurrentTime;
+                object.splitPreviousBest = old.splitPreviousBest;
+                object.splitStatus = old.splitStatus;
                 break;
             }
         }
-        list.push_back(object);
+        ((split.type == TimeSplits::SPLIT_TYPE_SCENE) ? scenes : objects).push_back(object);
     }
-    splitObjectList = list;
+    TimeSplits::splitObjectList = objects;
+    TimeSplits::sceneObjectList = scenes;
     return true;
 }
 
-// The splits a split's popup offers to pick from (SoH's bottles, swords...); no members removes the group
+// The items an item split's popup offers to pick from (SoH's bottles, swords...); no members removes the group
 extern "C" bool ModLabels_SetTimeSplitGroup(uint32_t id, const uint32_t* members, uint32_t count) {
     if ((count != 0) && (members == nullptr)) {
         return false;
     }
     if (count == 0) {
-        popupList.erase(id);
+        TimeSplits::itemSubMenuList.erase(id);
     } else {
-        popupList[id] = std::vector<uint32_t>(members, members + count);
+        TimeSplits::itemSubMenuList[id] = std::vector<uint32_t>(members, members + count);
     }
     return true;
 }
 
 extern "C" void ModLabels_ClearTimeSplitGroups(void) {
-    popupList.clear();
+    TimeSplits::itemSubMenuList.clear();
 }
 
 // SoH's windows draw item's icon as source's (as SoH made source's); source == item puts item's own back

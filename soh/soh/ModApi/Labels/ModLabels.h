@@ -13,11 +13,9 @@ typedef enum {
 } SOHLabelKind;
 
 typedef struct {
-    uint32_t type;     // SplitType: item, upgrade, equipment, quest, boss, entrance, misc
-    uint32_t id;       // what the split waits for: an item, a boss actor, an entrance...
-    const char* name;  // the label
-    const char* image; // an ImGui texture name, as SoH's own splits use
-    float tint[4];     // RGBA, 0 to 1
+    uint32_t type;    // TimeSplits' SplitTypes: SPLIT_TYPE_ITEM (an ITEM_*), _SCENE (a SCENE_*), _BOSS (the boss's ACTOR_*)
+    uint32_t id;      // what the split waits for
+    const char* name; // the label (the time splits draw the image for the type and id themselves)
 } SOHTimeSplit;
 
 #ifdef __cplusplus
