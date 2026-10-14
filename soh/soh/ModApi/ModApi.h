@@ -38,6 +38,7 @@ extern "C" {
 #include "soh/ModApi/UserFiles/UserFiles.h"
 #include "soh/ModApi/ModDialogs/ModDialogs.h"
 #include "soh/ModApi/ModDungeons/BossRegistry.h"
+#include "soh/ModApi/Labels/ModLabels.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -186,6 +187,11 @@ typedef struct {
     void (*ReportBossDefeated)(Actor* boss);
     bool (*RegisterPickupVariant)(const SOHCustomPickupVariant* variant);
     const SOHCustomPickupVariant* (*GetPickupVariant)(const char* key);
+    bool (*SetLabel)(SOHLabelKind kind, int32_t language, int32_t index, const char* name);
+    bool (*SetTimeSplits)(const SOHTimeSplit* splits, uint32_t count);
+    bool (*SetTimeSplitGroup)(uint32_t id, const uint32_t* members, uint32_t count);
+    void (*ClearTimeSplitGroups)(void);
+    bool (*SetItemIcon)(uint32_t item, uint32_t source);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

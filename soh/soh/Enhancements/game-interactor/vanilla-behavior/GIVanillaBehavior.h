@@ -84,6 +84,18 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN)
+    // ```
+    // #### `args`
+    // - `*Player`
+    // Whether Link counts as a child holding the Hylian Shield, which he cannot hold up: he keeps it on his back and
+    // crouches under it to block, with no shield walk or shield hand. Asked by the player's shielding, blocking, model
+    // and draw code (Player_IsChildWithHylianShield), including Equipment Always Visible's sheath. The pause screen's
+    // figure is drawn from the save's equipment, not a Player, and keeps its own check.
+    VB_BE_CHILD_WITH_HYLIAN_SHIELD,
+
+    // #### `result`
+    // ```c
     // this->currentReward == 3
     // ```
     // #### `args`
@@ -2981,6 +2993,15 @@ typedef enum {
     // - `*s8 iter2`
     // - `s8 sp3C[4]`
     VB_SHOULD_QUICKSPIN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `int32_t` (a `GameplayStatCount`)
+    // Whether the gameplay stats window lists this count's row in its Enemy Details, Ammo Details and Buttons lists.
+    VB_SHOW_GAMEPLAY_STATS_COUNT,
 
     // #### `result`
     // ```c

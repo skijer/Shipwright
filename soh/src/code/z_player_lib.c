@@ -528,7 +528,8 @@ s32 Player_CheckHostileLockOn(Player* this) {
 }
 
 s32 Player_IsChildWithHylianShield(Player* this) {
-    return gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN);
+    return GameInteractor_Should(VB_BE_CHILD_WITH_HYLIAN_SHIELD,
+                                 gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN), this);
 }
 
 s32 Player_ActionToModelGroup(Player* this, s32 itemAction) {
@@ -636,11 +637,10 @@ void Player_SetModels(Player* this, s32 modelGroup) {
     this->sheathDLists = &sPlayerDListGroups[this->sheathType][gSaveContext.linkAge];
 
     if (CVarGetInteger(CVAR_ENHANCEMENT("EquipmentAlwaysVisible"), 0)) {
-        if (LINK_IS_CHILD && (this->currentShield == PLAYER_SHIELD_HYLIAN &&
-                                  ((gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER) ||
-                                   (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_BGS)) ||
-                              (this->currentShield == PLAYER_SHIELD_MIRROR) &&
-                                  (gSaveContext.equips.buttonItems[0] != ITEM_SWORD_KOKIRI))) {
+        if ((Player_IsChildWithHylianShield(this) && ((gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER) ||
+                                                      (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_BGS))) ||
+            (LINK_IS_CHILD && (this->currentShield == PLAYER_SHIELD_MIRROR) &&
+             (gSaveContext.equips.buttonItems[0] != ITEM_SWORD_KOKIRI))) {
             this->sheathDLists = &sPlayerDListGroups[this->sheathType][0];
         } else if (LINK_IS_CHILD && this->currentShield == PLAYER_SHIELD_MIRROR &&
                    gSaveContext.equips.buttonItems[0] == ITEM_SWORD_KOKIRI &&
@@ -1305,7 +1305,7 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
         }
         if (limbIndex == PLAYER_LIMB_SHEATH) {
             if ((this->currentShield == PLAYER_SHIELD_MIRROR ||
-                 (this->currentShield == PLAYER_SHIELD_HYLIAN &&
+                 (Player_IsChildWithHylianShield(this) &&
                   (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER ||
                    gSaveContext.equips.buttonItems[0] == ITEM_SWORD_BGS))) &&
                 ((this->sheathType == PLAYER_MODELTYPE_SHEATH_16) || (this->sheathType == PLAYER_MODELTYPE_SHEATH_17) ||

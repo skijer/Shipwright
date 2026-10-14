@@ -22,6 +22,7 @@ typedef enum {
 typedef enum {
     SOH_PLAYER_MOTION_STICK_SPEED,
     SOH_PLAYER_MOTION_SPEED_CAP,
+    SOH_PLAYER_MOTION_WATER_SPEED,
 } SOHPlayerMotionKind;
 
 typedef enum {
