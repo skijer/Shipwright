@@ -31,7 +31,11 @@ void RandoInfCustom_SetByKey(const char* key, bool state);
 #ifdef __cplusplus
 }
 
+#include <string>
+#include <vector>
+
 void RandoInfCustom_Init();
+std::vector<std::string> RandoInfCustom_ListSet();
 #endif
 
 #endif

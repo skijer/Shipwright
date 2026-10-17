@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,6 +20,7 @@
 #include "soh/cvar_prefixes.h"
 #include "soh/ModApi/ConsoleArguments.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/Forms/FormModel.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
@@ -58,6 +60,7 @@ struct RegisteredCustomItem {
     std::string heldModelPath;
     std::string getItemModelPath;
     std::string firstPersonModelPath;
+    std::string appearanceModelPath;
     std::string logicKey;
     std::string hintKey;
     std::string progressionGroup;
@@ -81,6 +84,7 @@ std::unordered_map<std::string, std::unique_ptr<RegisteredCustomItem>> sCustomIt
 std::unordered_map<uint16_t, RegisteredCustomItem*> sRuntimeItems;
 std::unordered_map<uint16_t, RegisteredCustomItem*> sReplacements;
 std::unordered_set<std::string> sOwnedItems;
+std::set<std::string> sWornItems;
 std::unordered_map<Actor*, std::string> sActorItems;
 std::unordered_set<Actor*> sDroppedItems;
 std::array<ButtonKeys, AgeCount> sEquippedItems;
@@ -150,6 +154,7 @@ void SyncButton(size_t age, size_t button) {
 
 void ResetSaveState(bool isDebug) {
     sOwnedItems.clear();
+    sWornItems.clear();
     sActiveItem.clear();
     sHeldItem.clear();
     sPauseItem.clear();
@@ -637,7 +642,10 @@ bool IsValidDefinition(const SOHCustomItemDefinition* definition) {
 
 } // namespace
 
+static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t limbIndex);
+
 void CustomItemRegistry_Init() {
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerPostLimbDraw>(DrawOtherPlayerAppearance);
     RegisterSaveState();
     RegisterConsole();
     RegisterReplacementHooks();
@@ -677,6 +685,7 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     SetString(item->definition.heldModelPath, item->heldModelPath, item->definition.heldModelPath);
     SetString(item->definition.getItemModelPath, item->getItemModelPath, item->definition.getItemModelPath);
     SetString(item->definition.firstPersonModelPath, item->firstPersonModelPath, item->definition.firstPersonModelPath);
+    SetString(item->definition.appearance.modelPath, item->appearanceModelPath, item->definition.appearance.modelPath);
     ApplyDataDrivenDefaults(item->definition);
     item->definition.randomizer = nullptr;
 
@@ -839,18 +848,26 @@ bool CustomItemRegistry_SetOwned(const char* key, bool owned) {
         return false;
     }
     const bool wasOwned = sOwnedItems.contains(key);
+    if (owned == wasOwned) {
+        return true;
+    }
     if (owned) {
         sOwnedItems.insert(key);
     } else {
         sOwnedItems.erase(key);
     }
-    if (definition != nullptr && owned != wasOwned) {
+    if (definition != nullptr) {
         SOHCustomItemStateFunc callback = owned ? definition->onAcquire : definition->onRemove;
         if (callback != nullptr) {
             callback(key);
         }
     }
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCustomItemOwnedChange>(key, owned);
     return true;
+}
+
+std::vector<std::string> CustomItemRegistry_ListOwned() {
+    return std::vector<std::string>(sOwnedItems.begin(), sOwnedItems.end());
 }
 
 void CustomItemRegistry_ReceiveGetItem(const char* key) {
@@ -861,6 +878,7 @@ void CustomItemRegistry_ReceiveGetItem(const char* key) {
     if (definition != nullptr && definition->onReceive != nullptr) {
         definition->onReceive(key);
     }
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCustomItemReceive>(key);
 }
 
 bool CustomItemRegistry_IsOwned(const char* key) {
@@ -872,6 +890,44 @@ bool CustomItemRegistry_IsOwned(const char* key) {
         return INV_CONTENT(definition->replacesItem) == definition->replacesItem;
     }
     return sOwnedItems.contains(key);
+}
+
+bool CustomItemRegistry_SetWorn(const char* key, bool worn) {
+    if (key == nullptr || CustomItemRegistry_Find(key) == nullptr) {
+        return false;
+    }
+    if (worn) {
+        sWornItems.insert(key);
+    } else {
+        sWornItems.erase(key);
+    }
+    return true;
+}
+
+static bool IsWornByOtherPlayer(Player* player, const char* key) {
+    const char* const* wornKeys = nullptr;
+    uint32_t wornCount = 0;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
+                                                                                            &wornCount);
+    for (uint32_t index = 0; index < wornCount; index++) {
+        if (std::strcmp(wornKeys[index], key) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// While another player is drawn, a mod's draw hooks are asking about what that player wears.
+bool CustomItemRegistry_IsWorn(const char* key) {
+    if (key == nullptr) {
+        return false;
+    }
+    Player* otherPlayer = FormModel_GetDrawnOtherPlayer();
+    return otherPlayer != nullptr ? IsWornByOtherPlayer(otherPlayer, key) : sWornItems.contains(key);
+}
+
+std::vector<std::string> CustomItemRegistry_ListWorn() {
+    return std::vector<std::string>(sWornItems.begin(), sWornItems.end());
 }
 
 bool CustomItemRegistry_Equip(uint8_t button, const char* key) {
@@ -979,8 +1035,20 @@ const SOHCustomItemDefinition* CustomItemRegistry_GetActive(void) {
     return FindDefinition(sActiveItem);
 }
 
+static const char* ResolveOtherPlayerHeldKey(Player* player);
+
+// While another player is drawn, a mod's draw hooks are asking about that player's hand, not the local one.
 const char* CustomItemRegistry_GetHeldKey(void) {
+    Player* otherPlayer = FormModel_GetDrawnOtherPlayer();
+    if (otherPlayer != nullptr) {
+        return ResolveOtherPlayerHeldKey(otherPlayer);
+    }
     return sHeldItem.empty() ? nullptr : sHeldItem.c_str();
+}
+
+std::string CustomItemRegistry_GetOwner(const char* key) {
+    auto item = key == nullptr ? sCustomItems.end() : sCustomItems.find(key);
+    return item == sCustomItems.end() ? std::string() : item->second->owner;
 }
 
 bool CustomItemRegistry_SetIconPath(const char* key, const char* path) {
@@ -1037,7 +1105,7 @@ int32_t CustomItemRegistry_UpdateHeld(Player* player, PlayState* play) {
     return definition != nullptr && definition->update != nullptr ? definition->update(player, play) : 0;
 }
 
-void CustomItemRegistry_DrawHeld(Player* player, PlayState* play) {
+static void DrawLocalHeld(Player* player, PlayState* play) {
     const auto* definition = FindDefinition(sHeldItem);
     if (definition == nullptr) {
         return;
@@ -1047,6 +1115,87 @@ void CustomItemRegistry_DrawHeld(Player* player, PlayState* play) {
     } else if (definition->heldModelPath != nullptr) {
         DrawModelPath(play, definition->heldModelPath, false);
     }
+}
+
+static const char* ResolveOtherPlayerHeldKey(Player* player) {
+    const char* key = nullptr;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveHeldCustomItem>(player, &key);
+    return key;
+}
+
+// A mod's drawHeld reads the local player's item state, so another player only gets the static model. An item
+// with an appearance is drawn at its own limb instead (DrawOtherPlayerAppearance).
+static void DrawOtherPlayerHeld(Player* player, PlayState* play) {
+    const char* key = ResolveOtherPlayerHeldKey(player);
+    const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
+    if (definition != nullptr && definition->appearance.modelPath == nullptr &&
+        definition->heldModelPath != nullptr) {
+        DrawModelPath(play, definition->heldModelPath, false);
+    }
+}
+
+// Model DLs such as Majora's masks leave their env colour and a lighting-less geometry mode behind, which would
+// black out the limb drawn right after.
+static void RestoreLimbDrawState(PlayState* play, Player* player) {
+    const Color_RGB8 tunic = Player_GetTunicColor(player->currentTunic);
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetEnvColor(POLY_OPA_DISP++, tunic.r, tunic.g, tunic.b, 0);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void DrawAppearance(PlayState* play, Player* player, const SOHCustomItemAppearance& appearance) {
+    Matrix_Push();
+    if (appearance.scale > 0.0f) {
+        // The limb matrix carries Link's own 0.01 body scale: dividing it back out leaves the offsets in world units.
+        const float unscale = player->actor.scale.x != 0.0f ? 1.0f / player->actor.scale.x : 1.0f;
+        Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
+        Matrix_RotateY(static_cast<f32>(DEG_TO_RAD(appearance.rotation[1])), MTXMODE_APPLY);
+        Matrix_RotateX(static_cast<f32>(DEG_TO_RAD(appearance.rotation[0])), MTXMODE_APPLY);
+        Matrix_RotateZ(static_cast<f32>(DEG_TO_RAD(appearance.rotation[2])), MTXMODE_APPLY);
+        Matrix_Translate(appearance.offset[0], appearance.offset[1], appearance.offset[2], MTXMODE_APPLY);
+        Matrix_Scale(appearance.scale, appearance.scale, appearance.scale, MTXMODE_APPLY);
+    }
+    DrawModelPath(play, appearance.modelPath, false);
+    Matrix_Pop();
+    RestoreLimbDrawState(play, player);
+}
+
+static void DrawAppearanceAtLimb(PlayState* play, Player* player, int32_t limbIndex, const char* key,
+                                 uint8_t defaultLimb) {
+    const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
+    if (definition == nullptr || definition->appearance.modelPath == nullptr) {
+        return;
+    }
+    const uint8_t limb = definition->appearance.limb != 0 ? definition->appearance.limb : defaultLimb;
+    if (limbIndex == limb) {
+        DrawAppearance(play, player, definition->appearance);
+    }
+}
+
+static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t limbIndex) {
+    if (player == GET_PLAYER(play)) {
+        return;
+    }
+    DrawAppearanceAtLimb(play, player, limbIndex, ResolveOtherPlayerHeldKey(player), PLAYER_LIMB_L_HAND);
+
+    const char* const* wornKeys = nullptr;
+    uint32_t wornCount = 0;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
+                                                                                            &wornCount);
+    for (uint32_t index = 0; index < wornCount; index++) {
+        DrawAppearanceAtLimb(play, player, limbIndex, wornKeys[index], PLAYER_LIMB_HEAD);
+    }
+}
+
+void CustomItemRegistry_DrawHeld(Player* player, PlayState* play) {
+    if (player == GET_PLAYER(play)) {
+        DrawLocalHeld(player, play);
+        return;
+    }
+    DrawOtherPlayerHeld(player, play);
 }
 
 const char* CustomItemRegistry_GetFirstPersonModel(void) {

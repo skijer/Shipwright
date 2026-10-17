@@ -31,6 +31,7 @@ struct PermissionName {
 constexpr PermissionName kPermissionNames[] = {
     { ModPermission::Microphone, "microphone" },
     { ModPermission::Files, "files" },
+    { ModPermission::Network, "network" },
 };
 
 enum class ConfirmChoice : int {

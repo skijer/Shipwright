@@ -919,7 +919,7 @@ void DrawFaceGlow(PlayState* play) {
 }
 
 void DrawHead(PlayState* play, Player* player, int32_t limbIndex) {
-    if (!sActive || !sIsMaskCutscene || limbIndex != PLAYER_LIMB_HEAD) {
+    if (!sActive || !sIsMaskCutscene || limbIndex != PLAYER_LIMB_HEAD || player != GetPlayer()) {
         return;
     }
     DrawMask(play, player);

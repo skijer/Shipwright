@@ -42,6 +42,7 @@ void Anchor::SendPacket_UpdateTeamState() {
     payload["state"]["sceneFlags"][gPlayState->sceneNum * 4 + 1] = gPlayState->actorCtx.flags.swch;
     payload["state"]["sceneFlags"][gPlayState->sceneNum * 4 + 2] = gPlayState->actorCtx.flags.clear;
     payload["state"]["sceneFlags"][gPlayState->sceneNum * 4 + 3] = gPlayState->actorCtx.flags.collect;
+    payload["state"]["unbound"] = PrepCustomProgressState();
 
     // The commented out code below is an attempt at sending the entire randomizer seed over, in hopes that a player
     // doesn't have to generate the seed themselves Currently it doesn't work :)
@@ -230,6 +231,10 @@ void Anchor::HandlePacket_UpdateTeamState(nlohmann::json payload) {
         }
 
         gSaveContext.inventory = loadedData.inventory;
+
+        if (payload["state"].contains("unbound")) {
+            ApplyCustomProgressState(payload["state"]["unbound"]);
+        }
 
         // The commented out code below is an attempt at sending the entire randomizer seed over, in hopes that a player
         // doesn't have to generate the seed themselves Currently it doesn't work :)

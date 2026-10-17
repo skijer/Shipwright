@@ -47,6 +47,15 @@ DEFINE_HOOK(OnPlayerFilterInput, (Player * player, Input* input));
 DEFINE_HOOK(OnPlayerPostLimbDraw, (PlayState * play, Player* player, int32_t limbIndex));
 DEFINE_HOOK(OnPlayerResolveFaceTextures, (const char** eyes, const char** mouth));
 DEFINE_HOOK(OnPlayerResolveLimbDraw, (Player * player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos));
+DEFINE_HOOK(OnPlayerResolveForm, (Player * player, const char** formKey));
+DEFINE_HOOK(OnPlayerResolveHeldCustomItem, (Player * player, const char** itemKey));
+DEFINE_HOOK(OnPlayerResolveWornCustomItems, (Player * player, const char* const** itemKeys, uint32_t* count));
+DEFINE_HOOK(OnCustomItemOwnedChange, (const char* key, bool owned));
+DEFINE_HOOK(OnCustomItemReceive, (const char* key));
+DEFINE_HOOK(OnCustomEquipOwnedChange, (const char* key, bool owned));
+DEFINE_HOOK(OnRandoInfCustomChange, (const char* key, bool state));
+DEFINE_HOOK(OnNetConnectionChanged, (bool connected));
+DEFINE_HOOK(OnNetPeerChanged, (uint32_t clientId, bool joined));
 DEFINE_HOOK(OnGetItemDraw, (PlayState * play, GetItemEntry* entry, bool* handled));
 DEFINE_HOOK(OnGetItemDrawPost, (PlayState * play, GetItemEntry* entry));
 DEFINE_HOOK(OnBgCheckRaycastFloor,

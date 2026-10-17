@@ -5,6 +5,9 @@
 #include "soh/Notification/Notification.h"
 #include "soh/SohGui/ImGuiUtils.h"
 #include "soh/Enhancements/item-tables/ItemTableManager.h"
+#include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/RandoInfCustom/RandoInfCustom.h"
 
 extern "C" {
 #include "functions.h"
@@ -102,5 +105,71 @@ void Anchor::HandlePacket_GiveItem(nlohmann::json payload) {
                 .suffix = Rando::StaticData::RetrieveItem((RandomizerGet)getItemEntry.getItemId).GetName().english,
             });
         }
+    }
+}
+
+/**
+ * CUSTOM_PROGRESS
+ *
+ * Custom items, custom equipment and custom randomizer flags, by key. A client without the mod still saves the
+ * item and flag keys, so that progress is there once the mod is installed.
+ */
+
+void Anchor::SendPacket_CustomProgress(const std::string& kind, const char* key, bool state) {
+    if (!IsSaveLoaded() || isProcessingIncomingPacket || !roomState.syncItemsAndFlags || key == nullptr) {
+        return;
+    }
+
+    nlohmann::json payload;
+    payload["type"] = CUSTOM_PROGRESS;
+    payload["targetTeamId"] = CVarGetString(CVAR_REMOTE_ANCHOR("TeamId"), "default");
+    payload["addToQueue"] = true;
+    payload["kind"] = kind;
+    payload["key"] = key;
+    payload["state"] = state;
+
+    SendJsonToRemote(payload);
+}
+
+void Anchor::HandlePacket_CustomProgress(nlohmann::json payload) {
+    if (!IsSaveLoaded() || !roomState.syncItemsAndFlags) {
+        return;
+    }
+
+    const std::string kind = payload.at("kind").get<std::string>();
+    const std::string key = payload.at("key").get<std::string>();
+    const bool state = payload.at("state").get<bool>();
+
+    if (kind == CUSTOM_PROGRESS_ITEM) {
+        CustomItemRegistry_SetOwned(key.c_str(), state);
+    } else if (kind == CUSTOM_PROGRESS_RECEIVE) {
+        CustomItemRegistry_ReceiveGetItem(key.c_str());
+    } else if (kind == CUSTOM_PROGRESS_EQUIPMENT) {
+        CustomEquipRegistry_SetOwned(key.c_str(), state);
+    } else if (kind == CUSTOM_PROGRESS_FLAG) {
+        RandoInfCustom_SetByKey(key.c_str(), state);
+    } else {
+        SPDLOG_WARN("[Anchor] CUSTOM_PROGRESS: unknown kind '{}' for '{}'", kind, key);
+    }
+}
+
+nlohmann::json Anchor::PrepCustomProgressState() {
+    return nlohmann::json{
+        { CUSTOM_PROGRESS_ITEM, CustomItemRegistry_ListOwned() },
+        { CUSTOM_PROGRESS_EQUIPMENT, CustomEquipRegistry_ListOwned() },
+        { CUSTOM_PROGRESS_FLAG, RandoInfCustom_ListSet() },
+    };
+}
+
+// Merged like the vanilla flags: a team save only ever adds progress.
+void Anchor::ApplyCustomProgressState(const nlohmann::json& state) {
+    for (const std::string& key : state.value(CUSTOM_PROGRESS_ITEM, std::vector<std::string>{})) {
+        CustomItemRegistry_SetOwned(key.c_str(), true);
+    }
+    for (const std::string& key : state.value(CUSTOM_PROGRESS_EQUIPMENT, std::vector<std::string>{})) {
+        CustomEquipRegistry_SetOwned(key.c_str(), true);
+    }
+    for (const std::string& key : state.value(CUSTOM_PROGRESS_FLAG, std::vector<std::string>{})) {
+        RandoInfCustom_SetByKey(key.c_str(), true);
     }
 }

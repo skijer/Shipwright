@@ -76,7 +76,10 @@ void CustomEquipRegistry_Init(void);
 #ifdef __cplusplus
 }
 
+#include <vector>
+
 void CustomEquipRegistry_SetCurrentMod(const std::string& name);
+std::vector<std::string> CustomEquipRegistry_ListOwned();
 #endif
 
 #endif

@@ -2,6 +2,7 @@
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/frame_interpolation.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 
 extern "C" {
 #include "variables.h"
@@ -160,6 +161,10 @@ void Anchor::RegisterHooks() {
     COND_ID_HOOK(OnBossDefeat, ACTOR_BOSS_GANON2, isConnected, [&](void* refActor) { SendPacket_GameComplete(); });
 
     COND_HOOK(OnItemReceive, isConnected, [&](GetItemEntry itemEntry) {
+        if (CustomItemRegistry_IsCustomGetItem(&itemEntry)) {
+            return;
+        }
+
         // Handle vanilla dungeon items a bit differently
         if (itemEntry.modIndex == MOD_NONE &&
             (itemEntry.itemId >= ITEM_KEY_BOSS && itemEntry.itemId <= ITEM_KEY_SMALL)) {
@@ -173,6 +178,41 @@ void Anchor::RegisterHooks() {
     COND_HOOK(OnDungeonKeyUsed, isConnected, [&](uint16_t mapIndex) {
         // Handle vanilla dungeon items a bit differently
         SendPacket_UpdateDungeonItems();
+    });
+
+    COND_HOOK(OnCustomItemOwnedChange, isConnected,
+              [&](const char* key, bool owned) { SendPacket_CustomProgress(CUSTOM_PROGRESS_ITEM, key, owned); });
+
+    COND_HOOK(OnCustomItemReceive, isConnected,
+              [&](const char* key) { SendPacket_CustomProgress(CUSTOM_PROGRESS_RECEIVE, key, true); });
+
+    COND_HOOK(OnCustomEquipOwnedChange, isConnected,
+              [&](const char* key, bool owned) { SendPacket_CustomProgress(CUSTOM_PROGRESS_EQUIPMENT, key, owned); });
+
+    COND_HOOK(OnRandoInfCustomChange, isConnected,
+              [&](const char* key, bool state) { SendPacket_CustomProgress(CUSTOM_PROGRESS_FLAG, key, state); });
+
+    COND_HOOK(OnPlayerResolveForm, isConnected, [&](Player* player, const char** formKey) {
+        AnchorClient* client = FindDummyPlayerClient(&player->actor);
+        if (client != nullptr && !client->formKey.empty()) {
+            *formKey = client->formKey.c_str();
+        }
+    });
+
+    COND_HOOK(OnPlayerResolveWornCustomItems, isConnected,
+              [&](Player* player, const char* const** itemKeys, uint32_t* count) {
+                  AnchorClient* client = FindDummyPlayerClient(&player->actor);
+                  if (client != nullptr) {
+                      *itemKeys = client->wornCustomItemKeyPointers.data();
+                      *count = static_cast<uint32_t>(client->wornCustomItemKeyPointers.size());
+                  }
+              });
+
+    COND_HOOK(OnPlayerResolveHeldCustomItem, isConnected, [&](Player* player, const char** itemKey) {
+        AnchorClient* client = FindDummyPlayerClient(&player->actor);
+        if (client != nullptr && !client->heldCustomItemKey.empty()) {
+            *itemKey = client->heldCustomItemKey.c_str();
+        }
     });
 
     COND_VB_SHOULD(VB_APPLY_TUNIC_COLOR, isConnected, {

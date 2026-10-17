@@ -86,7 +86,11 @@ bool FormRegistry_IsActive(const char* key);
 #ifdef __cplusplus
 }
 
+#include <string>
+
 void FormRegistry_Init();
+void FormRegistry_SetCurrentMod(const std::string& name);
+std::string FormRegistry_GetOwner(const char* key);
 #endif
 
 #endif

@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 
 #include <spdlog/spdlog.h>
@@ -27,14 +28,29 @@ constexpr const char* AdultSkeleton = "/object_link_boy/gLinkAdultSkel";
 constexpr const char* ChildSkeleton = "/object_link_child/gLinkChildSkel";
 constexpr const char* DisableLodCvar = CVAR_ENHANCEMENT("DisableLOD");
 
-std::string sModelPath;
-float sRootScaleAdult = 1.0f;
-float sRootScaleChild = 1.0f;
-float sRootDrop = 0.0f;
-FlexSkeletonHeader* sSkeletonAdult = nullptr;
-FlexSkeletonHeader* sSkeletonChild = nullptr;
-bool sTriedAdult = false;
-bool sTriedChild = false;
+struct FormBody {
+    std::string modelPath;
+    float rootScaleAdult = 1.0f;
+    float rootScaleChild = 1.0f;
+    float rootDrop = 0.0f;
+    FlexSkeletonHeader* skeletonAdult = nullptr;
+    FlexSkeletonHeader* skeletonChild = nullptr;
+    bool triedAdult = false;
+    bool triedChild = false;
+};
+
+struct DrawnPlayer {
+    Player* player = nullptr;
+    FormBody* body = nullptr;
+    const SOHFormDefinition* otherPlayerForm = nullptr;
+    bool isChild = false;
+    bool isLocal = false;
+};
+
+std::unordered_map<std::string, FormBody> sBodies;
+FormBody* sLocalBody = nullptr;
+DrawnPlayer sDrawn;
+bool sIsDrawingPlayerActor = false;
 void** sSavedSkeleton = nullptr;
 s32 sSavedDListCount = 0;
 bool sForcedNearLod = false;
@@ -49,12 +65,40 @@ void ForceNearLod(bool formActive) {
     }
 }
 
+FormBody* FindBody(const SOHFormDefinition* form) {
+    const char* modelPath = form == nullptr ? nullptr : form->modelPath;
+    if (modelPath == nullptr || modelPath[0] == '\0') {
+        return nullptr;
+    }
+    FormBody& body = sBodies[modelPath];
+    body.modelPath = modelPath;
+    body.rootScaleAdult = form->rootScaleAdult > 0.0f ? form->rootScaleAdult : 1.0f;
+    body.rootScaleChild = form->rootScaleChild > 0.0f ? form->rootScaleChild : 1.0f;
+    body.rootDrop = form->rootDrop;
+    return &body;
+}
+
+// TAKEOVER forms draw through the mod's own callback, which only knows the local player: others stay Link.
+const SOHFormDefinition* FindOtherPlayerForm(Player* player) {
+    const char* formKey = nullptr;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveForm>(player, &formKey);
+    const SOHFormDefinition* form = formKey == nullptr ? nullptr : FormRegistry_Find(formKey);
+    return form != nullptr && form->kind == SOH_FORM_KIND_LINK ? form : nullptr;
+}
+
 bool IsLinkSkeleton(SkeletonHeader* header) {
     return header != nullptr && header->limbCount > 0 && header->limbCount <= 32 && header->segment != nullptr;
 }
 
-FlexSkeletonHeader* LoadSkeleton(const char* suffix) {
-    const std::string path = sModelPath + suffix;
+// Another player's dummy swaps gSaveContext.linkAge only inside its own draw, so read the age off its skeleton.
+bool HasChildSkeleton(Player* player) {
+    SkeletonHeader* child =
+        ResourceMgr_LoadSkeletonByName(reinterpret_cast<const char*>(gPlayerSkelHeaders[LINK_AGE_CHILD]), nullptr);
+    return child != nullptr && player->skelAnime.skeleton == child->segment;
+}
+
+FlexSkeletonHeader* LoadSkeleton(const FormBody& body, const char* suffix) {
+    const std::string path = body.modelPath + suffix;
     SkeletonHeader* header = ResourceMgr_LoadSkeletonByName(path.c_str(), nullptr);
     if (!IsLinkSkeleton(header)) {
         SPDLOG_WARN("[FormModel] '{}' is not a Link skeleton; keeping Link's body", path);
@@ -63,21 +107,21 @@ FlexSkeletonHeader* LoadSkeleton(const char* suffix) {
     return reinterpret_cast<FlexSkeletonHeader*>(header);
 }
 
-FlexSkeletonHeader* ActiveSkeleton() {
-    if (!LINK_IS_ADULT) {
-        if (!sTriedChild) {
-            sTriedChild = true;
-            sSkeletonChild = LoadSkeleton(ChildSkeleton);
+FlexSkeletonHeader* SkeletonFor(FormBody& body, bool isChild) {
+    if (isChild) {
+        if (!body.triedChild) {
+            body.triedChild = true;
+            body.skeletonChild = LoadSkeleton(body, ChildSkeleton);
         }
-        if (sSkeletonChild != nullptr) {
-            return sSkeletonChild;
+        if (body.skeletonChild != nullptr) {
+            return body.skeletonChild;
         }
     }
-    if (!sTriedAdult) {
-        sTriedAdult = true;
-        sSkeletonAdult = LoadSkeleton(AdultSkeleton);
+    if (!body.triedAdult) {
+        body.triedAdult = true;
+        body.skeletonAdult = LoadSkeleton(body, AdultSkeleton);
     }
-    return sSkeletonAdult;
+    return body.skeletonAdult;
 }
 
 const char* VanillaPlayerLeaf(const char* path) {
@@ -94,31 +138,49 @@ const char* VanillaPlayerLeaf(const char* path) {
     return leaf + std::strlen("objects/");
 }
 
-Gfx* ResolveMirrored(const char* vanillaPath) {
+Gfx* ResolveMirrored(const FormBody& body, const char* vanillaPath) {
     const char* leaf = VanillaPlayerLeaf(vanillaPath);
     if (leaf == nullptr) {
         return nullptr;
     }
-    const std::string path = sModelPath + "/" + leaf;
+    const std::string path = body.modelPath + "/" + leaf;
     if (!ResourceMgr_FileExists(path.c_str())) {
         return nullptr;
     }
     return ResourceMgr_LoadGfxByName(path.c_str());
 }
 
-bool IsModelPath(const char* path) {
-    return path != nullptr && std::strstr(path, sModelPath.c_str()) != nullptr;
+bool IsModelPath(const FormBody& body, const char* path) {
+    return path != nullptr && std::strstr(path, body.modelPath.c_str()) != nullptr;
+}
+
+// The pause menu draws Link outside any actor draw; only the local player is drawn there.
+DrawnPlayer DrawnPlayerFor(Player* player) {
+    if (sIsDrawingPlayerActor) {
+        return sDrawn;
+    }
+    const bool isLocal = gPlayState != nullptr && player == GET_PLAYER(gPlayState);
+    return DrawnPlayer{ player, isLocal ? sLocalBody : nullptr, nullptr, !LINK_IS_ADULT, isLocal };
+}
+
+const FormBody* DrawnBody() {
+    return sIsDrawingPlayerActor ? sDrawn.body : sLocalBody;
 }
 
 void SwapSkeleton(Actor* actor, PlayState* play, bool* drawVanilla) {
-    if (sModelPath.empty()) {
+    Player* player = reinterpret_cast<Player*>(actor);
+    const bool isLocal = player == GET_PLAYER(play);
+    const SOHFormDefinition* otherPlayerForm = isLocal ? nullptr : FindOtherPlayerForm(player);
+    sIsDrawingPlayerActor = true;
+    sDrawn = DrawnPlayer{ player, isLocal ? sLocalBody : FindBody(otherPlayerForm), otherPlayerForm, false, isLocal };
+    if (sDrawn.body == nullptr) {
         return;
     }
-    FlexSkeletonHeader* skeleton = ActiveSkeleton();
+    sDrawn.isChild = isLocal ? !LINK_IS_ADULT : HasChildSkeleton(player);
+    FlexSkeletonHeader* skeleton = SkeletonFor(*sDrawn.body, sDrawn.isChild);
     if (skeleton == nullptr) {
         return;
     }
-    Player* player = reinterpret_cast<Player*>(actor);
     sSavedSkeleton = player->skelAnime.skeleton;
     sSavedDListCount = player->skelAnime.dListCount;
     player->skelAnime.skeleton = skeleton->sh.segment;
@@ -126,6 +188,8 @@ void SwapSkeleton(Actor* actor, PlayState* play, bool* drawVanilla) {
 }
 
 void RestoreSkeleton(Actor* actor, PlayState* play) {
+    sIsDrawingPlayerActor = false;
+    sDrawn = DrawnPlayer{};
     if (sSavedSkeleton == nullptr) {
         return;
     }
@@ -136,8 +200,8 @@ void RestoreSkeleton(Actor* actor, PlayState* play) {
     sSavedDListCount = 0;
 }
 
-void ScaleRootLimb(int32_t limbIndex, Vec3f* pos) {
-    const float scale = LINK_IS_ADULT ? sRootScaleAdult : sRootScaleChild;
+void ScaleRootLimb(const DrawnPlayer& drawn, int32_t limbIndex, Vec3f* pos) {
+    const float scale = drawn.isChild ? drawn.body->rootScaleChild : drawn.body->rootScaleAdult;
 
     if (limbIndex != 1 || pos == nullptr) {
         return;
@@ -145,11 +209,12 @@ void ScaleRootLimb(int32_t limbIndex, Vec3f* pos) {
     pos->x *= scale;
     pos->y *= scale;
     pos->z *= scale;
-    pos->y -= sRootDrop;
+    pos->y -= drawn.body->rootDrop;
 }
 
-bool HideEmptySheath(int32_t limbIndex, Gfx** dList) {
-    if (limbIndex != PLAYER_LIMB_SHEATH || CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE ||
+bool HideEmptySheath(const DrawnPlayer& drawn, int32_t limbIndex, Gfx** dList) {
+    if (!drawn.isLocal || limbIndex != PLAYER_LIMB_SHEATH ||
+        CUR_EQUIP_VALUE(EQUIP_TYPE_SWORD) != EQUIP_VALUE_SWORD_NONE ||
         CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD) != EQUIP_VALUE_SHIELD_NONE) {
         return false;
     }
@@ -158,14 +223,15 @@ bool HideEmptySheath(int32_t limbIndex, Gfx** dList) {
 }
 
 void ResolveLimbDraw(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
-    if (sModelPath.empty()) {
+    const DrawnPlayer drawn = DrawnPlayerFor(player);
+    if (drawn.body == nullptr) {
         return;
     }
-    ScaleRootLimb(limbIndex, pos);
-    if (HideEmptySheath(limbIndex, dList) || *dList == nullptr) {
+    ScaleRootLimb(drawn, limbIndex, pos);
+    if (HideEmptySheath(drawn, limbIndex, dList) || *dList == nullptr) {
         return;
     }
-    Gfx* mirrored = ResolveMirrored(reinterpret_cast<const char*>(*dList));
+    Gfx* mirrored = ResolveMirrored(*drawn.body, reinterpret_cast<const char*>(*dList));
     if (mirrored != nullptr) {
         *dList = mirrored;
         return;
@@ -174,19 +240,19 @@ void ResolveLimbDraw(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDL
     if (isUnresolvedEquipment) {
         return;
     }
-    if (IsModelPath(reinterpret_cast<const char*>(limbDList))) {
+    if (IsModelPath(*drawn.body, reinterpret_cast<const char*>(limbDList))) {
         *dList = limbDList;
     }
 }
 
-void MirrorFaceTexture(const char** texture) {
+void MirrorFaceTexture(const FormBody& body, const char** texture) {
     static std::unordered_set<std::string> sMirroredPaths;
     const char* leaf = VanillaPlayerLeaf(*texture);
 
     if (leaf == nullptr) {
         return;
     }
-    const std::string path = std::string(OtrPrefix) + sModelPath + "/" + leaf;
+    const std::string path = std::string(OtrPrefix) + body.modelPath + "/" + leaf;
     if (!ResourceMgr_FileExists(path.c_str())) {
         return;
     }
@@ -194,11 +260,12 @@ void MirrorFaceTexture(const char** texture) {
 }
 
 void ResolveFaceTextures(const char** eyes, const char** mouth) {
-    if (sModelPath.empty()) {
+    const FormBody* body = DrawnBody();
+    if (body == nullptr) {
         return;
     }
-    MirrorFaceTexture(eyes);
-    MirrorFaceTexture(mouth);
+    MirrorFaceTexture(*body, eyes);
+    MirrorFaceTexture(*body, mouth);
 }
 
 } // namespace
@@ -206,40 +273,36 @@ void ResolveFaceTextures(const char** eyes, const char** mouth) {
 void FormModel_Init() {
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnVanillaBehavior>(
         VB_APPLY_TUNIC_COLOR, [](GIVanillaBehavior, bool* should, va_list) {
-            if (!sModelPath.empty()) {
+            if (DrawnBody() != nullptr) {
                 *should = false;
             }
         });
-    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDraw>(ACTOR_PLAYER, SwapSkeleton);
-    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDrawEnd>(ACTOR_PLAYER, RestoreSkeleton);
+    for (int16_t actorId : { ACTOR_PLAYER, ACTOR_EN_OE2 }) {
+        GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDraw>(actorId, SwapSkeleton);
+        GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDrawEnd>(actorId, RestoreSkeleton);
+    }
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveLimbDraw>(ResolveLimbDraw);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveFaceTextures>(ResolveFaceTextures);
 }
 
 bool FormModel_IsActive(void) {
-    return !sModelPath.empty();
+    return sLocalBody != nullptr;
+}
+
+bool FormModel_IsDrawingOtherPlayer(void) {
+    return sIsDrawingPlayerActor && !sDrawn.isLocal;
+}
+
+Player* FormModel_GetDrawnOtherPlayer(void) {
+    return FormModel_IsDrawingOtherPlayer() ? sDrawn.player : nullptr;
+}
+
+const char* FormModel_GetDrawnOtherPlayerFormKey(void) {
+    return FormModel_IsDrawingOtherPlayer() && sDrawn.otherPlayerForm != nullptr ? sDrawn.otherPlayerForm->key
+                                                                                    : nullptr;
 }
 
 void FormModel_SetActive(const SOHFormDefinition* form) {
-    const char* modelPath = form == nullptr ? nullptr : form->modelPath;
-    const bool hasModel = modelPath != nullptr && modelPath[0] != '\0';
-
-    ForceNearLod(hasModel);
-    if (!hasModel) {
-        sModelPath.clear();
-        sRootScaleAdult = 1.0f;
-        sRootScaleChild = 1.0f;
-        sRootDrop = 0.0f;
-        return;
-    }
-    if (sModelPath != modelPath) {
-        sSkeletonAdult = nullptr;
-        sSkeletonChild = nullptr;
-        sTriedAdult = false;
-        sTriedChild = false;
-    }
-    sModelPath = modelPath;
-    sRootScaleAdult = form->rootScaleAdult > 0.0f ? form->rootScaleAdult : 1.0f;
-    sRootScaleChild = form->rootScaleChild > 0.0f ? form->rootScaleChild : 1.0f;
-    sRootDrop = form->rootDrop;
+    sLocalBody = FindBody(form);
+    ForceNearLod(sLocalBody != nullptr);
 }

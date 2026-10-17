@@ -10,6 +10,7 @@
 #include "soh/SaveManager.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 
 namespace {
 
@@ -41,12 +42,7 @@ void ClaimUnresolvedKey(const std::string& key, uint16_t flag) {
 }
 
 void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
-    std::vector<std::string> set = sKeysOfUnloadedMods;
-    for (uint16_t flag = 1; flag <= sKeys.size(); flag++) {
-        if (sBanks[SOH_RANDO_INF_SAVE][flag - 1]) {
-            set.push_back(sKeys[flag - 1]);
-        }
-    }
+    std::vector<std::string> set = RandoInfCustom_ListSet();
     SaveManager::Instance->SaveArray("set", set.size(),
                                      [&set](size_t index) { SaveManager::Instance->SaveData("", set[index]); });
 }
@@ -125,10 +121,23 @@ bool RandoInfCustom_Get(SOHRandoInfBank bank, uint16_t flag) {
 }
 
 void RandoInfCustom_Set(SOHRandoInfBank bank, uint16_t flag, bool state) {
-    if (!IsBankValid(bank) || !IsFlagValid(flag)) {
+    if (!IsBankValid(bank) || !IsFlagValid(flag) || sBanks[bank][flag - 1] == state) {
         return;
     }
     sBanks[bank][flag - 1] = state;
+    if (bank == SOH_RANDO_INF_SAVE) {
+        GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandoInfCustomChange>(sKeys[flag - 1].c_str(), state);
+    }
+}
+
+std::vector<std::string> RandoInfCustom_ListSet() {
+    std::vector<std::string> set = sKeysOfUnloadedMods;
+    for (uint16_t flag = 1; flag <= sKeys.size(); flag++) {
+        if (sBanks[SOH_RANDO_INF_SAVE][flag - 1]) {
+            set.push_back(sKeys[flag - 1]);
+        }
+    }
+    return set;
 }
 
 void RandoInfCustom_ClearBank(SOHRandoInfBank bank) {

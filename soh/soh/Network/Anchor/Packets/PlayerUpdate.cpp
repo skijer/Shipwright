@@ -1,5 +1,7 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include "soh/Network/Anchor/JsonConversions.hpp"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
 #include <nlohmann/json.hpp>
 
 extern "C" {
@@ -7,6 +9,51 @@ extern "C" {
 #include "variables.h"
 extern PlayState* gPlayState;
 }
+
+namespace {
+
+// Every custom item shares one item action and one item id, and vanilla clients have neither: they go by key.
+s8 ToVanillaItemAction(s8 itemAction) {
+    return itemAction == PLAYER_IA_CUSTOM ? PLAYER_IA_NONE : itemAction;
+}
+
+u8 ToVanillaItem(u8 item) {
+    return item == ITEM_CUSTOM ? ITEM_NONE : item;
+}
+
+nlohmann::json PrepUnboundPlayerState(const Player* player) {
+    nlohmann::json state = nlohmann::json::object();
+    const char* formKey = FormRegistry_GetActiveKey();
+    if (formKey != nullptr) {
+        state["form"] = formKey;
+    }
+    const char* heldKey = player->heldItemAction == PLAYER_IA_CUSTOM ? CustomItemRegistry_GetHeldKey() : nullptr;
+    if (heldKey != nullptr) {
+        state["held"] = heldKey;
+    }
+    std::vector<std::string> wornKeys = CustomItemRegistry_ListWorn();
+    if (!wornKeys.empty()) {
+        state["worn"] = wornKeys;
+    }
+    return state;
+}
+
+void SetWornCustomItems(AnchorClient& client, std::vector<std::string> wornKeys) {
+    if (wornKeys == client.wornCustomItemKeys) {
+        return;
+    }
+    client.wornCustomItemKeys = std::move(wornKeys);
+    client.wornCustomItemKeyPointers.clear();
+    for (const std::string& key : client.wornCustomItemKeys) {
+        client.wornCustomItemKeyPointers.push_back(key.c_str());
+    }
+}
+
+u8 ToKnownMask(u8 mask) {
+    return mask < PLAYER_MASK_MAX ? mask : PLAYER_MASK_NONE;
+}
+
+} // namespace
 
 /**
  * PLAYER_UPDATE
@@ -58,10 +105,15 @@ void Anchor::SendPacket_PlayerUpdate() {
     payload["currentTunic"] = player->currentTunic;
     payload["stateFlags1"] = player->stateFlags1;
     payload["stateFlags2"] = player->stateFlags2 & ~PLAYER_STATE2_DISABLE_DRAW;
-    payload["buttonItem0"] = gSaveContext.equips.buttonItems[0];
-    payload["itemAction"] = player->itemAction;
-    payload["heldItemAction"] = player->heldItemAction;
+    payload["buttonItem0"] = ToVanillaItem(gSaveContext.equips.buttonItems[0]);
+    payload["itemAction"] = ToVanillaItemAction(player->itemAction);
+    payload["heldItemAction"] = ToVanillaItemAction(player->heldItemAction);
     payload["modelGroup"] = player->modelGroup;
+    payload["currentMask"] = player->currentMask;
+    nlohmann::json unboundState = PrepUnboundPlayerState(player);
+    if (!unboundState.empty()) {
+        payload["unbound"] = unboundState;
+    }
     payload["invincibilityTimer"] = player->invincibilityTimer;
     payload["unk_862"] = player->unk_862;
     payload["unk_85C"] = player->unk_85C;
@@ -109,6 +161,14 @@ void Anchor::HandlePacket_PlayerUpdate(nlohmann::json payload) {
         client.itemAction = payload.value("itemAction", (s8)0);
         client.heldItemAction = payload.value("heldItemAction", (s8)0);
         client.modelGroup = payload.value("modelGroup", (u8)0);
+        const nlohmann::json unboundState = payload.value("unbound", nlohmann::json::object());
+        client.formKey = unboundState.value("form", std::string());
+        client.heldCustomItemKey = unboundState.value("held", std::string());
+        if (!client.heldCustomItemKey.empty()) {
+            client.heldItemAction = PLAYER_IA_CUSTOM;
+        }
+        SetWornCustomItems(client, unboundState.value("worn", std::vector<std::string>{}));
+        client.currentMask = ToKnownMask(payload.value("currentMask", (u8)PLAYER_MASK_NONE));
         client.invincibilityTimer = payload.value("invincibilityTimer", (s8)0);
         client.unk_862 = payload.value("unk_862", (s16)0);
         client.unk_85C = payload.value("unk_85C", (f32)0);

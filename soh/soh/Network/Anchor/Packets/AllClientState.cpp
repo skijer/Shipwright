@@ -5,6 +5,7 @@
 #include <ship/window/Window.h>
 #include "soh/OTRGlobals.h"
 #include "soh/Notification/Notification.h"
+#include "soh/ModApi/Network/ModNetwork.h"
 
 /**
  * ALL_CLIENT_STATE
@@ -66,6 +67,13 @@ void Anchor::HandlePacket_AllClientState(nlohmann::json payload) {
     // (separate loop to avoid iterator invalidation)
     for (auto& clientId : clientsToRemove) {
         clients.erase(clientId);
+        ModNetwork_OnPeerOnlineChange(clientId, false);
+    }
+
+    for (auto& [clientId, client] : clients) {
+        if (!client.self) {
+            ModNetwork_OnPeerOnlineChange(clientId, client.online);
+        }
     }
 
     shouldRefreshActors = true;

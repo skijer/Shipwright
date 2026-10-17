@@ -86,6 +86,15 @@ typedef struct {
     bool poolModeInvert;
 } SOHCustomItemRandomizer;
 
+// How other players see this item on you, drawn by the game while you hold it or wear it (SetCustomItemWorn).
+typedef struct {
+    const char* modelPath;
+    uint8_t limb;      // PLAYER_LIMB_*; 0 = left hand when held, head when worn
+    float rotation[3]; // degrees, applied Y, then X, then Z
+    float offset[3];   // along the rotated axes, in world units
+    float scale;       // 0 = draw the model in the limb's own space, untransformed
+} SOHCustomItemAppearance;
+
 typedef struct {
     uint32_t structSize;
     const char* key;
@@ -120,6 +129,7 @@ typedef struct {
     SOHCustomItemStateFunc onReceive;
     uint8_t meleeWeapon;
     SOHCustomItemAmmoFunc getAmmo;
+    SOHCustomItemAppearance appearance;
 } SOHCustomItemDefinition;
 
 typedef void (*SOHPickupVariantReceiveFunc)(const char* itemKey, const char* variantKey);
@@ -216,6 +226,8 @@ const SOHCustomItemDefinition* CustomItemRegistry_GetAt(uint32_t index);
 bool CustomItemRegistry_SetOwned(const char* key, bool owned);
 void CustomItemRegistry_ReceiveGetItem(const char* key);
 bool CustomItemRegistry_IsOwned(const char* key);
+bool CustomItemRegistry_SetWorn(const char* key, bool worn);
+bool CustomItemRegistry_IsWorn(const char* key);
 bool CustomItemRegistry_Equip(uint8_t button, const char* key);
 void CustomItemRegistry_Unequip(uint8_t button);
 void CustomItemRegistry_CopyEquippedKey(uint8_t fromButton, uint8_t toButton);
@@ -255,8 +267,12 @@ void CustomItemRegistry_RemoveDrop(Actor* actor);
 }
 
 #include <string>
+#include <vector>
 
 void CustomItemRegistry_Init();
+std::vector<std::string> CustomItemRegistry_ListOwned();
+std::string CustomItemRegistry_GetOwner(const char* key);
+std::vector<std::string> CustomItemRegistry_ListWorn();
 void KaleidoItemManager_Init();
 void CustomItemRegistry_SetCurrentMod(const std::string& name);
 void CustomItemRegistry_ClearCurrentMod();

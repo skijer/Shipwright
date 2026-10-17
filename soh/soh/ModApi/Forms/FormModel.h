@@ -16,6 +16,9 @@ bool FormModel_IsActive(void);
 
 void FormModel_Init();
 void FormModel_SetActive(const SOHFormDefinition* form);
+bool FormModel_IsDrawingOtherPlayer(void);
+Player* FormModel_GetDrawnOtherPlayer(void);
+const char* FormModel_GetDrawnOtherPlayerFormKey(void);
 #endif
 
 #endif

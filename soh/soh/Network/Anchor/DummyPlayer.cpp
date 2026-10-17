@@ -131,6 +131,7 @@ void DummyPlayer_Update(Actor* actor, PlayState* play) {
     player->currentShield = client.currentShield;
     player->heldItemId = client.buttonItem0;
     player->currentTunic = client.currentTunic;
+    player->currentMask = client.currentMask;
     player->stateFlags1 = client.stateFlags1;
     player->stateFlags2 = client.stateFlags2;
     player->itemAction = client.itemAction;

@@ -39,6 +39,7 @@ extern "C" {
 #include "soh/ModApi/ModDialogs/ModDialogs.h"
 #include "soh/ModApi/ModDungeons/BossRegistry.h"
 #include "soh/ModApi/Labels/ModLabels.h"
+#include "soh/ModApi/Network/ModNetwork.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -194,6 +195,27 @@ typedef struct {
     bool (*SetItemIcon)(uint32_t item, uint32_t source);
     uint32_t (*ListArchiveFiles)(const char* searchMask, SOHArchivePathFunc visit, void* userData);
     bool (*MountUserArchive)(const char* title);
+    bool (*RegisterNetChannel)(const char* channel, uint16_t version, SOHNetMessageFunc onMessage);
+    bool (*SendNet)(const char* channel, uint32_t to, const void* data, uint32_t size);
+    bool (*SetNetPeerState)(const char* channel, const void* data, uint32_t size);
+    void (*ClearNetPeerState)(const char* channel);
+    uint32_t (*GetNetPeerState)(uint32_t clientId, const char* channel, void* output, uint32_t capacity);
+    bool (*SetNetRoomState)(const char* channel, const void* data, uint32_t size);
+    void (*ClearNetRoomState)(const char* channel);
+    uint32_t (*GetNetRoomState)(const char* channel, void* output, uint32_t capacity);
+    bool (*IsNetConnected)(void);
+    bool (*IsNetHost)(void);
+    uint32_t (*GetNetOwnClientId)(void);
+    uint32_t (*GetNetPeerCount)(void);
+    bool (*GetNetPeerAt)(uint32_t index, SOHNetPeer* peer);
+    bool (*FindNetPeer)(uint32_t clientId, SOHNetPeer* peer);
+    uint32_t (*GetNetPeerIdForActor)(const Actor* actor);
+    bool (*RequestNetTeleport)(uint32_t clientId);
+    bool (*SummonNetPeer)(uint32_t clientId);
+    bool (*StartNetRoomCountdown)(const char* owner, uint16_t seconds);
+    void (*StopNetRoomCountdown)(const char* owner);
+    bool (*SetCustomItemWorn)(const char* key, bool worn);
+    bool (*IsCustomItemWorn)(const char* key);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

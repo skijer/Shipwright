@@ -86,6 +86,17 @@ void ApplyVanillaValue(uint8_t slot, uint16_t value) {
     }
 }
 
+// Value a slot falls back to when its piece comes off: no sword or shield, the Kokiri tunic and boots.
+uint16_t BareValue(uint8_t slot) {
+    if (slot == SOH_EQUIP_SLOT_TUNIC) {
+        return EQUIP_VALUE_TUNIC_KOKIRI;
+    }
+    if (slot == SOH_EQUIP_SLOT_BOOTS) {
+        return EQUIP_VALUE_BOOTS_KOKIRI;
+    }
+    return 0;
+}
+
 bool IsAgeAllowed(const SOHCustomEquipDefinition* definition) {
     if (definition == nullptr) {
         return false;
@@ -116,7 +127,7 @@ void SetWorn(uint8_t slot, RegisteredEquip* entry, bool writesVanilla) {
     }
 
     if (IsVanillaSlot(slot) && writesVanilla) {
-        ApplyVanillaValue(slot, entry != nullptr ? entry->definition.vanillaBase : 0);
+        ApplyVanillaValue(slot, entry != nullptr ? entry->definition.vanillaBase : BareValue(slot));
     } else if (IsVanillaSlot(slot)) {
         sAppliedValue[slot] = ReadVanillaValue(slot);
     }
@@ -299,16 +310,24 @@ bool CustomEquipRegistry_SetOwned(const char* key, bool owned) {
     if (CustomItemRegistry_Find(entry->key.c_str()) != nullptr) {
         CustomItemRegistry_SetOwned(entry->key.c_str(), owned);
     }
-    if (owned) {
-        sOwned.insert(entry->key);
+    if (owned == CustomEquipRegistry_IsOwned(entry->key.c_str())) {
         return true;
     }
-    sOwned.erase(entry->key);
-    if (CustomEquipRegistry_IsWorn(entry->key.c_str())) {
-        SetWorn(entry->definition.slot, nullptr, true);
+    if (owned) {
+        sOwned.insert(entry->key);
+    } else {
+        sOwned.erase(entry->key);
+        if (CustomEquipRegistry_IsWorn(entry->key.c_str())) {
+            SetWorn(entry->definition.slot, nullptr, true);
+        }
+        sToggled.erase(entry->key);
     }
-    sToggled.erase(entry->key);
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCustomEquipOwnedChange>(entry->key.c_str(), owned);
     return true;
+}
+
+std::vector<std::string> CustomEquipRegistry_ListOwned() {
+    return std::vector<std::string>(sOwned.begin(), sOwned.end());
 }
 
 bool CustomEquipRegistry_Wear(const char* key) {

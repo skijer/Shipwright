@@ -13,6 +13,7 @@
 enum class ModPermission {
     Microphone,
     Files,
+    Network,
 };
 
 enum class PermissionAnswer {

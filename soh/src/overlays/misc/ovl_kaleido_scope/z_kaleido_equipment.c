@@ -560,6 +560,8 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 sEquipTimer = 10;
             } else if (CHECK_AGE_REQ_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP])) {
                 if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
+                    // A custom piece shares its row's vanilla value, so that value never reads as equipped.
+                    const u8 isCustomWorn = CustomEquipRegistry_GetWorn(pauseCtx->cursorY[PAUSE_EQUIP]) != NULL;
 
                     // #Region SoH [Enhancements]
                     // Allow Link to remove his equipment from the equipment subscreen by toggling on/off
@@ -567,7 +569,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     // Only BGS/Giant's Knife is affected, and it will revert to Master Sword.
 
                     // If we have the feature toggled on
-                    if (CVarGetInteger(CVAR_ENHANCEMENT("EquipmentCanBeRemoved"), 0)) {
+                    if (CVarGetInteger(CVAR_ENHANCEMENT("EquipmentCanBeRemoved"), 0) && !isCustomWorn) {
 
                         if (CVarGetInteger(CVAR_ENHANCEMENT("SwordToggle"), SWORD_TOGGLE_NONE) ==
                                 SWORD_TOGGLE_BOTH_AGES ||
@@ -626,6 +628,7 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                     }
 
                     if (CHECK_OWNED_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP] - 1)) {
+                        CustomEquipRegistry_TakeOff(pauseCtx->cursorY[PAUSE_EQUIP]);
                         Inventory_ChangeEquipment(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP]);
                     } else {
                         goto EQUIP_FAIL;

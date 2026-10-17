@@ -17,6 +17,8 @@
 #include "soh/unbound/UnboundAudio.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "soh/ModApi/Forms/FormModel.h"
+#include "soh/ModApi/ModPermissions/ModPermissions.h"
 
 extern "C" PlayState* gPlayState;
 
@@ -30,6 +32,7 @@ struct HookBinders {
 
 std::string sCurrentMod;
 std::unordered_set<std::string> sReportedMissing;
+bool sRegisteringModUsesNetwork = false;
 
 uint8_t HasResource(const char* path) {
     if (path == nullptr || path[0] == '\0') {
@@ -90,6 +93,67 @@ std::string Hex(uint64_t value) {
     return result;
 }
 
+struct DrawHookOwner {
+    std::string mod;
+    bool usesNetwork;
+};
+
+bool DeclaresNetwork(const ModIdentity* mod) {
+    return mod != nullptr &&
+           std::find(mod->declared.begin(), mod->declared.end(), ModPermission::Network) != mod->declared.end();
+}
+
+DrawHookOwner RegisteringDrawHookOwner() {
+    return DrawHookOwner{ sCurrentMod, sRegisteringModUsesNetwork };
+}
+
+// A mod draws on Link from its own local state, so on another player only the mods of that player's form and
+// held item may draw, plus the mods that take that player's state from the network themselves.
+bool MayModDrawOnPlayer(const DrawHookOwner& owner) {
+    if (!FormModel_IsDrawingOtherPlayer() || owner.usesNetwork) {
+        return true;
+    }
+    if (owner.mod.empty()) {
+        return false;
+    }
+    const char* formKey = FormModel_GetDrawnOtherPlayerFormKey();
+    const char* heldKey = CustomItemRegistry_GetHeldKey();
+    const bool ownsForm = formKey != nullptr && FormRegistry_GetOwner(formKey) == owner.mod;
+    const bool ownsHeldItem = heldKey != nullptr && CustomItemRegistry_GetOwner(heldKey) == owner.mod;
+    return ownsForm || ownsHeldItem;
+}
+
+void GateDrawingOnOtherPlayers(std::unordered_map<std::string, HookBinders>& entries) {
+    entries["OnPlayerResolveLimbDraw"].global = [](void* callback) {
+        auto modCallback = (SOHCb_OnPlayerResolveLimbDraw)callback;
+        GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveLimbDraw>(
+            [modCallback, owner = RegisteringDrawHookOwner()](Player* player, int32_t limbIndex, Gfx** dList,
+                                                              Gfx* limbDList, Vec3f* pos) {
+                if (MayModDrawOnPlayer(owner)) {
+                    modCallback(player, limbIndex, dList, limbDList, pos);
+                }
+            });
+    };
+    entries["OnPlayerPostLimbDraw"].global = [](void* callback) {
+        auto modCallback = (SOHCb_OnPlayerPostLimbDraw)callback;
+        GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerPostLimbDraw>(
+            [modCallback, owner = RegisteringDrawHookOwner()](PlayState* play, Player* player, int32_t limbIndex) {
+                if (MayModDrawOnPlayer(owner)) {
+                    modCallback(play, player, limbIndex);
+                }
+            });
+    };
+    entries["OnPlayerResolveFaceTextures"].global = [](void* callback) {
+        auto modCallback = (SOHCb_OnPlayerResolveFaceTextures)callback;
+        GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveFaceTextures>(
+            [modCallback, owner = RegisteringDrawHookOwner()](const char** eyes, const char** mouth) {
+                if (MayModDrawOnPlayer(owner)) {
+                    modCallback(eyes, mouth);
+                }
+            });
+    };
+}
+
 std::unordered_map<std::string, HookBinders> BuildHookEntries() {
     std::unordered_map<std::string, HookBinders> entries;
 
@@ -108,6 +172,7 @@ std::unordered_map<std::string, HookBinders> BuildHookEntries() {
 #include "soh/Enhancements/game-interactor/GameInteractor_HookTable.h"
 #undef DEFINE_HOOK
 
+    GateDrawingOnOtherPlayers(entries);
     return entries;
 }
 
@@ -141,7 +206,9 @@ bool RegisterHookByName(const char* name, void* callback) {
     if (binders == nullptr) {
         return false;
     }
+    sRegisteringModUsesNetwork = DeclaresNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()));
     binders->global(callback);
+    sRegisteringModUsesNetwork = false;
     return true;
 }
 
@@ -318,6 +385,27 @@ SOHModApi BuildTable() {
     api.SetItemIcon = ModLabels_SetItemIcon;
     api.ListArchiveFiles = O2rExtractor_ListFiles;
     api.MountUserArchive = UserFiles_MountArchive;
+    api.RegisterNetChannel = ModNetwork_RegisterChannel;
+    api.SendNet = ModNetwork_Send;
+    api.SetNetPeerState = ModNetwork_SetPeerState;
+    api.ClearNetPeerState = ModNetwork_ClearPeerState;
+    api.GetNetPeerState = ModNetwork_GetPeerState;
+    api.SetNetRoomState = ModNetwork_SetRoomState;
+    api.ClearNetRoomState = ModNetwork_ClearRoomState;
+    api.GetNetRoomState = ModNetwork_GetRoomState;
+    api.IsNetConnected = ModNetwork_IsConnected;
+    api.IsNetHost = ModNetwork_IsHost;
+    api.GetNetOwnClientId = ModNetwork_GetOwnClientId;
+    api.GetNetPeerCount = ModNetwork_GetPeerCount;
+    api.GetNetPeerAt = ModNetwork_GetPeerAt;
+    api.FindNetPeer = ModNetwork_FindPeer;
+    api.GetNetPeerIdForActor = ModNetwork_GetPeerIdForActor;
+    api.RequestNetTeleport = ModNetwork_RequestTeleport;
+    api.SummonNetPeer = ModNetwork_SummonPeer;
+    api.StartNetRoomCountdown = ModNetwork_StartRoomCountdown;
+    api.StopNetRoomCountdown = ModNetwork_StopRoomCountdown;
+    api.SetCustomItemWorn = CustomItemRegistry_SetWorn;
+    api.IsCustomItemWorn = CustomItemRegistry_IsWorn;
     return api;
 }
 
@@ -341,6 +429,7 @@ void ModApi_Init() {
     Microphone_Init();
     BossRegistry_Init();
     DungeonRegistry_Init();
+    ModNetwork_Init();
     ModLoader_LoadMods();
     DungeonRegistry_Load();
 }
@@ -355,6 +444,8 @@ void ModApi_SetCurrentMod(const std::string& name) {
     CustomItemRegistry_SetCurrentMod(name);
     CustomEquipRegistry_SetCurrentMod(name);
     BossRegistry_SetCurrentMod(name);
+    ModNetwork_SetCurrentMod(name);
+    FormRegistry_SetCurrentMod(name);
 }
 
 void ModApi_ClearCurrentMod() {
@@ -362,6 +453,8 @@ void ModApi_ClearCurrentMod() {
     CustomItemRegistry_ClearCurrentMod();
     CustomEquipRegistry_SetCurrentMod(std::string());
     BossRegistry_SetCurrentMod(std::string());
+    ModNetwork_SetCurrentMod(std::string());
+    FormRegistry_SetCurrentMod(std::string());
 }
 
 bool ModApi_HasHook(const char* name) {

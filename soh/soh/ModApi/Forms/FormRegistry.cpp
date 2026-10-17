@@ -34,6 +34,7 @@ namespace {
 constexpr const char* SaveSection = "forms";
 
 struct RegisteredForm {
+    std::string owner;
     std::string key;
     std::string label;
     std::string item;
@@ -48,6 +49,7 @@ std::deque<RegisteredForm> sForms;
 std::unordered_map<std::string, RegisteredForm*> sFormsByKey;
 RegisteredForm* sActiveForm = nullptr;
 std::string sPendingForm;
+std::string sCurrentMod;
 
 Player* GetPlayer() {
     return gPlayState == nullptr ? nullptr : GET_PLAYER(gPlayState);
@@ -342,20 +344,24 @@ void ResolveAnimOverride(int32_t group, int32_t animType, LinkAnimationHeader** 
     }
 }
 
+bool IsLocalPlayerInForm(Player* player) {
+    return sActiveForm != nullptr && player == GetPlayer();
+}
+
 void ResolveBody(Player* player, PlayerAgeProperties** properties) {
-    if (sActiveForm != nullptr && sActiveForm->definition.body != nullptr) {
+    if (IsLocalPlayerInForm(player) && sActiveForm->definition.body != nullptr) {
         *properties = &sActiveForm->body;
     }
 }
 
 void ResolveHeight(Player* player, float* height) {
-    if (sActiveForm != nullptr && sActiveForm->definition.height > 0.0f) {
+    if (IsLocalPlayerInForm(player) && sActiveForm->definition.height > 0.0f) {
         *height = sActiveForm->definition.height;
     }
 }
 
 void ResolveMotionScale(Player* player, int32_t kind, float* scale) {
-    if (sActiveForm != nullptr && sActiveForm->definition.motionScale > 0.0f) {
+    if (IsLocalPlayerInForm(player) && sActiveForm->definition.motionScale > 0.0f) {
         *scale *= sActiveForm->definition.motionScale;
     }
 }
@@ -507,6 +513,7 @@ bool FormRegistry_Register(const SOHFormDefinition* definition) {
     RegisteredForm& form = sForms.emplace_back();
     std::memcpy(&form.definition, definition, std::min<size_t>(definition->structSize, sizeof(form.definition)));
     form.definition.structSize = sizeof(form.definition);
+    form.owner = sCurrentMod;
     form.key = definition->key;
     form.label = definition->label;
     form.item = form.definition.item == nullptr ? "" : form.definition.item;
@@ -590,10 +597,24 @@ bool FormRegistry_Toggle(const char* key) {
     return FormRegistry_IsActive(key) ? FormRegistry_SetActive(nullptr) : FormRegistry_SetActive(key);
 }
 
+// While another player is drawn, a form mod's draw hooks are asking about that player, not the local one.
 const char* FormRegistry_GetActiveKey(void) {
+    if (FormModel_IsDrawingOtherPlayer()) {
+        return FormModel_GetDrawnOtherPlayerFormKey();
+    }
     return sActiveForm == nullptr ? nullptr : sActiveForm->key.c_str();
 }
 
 bool FormRegistry_IsActive(const char* key) {
-    return key != nullptr && sActiveForm != nullptr && sActiveForm->key == key;
+    const char* activeKey = FormRegistry_GetActiveKey();
+    return key != nullptr && activeKey != nullptr && std::strcmp(activeKey, key) == 0;
+}
+
+void FormRegistry_SetCurrentMod(const std::string& name) {
+    sCurrentMod = name;
+}
+
+std::string FormRegistry_GetOwner(const char* key) {
+    const RegisteredForm* form = FindForm(key);
+    return form == nullptr ? std::string() : form->owner;
 }

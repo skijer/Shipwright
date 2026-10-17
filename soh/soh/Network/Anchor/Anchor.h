@@ -6,6 +6,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <ship/window/gui/GuiWindow.h>
 #include <spdlog/spdlog.h>
+#include <chrono>
 #include <queue>
 #include <mutex>
 
@@ -57,6 +58,11 @@ typedef struct {
     u8 ocarinaNote;
     f32 ocarinaModulator;
     s8 ocarinaBend;
+    std::string formKey;
+    std::string heldCustomItemKey;
+    std::vector<std::string> wornCustomItemKeys;
+    std::vector<const char*> wornCustomItemKeyPointers;
+    u8 currentMask;
 
     // Ptr to the dummy player
     Player* player;
@@ -77,6 +83,7 @@ class Anchor : public Network {
     bool justLoadedSave = false;
     bool isHandlingUpdateTeamState = false;
     bool isProcessingIncomingPacket = false;
+    std::chrono::steady_clock::time_point connectedAt;
     std::queue<nlohmann::json> incomingPacketQueue;
     std::mutex incomingPacketQueueMutex;
     std::queue<nlohmann::json> outgoingPacketQueue;
@@ -87,14 +94,19 @@ class Anchor : public Network {
     void RegisterHooks();
     void RefreshClientActors();
     void SetDummyPlayerClientId(const Actor* actor, uint32_t clientId);
+    AnchorClient* FindDummyPlayerClient(const Actor* actor);
+    nlohmann::json PrepCustomProgressState();
+    void ApplyCustomProgressState(const nlohmann::json& state);
 
     void HandlePacket_AllClientState(nlohmann::json payload);
     void HandlePacket_ConsumeAdultTradeItem(nlohmann::json payload);
+    void HandlePacket_CustomProgress(nlohmann::json payload);
     void HandlePacket_DamagePlayer(nlohmann::json payload);
     void HandlePacket_DisableAnchor(nlohmann::json payload);
     void HandlePacket_EntranceDiscovered(nlohmann::json payload);
     void HandlePacket_GameComplete(nlohmann::json payload);
     void HandlePacket_GiveItem(nlohmann::json payload);
+    void HandlePacket_ModPacket(nlohmann::json payload);
     void HandlePacket_OcarinaSfx(nlohmann::json payload);
     void HandlePacket_PlayerSfx(nlohmann::json payload);
     void HandlePacket_PlayerUpdate(nlohmann::json payload);
@@ -117,12 +129,14 @@ class Anchor : public Network {
 
     // Packet types //
     inline static const std::string ALL_CLIENT_STATE = "ALL_CLIENT_STATE";
+    inline static const std::string CUSTOM_PROGRESS = "CUSTOM_PROGRESS";
     inline static const std::string DAMAGE_PLAYER = "DAMAGE_PLAYER";
     inline static const std::string DISABLE_ANCHOR = "DISABLE_ANCHOR";
     inline static const std::string ENTRANCE_DISCOVERED = "ENTRANCE_DISCOVERED";
     inline static const std::string GAME_COMPLETE = "GAME_COMPLETE";
     inline static const std::string GIVE_ITEM = "GIVE_ITEM";
     inline static const std::string HANDSHAKE = "HANDSHAKE";
+    inline static const std::string MOD_PACKET = "MOD_PACKET";
     inline static const std::string OCARINA_SFX = "OCARINA_SFX";
     inline static const std::string PLAYER_SFX = "PLAYER_SFX";
     inline static const std::string PLAYER_UPDATE = "PLAYER_UPDATE";
@@ -156,7 +170,14 @@ class Anchor : public Network {
     bool CanTeleportTo(uint32_t clientId);
     uint32_t GetDummyPlayerClientId(const Actor* actor);
 
+    // Custom progress travels by key: runtime ids depend on which mods each client loaded, and in what order.
+    inline static const std::string CUSTOM_PROGRESS_ITEM = "item";
+    inline static const std::string CUSTOM_PROGRESS_RECEIVE = "receive";
+    inline static const std::string CUSTOM_PROGRESS_EQUIPMENT = "equipment";
+    inline static const std::string CUSTOM_PROGRESS_FLAG = "flag";
+
     void SendPacket_ClearTeamState(std::string teamId);
+    void SendPacket_CustomProgress(const std::string& kind, const char* key, bool state);
     void SendPacket_DamagePlayer(u32 clientId, u8 damageEffect, u8 damage);
     void SendPacket_EntranceDiscovered(u16 entranceIndex);
     void SendPacket_GameComplete();
@@ -170,6 +191,7 @@ class Anchor : public Network {
     void SendPacket_SetCheckStatus(RandomizerCheck rc);
     void SendPacket_SetFlag(s16 sceneNum, s16 flagType, s16 flag);
     void SendPacket_TeleportTo(u32 clientId);
+    void SendPacket_Summon(u32 clientId);
     void SendPacket_UnsetFlag(s16 sceneNum, s16 flagType, s16 flag);
     void SendPacket_UpdateBeansCount();
     void SendPacket_UpdateClientState();
