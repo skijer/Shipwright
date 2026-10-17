@@ -1,0 +1,9 @@
+{
+  "name": "anim_viewer",
+  "author": "Skijer",
+  "version": "1.1",
+  "description": "Link animation viewer with archive clips, frame controls and Byrna bookmarks.",
+  "permissions": [
+    "files"
+  ]
+}

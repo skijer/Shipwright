@@ -1,0 +1,5 @@
+<DisplayList Version="0">
+<CallDisplayList Path="objects/object_nei_net/mat_net_f3dlite_material_layerTransparent"/>
+<CallDisplayList Path="objects/object_nei_net/net_net_mesh_layer_Transparent_tri_0"/>
+<EndDisplayList/>
+</DisplayList>

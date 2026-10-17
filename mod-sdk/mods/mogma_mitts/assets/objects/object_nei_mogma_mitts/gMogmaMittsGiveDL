@@ -1,0 +1,7 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_mogma_mitts/gMogmaMittsWhiteColorDL"/>
+	<CallDisplayList Path="objects/object_nei_mogma_mitts/gMogmaMittsDL"/>
+	<CallDisplayList Path="objects/object_nei_mogma_mitts/gMogmaMittsPlateColorDL"/>
+	<CallDisplayList Path="objects/object_nei_mogma_mitts/gMogmaMittsPlateDL"/>
+	<EndDisplayList/>
+</DisplayList>

@@ -1,0 +1,6 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/forms/gerudo/object_link_child/mat_gLinkChildSkel_Tunic_Color_f3d_layerOpaque"/>
+	<CallDisplayList Path="objects/forms/gerudo/object_link_child/bone003_gLinkChildRightThighLimb_mesh_layer_Opaque_tri_0"/>
+	<EndDisplayList/>
+</DisplayList>
+

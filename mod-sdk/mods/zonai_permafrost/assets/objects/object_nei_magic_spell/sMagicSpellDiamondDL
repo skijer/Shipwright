@@ -1,0 +1,20 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<SetRenderMode Mode1="G_RM_PASS" Mode2="G_RM_AA_ZB_XLU_SURF2"/>
+	<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_ENVIRONMENT" C0="G_CCMUX_TEXEL0" D0="G_CCMUX_ENVIRONMENT" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_TEXEL0" A1="G_CCMUX_0" B1="G_CCMUX_0" C1="G_CCMUX_0" D1="G_CCMUX_COMBINED" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_COMBINED"/>
+	<SetPrimColor M="0" L="0" R="255" G="255" B="255" A="255"/>
+	<SetEnvColor R="0" G="50" B="200" A="255"/>
+	<SetTextureLUT Mode="G_TT_NONE"/>
+	<Texture S="6000" T="6000" Level="0" Tile="0" On="1"/>
+	<LoadTextureBlock Path="objects/gameplay_keep/gEffUnknown10Tex" Format="4" Size="1" Width="32" Height="32" MaskS="5" MaskT="5" ShiftS="1" ShiftT="1" CMS_TXNoMirror="1" CMS_TXWrap="1" CMT_TXNoMirror="1" CMT_TXWrap="1"/>
+	<ClearGeometryMode G_CULL_BACK="1" G_FOG="1" />
+	<SetGeometryMode G_LIGHTING="1" G_TEXTURE_GEN="1" G_TEXTURE_GEN_LINEAR="1" />
+	<LoadVertices Path="objects/object_nei_magic_spell/sMagicSpellDiamondVtx" VertexBufferIndex="0" VertexOffset="0" Count="3"/>
+	<Triangle1 V00="0" V01="1" V02="2" Flag0="0"/>
+	<LoadVertices Path="objects/object_nei_magic_spell/sMagicSpellDiamondVtx" VertexBufferIndex="0" VertexOffset="3" Count="17"/>
+	<Triangles2 V00="0" V01="1" V02="2" Flag0="0" V10="0" V11="3" V12="4" Flag1="0"/>
+	<Triangles2 V00="5" V01="6" V02="7" Flag0="0" V10="8" V11="9" V12="10" Flag1="0"/>
+	<Triangles2 V00="11" V01="10" V02="12" Flag0="0" V10="13" V11="14" V12="12" Flag1="0"/>
+	<Triangle1 V00="9" V01="15" V02="16" Flag0="0"/>
+	<EndDisplayList/>
+</DisplayList>

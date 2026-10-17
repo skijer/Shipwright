@@ -1,0 +1,7 @@
+{
+    "name": "lantern",
+    "author": "Skijer",
+    "version": "1.0",
+    "description": "Lantern: drink in any flame you find, carry its light, and set it down again wherever you need it.",
+    "permissions": ["network"]
+}

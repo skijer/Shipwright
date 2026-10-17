@@ -1,0 +1,7 @@
+<DisplayList Version="0">
+	<CallDisplayList Path="objects/object_nei_ultrahand/mat_ultrahand_1"/>
+	<CallDisplayList Path="objects/object_nei_ultrahand/ultrahand_tri_1"/>
+	<CallDisplayList Path="objects/object_nei_ultrahand/mat_ultrahand_2"/>
+	<CallDisplayList Path="objects/object_nei_ultrahand/ultrahand_tri_2"/>
+	<EndDisplayList/>
+</DisplayList>
