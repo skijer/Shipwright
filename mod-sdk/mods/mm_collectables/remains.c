@@ -431,8 +431,8 @@ void Remains_Toggle(PlayState* play, Player* player, s32 remains) {
     }
     TakeOff();
     typedef void (*RemoveMaskFunc)(PlayState*,Player*);
-    RemoveMaskFunc remove=SOH_MOD_API_HAS(sApi,FindService)?(RemoveMaskFunc)sApi->FindService("nei.masks.take_off"):NULL;
-    if(remove)remove(play,player);
+    RemoveMaskFunc takeOffMask=SOH_MOD_API_HAS(sApi,FindService)?(RemoveMaskFunc)sApi->FindService("nei.masks.take_off"):NULL;
+    if(takeOffMask)takeOffMask(play,player);
     SetWornRemains(remains);
     player->currentMask = PLAYER_MASK_NONE;
     Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);

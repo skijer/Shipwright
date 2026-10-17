@@ -572,8 +572,8 @@ static void ToggleMask(PlayState* play, Player* player, int32_t index) {
     TakeOff(play, player);
     if (!wearingIt) {
         typedef void (*RemoveRemainsFunc)(void);
-        RemoveRemainsFunc remove=SOH_MOD_API_HAS(sApi,FindService)?(RemoveRemainsFunc)sApi->FindService("nei.remains.take_off"):NULL;
-        if(remove)remove();
+        RemoveRemainsFunc takeOffRemains=SOH_MOD_API_HAS(sApi,FindService)?(RemoveRemainsFunc)sApi->FindService("nei.remains.take_off"):NULL;
+        if(takeOffRemains)takeOffRemains();
         PutOn(player, index);
     }
     Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
