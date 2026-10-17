@@ -1,6 +1,5 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Network/Anchor/JsonConversions.hpp"
 
@@ -15,20 +14,36 @@ extern PlayState* gPlayState;
  * See REQUEST_TELEPORT for more information, this is the second part of the process.
  */
 
+static nlohmann::json PrepTeleportTo(uint32_t clientId) {
+    Player* player = GET_PLAYER(gPlayState);
+
+    nlohmann::json payload;
+    payload["type"] = Anchor::TELEPORT_TO;
+    payload["targetClientId"] = clientId;
+    payload["entranceIndex"] = gSaveContext.entranceIndex;
+    payload["roomIndex"] = gPlayState->roomCtx.curRoom.num;
+    payload["posRot"] = player->actor.world;
+    return payload;
+}
+
 void Anchor::SendPacket_TeleportTo(uint32_t clientId) {
     if (!IsSaveLoaded()) {
         return;
     }
 
-    Player* player = GET_PLAYER(gPlayState);
+    SendJsonToRemote(PrepTeleportTo(clientId));
+}
 
-    nlohmann::json payload;
-    payload["type"] = TELEPORT_TO;
-    payload["targetClientId"] = clientId;
-    payload["entranceIndex"] = gSaveContext.entranceIndex;
-    payload["roomIndex"] = gPlayState->roomCtx.curRoom.num;
-    payload["posRot"] = player->actor.world;
+/**
+ * Summon: the room owner sends an unrequested TELEPORT_TO, which only the room owner may do.
+ */
+void Anchor::SendPacket_Summon(uint32_t clientId) {
+    if (!IsSaveLoaded()) {
+        return;
+    }
 
+    nlohmann::json payload = PrepTeleportTo(clientId);
+    payload["summon"] = true;
     SendJsonToRemote(payload);
 }
 
@@ -37,9 +52,20 @@ void Anchor::HandlePacket_TeleportTo(nlohmann::json payload) {
         return;
     }
 
-    s32 entranceIndex = payload["entranceIndex"].get<s32>();
-    s16 roomIndex = payload["roomIndex"].get<s16>(); // SOH [Unbound]
-    PosRot posRot = payload["posRot"].get<PosRot>();
+    const bool isSummon = payload.value("summon", false);
+    if (isSummon && payload.at("clientId").get<uint32_t>() != roomState.ownerClientId) {
+        return;
+    }
+
+    s32 entranceIndex = payload.at("entranceIndex").get<s32>();
+    s16 roomIndex = payload.at("roomIndex").get<s16>(); // SOH [Unbound]
+
+    if (entranceIndex < 0 || roomIndex < 0) {
+        SPDLOG_ERROR("[Anchor] TELEPORT_TO: invalid entranceIndex {} or roomIndex {}", entranceIndex, (int)roomIndex);
+        return;
+    }
+
+    PosRot posRot = payload.at("posRot").get<PosRot>();
 
     gPlayState->nextEntranceIndex = entranceIndex;
     gPlayState->transitionTrigger = TRANS_TRIGGER_START;

@@ -1,8 +1,8 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetActorListFactory.h"
 #include "soh/resource/type/scenecommand/SetActorList.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 
 namespace SOH {
 std::shared_ptr<Ship::IResource> SetActorListFactory::ReadResource(std::shared_ptr<Ship::ResourceInitData> initData,
@@ -48,9 +48,9 @@ std::shared_ptr<Ship::IResource> SetActorListFactoryXML::ReadResource(std::share
         if (childName == "ActorEntry") {
             ActorEntry entry;
             entry.id = child->IntAttribute("Id");
-            entry.pos.x = child->IntAttribute("PosX");
-            entry.pos.y = child->IntAttribute("PosY");
-            entry.pos.z = child->IntAttribute("PosZ");
+            entry.pos.x = child->FloatAttribute("PosX");
+            entry.pos.y = child->FloatAttribute("PosY");
+            entry.pos.z = child->FloatAttribute("PosZ");
             entry.rot.x = child->IntAttribute("RotX");
             entry.rot.y = child->IntAttribute("RotY");
             entry.rot.z = child->IntAttribute("RotZ");
@@ -61,7 +61,7 @@ std::shared_ptr<Ship::IResource> SetActorListFactoryXML::ReadResource(std::share
         child = child->NextSiblingElement();
     }
 
-    setActorList->numActors = setActorList->actorList.size();
+    setActorList->numActors = static_cast<u32>(setActorList->actorList.size());
 
     return setActorList;
 }

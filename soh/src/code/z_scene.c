@@ -49,7 +49,7 @@ void Object_InitBank(PlayState* play, ObjectContext* objectCtx) {
     if (play2->sceneNum == SCENE_HYRULE_FIELD) {
         spaceSize = 1024000;
     } else if (play2->sceneNum == SCENE_GANON_BOSS) {
-        if (gSaveContext.sceneSetupIndex != 4) {
+        if (gSaveContext.sceneLayer != 4) {
             spaceSize = 1177600;
         } else {
             spaceSize = 1024000;
@@ -148,12 +148,12 @@ void func_800981B8(ObjectContext* objectCtx) {
 
     for (i = 0; i < objectCtx->num; i++) {
         id = objectCtx->status[i].id;
-        size = id < gObjectTableSize ? gObjectTable[id].vromEnd - gObjectTable[id].vromStart : 0; // SOH [Unbound]
+        size = (u32)id < gObjectTableSize ? gObjectTable[id].vromEnd - gObjectTable[id].vromStart : 0; // SOH [Unbound]
         osSyncPrintf("OBJECT[%d] SIZE %fK SEG=%x\n", objectCtx->status[i].id, size / 1024.0f,
                      objectCtx->status[i].segment);
         osSyncPrintf("num=%d adrs=%x end=%x\n", objectCtx->num, (uintptr_t)objectCtx->status[i].segment + size,
                      objectCtx->spaceEnd);
-        if (id < gObjectTableSize) { // SOH [Unbound]
+        if ((u32)id < gObjectTableSize) { // SOH [Unbound]
             DmaMgr_SendRequest1(objectCtx->status[i].segment, gObjectTable[id].vromStart, size, __FILE__, __LINE__);
         }
     }
@@ -293,7 +293,7 @@ void Scene_CommandObjectList(PlayState* play, SceneCmd* cmd) {
                 status2++;
             }
             play->objectCtx.num = i;
-            func_80031A28(play, &play->actorCtx);
+            Actor_KillAllWithMissingObject(play, &play->actorCtx);
 
             continue;
         }
@@ -371,7 +371,7 @@ void Scene_CommandTimeSettings(PlayState* play, SceneCmd* cmd) {
     }
 
     if (gSaveContext.sunsSongState == SUNSSONG_INACTIVE) {
-        gTimeIncrement = play->envCtx.timeIncrement;
+        gTimeSpeed = play->envCtx.timeIncrement;
     }
 
     play->envCtx.sunPos.x = -(Math_SinS(((void)0, gSaveContext.dayTime) - 0x8000) * 120.0f) * 25.0f;
@@ -432,10 +432,10 @@ void Scene_CommandAlternateHeaderList(PlayState* play, SceneCmd* cmd) {
 
     osSyncPrintf("\n[ZU]sceneset age    =[%X]", ((void)0, gSaveContext.linkAge));
     osSyncPrintf("\n[ZU]sceneset time   =[%X]", ((void)0, gSaveContext.cutsceneIndex));
-    osSyncPrintf("\n[ZU]sceneset counter=[%X]", ((void)0, gSaveContext.sceneSetupIndex));
+    osSyncPrintf("\n[ZU]sceneset counter=[%X]", ((void)0, gSaveContext.sceneLayer));
 
-    if (gSaveContext.sceneSetupIndex != 0) {
-        altHeader = ((SceneCmd**)SEGMENTED_TO_VIRTUAL(cmd->altHeaders.segment))[gSaveContext.sceneSetupIndex - 1];
+    if (gSaveContext.sceneLayer != 0) {
+        altHeader = ((SceneCmd**)SEGMENTED_TO_VIRTUAL(cmd->altHeaders.segment))[gSaveContext.sceneLayer - 1];
 
         if (altHeader != NULL) {
             Scene_ExecuteCommands(play, SEGMENTED_TO_VIRTUAL(altHeader));
@@ -444,9 +444,8 @@ void Scene_CommandAlternateHeaderList(PlayState* play, SceneCmd* cmd) {
             // "Coughh! There is no specified dataaaaa!"
             osSyncPrintf("\nげぼはっ！ 指定されたデータがないでええっす！");
 
-            if (gSaveContext.sceneSetupIndex == 3) {
-                altHeader =
-                    ((SceneCmd**)SEGMENTED_TO_VIRTUAL(cmd->altHeaders.segment))[gSaveContext.sceneSetupIndex - 2];
+            if (gSaveContext.sceneLayer == 3) {
+                altHeader = ((SceneCmd**)SEGMENTED_TO_VIRTUAL(cmd->altHeaders.segment))[gSaveContext.sceneLayer - 2];
 
                 // "Using adult day data there!"
                 osSyncPrintf("\nそこで、大人の昼データを使用するでええっす！！");

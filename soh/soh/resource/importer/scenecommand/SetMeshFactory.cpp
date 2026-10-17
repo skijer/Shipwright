@@ -1,9 +1,9 @@
+#include <spdlog/spdlog.h>
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetMeshFactory.h"
 #include "soh/resource/type/scenecommand/SetMesh.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
-#include "libultraship/libultraship.h"
 
 namespace SOH {
 std::shared_ptr<Ship::IResource> SetMeshFactory::ReadResource(std::shared_ptr<Ship::ResourceInitData> initData,
@@ -263,10 +263,10 @@ std::shared_ptr<Ship::IResource> SetMeshFactoryXML::ReadResource(std::shared_ptr
             dlist.xlu = nullptr;
 
             int32_t polyType = child->IntAttribute("PolyType"); // Unused
-            dlist.pos.x = child->IntAttribute("PosX");
-            dlist.pos.y = child->IntAttribute("PosY");
-            dlist.pos.z = child->IntAttribute("PosZ");
-            dlist.unk_06 = child->IntAttribute("Unknown");
+            dlist.pos.x = child->FloatAttribute("PosX");
+            dlist.pos.y = child->FloatAttribute("PosY");
+            dlist.pos.z = child->FloatAttribute("PosZ");
+            dlist.unk_06 = child->FloatAttribute("Unknown");
 
             std::string meshOpa = child->Attribute("MeshOpa");
             std::string meshXlu = child->Attribute("MeshXlu");

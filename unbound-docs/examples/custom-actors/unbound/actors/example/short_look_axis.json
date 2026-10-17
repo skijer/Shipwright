@@ -1,0 +1,7 @@
+{
+  "model": {
+    "skeleton": "objects/object_toryo/object_toryo_Skel_007150",
+    "animation": "objects/object_toryo/object_toryo_Anim_000E50"
+  },
+  "look": { "limb": 15, "nodAxis": [0, 1] }
+}

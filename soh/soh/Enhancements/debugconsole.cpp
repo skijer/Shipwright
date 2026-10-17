@@ -4,26 +4,28 @@
 #include <ship/utils/Utils.h>
 #include "savestates.h"
 #include "soh/ActorDB.h"
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
+#include "soh/ModApi/ConsoleArguments.h"
 
 #include <vector>
 #include <string>
+
+
 #include "soh/OTRGlobals.h"
-#include "soh/cvar_prefixes.h"
 #include <soh/Enhancements/item-tables/ItemTableManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
 #include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/randomizer/logic.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/Enhancements/randomizer/randomizer_check_tracker.h"
 #include "soh/Enhancements/Warping.h"
 
 #define Path _Path
 #define PATH_HACK
-#include <ship/utils/StringHelper.h>
 
-#include <ship/window/Window.h>
 #include <ship/Context.h>
-#include <imgui.h>
-#include <imgui_internal.h>
+#include <ship/window/Window.h>
 #undef PATH_HACK
 #undef Path
 
@@ -35,29 +37,62 @@ extern "C" {
 extern PlayState* gPlayState;
 }
 
-#include <libultraship/bridge.h>
-#include <libultraship/libultraship.h>
-
-#define CMD_REGISTER Ship::Context::GetInstance()->GetConsole()->AddCommand
+#define CMD_REGISTER Ship::Context::GetRawInstance()->GetConsole()->AddCommand
 // TODO: Commands should be using the output passed in.
-#define ERROR_MESSAGE                                                                 \
-    std::reinterpret_pointer_cast<Ship::ConsoleWindow>(                               \
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow("Console")) \
+#define ERROR_MESSAGE                                                                    \
+    std::reinterpret_pointer_cast<Ship::ConsoleWindow>(                                  \
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Console")) \
         ->SendErrorMessage
-#define INFO_MESSAGE                                                                  \
-    std::reinterpret_pointer_cast<Ship::ConsoleWindow>(                               \
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->GetGuiWindow("Console")) \
+#define INFO_MESSAGE                                                                     \
+    std::reinterpret_pointer_cast<Ship::ConsoleWindow>(                                  \
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetGuiWindow("Console")) \
         ->SendInfoMessage
 
-static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& args,
+static bool IsCustomActorMarker(const std::string& argument) {
+    return argument == "custom_actor" || argument == "custom_enemy";
+}
+
+// The console only shows a failed command's output, so spawn reports its errors there.
+static bool ResolveCustomActorArgs(std::vector<std::string>& args, std::string* output) {
+    if (args.size() < 2 || !IsCustomActorMarker(args[1])) {
+        return true;
+    }
+    const bool wantsEnemy = args[1] == "custom_enemy";
+
+    if (args.size() < 3) {
+        *output = "Usage: spawn custom_actor|custom_enemy \"<key>\" <params> [x y z [rx ry rz]]";
+        return false;
+    }
+    std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    int16_t actorId = ActorRegistry_FindCustomId(key.c_str());
+
+    if (actorId < 0 || (wantsEnemy && ActorRegistry_FindEnemyById(actorId) == nullptr)) {
+        *output = std::string("No installed mod registers ") + (wantsEnemy ? "an enemy" : "an actor") + " named \"" +
+                  key + "\"";
+        return false;
+    }
+    args.erase(args.begin() + 1);
+    args[1] = std::to_string(actorId);
+    return true;
+}
+
+static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& rawArgs,
                               std::string* output) {
+    std::vector<std::string> args = rawArgs;
+
+    while (args.size() > 1 && args.back().empty()) {
+        args.pop_back();
+    }
+    if (!ResolveCustomActorArgs(args, output)) {
+        return 1;
+    }
     if ((args.size() != 9) && (args.size() != 3) && (args.size() != 6)) {
-        ERROR_MESSAGE("Not enough arguments passed to actorspawn");
+        *output = "Expected <actor> <params>, plus x y z and optionally rx ry rz";
         return 1;
     }
 
     if (gPlayState == nullptr) {
-        ERROR_MESSAGE("PlayState == nullptr");
+        *output = "Load a save before spawning actors";
         return 1;
     }
 
@@ -68,8 +103,8 @@ static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std:
     if (nameId == -1) {
         try {
             actorId = std::stoi(args[1]);
-        } catch (std::invalid_argument const& ex) {
-            ERROR_MESSAGE("Invalid actor ID");
+        } catch ([[maybe_unused]] std::invalid_argument const& ex) {
+            *output = "Invalid actor ID";
             return 1;
         }
     } else {
@@ -93,19 +128,19 @@ static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std:
             [[fallthrough]];
         case 6:
             if (args[3][0] != ',') {
-                spawnPoint.pos.x = std::stoi(args[3]);
+                spawnPoint.pos.x = static_cast<f32>(std::stoi(args[3]));
             }
             if (args[4][0] != ',') {
-                spawnPoint.pos.y = std::stoi(args[4]);
+                spawnPoint.pos.y = static_cast<f32>(std::stoi(args[4]));
             }
             if (args[5][0] != ',') {
-                spawnPoint.pos.z = std::stoi(args[5]);
+                spawnPoint.pos.z = static_cast<f32>(std::stoi(args[5]));
             }
     }
 
     if (Actor_Spawn(&gPlayState->actorCtx, gPlayState, actorId, spawnPoint.pos.x, spawnPoint.pos.y, spawnPoint.pos.z,
                     spawnPoint.rot.x, spawnPoint.rot.y, spawnPoint.rot.z, params) == NULL) {
-        ERROR_MESSAGE("Failed to spawn actor. Actor_Spawn returned NULL");
+        *output = "Actor_Spawn returned NULL for actor " + std::to_string(actorId);
         return 1;
     }
     return 0;
@@ -135,7 +170,7 @@ static bool SetPlayerHealthHandler(std::shared_ptr<Ship::Console> Console, const
 
     try {
         health = std::stoi(args[1]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Health value must be an integer.");
         return 1;
     }
@@ -174,7 +209,7 @@ static bool RupeeHandler(std::shared_ptr<Ship::Console> Console, const std::vect
     int rupeeAmount;
     try {
         rupeeAmount = std::stoi(args[1]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Rupee count must be an integer.");
         return 1;
     }
@@ -242,7 +277,7 @@ static bool AddAmmoHandler(std::shared_ptr<Ship::Console> Console, const std::ve
 
     try {
         amount = std::stoi(args[2]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("Ammo count must be an integer");
         return 1;
     }
@@ -283,7 +318,7 @@ static bool TakeAmmoHandler(std::shared_ptr<Ship::Console> Console, const std::v
 
     try {
         amount = std::stoi(args[2]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("Ammo count must be an integer");
         return 1;
     }
@@ -339,7 +374,7 @@ static bool BottleHandler(std::shared_ptr<Ship::Console> Console, const std::vec
     unsigned int slot;
     try {
         slot = std::stoi(args[2]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Bottle slot must be an integer.");
         return 1;
     }
@@ -356,7 +391,7 @@ static bool BottleHandler(std::shared_ptr<Ship::Console> Console, const std::vec
         return 1;
     }
 
-    gSaveContext.inventory.items[0x11 + slot] = it->second;
+    gSaveContext.inventory.items[0x11 + slot] = static_cast<u8>(it->second);
 
     return 0;
 }
@@ -674,7 +709,7 @@ static bool FileSelectHandler(std::shared_ptr<Ship::Console> Console, const std:
 
 static bool QuitHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& args,
                         std::string* output) {
-    Ship::Context::GetInstance()->GetWindow()->Close();
+    Ship::Context::GetRawInstance()->GetWindow()->Close();
     return 0;
 }
 
@@ -724,16 +759,16 @@ static bool StateSlotSelectHandler(std::shared_ptr<Ship::Console> Console, const
         ERROR_MESSAGE("[SOH] Unexpected arguments passed");
         return 1;
     }
-    uint8_t slot;
+    int32_t slot;
 
     try {
         slot = std::stoi(args[1], nullptr, 10);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] SaveState slot value must be a number.");
         return 1;
     }
 
-    if (slot < 0) {
+    if (slot < 0 || slot > 2) {
         ERROR_MESSAGE("[SOH] Invalid slot passed. Slot must be between 0 and 2");
         return 1;
     }
@@ -753,7 +788,7 @@ static bool InvisibleHandler(std::shared_ptr<Ship::Console> Console, const std::
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Invisible value must be a number.");
         return 1;
     }
@@ -780,7 +815,7 @@ static bool GiantLinkHandler(std::shared_ptr<Ship::Console> Console, const std::
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Giant value must be a number.");
         return 1;
     }
@@ -808,7 +843,7 @@ static bool MinishLinkHandler(std::shared_ptr<Ship::Console> Console, const std:
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Minish value must be a number.");
         return 1;
     }
@@ -836,7 +871,7 @@ static bool AddHeartContainerHandler(std::shared_ptr<Ship::Console> Console, con
 
     try {
         hearts = std::stoi(args[1]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Hearts value must be an integer.");
         return 1;
     }
@@ -868,7 +903,7 @@ static bool RemoveHeartContainerHandler(std::shared_ptr<Ship::Console> Console, 
 
     try {
         hearts = std::stoi(args[1]);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Hearts value must be an integer.");
         return 1;
     }
@@ -900,9 +935,9 @@ static bool GravityHandler(std::shared_ptr<Ship::Console> Console, const std::ve
     GameInteractionEffect::ModifyGravity effect;
 
     try {
-        effect.parameters[0] =
-            Ship::Math::clamp(std::stoi(args[1], nullptr, 10), GI_GRAVITY_LEVEL_LIGHT, GI_GRAVITY_LEVEL_HEAVY);
-    } catch (std::invalid_argument const& ex) {
+        effect.parameters[0] = static_cast<int32_t>(Ship::Math::clamp(
+            static_cast<float>(std::stoi(args[1], nullptr, 10)), GI_GRAVITY_LEVEL_LIGHT, GI_GRAVITY_LEVEL_HEAVY));
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Gravity value must be a number.");
         return 1;
     }
@@ -927,7 +962,7 @@ static bool NoUIHandler(std::shared_ptr<Ship::Console> Console, const std::vecto
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] No UI value must be a number.");
         return 1;
     }
@@ -969,7 +1004,7 @@ static bool DefenseModifierHandler(std::shared_ptr<Ship::Console> Console, const
 
     try {
         effect.parameters[0] = std::stoi(args[1], nullptr, 10);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Defense modifier value must be a number.");
         return 1;
     }
@@ -1000,7 +1035,7 @@ static bool DamageHandler(std::shared_ptr<Ship::Console> Console, const std::vec
         }
 
         effect.parameters[0] = -value;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Damage value must be a number.");
         return 1;
     }
@@ -1031,7 +1066,7 @@ static bool HealHandler(std::shared_ptr<Ship::Console> Console, const std::vecto
         }
 
         effect.parameters[0] = value;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Damage value must be a number.");
         return 1;
     }
@@ -1084,7 +1119,7 @@ static bool NoZHandler(std::shared_ptr<Ship::Console> Console, const std::vector
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] NoZ value must be a number.");
         return 1;
     }
@@ -1112,7 +1147,7 @@ static bool OneHitKOHandler(std::shared_ptr<Ship::Console> Console, const std::v
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] One-hit KO value must be a number.");
         return 1;
     }
@@ -1140,7 +1175,7 @@ static bool PacifistHandler(std::shared_ptr<Ship::Console> Console, const std::v
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Pacifist value must be a number.");
         return 1;
     }
@@ -1168,7 +1203,7 @@ static bool PaperLinkHandler(std::shared_ptr<Ship::Console> Console, const std::
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Paper Link value must be a number.");
         return 1;
     }
@@ -1197,7 +1232,7 @@ static bool RainstormHandler(std::shared_ptr<Ship::Console> Console, const std::
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Rainstorm value must be a number.");
         return 1;
     }
@@ -1225,7 +1260,7 @@ static bool ReverseControlsHandler(std::shared_ptr<Ship::Console> Console, const
 
     try {
         state = std::stoi(args[1], nullptr, 10) == 0 ? 0 : 1;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Reverse controls value must be a number.");
         return 1;
     }
@@ -1254,7 +1289,7 @@ static bool UpdateRupeesHandler(std::shared_ptr<Ship::Console> Console, const st
 
     try {
         effect.parameters[0] = std::stoi(args[1], nullptr, 10);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Rupee value must be a number.");
         return 1;
     }
@@ -1279,7 +1314,7 @@ static bool SpeedModifierHandler(std::shared_ptr<Ship::Console> Console, const s
 
     try {
         effect.parameters[0] = std::stoi(args[1], nullptr, 10);
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Speed modifier value must be a number.");
         return 1;
     }
@@ -1400,7 +1435,7 @@ static bool KnockbackHandler(std::shared_ptr<Ship::Console> Console, const std::
         }
 
         effect.parameters[0] = value;
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] Knockback value must be a number.");
         return 1;
     }
@@ -1475,7 +1510,7 @@ static bool GenerateRandoHandler(std::shared_ptr<Ship::Console> Console, const s
         if (GenerateRandomizer(seed + std::to_string(value))) {
             return 0;
         }
-    } catch (std::invalid_argument const& ex) {
+    } catch ([[maybe_unused]] std::invalid_argument const& ex) {
         ERROR_MESSAGE("[SOH] seed|count value must be a number.");
         return 1;
     }
@@ -1606,7 +1641,7 @@ static bool AvailableChecksProcessUndiscoveredExitsHandler(std::shared_ptr<Ship:
     } else {
         try {
             enabled = std::stoi(args[1]);
-        } catch (std::invalid_argument const& ex) {
+        } catch ([[maybe_unused]] std::invalid_argument const& ex) {
             ERROR_MESSAGE("[SOH] Enable should be 0 or 1");
             return 1;
         }
@@ -1628,7 +1663,7 @@ static bool AvailableChecksRecalculateHandler(std::shared_ptr<Ship::Console> Con
     if (args.size() > 1) {
         try {
             startingRegion = static_cast<RandomizerRegion>(std::stoi(args[1]));
-        } catch (std::invalid_argument const& ex) {
+        } catch ([[maybe_unused]] std::invalid_argument const& ex) {
             ERROR_MESSAGE("[SOH] Region should be a number");
             return 1;
         }
@@ -1719,19 +1754,18 @@ void DebugConsole_Init(void) {
                                 { "Item ID", Ship::ArgumentType::NUMBER },
                             } });
 
-    CMD_REGISTER("spawn",
-                 { ActorSpawnHandler,
-                   "Spawn an actor.",
-                   {
-                       { "actor name/id", Ship::ArgumentType::NUMBER }, // TODO there should be an actor_id arg type
-                       { "data", Ship::ArgumentType::NUMBER },
-                       { "x", Ship::ArgumentType::NUMBER, true },
-                       { "y", Ship::ArgumentType::NUMBER, true },
-                       { "z", Ship::ArgumentType::NUMBER, true },
-                       { "rx", Ship::ArgumentType::NUMBER, true },
-                       { "ry", Ship::ArgumentType::NUMBER, true },
-                       { "rz", Ship::ArgumentType::NUMBER, true },
-                   } });
+    CMD_REGISTER("spawn", { ActorSpawnHandler,
+                            "Spawn an actor. Mod actors: spawn custom_actor|custom_enemy \"<key>\" <data> ...",
+                            {
+                                { "actor name/id|custom_actor|custom_enemy", Ship::ArgumentType::TEXT },
+                                { "data", Ship::ArgumentType::NUMBER },
+                                { "x", Ship::ArgumentType::NUMBER, true },
+                                { "y", Ship::ArgumentType::NUMBER, true },
+                                { "z", Ship::ArgumentType::NUMBER, true },
+                                { "rx", Ship::ArgumentType::NUMBER, true },
+                                { "ry", Ship::ArgumentType::NUMBER, true },
+                                { "rz", Ship::ArgumentType::NUMBER, true },
+                            } });
 
     CMD_REGISTER("pos", { SetPosHandler,
                           "Sets the position of the player.",
@@ -1935,7 +1969,7 @@ void DebugConsole_Init(void) {
                             "Available Checks - Process Undiscovered Exits",
                             { { "enable", Ship::ArgumentType::NUMBER, true } } });
 
-    Ship::Context::GetInstance()->GetConsole()->AddCommand(
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "acr", { AvailableChecksRecalculateHandler,
                  "Available Checks - Recalculate",
                  {
@@ -1943,5 +1977,5 @@ void DebugConsole_Init(void) {
                      { "ChildDay|ChildNight|AdultDay|AdultNight", Ship::ArgumentType::TEXT, true },
                  } });
 
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }

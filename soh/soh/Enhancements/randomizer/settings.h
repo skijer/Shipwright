@@ -2,19 +2,14 @@
 
 #include "SeedContext.h"
 #include "option.h"
-#include "randomizerTypes.h"
-#include "3drando/spoiler_log.hpp"
 
 #include <array>
-#include <set>
+#include <deque>
 #include <unordered_map>
-#include <nlohmann/json.hpp>
 
 namespace Rando {
 class Settings {
   public:
-    Settings();
-
     /**
      * @brief Hides or Unhides the price UI of Shopsanity based on settings.
      */
@@ -24,6 +19,11 @@ class Settings {
      * @brief Hides or Unhides the UI of Mixed Entrance Pools
      */
     void HandleMixedEntrancePoolsUI();
+
+    /**
+     * @brief Hides or Unhides the UI of the keyring options, and updates the max keyring count.
+     */
+    void HandleKeyringUI();
 
     /**
      * @brief UI Callback for handling UI state of Starting Age shuffle.
@@ -69,11 +69,19 @@ class Settings {
     int GetRandomizerTrickByName(const std::string& name);
 
     /**
-     * @brief Returns a reference to the entire array of options.
+     * @brief Returns a reference to the entire list of options.
      *
-     * @return const std::array<Option, RSK_MAX>&
+     * @return const std::deque<Option>&
      */
-    const std::array<Option, RSK_MAX>& GetAllOptions() const;
+    const std::deque<Option>& GetAllOptions() const;
+
+    /**
+     * @brief Appends an option registered by a mod.
+     *
+     * @param option
+     * @return RandomizerSettingKey
+     */
+    RandomizerSettingKey AddModOption(Option&& option);
 
     /**
      * @brief Get a list of Location Exclude `Option`s for the given
@@ -87,9 +95,9 @@ class Settings {
     /**
      * @brief Get a reference to all of the Exclude Location `Option` lists.
      *
-     * @return const std::vector<std::vector<Option*>>&
+     * @return const std::array<std::vector<Option*>, RCAREA_INVALID>&
      */
-    const std::vector<std::vector<Option*>>& GetExcludeLocationsOptions() const;
+    const std::array<std::vector<Option*>, RCAREA_INVALID>& GetExcludeLocationsOptions() const;
 
     /**
      * @brief Get the list of `OptionGroup`s.
@@ -118,7 +126,7 @@ class Settings {
      *
      * @param spoilerFileJson
      */
-    void ParseJson(nlohmann::json spoilerFileJson);
+    void ParseJson(const nlohmann::json& spoilerFileJson);
     std::map<RandomizerArea, std::vector<RandomizerTrick>> mTricksByArea = {};
 
     /**
@@ -135,20 +143,22 @@ class Settings {
      */
     void SetAllToContext();
 
+    /**
+     * @brief Randomizes all randomizer settings (excluding tricks) to random valid values.
+     * This function iterates through all options and sets them to a random index within
+     * their valid range.
+     */
+    void RandomizeAllSettings();
+
     static std::shared_ptr<Settings> GetInstance();
 
   private:
-    /**
-     * @brief Create the list of description strings for `Option`s.
-     */
-    void CreateOptionDescriptions();
     static std::shared_ptr<Settings> mInstance;
     std::shared_ptr<Context> mContext = nullptr;
-    std::array<Option, RSK_MAX> mOptions = {};
-    std::array<std::string, RSK_MAX> mOptionDescriptions = {};
+    std::deque<Option> mOptions = std::deque<Option>(RSK_MAX);
     std::array<OptionGroup, RSG_MAX> mOptionGroups = {};
     std::array<TrickSetting, RT_MAX> mTrickSettings = {};
-    std::vector<std::vector<Option*>> mExcludeLocationsOptionsAreas = {};
+    std::array<std::vector<Option*>, RCAREA_INVALID> mExcludeLocationsOptionsAreas = {};
     std::unordered_map<std::string, RandomizerTrick> mTrickNameToEnum;
 };
 } // namespace Rando

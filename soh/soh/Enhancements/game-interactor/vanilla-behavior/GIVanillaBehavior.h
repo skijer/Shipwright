@@ -1,8 +1,5 @@
 #pragma once
 
-#ifndef GI_VANILLA_BEHAVIOR_H
-#define GI_VANILLA_BEHAVIOR_H
-
 typedef enum {
     // #### `result`
     // ```c
@@ -22,11 +19,36 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // sBgPoEventPuzzleState == 0xF
+    // (this->actionFunc != BossSst_HeadLurk) && (this->actionFunc != BossSst_HeadIntro)
+    // ```
+    // #### `args`
+    // - None
+    VB_ALLOW_QUICK_BONGO_KILL,
+
+    // #### `result`
+    // ```c
+    // !(this->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM)
+    // ```
+    // #### `args`
+    // - None
+    VB_ALLOW_QUICK_PUTAWAY,
+
+    // #### `result`
+    // ```c
+    // sPuzzleState == 0xF
     // ```
     // #### `args`
     // - None
     VB_AMY_SOLVE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossVa`
+    // - `s8*` sCsState
+    VB_BARINADE_DEATH_SCENE,
 
     // #### `result`
     // ```c
@@ -59,6 +81,18 @@ typedef enum {
     // #### `args`
     // - None
     VB_BE_ABLE_TO_SAVE,
+
+    // #### `result`
+    // ```c
+    // gSaveContext.linkAge != 0 && (this->currentShield == PLAYER_SHIELD_HYLIAN)
+    // ```
+    // #### `args`
+    // - `*Player`
+    // Whether Link counts as a child holding the Hylian Shield, which he cannot hold up: he keeps it on his back and
+    // crouches under it to block, with no shield walk or shield hand. Asked by the player's shielding, blocking, model
+    // and draw code (Player_IsChildWithHylianShield), including Equipment Always Visible's sheath. The pause screen's
+    // figure is drawn from the save's equipment, not a Player, and keeps its own check.
+    VB_BE_CHILD_WITH_HYLIAN_SHIELD,
 
     // #### `result`
     // ```c
@@ -197,11 +231,35 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - 'EnHy*'
+    VB_BEGGAR_GIVE_ITEM,
+
+    // #### `result`
+    // ```c
     // this->collider.base.acFlags & 2 || blueFireArrowHit
     // ```
     // #### `args`
-    // - None
+    // - `*BgBreakwall`
     VB_BG_BREAKWALL_BREAK,
+
+    // #### `result`
+    // ```c
+    // this->cylinder1.base.acFlags & AC_HIT
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_BG_ICE_SHELTER_HIT,
+
+    // #### `result`
+    // ```c
+    // (this->cylinder1.base.ac != NULL) && (this->cylinder1.base.ac->id == ACTOR_EN_ICE_HONO)
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_BG_ICE_SHELTER_MELT,
 
     // #### `result`
     // ```c
@@ -236,6 +294,20 @@ typedef enum {
     VB_BIGGORON_CONSIDER_TRADE_COMPLETE,
 
     // #### `result`
+    // ```c
+    // this->timer == 0
+    // ```
+    // or while the body darkens
+    // ```c
+    // this->timer != 0
+    // ```
+    // #### `args`
+    // - `*BossSst` (head)
+    // - `*BossSst` (left hand)
+    // - `*BossSst` (right hand)
+    VB_BONGO_BONGO_DEATH_SCENE,
+
+    // #### `result`
     // Actor is ACTOR_EN_ELF, ACTOR_EN_FISH, ACTOR_EN_ICE_HONO, or ACTOR_EN_INSECT
     // ```c
     // i < ARRAY_COUNT(sBottleCatchInfo)
@@ -245,12 +317,29 @@ typedef enum {
     VB_BOTTLE_ACTOR,
 
     // #### `result`
+    // Actor is ACTOR_OBJ_BOMBIWA, or ACTOR_OBJ_HAMISHI
+    // ```c
+    // Flags_GetSwitch(play, this->actor.params & 0x3F)
+    // ```
+    // #### `args`
+    // - `*Actor` (interactRangeActor)
+    VB_BOULDER_BREAK_FLAG,
+
+    // #### `result`
     // ```c
     // true
     // ```
     // #### `args`
     // - `*EnPoField`
     VB_BOTTLE_BIG_POE,
+
+    // #### `result`
+    // ```c
+    // this->currentShield == PLAYER_SHIELD_DEKU
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_BURN_SHIELD,
 
     // #### `result`
     // ```c
@@ -328,11 +417,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_AFTER_PROCESS_SCENE_COLLISION,
+
+    // #### `result`
+    // ```c
     // CHECK_BTN_ALL(input->press.button, BTN_START)
     // ```
     // #### `args`
     // - None
     VB_CLOSE_PAUSE_MENU,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnHorse`
+    VB_CONSUME_EPONA_BOOST,
 
     // #### `result`
     // ```c
@@ -360,7 +465,7 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // true
+    // !LINK_IS_ADULT
     // ```
     // #### `args`
     // - None
@@ -405,11 +510,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->hookshotSlotFull
+    // ```
+    // #### `args`
+    // - None
+    VB_DAMPE_AWARD_SECOND_PRIZE,
+
+    // #### `result`
+    // ```c
     // this->actionTimer == 0 && Rand_ZeroOne() < 0.03f
     // ```
     // #### `args`
     // - `*EnPoRelay`
     VB_DAMPE_DROP_FLAME,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*f32` (speed
+    VB_DAMPE_GO_BACKWARDS,
 
     // #### `result`
     // ```c
@@ -519,6 +640,16 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // !Player_InCsMode(play) && !(player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_WATER)) &&
+    // this->actor.xzDistToPlayer <= 15.0f && -50.0f <= this->actor.yDistToPlayer &&
+    // this->actor.yDistToPlayer <= 15.0f
+    // ```
+    // #### `args`
+    // - None
+    VB_DOOR_ANA_GRAB_PLAYER,
+
+    // #### `result`
+    // ```c
     // !Flags_GetSwitch(play, this->actor.params & 0x3F)
     // ```
     // #### `args`
@@ -540,11 +671,21 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // (this->heldItemAction == PLAYER_IA_HOOKSHOT) ||
+    // (this->heldItemAction == PLAYER_IA_LONGSHOT)
+    // ```
+    // #### `args`
+    // - '*Player'
+    VB_DRAW_ADDITIONAL_RETICLES,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
-    // - None
-    VB_DRAW_ADDITIONAL_RETICLES,
+    // - `PlayerMask currentMask`
+    // - `*PlayState play`
+    VB_DRAW_PLAYER_MASK,
 
     // #### `result`
     // In `Interface_DrawAmmoCount`:
@@ -574,8 +715,51 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - None
+    VB_DRAW_EPONA_BOOST_CARROTS,
+
+    // #### `args`
+    // - `Player*` player
+    // - `PlayState*` play
+    VB_DRAW_HOOKSHOT_CHAIN,
+    VB_DRAW_HOOKSHOT_TIP,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - Player*
     VB_EMPTYING_BOTTLE,
+
+    // #### `result`
+    // ```c
+    // (gSaveContext.inventory.items[gSaveContext.equips.cButtonSlots[button - 1]] == ITEM_MILK_BOTTLE) &&
+    //     (item == ITEM_BOTTLE)
+    // ```
+    // #### `args`
+    // - `int32_t` (button - promoted from `u8`)
+    // - `int32_t` (item - promoted from `u8`)
+    VB_EMPTY_BOTTLE_TO_HALF_MILK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnArrow`
+    VB_EN_ARROW_MAGIC_CONSUMPTION,
+
+    // #### `result`
+    // ```c
+    // i + 1 == msgCtx->textDrawPos &&
+    // (msgCtx->msgMode == MSGMODE_TEXT_DISPLAYING ||
+    //  (msgCtx->msgMode >= MSGMODE_OCARINA_STARTING &&
+    //   msgCtx->msgMode < MSGMODE_SCARECROW_LONG_RECORDING_START))
+    // ```
+    // #### `args`
+    // - `u16` (text position)
+    VB_ENABLE_QUICKTEXT,
 
     // #### `result`
     // ```c
@@ -590,8 +774,8 @@ typedef enum {
     // true
     // ```
     // #### `args`
-    // - `*EnArrow`
-    VB_EN_ARROW_MAGIC_CONSUMPTION,
+    // - `*EnGe1`
+    VB_END_HORSEBACK_ARCHERY,
 
     // #### `result`
     // ```c
@@ -636,6 +820,103 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->actor.xzDistToPlayer < (KREG(59) + 50.0f)
+    // ```
+    // Whether a hooked fish is reeled in close enough to be caught.
+    // #### `args`
+    // - None
+    VB_FISHING_CATCH_FISH,
+
+    // #### `result`
+    // ```c
+    // (this->isLoach == 0) && (sFishOnHandIsLoach == 0) && ((s16)this->fishLength < (s16)sFishOnHandLength)
+    // ```
+    // Whether keeping a fish smaller than the one held asks for confirmation.
+    // #### `args`
+    // - None
+    VB_FISHING_CONFIRM_KEEPING_SMALLER_FISH,
+
+    // #### `result`
+    // ```c
+    // ((this->timerArray[0] == 1) || (Rand_ZeroOne() < chance)) &&
+    //     ((Rand_ZeroOne() < (this->perception * multiplier)) || ((this->isLoach + 1) == KREG(69)))
+    // ```
+    // Whether a fish bites the lure.
+    // #### `args`
+    // - None
+    VB_FISHING_FISH_BITE,
+
+    // #### `result`
+    // ```c
+    // ((sLureTimer & 0x7F) == 0) && (Rand_ZeroOne() < 0.05f) && (sLureEquipped != FS_LURE_SINKING) && (KREG(69) == 0)
+    // ```
+    // Whether a hooked fish randomly escapes the line.
+    // #### `args`
+    // - None
+    VB_FISHING_FISH_ESCAPE,
+
+    // #### `result`
+    // ```c
+    // sFishInits[thisx->params - EN_FISH_PARAM].isLoach
+    // ```
+    // Whether this pond fish is a loach.
+    // #### `args`
+    // - None
+    VB_FISHING_FISH_IS_LOACH,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // Whether a caught fish snaps to Link's hand instead of drifting there.
+    // #### `args`
+    // - None
+    VB_FISHING_INSTANT_CATCH,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // Whether the pond owner offers to quit fishing at the door.
+    // #### `args`
+    // - None
+    VB_FISHING_QUIT_AT_DOOR,
+
+    // #### `result`
+    // ```c
+    // (KREG(1) == 1) || ((sFishGameNumber & 3) == 3)
+    // ```
+    // Whether loaches spawn in the pond this game.
+    // #### `args`
+    // - None
+    VB_FISHING_SPAWN_LOACHES,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the starting fishing record uses the vanilla length.
+    // A hook returning false should write its own length through the arg.
+    // #### `args`
+    // - `*f32` (sFishingRecordLength)
+    VB_FISHING_USE_DEFAULT_RECORD_LENGTH,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_FISHING_ZERO_XZ,
+
+    // #### `result`
+    // True if the next text position must be beyond the current position; false otherwise
+    // #### `args`
+    // - `u16` (next text position)
+    VB_FIX_TEXT_SPEED_SOFTLOCK,
+
+    // #### `result`
+    // ```c
     // false
     // ```
     // #### `args`
@@ -658,6 +939,22 @@ typedef enum {
     // #### `args`
     // - None
     VB_FLASH_SCREEN_FOR_FINISHING_BLOW,
+
+    // #### `result`
+    // ```c
+    // varies
+    // ```
+    // #### `args`
+    // - `s32` (drop id)
+    VB_FLEX_DROP_AMMO,
+
+    // #### `result`
+    // ```c
+    // gSaveContext.health < STARTING_HEALTH
+    // ```
+    // #### `args`
+    // - None
+    VB_FULL_HEALTH_SPAWN,
 
     // #### `result`
     // ```c
@@ -690,6 +987,22 @@ typedef enum {
     // #### `args`
     // - `*EnFr`
     VB_FROGS_GO_TO_IDLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_FROGS_OCARINA_GAME_TIMER_TICK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossGanon`
+    VB_GANONDORF_DEATH_SCENE,
 
     // #### `result`
     // ```c
@@ -751,6 +1064,14 @@ typedef enum {
     // #### `args`
     // - `*EnJs`
     VB_GIVE_BOMBCHUS_FROM_CARPET_SALESMAN,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - None
+    VB_GIVE_EYEBALL_FROG_EARLY,
 
     // #### `result`
     // ```c
@@ -888,6 +1209,39 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnGe1`
+    // - `*PlayState`
+    VB_PLAY_HORSEBACK_ARCHERY,
+
+    // #### `result`
+    // ```c
+    // play->sceneNum == SCENE_KOKIRI_FOREST
+    // ```
+    // #### `args`
+    // - `*EnSa`
+    VB_SARIA_GESTURE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*s32` (scoreIndex: 0=30pts, 1=60pts, 2=100pts)
+    VB_SCORE_HORSEBACK_ARCHERY_TARGET,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*InterfaceContext`
+    VB_SET_HORSEBACK_ARCHERY_AMMO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnItem00`
     VB_GIVE_ITEM_FROM_ITEM_00,
 
@@ -946,6 +1300,14 @@ typedef enum {
     // #### `args`
     // - `*EnGb`
     VB_GIVE_ITEM_FROM_POE_COLLECTOR,
+
+    // #### `result`
+    // ```c
+    // !Flags_GetEventChkInf(EVENTCHKINF_PLAYED_SONG_FOR_SCARECROW_AS_ADULT)
+    // ```
+    // #### `args`
+    // - None
+    VB_GIVE_ITEM_FROM_SCARECROW,
 
     // #### `result`
     // ```c
@@ -1109,6 +1471,18 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->timer == 80
+    // ```
+    // or once the blue warp has spawned
+    // ```c
+    // this->timer == 0
+    // ```
+    // #### `args`
+    // - `*BossGoma`
+    VB_GOHMA_DEATH_SCENE,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
@@ -1200,6 +1574,22 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnCrow`
+    VB_GUAY_SETUP_DAMAGED,
+
+    // #### `result`
+    // ```c
+    // this->actor.colChkInfo.health != 0
+    // ```
+    // #### `args`
+    // - `*f32` (scale)
+    VB_GUAY_ALIVE_MOVE_HEIGHT_OFFSET,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - None
     VB_HAVE_OCARINA_NOTE_A4,
 
@@ -1253,6 +1643,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_ICICLE_SETUP_DRAW,
+
+    // #### `result`
+    // ```c
     // (respawnFlag == 1) || (respawnFlag == -1)
     // ```
     // #### `args`
@@ -1288,8 +1686,40 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnItem00`
+    VB_ITEM00_REQUIRE_OBJECT,
+
+    // #### `result`
+    // ```c
+    // this->unk_15A > 0
+    // ```
+    // #### `args`
+    // - `*EnItem00`
+    VB_ITEM00_TIMER_TICK,
+
+    // #### `result`
+    // ```c
+    // Math_Vec3f_DistXZ(&feedingSpot, &player->actor.world.pos) < 300.0f && play->isPlayerDroppingFish(play)
+    // ```
+    // #### `args`
+    // - `*EnJj`
+    VB_JABU_JABU_EAT_FISH,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - None
     VB_JABU_WOBBLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_HOT_ROOM_DISTORTION,
 
     // #### `result`
     // ```c
@@ -1317,6 +1747,30 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // varies
+    // ```
+    // #### `args`
+    // - `*EnFirefly`
+    VB_KEESE_SETUP_FALL,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnFirefly`
+    VB_KEESE_SETUP_FROZENFALL,
+
+    // #### `result`
+    // ```c
+    // this->unk_1DA == 600
+    // ```
+    // #### `args`
+    // - `*BossDodongo`
+    VB_KING_DODONGO_DEATH_SCENE,
+
+    // #### `result`
+    // ```c
     // Flags_GetEventChkInf(EVENTCHKINF_KING_ZORA_MOVED)
     // ```
     // #### `args`
@@ -1341,6 +1795,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false if in Jabu, carrying Ruto, abducted flag set, door is id 21 or 3
+    // ```
+    // #### `args`
+    // - `*Actor` (shutter door)
+    VB_JABU_PREVENT_RUTO_REENTER_BIGOCTO,
+
+    // #### `result`
+    // ```c
     // varies
     // ```
     // #### `args`
@@ -1357,11 +1819,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // gSaveContext.eventInf[0] & 0x40
+    // ```
+    // #### `args`
+    // - None
+    VB_LINK_WIN_EPONA,
+
+    // #### `result`
+    // ```c
     // !Flags_GetSwitch(play, this->dyna.actor.params & 0x3F)
     // ```
     // #### `args`
     // - `*DoorShutter`
     VB_LOCK_BOSS_DOOR,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_LOST_WOODS_OCARINA_GAME_TIMER_TICK,
 
     // #### `result`
     // ```c
@@ -1410,6 +1888,39 @@ typedef enum {
     // #### `args`
     // - `*EnMd`
     VB_MIDO_SPAWN,
+
+    // #### `result`
+    // ```c
+    // reflection[i].reflectionPoly != NULL
+    // ```
+    // #### `args`
+    // - `*MirRayShieldReflection`
+    VB_MIRRAY_DRAW_REFLECTION,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `s32` (note append position)
+    VB_MODIFY_LOST_WOODS_OCARINA_GAME_NOTE_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `f32*` speed
+    VB_MODIFY_WATER_TEMPLE_WATER_LEVEL_SPEED,
+
+    // #### `result`
+    // ```c
+    // this->timers[0] == 0
+    // ```
+    // #### `args`
+    // - `*BossMo` (core)
+    // - `*BossMo` (tentacle)
+    VB_MORPHA_DEATH_SCENE,
 
     // #### `result`
     // ```c
@@ -1499,7 +2010,7 @@ typedef enum {
     // this->getItemId != GI_NONE
     // ```
     // #### `args`
-    // - `None`
+    // - `*EnBox`
     VB_OPEN_CHEST,
 
     // #### `result`
@@ -1512,6 +2023,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_OPEN_PAUSE_MENU,
+
+    // #### `result`
+    // ```c
     // false
     // ```
     // #### `args`
@@ -1520,11 +2039,27 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `None`
+    VB_OWL_CHOOSE_BETTER,
+
+    // #### `result`
+    // ```c
     // this->actor.xzDistToPlayer < targetDist
     // ```
     // #### `args`
     // - `*EnOwl`
     VB_OWL_INTERACTION,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Actor`
+    VB_PERFORM_WALL_COLLISION_CHECK,
 
     // #### `result`
     // ```c
@@ -1596,6 +2131,14 @@ typedef enum {
     VB_PLAY_CARPENTER_FREE_CS,
 
     // #### `result`
+    // ```c
+    // true if one point cutscene skip not enabled, or not randomizer
+    // ```
+    // #### `args`
+    // - none
+    VB_PLAY_TIMEBLOCK_CS,
+
+    // #### `result`
     // Close enough & various cutscene checks
     // ```c
     // (func_80AEC5FC(this, play)) && (!Play_InCsMode(play)) &&
@@ -1652,21 +2195,23 @@ typedef enum {
     // true
     // ```
     // #### `args`
-    // - None
-    VB_PLAY_DROP_FISH_FOR_JABU_CS,
+    // ##### In `z_demo.c`:
+    // - `int32_t` (entranceCutscene->flag) (promoted from `uint8_t` by va_arg)
+    // - `int32_t` (entranceCutscene->entrance) (promoted from `uint16_t` by va_arg)
+    // - `void*` (entranceCutscene->segAddr)
+    // ##### In `z_bg_breakwall.c` and `z_bg_toki_swd.c`:
+    // - `int32_t` (EVENTCHKINF)
+    // - `int32_t` (gSaveContext.entranceIndex)
+    // - `void*` (cutscene)
+    VB_PLAY_ENTRANCE_CS,
 
     // #### `result`
     // ```c
     // true
     // ```
     // #### `args`
-    // ##### In `z_demo.c`:
-    // - `int32_t` (entranceCutscene->flag) (promoted from `uint8_t` by va_arg)
-    // - `int32_t` (entranceCutscene->entrance) (promoted from `uint16_t` by va_arg)
-    // ##### In `z_bg_breakwall.c` and `z_bg_toki_swd.c`:
-    // - `int32_t` (EVENTCHKINF)
-    // - `int32_t` (gSaveContext.entranceIndex)
-    VB_PLAY_ENTRANCE_CS,
+    // - `*BossGanon2`
+    VB_PLAY_ESCAPED_TOWER_CS,
 
     // #### `result`
     // ```c
@@ -1700,6 +2245,31 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnFr`
+    VB_PLAY_FROG_OCARINA_GAME,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossGanon`
+    VB_PLAY_GANONDORF_INTRO_CS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossGanon2`
+    // - `*EnZl3`
+    VB_PLAY_GANON_INTRO_CS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnHeishi2`
     // - `bool` (clearCamera - true if the code clears a sub-camera, false otherwise)
     VB_PLAY_GATE_OPENING_OR_CLOSING_CS,
@@ -1717,8 +2287,8 @@ typedef enum {
     // true
     // ```
     // #### `args`
-    // - None
-    VB_PLAY_MINUET_OF_FOREST_CS,
+    // - `*EnSkj`
+    VB_PLAY_LOST_WOODS_OCARINA_GAME,
 
     // #### `result`
     // ```c
@@ -1726,7 +2296,7 @@ typedef enum {
     // ```
     // #### `args`
     // - None
-    VB_PLAY_MWEEP_CS,
+    VB_PLAY_MINUET_OF_FOREST_CS,
 
     // #### `result`
     // ```c
@@ -1735,6 +2305,39 @@ typedef enum {
     // #### `args`
     // - None
     VB_PLAY_NABOORU_CAPTURED_CS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossTw`
+    // - `*PlayState`
+    VB_PLAY_TWINROVA_INTRO_CS,
+
+    // #### `result`
+    // ```c
+    // this->work[CS_TIMER_2] >= 120 && this->work[CS_TIMER_2] < 500
+    // ```
+    // #### `args`
+    // - `*BossTw`
+    VB_TWINROVA_DEATH_SCENE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_TWINROVA_SPAWN_PORTAL_TRANSLATION_KOTAKE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_TWINROVA_SPAWN_PORTAL_TRANSLATION_KOUME,
 
     // #### `result`
     // ```c
@@ -1831,6 +2434,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnSyatekiItm`
+    VB_PLAY_SHOOTING_GALLERY,
+
+    // #### `result`
+    // ```c
     // (giEntry.itemId != ITEM_NONE) && (giEntry.gi >= 0) && (Item_CheckObtainability(giEntry.itemId) == ITEM_NONE)
     // ```
     // #### `args`
@@ -1879,6 +2490,32 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // (player->actor.scale.y >= 0.0f) && !(player->stateFlags1 & PLAYER_STATE1_DEAD) &&
+    //     (Player_ActionToMagicSpell(player, player->itemAction) < 0)
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_ADJUST_LEGS_TO_FLOOR,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*BossGanon`
+    VB_PLAY_ZELDA_CRYSTAL_CS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the left stick aims in first person. Off when it moves Link instead.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_AIM_WITH_LEFT_STICK,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
@@ -1886,6 +2523,121 @@ typedef enum {
     // - `int32_t` (magicArrowType)
     // - `*int32_t` (arrowType)
     VB_PLAYER_ARROW_MAGIC_CONSUMPTION,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_DRAW_BOTTLE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether Link's movement direction is set to where he faces in first person.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_FIRST_PERSON_ALIGN_YAW,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether Link slows to a stop in first person. Hooks may set his speed instead.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_FIRST_PERSON_DECELERATE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_LIMIT_DIVE_XZ_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_LIMIT_JUMP_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `f32*` speedTarget
+    VB_PLAYER_MODIFY_RUN_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `f32*` swimSpeed
+    // - `s32` sControlInput != NULL
+    VB_PLAYER_MODIFY_SWIM_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` limbIndex
+    // - `Gfx**` dList (write to *dList to replace the resolved display list)
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_OVERRIDE_LIMB_DRAW,
+
+    // Fired from Player_OverrideLimbDrawPause (pause/equipment screen character only).
+    // #### `args`
+    // - `s32` limbIndex
+    // - `Gfx**` dList (write to *dList to replace the resolved display list)
+    // - `void*` player (Player*)
+    // - `PlayState*` play
+    VB_PLAYER_OVERRIDE_LIMB_DRAW_PAUSE,
+
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    VB_PLAYER_UPDATE_BOTTLE_HELD,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    // - `*Input` (sControlInput)
+    // - `s32` (sFloorType)
+    VB_PLAYER_ROLL_CHAIN,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    // - `*PlayState`
+    // - `s16 yawTarget` (stick world-space yaw, promoted to int in va_list)
+    VB_PLAYER_ROLL_STEER,
+
+    // #### `result`
+    // ```c
+    // this->ageProperties->unk_24 <= ySurface
+    // ```
+    // #### `args`
+    // - `Player*`
+    VB_PLAYER_SPAWN_SWIMMING,
 
     // #### `result`
     // ```c
@@ -1932,10 +2684,41 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `s32` (entrance index)
+    VB_RACE_INGO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnRd`
     VB_REDEAD_GIBDO_FREEZE_LINK,
 
     // #### `result`
+    // ```c
+    // this->alpha <= 0
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_RED_ICE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // !((this->dyna.actor.params >> 6) & 1) && (Flags_GetSwitch(play, this->dyna.actor.params & 0x3F))
+    // ```
+    // #### `args`
+    // - `*BgIceShelter`
+    VB_RED_ICE_MELTED_FLAG,
+
+    // #### `result`
+    // ```c
+    // camera->xzSpeed > 0.001f || <any release button pressed> || params->interfaceFlags & 0x8
+    // ```
+    // #### `args`
+    // - `Camera*` (`camera`)
+    VB_RELEASE_DOORC_CAMERA,
+
     // #### `result`
     // ```c
     // true
@@ -1965,8 +2748,27 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*PlayState`
+    // - `*Player`
+    // - `*u32`
+    // - `*s16`
+    VB_REVALIDATE_CLIMBED_WALL,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - None
     VB_REVERT_SPOILING_ITEMS,
+
+    // #### `result`
+    // ```c
+    // varies
+    // ```
+    // #### `args`
+    // - `*EnIshi`, `*ObjBombiwa`, or `*ObjHamishi`
+    VB_ROCK_DROP_ITEM,
 
     // #### `result`
     // ```c
@@ -2009,8 +2811,41 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `None`
+    VB_SET_BOMBCHU_BOWLING_AMMO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnBomBowlMan`
+    // - `s16*` (prize to show, an `ExItemType`)
+    VB_SET_BOMBCHU_BOWLING_PRIZE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnBomBowlMan`
+    VB_SET_BOMBCHU_BOWLING_PRIZE_SELECT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `int32_t` (button - promoted from `s16`)
     VB_SET_BUTTON_ITEM_FROM_C_BUTTON_SLOT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Actor` (spawnedActor)
+    VB_SET_CHILD_ACTOR_PARENT,
 
     // #### `result`
     // ```c
@@ -2022,7 +2857,49 @@ typedef enum {
 
     // #### `result`
     // ```c
-    // SurfaceType_GetSlope(&play->colCtx, poly, bgId) == 2
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SET_DIVING_GAME_TIME_LIMIT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnFr`
+    // - `s16` (default time limit)
+    VB_SET_FROG_OCARINA_GAME_TIME_LIMIT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` (round number, zero-based)
+    // - `*u8` (note end position)
+    VB_SET_LOST_WOODS_OCARINA_GAME_NOTES,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SET_LOST_WOODS_OCARINA_GAME_STARTING_NOTES,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*s32` (ammo count)
+    VB_SET_SHOOTING_GALLERY_AMMO,
+
+    // #### `result`
+    // ```c
+    // SurfaceType_GetFloorEffect(&play->colCtx, poly, bgId) == FLOOR_EFFECT_2
     // ```
     // #### `args`
     // - `*int16_t` - original next entrance index (`play->setupExitList[exitIndex - 1]`)
@@ -2045,6 +2922,14 @@ typedef enum {
     // #### `args`
     // - None
     VB_SHIEK_PREPARE_TO_GIVE_SERENADE_OF_WATER,
+
+    // #### `result`
+    // ```c
+    // LINK_IS_ADULT
+    // ```
+    // #### `args`
+    // - None
+    VB_SHOOTING_GALLERY_SHUFFLE_ADULT_RUPEES,
 
     // #### `result`
     // ```c
@@ -2077,11 +2962,28 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // CHECK_BTN_ALL(input->press.button, BTN_B)
+    // ```
+    // #### `args`
+    // - `*Input`
+    VB_SHOULD_OSSAN_CANCEL,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
     // - `*VBFishingData`
     VB_SHOULD_SET_FISHING_RECORD,
+
+    // #### `result`
+    // ```c
+    // !(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) || (this->actor.world.pos.z > 1300.0f) ||
+    // BgCheck_SphVsFirstPoly(&play->colCtx, &rodCheckPos, 20.0f)
+    // ```
+    // #### `args`
+    // - `*Vec3f`
+    VB_NOT_CAST_FISHING,
 
     // #### `result`
     // ```c
@@ -2091,6 +2993,15 @@ typedef enum {
     // - `*s8 iter2`
     // - `s8 sp3C[4]`
     VB_SHOULD_QUICKSPIN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `int32_t` (a `GameplayStatCount`)
+    // Whether the gameplay stats window lists this count's row in its Enemy Details, Ammo Details and Buttons lists.
+    VB_SHOW_GAMEPLAY_STATS_COUNT,
 
     // #### `result`
     // ```c
@@ -2107,6 +3018,46 @@ typedef enum {
     // #### `args`
     // - None
     VB_SHOW_TITLE_CARD,
+
+    // #### `result`
+    // ```c
+    // this->actor.xyzDistToPlayerSq < 900.0f
+    // ```
+    // #### `args`
+    // - *EnGSwitch
+    VB_SILVER_COLLECT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - *EnGSwitch
+    VB_SILVER_COUNT_CHECK,
+
+    // #### `result`
+    // ```c
+    // Flags_GetSwitch(play, this->switchFlag)
+    // ```
+    // #### `args`
+    // - *EnGSwitch
+    VB_SILVER_DESPAWN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SKIP_TALKING,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - None
+    VB_SLAY_GANON,
 
     // #### `result`
     // ```c
@@ -2131,6 +3082,14 @@ typedef enum {
     // #### `args`
     // - None
     VB_SKIP_SCARECROWS_SONG,
+
+    // #### `result`
+    // ```c
+    // !gMapLoading
+    // ```
+    // #### `args`
+    // - `s16` (actorId)
+    VB_SPAWN_ACTOR_WITHOUT_OBJECT,
 
     // #### `result`
     // ```c
@@ -2177,6 +3136,30 @@ typedef enum {
     // ##### In `z_boss_va.c`:
     // - `*BossVa`
     VB_SPAWN_BLUE_WARP,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32` (Cucco index; 0 = small, 1 = big)
+    VB_SPAWN_BOMBCHU_BOWLING_CUCCOS,
+
+    // #### `result`
+    // ```c
+    // this->timer == 4
+    // ```
+    // #### `args`
+    // - `*EnButte`
+    VB_SPAWN_BUTTERFLY_FAIRY,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*EnButte`
+    VB_SPAWN_BUTTERFLY_FAIRY_EASY,
 
     // #### `result`
     // ```c
@@ -2241,6 +3224,46 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->dyna.actor.params == TURARA_STALACTITE_REGROW
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_STALACTITE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // this->collider.base.acFlags & AC_HIT
+    // ```
+    // #### `args`
+    // - `*BgIceTurara`
+    VB_STALAGMITE_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // ABS(wallPoly->normal.y) < 600
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_ANGLE_IS_CLIMBABLE,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_IS_CLIMBABLE,
+
+    // #### `result`
+    // ```c
+    // SurfaceType_GetData(colCtx, poly, bgId, 1) >> 17 & 1
+    // ```
+    // #### `args`
+    // - None
+    VB_SURFACE_IS_HOOKSHOT,
+
+    // #### `result`
+    // ```c
     // varies, never set should to true
     // ```
     // #### `args`
@@ -2259,12 +3282,28 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `u16` (text position)
+    VB_TEXT_CRAWL_FASTER,
+
+    // #### `result`
+    // ```c
     // (this->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) && (this->heldActor != NULL) &&
     // CHECK_BTN_ANY(sControlInput->press.button, buttonsToCheck)
     // ```
     // #### `args`
     // - `*Input`
     VB_THROW_OR_PUT_DOWN_HELD_ITEM,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Actor`
+    VB_ON_ACTOR_THROW_ONLY_CHECK,
 
     // #### `result`
     // ```c
@@ -2397,6 +3436,14 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // this->timers[0] == 0
+    // ```
+    // #### `args`
+    // - `*BossFd2`
+    VB_VOLVAGIA_DEATH_SCENE,
+
+    // #### `result`
+    // ```c
     // (shapeRotY < -0x2E93) || (shapeRotY >= 0x7C19)
     // ```
     // #### `args`
@@ -2408,12 +3455,48 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*EnWonderItem`
+    VB_WONDER_DROP_ITEM,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - 'Vec3f' pos
+    // - 'f32' rotY
+    VB_WONDER_HEISHI_ITEM,
+
+    // #### `result`
+    // ```c
+    // (gSaveContext.dayTime < 0xB888 || IS_DAY) && ((!IS_RANDO &&
+    // !Flags_GetEventChkInf(EVENTCHKINF_ZELDA_FLED_HYRULE_CASTLE)) || (IS_RANDO && !metZelda))
+    // (gSaveContext.dayTime >= 0xB889) || !IS_DAY || (!IS_RANDO &&
+    // Flags_GetEventChkInf(EVENTCHKINF_ZELDA_FLED_HYRULE_CASTLE)) || (IS_RANDO && metZelda)
+    // ```
+    // #### `args`
+    // - EnHeishi1*
+    VB_WONDER_HEISHI_PATROLLING,
+
+    // #### `result`
+    // ```c
+    // (this->switchFlag >= 0) && Flags_GetSwitch(play, this->switchFlag)
+    // ```
+    // #### `args`
+    // - `None`
+    VB_WONDER_SPAWN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*EnWonderTalk2`
     VB_WONDER_TALK,
 
     // #### `result`
     // ```c
-    // true
+    // varies
     // ```
     // #### `args`
     // - `*Actor`
@@ -2485,7 +3568,17 @@ typedef enum {
     // ```
     // #### `args`
     // - `*DoorShutter`
+    // - `*Vec3f` (relPlayerPos)
+    // - `*f32` (maxDistSides)
     VB_BE_NEAR_DOOR_SHUTTER,
+
+    // #### `result`
+    // ```c
+    // arg3 < fabsf(sp1C.x) || arg4 < fabsf(sp1C.y)
+    // ```
+    // #### `args`
+    // - `*Vec3f` (playerPosRelToDoor)
+    VB_EN_DOOR_OFFER_OPEN,
 
     // #### `result`
     // ```c
@@ -2494,14 +3587,6 @@ typedef enum {
     // #### `args`
     // - None
     VB_DRAW_2D_BACKGROUND,
-
-    // #### `result`
-    // ```c
-    // CVarGetInteger(CVAR_ENHANCEMENT("3DSceneRender"), 0)
-    // ```
-    // #### `args`
-    // - None
-    VB_LOAD_SKYBOX,
 
     // true
     // ```
@@ -2527,6 +3612,15 @@ typedef enum {
 
     // #### `result`
     // ```c
+    // false
+    // ```
+    // #### `args`
+    // - *EnGirlACanBuyResult
+    // - `RAND_INF`
+    VB_CAN_BUY_SHOP_SHIELD_OR_TUNIC,
+
+    // #### `result`
+    // ```c
     // true
     // ```
     // #### `args`
@@ -2547,14 +3641,6 @@ typedef enum {
     // #### `args`
     // - `*BgHidanDalm`
     VB_HAMMER_TOTEM_BREAK,
-
-    // #### `result`
-    // ```c
-    // Actor_GetCollidedExplosive(play, &this->collider.base) != NULL
-    // ```
-    // #### `args`
-    // - `*BgHidanKowarerukabe`
-    VB_FIRE_TEMPLE_BOMBABLE_WALL_BREAK,
 
     // #### `result`
     // ```c
@@ -2589,6 +3675,22 @@ typedef enum {
     // #### `args`
     // - `*FileChooseContext`
     VB_FILE_SELECT_DRAW_FILE_INFO_BOX,
+
+    // #### `result`
+    // ```c
+    // Actor_GetCollidedExplosive(play, &this->collider.base) != NULL
+    // ```
+    // #### `args`
+    // - `*BgHidanKowarerukabe`
+    VB_FIRE_TEMPLE_BOMBABLE_WALL_BREAK,
+
+    // #### `result`
+    // ```c
+    // this->timer > 0
+    // ```
+    // #### `args`
+    // - None
+    VB_FISH_TIMER_TICK,
 
     // #### `result`
     // ```c
@@ -2764,6 +3866,14 @@ typedef enum {
     // true
     // ```
     // #### `args`
+    // - `*Actor`
+    VB_AFTER_ACTOR_UPDATE_BGCHECKINFO,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
     // - `*BgHakaHuta`
     // - `*PlayState`
     VB_HAKA_HUTA_SPAWN_KEESE,
@@ -2783,7 +3893,324 @@ typedef enum {
     // ```
     // #### `args`
     // - `*int32_t (camId)`
-    VB_SHOULD_LOAD_BG_IMAGE
-} GIVanillaBehavior;
+    VB_SHOULD_LOAD_BG_IMAGE,
 
-#endif
+    // #### `result`
+    // ```c
+    // this->actor.floorHeight <= -10000.0f
+    // ```
+    // #### `args`
+    // - `*EnItem00`
+    VB_ITEM00_KILL,
+
+    // #### `result`
+    // ```c
+    // interruptResult == PLAYER_INTERRUPT_NEW_ACTION
+    // ```
+    // #### `args`
+    // - `*u8 (&player->unk_6AD)`
+    VB_INTERRUPT_LADDER_DISMOUNT,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - none
+    VB_ITEMSHIELD_DRAW,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_INIT_HOOKSHOT_IA,
+
+    // #### `result`
+    // ```c
+    // !(this->stateFlags1 & PLAYER_STATE1_ON_HORSE) && Player_HoldsHookshot(this)
+    // ```
+    // #### `args`
+    // - `s16* (&this->actor.parent->id)`
+    VB_PREVENT_HOOKSHOT_PARENT_SOFTLOCK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - none
+    VB_PUTAWAY_BECAUSE_DISABLED_ITEM_BUTTONS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `s32* i` (button index)
+    // - `Player*`
+    // - `s32* item`
+    VB_OVERRIDE_BUTTON_ITEM_USED,
+
+    // #### `result`
+    // ```c
+    // true if Goron Link is talking
+    // ```
+    // #### `args`
+    // - `*EnGo2` (Goron Link)
+    VB_PREVENT_GORON_LINK_SOFTLOCK,
+
+    // #### `result`
+    // ```c
+    // play->interfaceCtx.hbaAmmo == 0
+    // ```
+    // Prevent custom fanfares set to loop from softlocking Horseback Archery by
+    // letting players escape the cutscene with A/B/start after a normal number of playframes.
+    // #### `args`
+    // - none
+    VB_PREVENT_HBA_FANFARE_SOFTLOCK_TIMER,
+
+    // #### `result`
+    // ```c
+    // (isFanfarePlaying != 1 && gSaveContext.minigameState != 3)
+    // ```
+    // Prevent custom fanfares set to loop from softlocking Horseback Archery by
+    // letting players escape the cutscene with A/B/start after a normal number of playframes.
+    // #### `args`
+    // - `EnHorse*`
+    VB_PREVENT_HBA_FANFARE_SOFTLOCK_BUTTONS,
+
+    // #### `result`
+    // ```c
+    // sets `camMode` to new mode if applicable
+    // ```
+    // #### `args`
+    // - `s32` player->heldItemAction
+    // - `s32*` camMode
+    VB_CHANGE_AIMING_CAMERA,
+
+    // true
+    // ```
+    // #### `args`
+    // - `*EnPeehat`
+    // - `*PlayState`
+    VB_PEEHAT_SPAWN_LARVAS,
+
+    // #### `result`
+    // ```c
+    // gSaveContext.equips.buttonItems[0] != ITEM_NONE
+    // ```
+    // Whether the B button slot should be treated as holding an item when entering the
+    // horseback/minigame "temporary B" force path. Rando returns `true` for a swordless
+    // player so the swordless-on-Epona item glitch can be blocked.
+    // #### `args`
+    // - `*PlayState`
+    VB_TEMP_B_TREAT_AS_OCCUPIED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Side-effect hook (return value ignored): fired right after the vanilla
+    // `buttonStatus[0] = buttonItems[0]` stash so rando can relocate it to its swordless
+    // sentinel for later restoration.
+    // #### `args`
+    // - `*PlayState`
+    VB_TEMP_B_STASH_SWORDLESS,
+
+    // #### `result`
+    // ```c
+    // (gSaveContext.equips.buttonItems[0] != ITEM_NONE) || (gSaveContext.infTable[29] == 0)
+    // ```
+    // Whether the "temporary B" item should be restored to the B button. Rando also returns
+    // `true` when it had stashed a swordless sentinel.
+    // #### `args`
+    // - None
+    VB_TEMP_B_SHOULD_RESTORE,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Side-effect hook (return value ignored): fired right after the vanilla
+    // `buttonItems[0] = buttonStatus[0]` restore so rando can convert its swordless sentinel
+    // back into an empty (swordless) B button.
+    // #### `args`
+    // - None
+    VB_TEMP_B_RESTORE_SWORDLESS,
+
+    // #### `result`
+    // ```c
+    // true
+    // // ```
+    // Hook to override the save menu for a message box allowing you to
+    // Continue, Reset, and Reset to Spawn after saving (only from the pause menu, not the
+    // game over screen).
+    // #### `args`
+    // - `*PlayState`
+    VB_LOAD_SAVE_MENU,
+
+    // #### `result`
+    // ```c
+    // pauseCtx->state == 7
+    // ```
+    // Hook to override the drawing/loading textures for the save menu so that
+    // a textbox can be rendered instead. Pause screen only, Game Over version left
+    // intact.
+    VB_DRAW_SAVE_MENU,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the chest game shopkeeper wipes the scene's chest flags and keys on spawn.
+    // #### `args`
+    // - `*EnTakaraMan`
+    VB_TAKARA_MAN_RESET_CHESTS_AND_KEYS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the chest game shopkeeper hands over a small key after being paid.
+    // #### `args`
+    // - `*EnTakaraMan`
+    VB_TAKARA_MAN_OFFER_GET_ITEM,
+
+    // #### `result`
+    // ```c
+    // Rand_ZeroFloat(1.99f) < 1.0f
+    // ```
+    // Whether the chest game swaps which side of the room holds the key chest.
+    // #### `args`
+    // - `*EnChanger`
+    VB_EN_CHANGER_SWAP_CHESTS,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether opening a chest sets its treasure flag.
+    // #### `args`
+    // - `*EnBox`
+    VB_CHEST_SET_TREASURE_FLAG,
+
+    // #### `result`
+    // ```c
+    // Flags_GetTreasure(play, this->dyna.actor.params & 0x1F)
+    // ```
+    // Whether a chest counts as already opened.
+    // #### `args`
+    // - `*EnBox`
+    VB_CHEST_CONSIDER_CHEST_OPEN,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether NPCs give their mask reaction text for the mask being worn.
+    // #### `args`
+    // - `u8 currentMask`
+    VB_NPC_REACT_TO_MASK,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether a trade item button gets greyed out while trade items are restricted.
+    // #### `args`
+    // - `u8 item`
+    VB_DISABLE_TRADE_ITEM_BUTTON,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Movement speed for the "Move in first person" setting, multiplied in place.
+    // #### `args`
+    // - `*Player`
+    // - `f32*` movementSpeed
+    VB_PLAYER_MODIFY_FIRST_PERSON_SPEED,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // Whether the market night guard goes back to idle once talked to, rather than
+    // a hook taking over his action func.
+    // #### `args`
+    // - `*EnHeishi4`
+    // - `*PlayState`
+    VB_MARKET_NIGHT_GUARD_SET_ACTION_AFTER_TALK,
+
+    // #### `result`
+    // ```c
+    // ageReq == AGE_REQ_NONE || ageReq == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age for something age gated.
+    // #### `args`
+    // - `u8 ageReq` an `AGE_REQ_*`, which for adult and child is the matching `LINK_AGE_*`
+    VB_PLAYER_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // gItemAgeReqs[itemIndex] == AGE_REQ_NONE || gItemAgeReqs[itemIndex] == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age to hold an item.
+    // #### `args`
+    // - `u8 itemIndex`
+    VB_ITEM_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // gSlotAgeReqs[slotIndex] == AGE_REQ_NONE || gSlotAgeReqs[slotIndex] == gSaveContext.linkAge
+    // ```
+    // Whether the player is the right age to use an inventory slot.
+    // #### `args`
+    // - `u8 slotIndex`
+    VB_SLOT_MEETS_AGE_REQ,
+
+    // #### `result`
+    // ```c
+    // this->currentMask != PLAYER_MASK_NONE
+    // ```
+    // Whether a worn mask comes off once it's no longer on a button.
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON,
+
+    // #### `result`
+    // ```c
+    // this->itemAction != PLAYER_IA_BOTTLE
+    // ```
+    // #### `args`
+    // - none
+    VB_EMPTY_BOTTLE_OI,
+
+    // #### `result`
+    // ```c
+    // true
+    // ```
+    // #### `args`
+    // - `*int32_t (strength)`
+    VB_USE_STRENGTH_UPGRADE,
+
+    // #### `result`
+    // ```c
+    // Flags_GetRandomizerInf(RAND_INF_CAN_SWIM)
+    // ```
+    // #### `args`
+    // - None
+    VB_SWIM,
+
+    // #### `result`
+    // ```c
+    // false
+    // ```
+    // #### `args`
+    // - `*Player`
+    VB_PLAYER_ALLOW_MIDAIR_AIM,
+
+    VB_MOD_BASE = 10000
+} GIVanillaBehavior;

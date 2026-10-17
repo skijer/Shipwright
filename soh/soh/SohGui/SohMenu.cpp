@@ -1,8 +1,7 @@
+#include <libultraship/bridge/consolevariablebridge.h>
+#include <ship/Context.h>
+
 #include "SohMenu.h"
-#include <ship/window/gui/GuiMenuBar.h>
-#include <ship/window/gui/GuiElement.h>
-#include <ship/utils/StringHelper.h>
-#include <spdlog/fmt/fmt.h>
 
 extern "C" {
 extern PlayState* gPlayState;
@@ -14,6 +13,51 @@ namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
 
 using namespace UIWidgets;
+
+bool SohMenu::EnsureModSidebar(const std::string& section, const std::string& sidebar, const char* cvar,
+                               uint32_t columns) {
+    if (!menuEntries.contains(section)) {
+        AddMenuEntry(section, cvar);
+    }
+    auto& entry = menuEntries.at(section);
+    if (!entry.sidebars.contains(sidebar)) {
+        AddSidebarEntry(section, sidebar, columns);
+    }
+    return entry.sidebars.at(sidebar).columnCount >= columns;
+}
+
+bool SohMenu::MoveModWidget(const WidgetPath& path, const std::string& label, const std::string& anchor, bool after) {
+    if (!menuEntries.contains(path.sectionName)) {
+        return false;
+    }
+    auto& sidebars = menuEntries.at(path.sectionName).sidebars;
+    if (!sidebars.contains(path.sidebarName) || sidebars.at(path.sidebarName).columnWidgets.size() <= path.column) {
+        return false;
+    }
+    auto& widgets = sidebars.at(path.sidebarName).columnWidgets.at(path.column);
+    auto source =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == label; });
+    auto target =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    if (source == widgets.end() || target == widgets.end() || source == target) {
+        return false;
+    }
+    auto moved = std::move(*source);
+    widgets.erase(source);
+    target = std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    widgets.insert(target + (after ? 1 : 0), std::move(moved));
+    return true;
+}
+
+bool SohMenu::HasModWidgetPath(const WidgetPath& path) const {
+    auto section = menuEntries.find(path.sectionName);
+    if (section == menuEntries.end()) {
+        return false;
+    }
+    auto sidebar = section->second.sidebars.find(path.sidebarName);
+    return sidebar != section->second.sidebars.end() &&
+           static_cast<uint32_t>(path.column) < sidebar->second.columnCount;
+}
 
 void SohMenu::AddSidebarEntry(std::string sectionName, std::string sidebarName, uint32_t columnCount) {
     assert(!sectionName.empty());
@@ -29,7 +73,7 @@ WidgetInfo& SohMenu::AddWidget(WidgetPath& pathInfo, std::string widgetName, Wid
     std::unordered_map<std::string, SidebarEntry>& sidebar = menuEntries.at(pathInfo.sectionName).sidebars;
     uint8_t column = pathInfo.column;
     if (sidebar.contains(pathInfo.sidebarName)) {
-        while (sidebar.at(pathInfo.sidebarName).columnWidgets.size() < column + 1) {
+        while (sidebar.at(pathInfo.sidebarName).columnWidgets.size() < static_cast<size_t>(column) + 1) {
             sidebar.at(pathInfo.sidebarName).columnWidgets.push_back({});
         }
     }
@@ -108,29 +152,29 @@ void SohMenu::InitElement() {
     disabledMap = {
         { DISABLE_FOR_NO_VSYNC,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->CanDisableVerticalSync();
+               return !Ship::Context::GetRawInstance()->GetWindow()->CanDisableVerticalSync();
            },
             "Disabling VSync not supported" } },
         { DISABLE_FOR_NO_WINDOWED_FULLSCREEN,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->SupportsWindowedFullscreen();
+               return !Ship::Context::GetRawInstance()->GetWindow()->SupportsWindowedFullscreen();
            },
             "Windowed Fullscreen not supported" } },
         { DISABLE_FOR_NO_MULTI_VIEWPORT,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->GetGui()->SupportsViewports();
+               return !Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SupportsViewports();
            },
             "Multi-viewports not supported" } },
         { DISABLE_FOR_NOT_DIRECTX,
           { [](disabledInfo& info) -> bool {
-               return Ship::Context::GetInstance()->GetWindow()->GetWindowBackend() !=
-                      Ship::WindowBackend::FAST3D_DXGI_DX11;
+               return Ship::Context::GetRawInstance()->GetWindow()->GetWindowBackend() !=
+                      Fast::WindowBackend::FAST3D_DXGI_DX11;
            },
             "Available Only on DirectX" } },
         { DISABLE_FOR_DIRECTX,
           { [](disabledInfo& info) -> bool {
-               return Ship::Context::GetInstance()->GetWindow()->GetWindowBackend() ==
-                      Ship::WindowBackend::FAST3D_DXGI_DX11;
+               return Ship::Context::GetRawInstance()->GetWindow()->GetWindowBackend() ==
+                      Fast::WindowBackend::FAST3D_DXGI_DX11;
            },
             "Not Available on DirectX" } },
         { DISABLE_FOR_MATCH_REFRESH_RATE_ON,

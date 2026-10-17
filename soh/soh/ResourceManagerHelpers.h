@@ -4,13 +4,18 @@
 
 #define GAME_REGION_NTSC 0
 #define GAME_REGION_PAL 1
+#define GAME_REGION_UNKNOWN 2
 
 #define GAME_PLATFORM_N64 0
 #define GAME_PLATFORM_GC 1
+#define GAME_PLATFORM_UNKNOWN 2
 
 #ifdef __cplusplus
 #include <memory>
-#include <ship/resource/Resource.h>
+
+namespace Ship {
+class IResource;
+} // namespace Ship
 
 std::shared_ptr<Ship::IResource> ResourceMgr_GetResourceByNameHandlingMQ(const char* path);
 
@@ -31,6 +36,9 @@ bool ResourceMgr_IsPalLoaded();
 void ResourceMgr_LoadDirectory(const char* resName);
 void ResourceMgr_UnloadResource(const char* resName);
 char** ResourceMgr_ListFiles(const char* searchMask, int* resultSize);
+bool ResourceMgr_IsOcarinaOfTimeVersion(uint32_t version);
+uint8_t ResourceMgr_IsBaseGameFile(const char* filePath);
+int32_t ResourceMgr_GetFileArchiveIndex(const char* filePath);
 uint8_t ResourceMgr_FileExists(const char* resName);
 uint8_t ResourceMgr_FileAltExists(const char* resName);
 void ResourceMgr_UnloadOriginalWhenAltExists(const char* resName);
@@ -41,6 +49,7 @@ uint16_t ResourceMgr_LoadTexWidthByName(char* texPath);
 uint16_t ResourceMgr_LoadTexHeightByName(char* texPath);
 char* ResourceMgr_LoadTexOrDListByName(const char* filePath);
 char* ResourceMgr_LoadPlayerAnimByName(const char* animPath);
+LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath);
 AnimationHeaderCommon* ResourceMgr_LoadAnimByName(const char* path);
 char* ResourceMgr_GetNameByCRC(uint64_t crc, char* alloc);
 Gfx* ResourceMgr_LoadGfxByCRC(uint64_t crc);

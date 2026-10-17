@@ -3,9 +3,10 @@
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "overlays/effects/ovl_Effect_Ss_Dead_Sound/z_eff_ss_dead_sound.h"
 #include "textures/icon_item_static/icon_item_static.h"
-#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
+#include <libultraship/bridge/consolevariablebridge.h>
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 
 #define FLAGS 0
 
@@ -334,12 +335,7 @@ void EnItem00_SetupAction(EnItem00* this, EnItem00ActionFunc actionFunc) {
 }
 
 void EnItem00_SetObjectDependency(EnItem00* this, PlayState* play, s16 objectIndex) {
-    // Remove object dependency for Enemy Randomizer and Crowd Control to allow Like-likes to
-    // drop equipment correctly in rooms where Like-likes normally don't spawn.
-    if (CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemies"), 0) ||
-        (CVarGetInteger(CVAR_REMOTE_CROWD_CONTROL("Enabled"), 0))) {
-        this->actor.objBankIndex = 0;
-    } else {
+    if (GameInteractor_Should(VB_ITEM00_REQUIRE_OBJECT, true, this)) {
         this->actor.objBankIndex = Object_GetIndex(&play->objectCtx, objectIndex);
         Actor_SetObjectDependency(play, &this->actor);
     }
@@ -481,6 +477,7 @@ void EnItem00_Init(Actor* thisx, PlayState* play) {
         case ITEM00_SOH_GIVE_ITEM_ENTRY:
         case ITEM00_SOH_GIVE_ITEM_ENTRY_GI:
         case ITEM00_SOH_DUMMY:
+        case ITEM00_SOH_CUSTOM:
             this->unk_158 = 0;
             Actor_SetScale(&this->actor, 0.03f);
             this->scale = 0.03f;
@@ -591,6 +588,7 @@ void EnItem00_Init(Actor* thisx, PlayState* play) {
 void EnItem00_Destroy(Actor* thisx, PlayState* play) {
     EnItem00* this = (EnItem00*)thisx;
 
+    CustomItemRegistry_RemoveDrop(thisx);
     Collider_DestroyCylinder(play, &this->collider);
 }
 
@@ -772,20 +770,17 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         (this->actor.params >= ITEM00_ARROWS_SMALL && this->actor.params <= ITEM00_SMALL_KEY) ||
         this->actor.params == ITEM00_BOMBS_A || this->actor.params == ITEM00_ARROWS_SINGLE ||
         this->actor.params == ITEM00_BOMBS_SPECIAL ||
-        (this->actor.params >= ITEM00_BOMBCHU && this->actor.params <= ITEM00_SOH_GIVE_ITEM_ENTRY_GI)) {
+        (this->actor.params >= ITEM00_BOMBCHU && this->actor.params <= ITEM00_SOH_CUSTOM)) {
         if (CVarGetInteger(CVAR_ENHANCEMENT("NewDrops"), 0) ||
-            (this->actor.params >= ITEM00_SOH_DUMMY && this->actor.params <= ITEM00_SOH_GIVE_ITEM_ENTRY_GI)) {
+            (this->actor.params >= ITEM00_SOH_DUMMY && this->actor.params <= ITEM00_SOH_CUSTOM)) {
             this->actor.shape.rot.y += 960;
         } else {
             this->actor.shape.rot.y = 0;
         }
     }
 
-    if (this->unk_15A > 0) {
+    if (GameInteractor_Should(VB_ITEM00_TIMER_TICK, this->unk_15A > 0, this)) {
         this->unk_15A--;
-        if (CVarGetInteger(CVAR_CHEAT("DropsDontDie"), 0) && (this->unk_154 <= 0)) {
-            this->unk_15A++;
-        }
     }
 
     if ((this->unk_15A > 0) && (this->unk_15A < 41) && (this->unk_154 <= 0)) {
@@ -827,7 +822,7 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         if (sp3A || D_80157D94[0]) {
             Actor_UpdateBgCheckInfo(play, &this->actor, 10.0f, 15.0f, 15.0f, 0x1D);
 
-            if (this->actor.floorHeight <= -10000.0f) {
+            if (GameInteractor_Should(VB_ITEM00_KILL, this->actor.floorHeight <= -10000.0f, this)) {
                 Actor_Kill(&this->actor);
                 return;
             }
@@ -855,6 +850,10 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
     }
 
     if (play->gameOverCtx.state != GAMEOVER_INACTIVE) {
+        return;
+    }
+
+    if (this->actor.params == ITEM00_SOH_CUSTOM && CustomItemRegistry_UpdateDrop(&this->actor, play)) {
         return;
     }
 
@@ -965,8 +964,8 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
     }
 
     if ((*params <= ITEM00_RUPEE_RED) || (*params == ITEM00_RUPEE_ORANGE)) {
-        Audio_PlaySoundGeneral(NA_SE_SY_GET_RUPY, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        Audio_PlaySfxGeneral(NA_SE_SY_GET_RUPY, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     } else if (getItemId != GI_NONE) {
         if (Actor_HasParent(&this->actor, play)) {
             Flags_SetCollectible(play, this->collectibleFlag);
@@ -974,8 +973,8 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
         }
         return;
     } else {
-        Audio_PlaySoundGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+        Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }
 
     Flags_SetCollectible(play, this->collectibleFlag);
@@ -1001,6 +1000,10 @@ void EnItem00_Draw(Actor* thisx, PlayState* play) {
     if (CVarGetInteger(CVAR_ENHANCEMENT("NewDrops"), 0)) {
         func_8002EBCC(&this->actor, play, 0);
         func_8002ED80(&this->actor, play, 0);
+    }
+
+    if (this->actor.params == ITEM00_SOH_CUSTOM && CustomItemRegistry_DrawDrop(&this->actor, play)) {
+        return;
     }
 
     if (!(this->unk_156 & this->unk_158)) {
@@ -1213,6 +1216,7 @@ void EnItem00_CustomItemsParticles(Actor* Parent, PlayState* play, GetItemEntry 
                 case ITEM_BOTTLE:
                 case ITEM_MILK_BOTTLE:
                 case ITEM_LETTER_RUTO:
+                case ITEM_CUSTOM:
                     colorIndex = PARTICLE_WHITE;
                     break;
                 default:
@@ -1731,15 +1735,17 @@ void Item_DropCollectibleRandom(PlayState* play, Actor* fromActor, Vec3f* spawnP
             params = 0xA * 0x10;
             dropTableIndex = 0x0;
             dropId = ITEM00_MAGIC_SMALL;
-        } else if (!LINK_IS_ADULT && (AMMO(ITEM_SLINGSHOT) < 6)) {
+        } else if (GameInteractor_Should(VB_FLEX_DROP_AMMO, !LINK_IS_ADULT && (AMMO(ITEM_SLINGSHOT) < 6),
+                                         ITEM00_SEEDS)) {
             params = 0xA * 0x10;
             dropTableIndex = 0x0;
             dropId = ITEM00_SEEDS;
-        } else if (LINK_IS_ADULT && (AMMO(ITEM_BOW) < 6)) {
+        } else if (GameInteractor_Should(VB_FLEX_DROP_AMMO, LINK_IS_ADULT && (AMMO(ITEM_BOW) < 6),
+                                         ITEM00_ARROWS_MEDIUM)) {
             params = 0xA * 0x10;
             dropTableIndex = 0x0;
             dropId = ITEM00_ARROWS_MEDIUM;
-        } else if (AMMO(ITEM_BOMB) < 6) {
+        } else if (GameInteractor_Should(VB_FLEX_DROP_AMMO, AMMO(ITEM_BOMB) < 6, ITEM00_BOMBS_A)) {
             params = 0xD * 0x10;
             dropTableIndex = 0x0;
             dropId = ITEM00_BOMBS_A;
