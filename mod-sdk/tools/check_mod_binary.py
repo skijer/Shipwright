@@ -14,6 +14,10 @@ WINDOWS_STARTUP_KERNEL_IMPORTS = {
     "QueryPerformanceCounter", "RtlCaptureContext", "RtlLookupFunctionEntry", "RtlVirtualUnwind",
     "SetUnhandledExceptionFilter", "TerminateProcess", "UnhandledExceptionFilter",
 }
+# MSVC links these into any C++ module with a function-local static (thread-safe static initialisation).
+WINDOWS_STATIC_INIT_KERNEL_IMPORTS = {
+    "AcquireSRWLockExclusive", "ReleaseSRWLockExclusive", "SleepConditionVariableSRW", "WakeAllConditionVariable",
+}
 WINDOWS_DANGEROUS_RUNTIME_IMPORTS = {
     "system", "_wsystem", "_popen", "_wpopen", "fopen", "fopen_s", "_wfopen", "_wfopen_s", "_fsopen", "_wfsopen",
     "freopen", "freopen_s", "_open", "_wopen", "_sopen", "_sopen_s", "_wsopen", "_wsopen_s", "_creat", "remove",
@@ -59,7 +63,7 @@ def is_allowed_windows_import(library, function):
     if library == "soh.exe":
         return not HOST_TRUST_INTERNALS.search(function)
     if library == "kernel32.dll":
-        return function in WINDOWS_STARTUP_KERNEL_IMPORTS
+        return function in WINDOWS_STARTUP_KERNEL_IMPORTS or function in WINDOWS_STATIC_INIT_KERNEL_IMPORTS
     if not library.startswith(WINDOWS_RUNTIME_PREFIXES):
         return False
     return function not in WINDOWS_DANGEROUS_RUNTIME_IMPORTS and not function.startswith(
