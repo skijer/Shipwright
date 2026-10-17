@@ -57,7 +57,7 @@ bool IsMenuBuilt() {
 void AddWidget(const RegisteredOption& option) {
     WidgetPath path = { kSection, kSidebar, SECTION_COLUMN_1 };
 
-    SohGui::mSohMenu->AddSidebarEntry(kSection, kSidebar, 1);
+    SohGui::mSohMenu->EnsureModSidebar(kSection, kSidebar, nullptr, 1);
     Rando::Settings::GetInstance()->GetOption(option.settingKey).AddWidget(path);
 }
 

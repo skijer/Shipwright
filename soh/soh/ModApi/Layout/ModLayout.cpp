@@ -13,6 +13,7 @@
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/cvar_prefixes.h"
 #include "soh/Enhancements/enhancementTypes.h"
@@ -78,6 +79,7 @@ std::vector<VanillaReference> sVanillaReferences;
 std::array<std::string, SOH_LAYOUT_COUNT> sShown = { NativePage, NativePage, NativePage };
 std::array<std::string, SOH_LAYOUT_COUNT> sEdited = { NativePage, NativePage, NativePage };
 std::array<int, SOH_LAYOUT_COUNT> sCursor{};
+std::array<int16_t, MaxCells> sItemCellSlots{};
 std::map<std::string, std::string> sSelected;
 std::array<bool, SOH_LAYOUT_COUNT> sCycling{};
 std::array<uint32_t, SOH_LAYOUT_COUNT> sInputFrame{};
@@ -1032,6 +1034,10 @@ bool ModLayout_IsActive(uint8_t kind) {
     return kind < SOH_LAYOUT_COUNT && sActive[kind];
 }
 
+int16_t ModLayout_GetItemCellSlot(uint8_t cell) {
+    return cell < MaxCells ? sItemCellSlots[cell] : -1;
+}
+
 bool ModLayout_BeginCustomEquip(PlayState* play, const char* key, uint8_t button, int16_t x, int16_t y) {
     const auto* definition = CustomItemRegistry_Find(key);
     if (play == nullptr || definition == nullptr || button < 1 || button > 7 || !CustomItemRegistry_IsOwned(key) ||
@@ -1142,6 +1148,11 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
     for (int cell = 0; cell < CellCount(page); ++cell) {
         const auto contents = CellEntries(entries, page, cell, true);
         const auto* selected = SelectedEntry(contents, page, cell);
+        if (kind == SOH_LAYOUT_ITEMS && cell < MaxCells) {
+            const bool isInventorySlot =
+                selected != nullptr && selected->custom == nullptr && selected->sourceKind == SOH_LAYOUT_ITEMS;
+            sItemCellSlots[cell] = isInventorySlot ? selected->source : -1;
+        }
         const bool quest =
             selected != nullptr && selected->custom == nullptr && selected->sourceKind == SOH_LAYOUT_COLLECTABLES;
         const bool song = quest && selected->source >= 6 && selected->source < 18;
@@ -1175,6 +1186,10 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
         } else {
             KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, const_cast<char*>(selected->icon), textureWidth,
                                                textureHeight, 0);
+        }
+        // The native item page runs this per cell; this page must too, or mods lose their overlay.
+        if (kind == SOH_LAYOUT_ITEMS) {
+            GameInteractor_ExecuteOnKaleidoItemDraw(play, cell, selected->item, &vertices[cell * 4]);
         }
     }
     if (kind == SOH_LAYOUT_ITEMS) {

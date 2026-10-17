@@ -16,6 +16,7 @@ typedef enum {
     SOH_MOD_MENU_SEPARATOR,
     SOH_MOD_MENU_TEXT,
     SOH_MOD_MENU_CUSTOM,
+    SOH_MOD_MENU_COMBOBOX,
 } SOHModMenuWidgetType;
 
 typedef void (*SOHModMenuCallback)(void);
@@ -36,9 +37,13 @@ typedef struct {
     float minFloat;
     float maxFloat;
     SOHModMenuCallback onChange;
+    const char* const* values;
+    uint32_t valueCount;
 } SOHModMenuWidget;
 
 #define SOH_MOD_MENU_WIDGET_MIN_SIZE (offsetof(SOHModMenuWidget, onChange) + sizeof(((SOHModMenuWidget*)0)->onChange))
+#define SOH_MOD_MENU_WIDGET_COMBOBOX_SIZE \
+    (offsetof(SOHModMenuWidget, valueCount) + sizeof(((SOHModMenuWidget*)0)->valueCount))
 
 bool ModMenu_RegisterWidget(const SOHModMenuWidget* widget);
 bool ModMenu_RegisterSidebar(const char* section, const char* sidebar, const char* selectionCvar, uint8_t columns);

@@ -192,6 +192,8 @@ typedef struct {
     bool (*SetTimeSplitGroup)(uint32_t id, const uint32_t* members, uint32_t count);
     void (*ClearTimeSplitGroups)(void);
     bool (*SetItemIcon)(uint32_t item, uint32_t source);
+    uint32_t (*ListArchiveFiles)(const char* searchMask, SOHArchivePathFunc visit, void* userData);
+    bool (*MountUserArchive)(const char* title);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

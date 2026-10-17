@@ -52,26 +52,27 @@ static bool IsCustomActorMarker(const std::string& argument) {
     return argument == "custom_actor" || argument == "custom_enemy";
 }
 
-static bool ResolveCustomActorArgs(std::vector<std::string>& args) {
+// The console only shows a failed command's output, so spawn reports its errors there.
+static bool ResolveCustomActorArgs(std::vector<std::string>& args, std::string* output) {
     if (args.size() < 2 || !IsCustomActorMarker(args[1])) {
         return true;
     }
-    const std::string& kind = args[1];
+    const bool wantsEnemy = args[1] == "custom_enemy";
 
     if (args.size() < 3) {
-        ERROR_MESSAGE("Usage: spawn %s \"<key>\" <params> [x y z [rx ry rz]]", kind.c_str());
+        *output = "Usage: spawn custom_actor|custom_enemy \"<key>\" <params> [x y z [rx ry rz]]";
         return false;
     }
     std::string key = ModApi_UnquoteConsoleArgument(args[2]);
     int16_t actorId = ActorRegistry_FindCustomId(key.c_str());
-    bool wantsEnemy = kind == "custom_enemy";
 
     if (actorId < 0 || (wantsEnemy && ActorRegistry_FindEnemyById(actorId) == nullptr)) {
-        ERROR_MESSAGE("No installed mod registers %s named \"%s\"", wantsEnemy ? "an enemy" : "an actor", key.c_str());
+        *output = std::string("No installed mod registers ") + (wantsEnemy ? "an enemy" : "an actor") + " named \"" +
+                  key + "\"";
         return false;
     }
     args.erase(args.begin() + 1);
-    args[1] = key;
+    args[1] = std::to_string(actorId);
     return true;
 }
 
@@ -79,16 +80,19 @@ static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std:
                               std::string* output) {
     std::vector<std::string> args = rawArgs;
 
-    if (!ResolveCustomActorArgs(args)) {
+    while (args.size() > 1 && args.back().empty()) {
+        args.pop_back();
+    }
+    if (!ResolveCustomActorArgs(args, output)) {
         return 1;
     }
     if ((args.size() != 9) && (args.size() != 3) && (args.size() != 6)) {
-        ERROR_MESSAGE("Not enough arguments passed to actorspawn");
+        *output = "Expected <actor> <params>, plus x y z and optionally rx ry rz";
         return 1;
     }
 
     if (gPlayState == nullptr) {
-        ERROR_MESSAGE("PlayState == nullptr");
+        *output = "Load a save before spawning actors";
         return 1;
     }
 
@@ -100,7 +104,7 @@ static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std:
         try {
             actorId = std::stoi(args[1]);
         } catch ([[maybe_unused]] std::invalid_argument const& ex) {
-            ERROR_MESSAGE("Invalid actor ID");
+            *output = "Invalid actor ID";
             return 1;
         }
     } else {
@@ -136,7 +140,7 @@ static bool ActorSpawnHandler(std::shared_ptr<Ship::Console> Console, const std:
 
     if (Actor_Spawn(&gPlayState->actorCtx, gPlayState, actorId, spawnPoint.pos.x, spawnPoint.pos.y, spawnPoint.pos.z,
                     spawnPoint.rot.x, spawnPoint.rot.y, spawnPoint.rot.z, params) == NULL) {
-        ERROR_MESSAGE("Failed to spawn actor. Actor_Spawn returned NULL");
+        *output = "Actor_Spawn returned NULL for actor " + std::to_string(actorId);
         return 1;
     }
     return 0;

@@ -119,6 +119,30 @@ bool PickFor(const ModIdentity* mod, const char* title, const char* filterName, 
 #endif
 }
 
+// The player picking the archive in the dialog is the consent; it stays mounted until the game closes.
+bool MountFor(const ModIdentity* mod, const char* title) {
+    if (!CanUseFiles(mod)) {
+        return false;
+    }
+#ifdef USER_FILES_HAS_DIALOGS
+    const std::string dialogTitle = mod->name + ": " + (title != nullptr ? title : "Choose an archive to load");
+    const std::vector<std::string> chosen =
+        pfd::open_file(dialogTitle, ".", { "Ship archives", "*.o2r *.otr *.zip" }).result();
+    if (chosen.empty()) {
+        return false;
+    }
+    auto archive = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->AddArchive(chosen[0]);
+    if (archive == nullptr) {
+        SPDLOG_ERROR("[UserFiles] '{}' could not mount '{}'", mod->name, chosen[0]);
+        return false;
+    }
+    SPDLOG_INFO("[UserFiles] The player mounted '{}' for '{}'", chosen[0], mod->name);
+    return true;
+#else
+    return false;
+#endif
+}
+
 bool SaveFor(const ModIdentity* mod, const char* fileName, const void* data, uint64_t size) {
     if (!CanUseFiles(mod) || data == nullptr || !IsPlainFileName(fileName)) {
         return false;
@@ -152,6 +176,10 @@ extern "C" void UserFiles_Free(SOHUserFile* file) {
 
 extern "C" bool UserFiles_SaveToMods(const char* fileName, const void* data, uint64_t size) {
     return SaveFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), fileName, data, size);
+}
+
+extern "C" bool UserFiles_MountArchive(const char* title) {
+    return MountFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), title);
 }
 
 void UserFiles_ApplyPending(const std::filesystem::path& modsDirectory) {

@@ -11,9 +11,11 @@ extern "C" {
 
 // Returning false stops the walk. The data lives only for the call.
 typedef bool (*SOHArchiveFileFunc)(const char* path, const uint8_t* data, uint64_t size, void* userData);
+typedef bool (*SOHArchivePathFunc)(const char* path, void* userData);
 
 uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinationDir);
 uint32_t O2rExtractor_ReadFiles(const char* searchMask, SOHArchiveFileFunc visit, void* userData);
+uint32_t O2rExtractor_ListFiles(const char* searchMask, SOHArchivePathFunc visit, void* userData);
 
 #ifdef __cplusplus
 }

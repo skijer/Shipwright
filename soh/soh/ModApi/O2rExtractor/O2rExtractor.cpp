@@ -117,3 +117,22 @@ uint32_t O2rExtractor_ReadFiles(const char* searchMask, SOHArchiveFileFunc visit
     }
     return visited;
 }
+
+uint32_t O2rExtractor_ListFiles(const char* searchMask, SOHArchivePathFunc visit, void* userData) {
+    if (searchMask == nullptr || visit == nullptr) {
+        return 0;
+    }
+    auto paths = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(searchMask);
+    if (paths == nullptr) {
+        return 0;
+    }
+    uint32_t visited = 0;
+
+    for (const std::string& path : *paths) {
+        visited++;
+        if (!visit(path.c_str(), userData)) {
+            break;
+        }
+    }
+    return visited;
+}

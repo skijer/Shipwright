@@ -316,6 +316,8 @@ SOHModApi BuildTable() {
     api.SetTimeSplitGroup = ModLabels_SetTimeSplitGroup;
     api.ClearTimeSplitGroups = ModLabels_ClearTimeSplitGroups;
     api.SetItemIcon = ModLabels_SetItemIcon;
+    api.ListArchiveFiles = O2rExtractor_ListFiles;
+    api.MountUserArchive = UserFiles_MountArchive;
     return api;
 }
 

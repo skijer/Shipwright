@@ -1,12 +1,17 @@
 #include "ModMenu.h"
 
+#include <algorithm>
+#include <cstring>
+#include <deque>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
-#include <deque>
 #include <spdlog/spdlog.h>
 
+#include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/SohMenu.h"
+#include "soh/SohGui/UIWidgets.hpp"
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -22,6 +27,7 @@ struct RegisteredWidget {
     std::string cvar;
     std::string tooltip;
     std::string anchor;
+    std::vector<std::string> values;
     bool after = false;
 };
 
@@ -35,6 +41,15 @@ struct RegisteredSidebar {
 };
 
 std::deque<RegisteredSidebar> sSidebars;
+
+// The map points into the registered strings, which a deque element never moves.
+std::map<int32_t, const char*> BuildComboMap(const std::vector<std::string>& values) {
+    std::map<int32_t, const char*> comboMap;
+    for (size_t index = 0; index < values.size(); index++) {
+        comboMap[static_cast<int32_t>(index)] = values[index].c_str();
+    }
+    return comboMap;
+}
 
 void AddWidget(const RegisteredWidget& registered) {
     const auto& definition = registered.definition;
@@ -64,7 +79,11 @@ void AddWidget(const RegisteredWidget& registered) {
         case SOH_MOD_MENU_CUSTOM:
             type = WIDGET_CUSTOM;
             break;
+        case SOH_MOD_MENU_COMBOBOX:
+            type = WIDGET_CVAR_COMBOBOX;
+            break;
         default:
+            SPDLOG_ERROR("[ModMenu] Unknown widget type {} for '{}'", (int32_t)definition.type, registered.label);
             return;
     }
 
@@ -94,6 +113,12 @@ void AddWidget(const RegisteredWidget& registered) {
             break;
         case SOH_MOD_MENU_TEXT:
             widget.Options(UIWidgets::TextOptions().Tooltip(registered.tooltip.c_str()));
+            break;
+        case SOH_MOD_MENU_COMBOBOX:
+            widget.Options(UIWidgets::ComboboxOptions()
+                               .ComboMap(BuildComboMap(registered.values))
+                               .DefaultIndex(static_cast<uint32_t>(definition.defaultInt))
+                               .Tooltip(registered.tooltip.c_str()));
             break;
         default:
             break;
@@ -131,22 +156,63 @@ void RegisterWidgets() {
 
 RegisterMenuInitFunc sMenuInit(RegisterWidgets);
 
+bool IsFilled(const char* text) {
+    return text != nullptr && text[0] != '\0';
+}
+
+bool HasComboValues(const SOHModMenuWidget* widget) {
+    return widget->structSize >= SOH_MOD_MENU_WIDGET_COMBOBOX_SIZE && widget->values != nullptr &&
+           widget->valueCount > 0;
+}
+
+bool IsValidWidget(const SOHModMenuWidget* widget) {
+    if (widget == nullptr || widget->structSize < SOH_MOD_MENU_WIDGET_MIN_SIZE) {
+        return false;
+    }
+    if (!IsFilled(widget->section) || !IsFilled(widget->sidebar) || !IsFilled(widget->label) || widget->column > 2) {
+        return false;
+    }
+    switch (widget->type) {
+        case SOH_MOD_MENU_CHECKBOX:
+        case SOH_MOD_MENU_INT_SLIDER:
+        case SOH_MOD_MENU_FLOAT_SLIDER:
+            return IsFilled(widget->cvar);
+        case SOH_MOD_MENU_COMBOBOX:
+            return IsFilled(widget->cvar) && HasComboValues(widget);
+        case SOH_MOD_MENU_SEPARATOR:
+        case SOH_MOD_MENU_TEXT:
+        case SOH_MOD_MENU_CUSTOM:
+            return true;
+        default:
+            return false;
+    }
+}
+
+std::vector<std::string> CopyComboValues(const SOHModMenuWidget* widget) {
+    std::vector<std::string> values;
+    if (widget->type != SOH_MOD_MENU_COMBOBOX) {
+        return values;
+    }
+    for (uint32_t index = 0; index < widget->valueCount; index++) {
+        values.emplace_back(widget->values[index] == nullptr ? "" : widget->values[index]);
+    }
+    return values;
+}
+
 bool StoreWidget(const SOHModMenuWidget* widget, const char* anchor, bool after) {
-    if (widget == nullptr || widget->structSize < SOH_MOD_MENU_WIDGET_MIN_SIZE || widget->section == nullptr ||
-        widget->sidebar == nullptr || widget->label == nullptr || widget->section[0] == '\0' ||
-        widget->sidebar[0] == '\0' || widget->label[0] == '\0' || widget->column > 2 ||
-        widget->type > SOH_MOD_MENU_CUSTOM ||
-        (widget->type <= SOH_MOD_MENU_FLOAT_SLIDER && (widget->cvar == nullptr || widget->cvar[0] == '\0'))) {
+    if (!IsValidWidget(widget)) {
         return false;
     }
     RegisteredWidget registered = {};
-    registered.definition = *widget;
+    // A mod built against an older header passes a shorter struct; the missing tail stays zero.
+    std::memcpy(&registered.definition, widget, std::min<size_t>(widget->structSize, sizeof(SOHModMenuWidget)));
     registered.section = widget->section;
     registered.sidebar = widget->sidebar;
     registered.label = widget->label;
     registered.cvar = widget->cvar == nullptr ? "" : widget->cvar;
     registered.tooltip = widget->tooltip == nullptr ? "" : widget->tooltip;
     registered.anchor = anchor == nullptr ? "" : anchor;
+    registered.values = CopyComboValues(widget);
     registered.after = after;
     sWidgets.push_back(std::move(registered));
     if (IsMenuBuilt()) {
@@ -203,9 +269,21 @@ void ModUI_Text(const char* text) {
 }
 
 bool ModUI_Checkbox(const char* label, bool* value) {
-    return label != nullptr && value != nullptr && ImGui::Checkbox(label, value);
+    if (label == nullptr || value == nullptr) {
+        return false;
+    }
+    UIWidgets::PushStyleCheckbox(THEME_COLOR);
+    const bool changed = ImGui::Checkbox(label, value);
+    UIWidgets::PopStyleCheckbox();
+    return changed;
 }
 
 bool ModUI_InputInt(const char* label, int32_t* value) {
-    return label != nullptr && value != nullptr && ImGui::InputInt(label, value);
+    if (label == nullptr || value == nullptr) {
+        return false;
+    }
+    UIWidgets::PushStyleInput(THEME_COLOR);
+    const bool changed = ImGui::InputInt(label, value);
+    UIWidgets::PopStyleInput();
+    return changed;
 }

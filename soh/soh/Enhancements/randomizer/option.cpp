@@ -80,15 +80,30 @@ const static std::string trickPrefix = "randomizer.tricks.";
 const static std::string empty = "";
 const static std::string error = "[ERROR]";
 
-static const std::string& MakeSettingName(RandomizerSettingKey key) {
-    std::string settingNamePart(EnumToString(key).substr(4));
+// Mod options take keys past the builtin enum, which have no "RSK_" name to build a lang key from.
+static std::string MakeSettingLangPart(RandomizerSettingKey key) {
+    std::string_view enumName = EnumToString(key);
+    if (enumName.size() <= 4) {
+        return "";
+    }
+    std::string settingNamePart(enumName.substr(4));
     std::transform(settingNamePart.begin(), settingNamePart.end(), settingNamePart.begin(), ::tolower);
+    return settingNamePart;
+}
+
+static const std::string& MakeSettingName(RandomizerSettingKey key) {
+    std::string settingNamePart = MakeSettingLangPart(key);
+    if (settingNamePart.empty()) {
+        return error;
+    }
     return Lang::Translate((settingPrefix + settingNamePart + namePostfix).c_str());
 }
 
 static const std::string& MakeSettingDescription(RandomizerSettingKey key) {
-    std::string settingNamePart(EnumToString(key).substr(4));
-    std::transform(settingNamePart.begin(), settingNamePart.end(), settingNamePart.begin(), ::tolower);
+    std::string settingNamePart = MakeSettingLangPart(key);
+    if (settingNamePart.empty()) {
+        return empty;
+    }
     auto result = Lang::TryTranslate((settingPrefix + settingNamePart + descriptionPostfix).c_str());
     if (std::holds_alternative<std::reference_wrapper<const std::string>>(result)) {
         return std::get<std::reference_wrapper<const std::string>>(result);
