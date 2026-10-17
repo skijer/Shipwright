@@ -29,12 +29,16 @@ FORBIDDEN_IDENTIFIERS = ASSEMBLY_KEYWORDS | {
     "CreateProcessA", "CreateProcessW", "ShellExecuteA", "ShellExecuteW", "WinExec", "CreateThread",
     "_beginthread", "_beginthreadex", "pthread_create", "socket", "connect", "getaddrinfo", "gethostbyname",
 }
-KNOWN_PERMISSIONS = {"microphone", "files"}
+KNOWN_PERMISSIONS = {"microphone", "files", "network"}
 SERVICE_PERMISSIONS = {
     "OpenMicrophone": "microphone", "ReadMicrophone": "microphone", "CloseMicrophone": "microphone",
     "Microphone_Open": "microphone", "Microphone_Read": "microphone", "Microphone_Close": "microphone",
     "PickUserFile": "files", "SaveToModsFolder": "files", "UserFiles_Pick": "files", "UserFiles_SaveToMods": "files",
     "ExportArchiveFiles": "files", "O2rExtractor_ExportFiles": "files",
+    "RegisterNetChannel": "network", "RequestNetTeleport": "network", "SummonNetPeer": "network",
+    "StartNetRoomCountdown": "network", "ModNetwork_RegisterChannel": "network",
+    "ModNetwork_RequestTeleport": "network", "ModNetwork_SummonPeer": "network",
+    "ModNetwork_StartRoomCountdown": "network",
 }
 BUILD_SETTINGS = {"includeDirectories", "definitions"}
 INCLUDE_DIRECTORY = re.compile(r"^[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*$")
