@@ -14,7 +14,7 @@ void ZString::ParseRawData()
 {
 	size_t size = 0;
 	const auto& rawData = parent->GetRawData();
-	const auto& rawDataArr = rawData.data();
+	const uint8_t* rawDataArr = rawData.data();
 	size_t rawDataSize = rawData.size();
 	for (size_t i = rawDataIndex; i < rawDataSize; ++i)
 	{

@@ -5,7 +5,7 @@
 #include "gfxd.h"
 #include "priv.h"
 
-#include "uc_argfn.inc.c"
+#include "uc_argfn.inc"
 #include "uc_argtbl.inc.c"
 #include "uc_macrofn.inc.c"
 #include "uc_macrotbl.inc.c"

@@ -56,17 +56,14 @@ void EnHorse_Draw(Actor* thisx, PlayState* play);
 
 typedef struct {u32 dmgFlags;u8 damage;u8 effect;f32 radius;f32 height;} CombatColliderConfig;
 static void Combat_InitCylinder(PlayState* play, ColliderCylinder* col, Actor* owner, CombatColliderConfig* cfg) {
+    ColliderCylinderInit init = {
+        { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
+        { ELEMTYPE_UNK2, { cfg->dmgFlags, cfg->effect, cfg->damage }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL,
+          BUMP_NONE, OCELEM_NONE },
+        { (s16)cfg->radius, (s16)cfg->height, 0, { 0, 0, 0 } },
+    };
     Collider_InitCylinder(play, col);
-    Collider_SetCylinder(play, col, owner,
-                         &(ColliderCylinderInit){
-                             { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-                             { ELEMTYPE_UNK2,
-                               { cfg->dmgFlags, cfg->effect, cfg->damage },
-                               { 0, 0, 0 },
-                               TOUCH_ON | TOUCH_SFX_NORMAL,
-                               BUMP_NONE,
-                               OCELEM_NONE },
-                             { (s16)cfg->radius, (s16)cfg->height, 0, { 0, 0, 0 } } });
+    Collider_SetCylinder(play, col, owner, &init);
 }
 
 static void Combat_UpdateCylinder(ColliderCylinder* col, Vec3f* pos, CombatColliderConfig* cfg) {

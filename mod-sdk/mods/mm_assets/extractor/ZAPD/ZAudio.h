@@ -59,11 +59,11 @@ struct DrumEntry
 
 struct InstrumentEntry
 {
-	bool isValidInstrument;
-	uint8_t loaded;
-	uint8_t normalRangeLo;
-	uint8_t normalRangeHi;
-	uint8_t releaseRate;
+	bool isValidInstrument = false;
+	uint8_t loaded = 0;
+	uint8_t normalRangeLo = 0;
+	uint8_t normalRangeHi = 0;
+	uint8_t releaseRate = 0;
 	std::vector<AdsrEnvelope*> env;
 	SoundFontEntry* lowNotesSound = nullptr;
 	SoundFontEntry* normalNotesSound = nullptr;

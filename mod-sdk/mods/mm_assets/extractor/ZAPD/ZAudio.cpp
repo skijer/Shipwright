@@ -99,12 +99,12 @@ SoundFontEntry* ZAudio::ParseSoundFontEntry(const std::vector<uint8_t>& audioBan
                                             int soundFontOffset,
                                             int baseOffset)
 {
-	SoundFontEntry* soundFont = new SoundFontEntry();
-
 	int sampleOffset = BitConverter::ToInt32BE(audioBank, soundFontOffset + 0) + baseOffset;
 
 	if (sampleOffset == 0)
 		return nullptr;
+
+	SoundFontEntry* soundFont = new SoundFontEntry();
 
 	soundFont->sampleEntry = ParseSampleEntry(
 		audioBank, audioTable, audioSampleBankEntry, bankIndex,

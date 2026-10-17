@@ -213,9 +213,7 @@ void ZTexture::ParseRawDataLate()
 					if (res->GetRawDataIndex() == palOffset)
 					{
 						ZTexture* palette = (ZTexture*)res;
-						ZTexture tlutTemp(file);
-
-						tlut = &tlutTemp;
+						tlut = new ZTexture(file);
 						tlut->ExtractFromBinary(palOffset, palette->width, palette->height,
 						                        TextureType::RGBA16bpp, true);
 						SetTlut(tlut);

@@ -73,7 +73,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 	writer->Write((uint32_t)(hash & 0xFFFFFFFF));
 
 	auto dlStart = std::chrono::steady_clock::now();
-	uint8_t lastOpCode;
+	uint8_t lastOpCode = G_NOOP;
 
 	//for (auto data : dList->instructions)
 	for (size_t dataIdx = 0; dataIdx < dList->instructions.size(); dataIdx++)
