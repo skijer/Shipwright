@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -253,6 +255,14 @@ void Player_RequestRumble(Player* player, s32 sourceStrength, s32 duration, s32 
 GetItemEntry ItemTable_RetrieveEntry(s16 modIndex, s16 getItemID);
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
 
@@ -1808,7 +1818,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(GORON_FORM_KEY);
+    ToggleConfiguredForm(GORON_FORM_KEY);
 }
 
 // A vanilla GetItemEntry has no draw callback of its own, and the registry reads NULL as "no model".
@@ -1837,11 +1847,12 @@ static void RegisterMask(void) {
     mask.getItemEntry.drawFunc = DrawMaskGetItem;
     Z64Items_SetReplaces(&mask, ITEM_MASK_GORON);
     Z64Items_SetVanillaMode(&mask, SOH_VANILLA_ITEM_REPLACE, RG_GORON_MASK);
-    Z64Items_SetTextbox(&mask, "You got the %rGoron Mask%w!&It holds the spirit of a proud Goron hero.^"
-                               "Wear it with %y\xA1%w to become a Goron: heavy fists, a rock-hard shell and a body "
-                               "that rolls.");
-    Z64Items_SetPauseText(&mask, "%rGoron Mask&%wPress %y\xA1%w to become a Goron.&%y\xA0%w: punch  Hold %y\x9F%w: "
-                                 "roll  %y\xA0%w rolling: pound  Hold %y\xA3%w: guard");
+    Z64Items_SetTextbox(&mask, "You got the %rGoron Mask%w! It&holds the spirit of a proud&Goron hero.^"
+                               "Wear it with %y\xA1%w to become a&Goron: heavy fists, a rock-hard&"
+                               "shell and a body that rolls.");
+    Z64Items_SetPauseText(&mask, "%rGoron Mask&%wPress %y\xA1%w to become a Goron.&"
+                                 "%y\xA0%w: punch  Hold %y\x9F%w: roll&"
+                                 "%y\xA0%w rolling: pound  Hold %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

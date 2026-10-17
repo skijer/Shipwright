@@ -248,7 +248,7 @@ static void UpdateWindupEffects(Player* player, PlayState* play) {
     Vec3f* pos = &player->actor.world.pos;
 
     if (sTimer == 20) {
-        PlaySfxAt(NA_SE_EN_GANON_AT_RETURN, pos);
+        PlaySfxAt(NA_SE_EN_GANON_LAUGH, pos);
     }
     if (sTimer > 20) {
         if (((sTimer - 20) % 8) == 0) {
@@ -408,12 +408,11 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&demise, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&demise, 0, 5, 0);
-    Z64Items_SetTextbox(&demise, "You got %rDemise Destruction%w!&The Demon King's storm, bound&into a spell you can "
-                                 "call.^"
-                                 "Press %y\xA1%w with both feet on the&ground. The sky darkens, and&then the earth "
-                                 "splits around you.^"
-                                 "The blast breaks what the&%rMegaton Hammer%w breaks and&leaves the rest reeling. "
-                                 "Uses&%gmagic%w.");
+    Z64Items_SetTextbox(&demise, "You got %rDemise Destruction%w!&The Demon King's boomerang&"
+                                 "attack, bound into a spell you&can call.^Press %y\xA1%w with both feet on&"
+                                 "the ground. The sky darkens,&and then the earth splits&around you.^"
+                                 "The blast breaks what the&%rMegaton Hammer%w breaks and&"
+                                 "leaves the rest reeling. Uses&%gmagic%w.");
     Z64Items_SetPauseText(&demise, "%rDemise Destruction&%wPress %y\xA1%w on the ground to call&down the storm. Uses "
                                    "magic.");
     Z64Items_SetCanUse(&demise, CanCast);

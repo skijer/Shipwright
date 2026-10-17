@@ -1,0 +1,43 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_PRIMITIVE" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_SHADE" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_PRIMITIVE"/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_ZBUFFER="1" G_SHADE="1" G_SHADING_SMOOTH="1" G_LIGHTING="1" />
+	<Matrix Path=">0x0D000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="0" VertexOffset="0" Count="9"/>
+	<Matrix Path=">0x0D0000C0" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="9" VertexOffset="9" Count="18"/>
+	<Matrix Path=">0x0D000180" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="27" VertexOffset="27" Count="3"/>
+	<SetPrimColor M="0" L="0" R="103" G="48" B="14" A="255"/>
+	<Triangle1 V00="9" V01="10" V02="11" Flag0="0"/>
+	<SetPrimColor M="0" L="0" R="129" G="56" B="17" A="255"/>
+	<Triangle1 V00="0" V01="12" V02="1" Flag0="0"/>
+	<Triangle1 V00="2" V01="13" V02="14" Flag0="0"/>
+	<Triangle1 V00="15" V01="3" V02="16" Flag0="0"/>
+	<Triangle1 V00="17" V01="4" V02="18" Flag0="0"/>
+	<Triangle1 V00="19" V01="5" V02="27" Flag0="0"/>
+	<Triangle1 V00="20" V01="28" V02="29" Flag0="0"/>
+	<Triangle1 V00="21" V01="22" V02="23" Flag0="0"/>
+	<Triangle1 V00="6" V01="24" V02="25" Flag0="0"/>
+	<Triangle1 V00="7" V01="26" V02="8" Flag0="0"/>
+	<Matrix Path=">0x0D000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="0" VertexOffset="30" Count="8"/>
+	<Matrix Path=">0x0D0000C0" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="8" VertexOffset="38" Count="14"/>
+	<Matrix Path=">0x0D000180" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="22" VertexOffset="52" Count="1"/>
+	<Matrix Path=">0x0D000240" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelNeckDL_vtx" VertexBufferIndex="23" VertexOffset="53" Count="1"/>
+	<SetPrimColor M="0" L="0" R="150" G="67" B="22" A="255"/>
+	<Triangle1 V00="0" V01="8" V02="1" Flag0="0"/>
+	<Triangle1 V00="9" V01="23" V02="2" Flag0="0"/>
+	<Triangle1 V00="10" V01="3" V02="11" Flag0="0"/>
+	<Triangle1 V00="12" V01="4" V02="13" Flag0="0"/>
+	<Triangle1 V00="14" V01="15" V02="16" Flag0="0"/>
+	<Triangle1 V00="17" V01="18" V02="19" Flag0="0"/>
+	<Triangle1 V00="5" V01="20" V02="22" Flag0="0"/>
+	<SetPrimColor M="0" L="0" R="170" G="81" B="30" A="255"/>
+	<Triangle1 V00="6" V01="7" V02="21" Flag0="0"/>
+	<EndDisplayList/>
+</DisplayList>

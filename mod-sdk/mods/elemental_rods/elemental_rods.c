@@ -18,6 +18,8 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "objects/object_link_boy/object_link_boy.h"
+#include "objects/object_link_child/object_link_child.h"
 #include "overlays/actors/ovl_Bg_Ice_Shelter/z_bg_ice_shelter.h"
 
 #define FIRE_ROD_KEY "nei.rod_fire"
@@ -180,7 +182,7 @@ static const ALIGN_ASSET(2) char sRingDL[] = "__OTR__objects/gameplay_keep/gEffF
 static const u16 sItemButtons[ROD_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                     BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayDrawEnd", "OnActorDrawEnd", "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnPlayDrawEnd", "OnActorDrawEnd", "OnSceneInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -632,11 +634,15 @@ static bool WasButtonPressed(const RodConfig* cfg, PlayState* play) {
  * Consuming leaves the meter flashing and refusing every later request until the spell resets it.
  */
 static bool SpendMagic(const RodConfig* cfg, Player* player, PlayState* play, s16 cost, u8 backfireChance) {
-    if (Magic_RequestChange(play, cost, MAGIC_CONSUME_NOW)) {
+    if (gSaveContext.magic >= cost && Magic_RequestChange(play, cost, MAGIC_CONSUME_NOW)) {
+        // CONSUME_NOW queues a target; resetting before settling it cancels the payment.
+        if (!Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER)) {
+            gSaveContext.magic=gSaveContext.magicTarget;
+        }
         Magic_Reset(play);
         return true;
     }
-    if ((u8)(Rand_ZeroOne() * 100.0f) < backfireChance) {
+    if ((u8)(Rand_ZeroOne() * 100.0f) < 10) {
         Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_HIT);
         cfg->onBackfire(play, player);
     } else {
@@ -1261,7 +1267,7 @@ static void ResetRod(const RodConfig* cfg, PlayState* play) {
     RodState* state = cfg->state;
 
     ClearCharge(cfg);
-    state->lastSwing = 0;
+    state->lastSwing = 0xFF;
     state->jumpSpawned = false;
     state->lineActive = false;
     state->lineTimer = 0;
@@ -1385,7 +1391,7 @@ static void RunRodInHand(const RodConfig* cfg, Player* player, PlayState* play) 
         return;
     }
     if (!state->charging) {
-        state->lastSwing = 0;
+        state->lastSwing = 0xFF;
     }
     if (state->spinActive) {
         StopSpin(cfg);
@@ -1406,7 +1412,7 @@ static void TickRods(void) {
 
         UpdateBolts(cfg, player, play);
         UpdateLine(cfg, player, play);
-        if (cfg == sRodInHand && player->heldItemAction == PLAYER_IA_CUSTOM) {
+        if (cfg == sRodInHand) {
             RunRodInHand(cfg, player, play);
         }
     }
@@ -1439,42 +1445,35 @@ static void DropRodsOnSceneInit(int16_t sceneNum) {
  * The rod follows the forearm-to-hand direction the way NEI dialled it in; the offsets and the 0.05 scale
  * are that calibration, so they only make sense against this construction.
  */
-static void DrawRodInHand(Actor* actor, PlayState* play) {
-    Player* player = (Player*)actor;
-    const RodConfig* cfg = sRodInHand;
-    Vec3f forearm;
-    Vec3f hand;
-    f32 dx;
-    f32 dy;
-    f32 dz;
-
-    if (cfg == NULL || player->heldItemAction != PLAYER_IA_CUSTOM ||
-        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
-        return;
-    }
-    forearm = player->bodyPartsPos[PLAYER_BODYPART_L_FOREARM];
-    hand = player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
-    dx = hand.x - forearm.x;
-    dy = hand.y - forearm.y;
-    dz = hand.z - forearm.z;
-
+static MtxF sWeaponHand;
+static bool sWeaponHandReady;
+static void ReplaceSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* original, Vec3f* pos) {
+    if (!(sRodInHand!=NULL) || limb!=PLAYER_LIMB_L_HAND) { return; }
+    *dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
+}
+static void CaptureSwordHand(PlayState* play, Player* player, int32_t limb) {
+    if ((sRodInHand!=NULL) && limb==PLAYER_LIMB_L_HAND) { Matrix_Get(&sWeaponHand); sWeaponHandReady=true; }
+}
+static void DrawSwordReplacement(Actor* actor, PlayState* play) {
+    Player* player=(Player*)actor;
+    if (!(sRodInHand!=NULL) || !sWeaponHandReady || (player->stateFlags2&PLAYER_STATE2_DISABLE_DRAW)) { return; }
+    Matrix_Push();
+    Matrix_Put(&sWeaponHand);
+    float unscale=player->actor.scale.x!=0?1.0f/player->actor.scale.x:1.0f;
+    Matrix_Scale(unscale,unscale,unscale,MTXMODE_APPLY);
+    Matrix_RotateZ(-M_PI/2,MTXMODE_APPLY);
+    Matrix_Scale(ROD_HELD_SCALE,ROD_HELD_SCALE,ROD_HELD_SCALE,MTXMODE_APPLY);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Translate(hand.x, hand.y, hand.z, MTXMODE_NEW);
-    Matrix_RotateY(atan2f(dx, dz), MTXMODE_APPLY);
-    Matrix_RotateX(-atan2f(dy, sqrtf(SQ(dx) + SQ(dz))), MTXMODE_APPLY);
-    Matrix_RotateY(BINANG_TO_RAD(0x4000), MTXMODE_APPLY);
-    Matrix_Translate(-ROD_HELD_SIDE_OFFSET, 0.0f, ROD_HELD_SIDE_OFFSET, MTXMODE_APPLY);
-    Matrix_Scale(ROD_HELD_SCALE, ROD_HELD_SCALE, ROD_HELD_SCALE, MTXMODE_APPLY);
-    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)cfg->opaqueDL);
-
-    if (cfg->xluDL != NULL) {
+    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)(sRodInHand->opaqueDL));
+    if ((sRodInHand->xluDL)!=NULL) {
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)cfg->xluDL);
+        gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++,(Gfx*)(sRodInHand->xluDL));
     }
     CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Pop();
 }
 
 static void DrawRodModel(PlayState* play, const RodConfig* cfg) {
@@ -1700,7 +1699,7 @@ static bool RegisterRod(const RodConfig* cfg, u8 slot, SOHCustomItemInitFunc tak
     // The kokiri index, not the deku stick's: a stick measures zero in sMeleeWeaponLengths, so its quad would
     // never touch anything. Group 10 is the stick's own: a closed fist, with the weapon drawn separately.
     Z64Items_SetMeleeWeapon(&rod, 2);
-    rod.modelGroup = PLAYER_MODELGROUP_10;
+    rod.modelGroup = PLAYER_MODELGROUP_SWORD_AND_SHIELD;
     rod.getItemEntry.drawFunc = drawGive;
     const SOHCustomItemRandomizer randomizer = {
         sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, cfg->key, cfg->key, "",
@@ -1715,25 +1714,27 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
 
     if (!RegisterRod(&sFireRod, 4, TakeOutFireRod, StowFireRod, DrawFireRodGive,
-                     "You got the %rFire Rod%w!&A magic weapon that channels fire.^%ySwing%w for three "
-                     "fireballs,&%ystab%w for one long shot,&%yjump%w to lay a flame trail.^%rHold%w %y\xA1%w to "
-                     "charge a fire wave,&%c\xA5%w to aim in first person.^Without magic the fire burns %rYOU%w.",
-                     "%rFire Rod&%wSwing to cast, hold %y\xA1%w to charge,&%c\xA5%w to aim.")) {
+                     "You got the %rFire Rod%w! A magic&weapon that channels fire.^"
+                     "%ySwing%w for three fireballs, %ystab%w&for one long shot, %yjump%w to lay&a flame trail.^"
+                     "%rHold%w %y\xA1%w to charge a fire wave, %c\xA5%w&to aim in first person. Without&"
+                     "magic the fire burns %rYOU%w.",
+                     "%rFire Rod&%wSwing to cast, hold %y\xA1%w to charge, %c\xA5%w&to aim.")) {
         return;
     }
     if (!RegisterRod(&sIceRod, 10, TakeOutIceRod, StowIceRod, DrawIceRodGive,
-                     "You got the %cIce Rod%w!&A magic weapon that channels ice.^%ySwing%w for three "
-                     "iceballs,&%ystab%w for one long shot,&%yjump%w to lay an ice trail.^%rHold%w %y\xA1%w to "
-                     "charge an ice wave,&%c\xA5%w to aim in first person.^It freezes what it hits — and red ice "
-                     "with it.",
-                     "%cIce Rod&%wSwing to cast, hold %y\xA1%w to charge,&%c\xA5%w to aim.")) {
+                     "You got the %cIce Rod%w! A magic&weapon that channels ice.^"
+                     "%ySwing%w for three iceballs, %ystab%w&for one long shot, %yjump%w to lay&an ice trail.^"
+                     "%rHold%w %y\xA1%w to charge an ice wave, %c\xA5%w&to aim in first person. It&"
+                     "freezes what it hits, and red&ice with it.",
+                     "%cIce Rod&%wSwing to cast, hold %y\xA1%w to charge, %c\xA5%w&to aim.")) {
         return;
     }
     if (!RegisterRod(&sLightRod, 16,TakeOutLightRod, StowLightRod, DrawLightRodGive,
-                     "You got the %yLight Rod%w!&A magic weapon that channels light.^%ySwing%w for three "
-                     "light balls,&%ystab%w for one long shot,&%yjump%w to lay a trail of light.^%rHold%w %y\xA1%w "
-                     "to charge a light wave,&%c\xA5%w to aim in first person.^The undead freeze where they stand.",
-                     "%yLight Rod&%wSwing to cast, hold %y\xA1%w to charge,&%c\xA5%w to aim.")) {
+                     "You got the %yLight Rod%w! A&magic weapon that channels&light.^"
+                     "%ySwing%w for three light balls,&%ystab%w for one long shot, %yjump%w&"
+                     "to lay a trail of light.^%rHold%w %y\xA1%w to charge a light wave,&"
+                     "%c\xA5%w to aim in first person. The&undead freeze where they&stand.",
+                     "%yLight Rod&%wSwing to cast, hold %y\xA1%w to charge, %c\xA5%w&to aim.")) {
         return;
     }
 
@@ -1743,5 +1744,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickRods);
     SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, DrawRodEffects);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, DropRodsOnSceneInit);
-    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawRodInHand);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawSwordReplacement);
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, ReplaceSwordHand);
+    SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureSwordHand);
 }

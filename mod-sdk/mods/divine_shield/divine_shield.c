@@ -180,10 +180,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = DIVINE_SHIELD_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rDivine Shield&%wBlock with %y\xA3%w right as you raise it and every enemy nearby freezes. "
-                           "Fire cannot burn it.";
-    definition.getItemText = "You got the %rDivine Shield%w!&Wood blessed by the goddess: flames will not take it, and "
-                             "a guard raised just in time freezes whatever dares to strike it.";
+    definition.pauseText = "%rDivine Shield&%wBlock with %y\xA3%w right as you raise it&"
+                           "and every enemy nearby freezes.&Fire cannot burn it.";
+    definition.getItemText = "You got the %rDivine Shield%w!^Wood blessed by the goddess:&"
+                             "flames will not take it,^and a guard raised just in time&freezes whatever dares to&"
+                             "strike it.";
     definition.slot = SOH_EQUIP_SLOT_SHIELD;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_SHIELD;

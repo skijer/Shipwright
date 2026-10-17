@@ -14,7 +14,7 @@
 #define GUST_JAR_KEY "nei.gust_jar"
 #define GUST_JAR_BUTTON_COUNT 8
 #define GUST_JAR_HELD_SCALE 1.5f
-#define GUST_JAR_GIVE_SCALE 0.5f
+#define GUST_JAR_GIVE_SCALE 4.0f
 #define GUST_JAR_HAND_DROP 2.0f
 #define GUST_JAR_NOZZLE_REACH 28.0f
 #define GUST_JAR_NOZZLE_HEIGHT 28.0f
@@ -744,12 +744,9 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&jar, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&jar, 0, 12, 0);
-    Z64Items_SetTextbox(&jar, "You got the %rGust Jar%w!&A Minish jar that breathes in&whatever it can swallow.^"
-                              "Hold %y\xA1%w to pull in grass, pots&and small foes. Anything that&reaches the mouth "
-                              "is cut down.^%y\xA5%w aims it. %y\xA2%w turns the&wheel: every %gmedallion%w adds&a "
-                              "breath of its own to blow.");
-    Z64Items_SetPauseText(&jar, "%rGust Jar&%wHold %y\xA1%w to suck things in.&%y\xA5%w aims, %y\xA2%w picks the "
-                                "breath.");
+    Z64Items_SetTextbox(&jar,"You got the %rGust Jar%w! Hold its C button to pull in grass, pots and small foes.^Anything that reaches its mouth is cut down. C-Up aims it.^Hold L to choose a breath. Each medallion adds a breath to blow.");
+    Z64Items_SetPauseText(&jar, "%rGust Jar&%wHold %y\xA1%w to suck things in. %y\xA5%w aims,&"
+                                "%y\xA2%w picks the breath.");
     Z64Items_SetAction(&jar, TakeOutJar, UseJar);
     Z64Items_SetHeldCallbacks(&jar, NULL, PutJarAway, NULL);
     jar.modelGroup = PLAYER_MODELGROUP_DEFAULT;

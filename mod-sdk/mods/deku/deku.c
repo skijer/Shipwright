@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -186,6 +188,14 @@ typedef enum {
 } DekuAction;
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
 
@@ -2014,7 +2024,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(DEKU_FORM_KEY);
+    ToggleConfiguredForm(DEKU_FORM_KEY);
 }
 
 // Shuffled once by the randomizer; no vanilla logic needs it.
@@ -2029,11 +2039,11 @@ static void RegisterMask(void) {
     mask.disabledIconSurfaces |= SOH_ITEM_ICON_SAVE_EDITOR;
     Z64Items_SetPlacement(&mask, DEKU_MASK_PAGE, DEKU_MASK_SLOT, 0);
     Z64Items_SetGetItemModel(&mask, sGetItemDL);
-    Z64Items_SetTextbox(&mask, "You got the %gDeku Mask%w!&Wear it with %y\xA1%w to become Deku Link. Press %y\x9F%w "
-                               "to spin, use the Deku Leaf for a flower, hold %y\xA0%w to aim a bubble, and use "
-                               "%y\xA3%w to guard.");
-    Z64Items_SetPauseText(&mask, "%gDeku Mask&%wPress %y\x9F%w: spin  Deku Leaf: flower flight&Hold %y\xA0%w: "
-                                 "aim bubble  Hold %y\xA3%w: guard");
+    Z64Items_SetTextbox(&mask, "You got the %gDeku Mask%w! Wear&it with %y\xA1%w to become Deku Link.^"
+                               "Press %y\x9F%w to spin, use the Deku&Leaf for a flower, hold %y\xA0%w to aim&"
+                               "a bubble, and use %y\xA3%w to guard.");
+    Z64Items_SetPauseText(&mask, "%gDeku Mask&%wPress %y\x9F%w: spin&Deku Leaf: flower flight&"
+                                 "Hold %y\xA0%w: aim bubble  Hold %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

@@ -804,7 +804,7 @@ static void RebuildClones(PlayState* play, Player* player) {
 }
 
 static void OpenFormationWheel(PlayState* play) {
-    if (CountClones() == 0 || !CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L)) {
+    if (sSword.isCharging || CountClones() == 0 || !CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L)) {
         sSword.wheelHold = 0;
         return;
     }
@@ -859,9 +859,9 @@ static void HoldChargePose(Player* player, PlayState* play) {
 }
 
 static void ChargeSummon(Player* player, PlayState* play) {
-    bool isShielding = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) != 0;
+    bool isShielding = Player_GetMeleeWeaponHeld(player) != 0;
 
-    if (!isShielding || !CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B)) {
+    if (!isShielding || !CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_L)) {
         sSword.chargeHold = 0;
         sSword.isCharging = false;
         return;
@@ -1170,11 +1170,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = FOUR_SWORD_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rFour Sword&%wHold %y\xA3%w and %y\xA0%w to split in four. Hold %y\xA2%w to choose "
-                           "the formation.";
-    definition.getItemText = "You got the %rFour Sword%w!&The blade that splits its bearer in four. Raise your shield "
-                             "and hold %y\xA0%w: three more of you fight at your side, and each formation has its "
-                             "own trick.";
+    definition.pauseText = "%rFour Sword&%wHold %y\xA3%w and %y\xA0%w to split in four. Hold&"
+                           "%y\xA2%w to choose the formation.";
+    definition.getItemText = "You got the %rFour Sword%w! The&blade that splits its bearer in&four.^"
+                             "Raise your shield and hold %y\xA0%w:&three more of you fight at&"
+                             "your side, and each formation&has its own trick.";
     definition.slot = SOH_EQUIP_SLOT_SWORD;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_SWORD;

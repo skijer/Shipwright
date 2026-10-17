@@ -988,7 +988,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.draw = EnMolmauk_Draw;
     // Sixteen hit points behind a guard that only drops between swings: too slow a fight for a timed room.
     definition.enemyFlags = SOH_ACTOR_ENEMY | SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS;
-    definition.naviHint = "Molmauk&%cWatch out for its %whammers%c! Strike when it drops its guard!%w";
+    definition.naviHint = "Molmauk&%cWatch out for its %whammers%c!&Strike when it drops its guard!%w";
 
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " MOLMAUK_KEY);

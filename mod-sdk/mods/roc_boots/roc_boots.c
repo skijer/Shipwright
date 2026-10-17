@@ -12,6 +12,7 @@
 #include "variables.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "objects/object_gi_hoverboots/object_gi_hoverboots.h"
+#include "objects/object_link_boy/object_link_boy.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 
 #define ROC_BOOTS_KEY "nei.equip.roc_boots"
@@ -173,7 +174,47 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnBgCheckRaycastFloor" };
+// Keep the exact env colour emitted for this player, including custom tunics and cosmetics.
+static u32 CurrentPlayerEnv(PlayState* play) {
+    Gfx* begin=play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor=play->state.gfxCtx->polyOpa.p;
+    while (cursor>begin) {
+        --cursor;
+        if (((cursor->words.w0>>24)&255)==G_SETENVCOLOR) { return (u32)cursor->words.w1; }
+    }
+    return 0xFFFFFFFF;
+}
+// Visual-only golden hover boot overlays; currentBoots and vanilla equipment remain Kokiri boots.
+static void DrawGoldBootsOnFeet(PlayState* play, Player* player, int32_t limbIndex) {
+    if (!IsWorn() || (limbIndex != PLAYER_LIMB_L_FOOT && limbIndex != PLAYER_LIMB_R_FOOT)) { return; }
+    u32 savedEnv=CurrentPlayerEnv(play);
+    const char* path = limbIndex == PLAYER_LIMB_L_FOOT ? gLinkAdultLeftHoverBootDL : gLinkAdultRightHoverBootDL;
+    // Scope both the model transform and the tint; never leave Link's tunic env colour white.
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetGrayscaleColor(POLY_OPA_DISP++, 255, 198, 65, 255);
+    gSPGrayscale(POLY_OPA_DISP++, true);
+    Matrix_Push();
+    if (!LINK_IS_ADULT) { Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY); }
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
+    Matrix_Pop();
+    gSPGrayscale(POLY_OPA_DISP++, false);
+    gDPSetEnvColor(POLY_OPA_DISP++, savedEnv>>24, (savedEnv>>16)&255, (savedEnv>>8)&255, savedEnv&255);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Taking off custom boots writes 0 in the equipment slot; vanilla's draw requires a valid boot index.
+static void KeepBootDrawValid(Actor* actor, PlayState* play, bool* drawVanilla) {
+    if (actor != &GET_PLAYER(play)->actor) { return; }
+    if (CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) < EQUIP_VALUE_BOOTS_KOKIRI ||
+        CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) >= EQUIP_VALUE_BOOTS_MAX) {
+        Inventory_ChangeEquipment(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_KOKIRI);
+        Player_SetEquipmentData(play, (Player*)actor);
+    }
+}
+
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnBgCheckRaycastFloor", "OnPlayerPostLimbDraw", "OnActorDraw" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -193,9 +234,9 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = ROC_BOOTS_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rRoc's Boots&%wYou fall at half speed, and water, lava and quicksand hold you up.";
-    definition.getItemText = "You got the %rRoc's Boots%w!&Boots as light as the great bird's feathers. Every jump "
-                             "carries further, and you can walk across water and lava.";
+    definition.pauseText = "%rRoc's Boots&%wYou fall at half speed, and water,&lava and quicksand hold you up.";
+    definition.getItemText = "You got the %rRoc's Boots%w!&Boots as light as the great&bird's feathers.^"
+                             "Every jump carries further, and&you can walk across water and&lava.";
     definition.slot = SOH_EQUIP_SLOT_BOOTS;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_BOOTS;
@@ -209,6 +250,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
 
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, HalveGravity);
+    SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawGoldBootsOnFeet);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_PLAYER, KeepBootDrawValid);
     SOH_REGISTER_HOOK(sApi, OnBgCheckRaycastFloor, WalkOnWater);
     sApi->RegisterVB(VB_SET_STATIC_FLOOR_TYPE, StandOnDeadlyFloors);
 }

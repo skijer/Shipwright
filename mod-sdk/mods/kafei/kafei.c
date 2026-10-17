@@ -656,7 +656,7 @@ static void HideOcarina(Player* player, int32_t limbIndex, Gfx** dList, Gfx* lim
     }
     const char* emptyHand = LINK_IS_ADULT ? sAdultEmptyHandDL : sChildEmptyHandDL;
 
-    if (ResourceMgr_FileExists(emptyHand)) {
+    if (sApi->HasResource(emptyHand)) {
         *dList = ResourceMgr_LoadGfxByName(emptyHand);
     }
 }
@@ -927,14 +927,15 @@ static void RegisterMask(void) {
     // asking the Save Editor to load the absent icon dereferences a null texture in the host GUI.
     mask.disabledIconSurfaces |= SOH_ITEM_ICON_SAVE_EDITOR;
     Z64Items_SetPlacement(&mask, KAFEI_MASK_PAGE, KAFEI_MASK_SLOT, 0);
-    if (ResourceMgr_FileExists(sGetItemDL)) {
+    if (sApi->HasResource(sGetItemDL)) {
         Z64Items_SetGetItemModel(&mask, sGetItemDL);
     }
-    Z64Items_SetTextbox(&mask, "You got %rKafei's Mask%w!&The face of Anju's missing groom. Wear it with %y\xA1%w "
-                               "and you become Kafei: he sprints until he runs out of breath, whistles instead of "
-                               "playing the ocarina and lays %rlandmines%w instead of bombchus.");
-    Z64Items_SetPauseText(&mask, "%rKafei's Mask&%wPress %y\xA1%w to become Kafei. Hold %y\x9F%w to sprint; standing "
-                                 "still, his shield guards on its own.");
+    Z64Items_SetTextbox(&mask, "You got %rKafei's Mask%w! The face&of Anju's missing groom.^"
+                               "Wear it with %y\xA1%w and you become&Kafei: he sprints until he runs&"
+                               "out of breath,^whistles instead of playing the&ocarina and lays %rlandmines%w&"
+                               "instead of bombchus.");
+    Z64Items_SetPauseText(&mask, "%rKafei's Mask&%wPress %y\xA1%w to become Kafei. Hold %y\x9F%w&"
+                                 "to sprint; standing still, his shield&guards on its own.");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);
@@ -952,7 +953,7 @@ static void RegisterForm(void) {
     kafei.item = KAFEI_MASK_KEY;
     kafei.modelPath = KAFEI_MODEL_PATH;
     kafei.transformAnim = LoadMmAnim(sMaskOnPath);
-    kafei.transformMask = ResourceMgr_FileExists(sMaskDL) ? sMaskDL : NULL;
+    kafei.transformMask = sApi->HasResource(sMaskDL) ? sMaskDL : NULL;
     kafei.transformVoiceSfx = NA_SE_VO_LI_FALL_L;
     kafei.actions = sActions;
     kafei.actionCount = ARRAY_COUNT(sActions);

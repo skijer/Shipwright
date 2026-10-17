@@ -1267,7 +1267,7 @@ static void ReceiveSeason(const char* itemKey, const char* variantKey) {
     for (u8 season = SEASON_SPRING; season < SEASON_COUNT; season++) {
         if (strcmp(variantKey, sVariantNames[season]) == 0) {
             Z64Wheel_SetEntryUnlocked(season, true);
-            Z64Wheel_SetSelection(season);
+            // Ownership unlocks a choice; only using the rod changes world state.
             return;
         }
     }
@@ -1291,13 +1291,13 @@ static void SyncReceivedSeasons(void) {
 static const char* WakeMessage(u8 season) {
     switch (season) {
         case SEASON_SPRING:
-            return "The rod wakes to %gSpring%w!&Flowers open, and what sleeps&through winter is awake.";
+            return "The rod wakes to %gSpring%w! Flowers&open, and what sleeps through&winter is awake.";
         case SEASON_SUMMER:
-            return "The rod wakes to %rSummer%w!&The heat dries shallow water and&thaws what the cold held.";
+            return "The rod wakes to %rSummer%w! The&heat dries shallow water and&thaws what the cold held.";
         case SEASON_AUTUMN:
-            return "The rod wakes to %yAutumn%w!&Rain falls, and the wind carries&leaves across the land.";
+            return "The rod wakes to %yAutumn%w! Rain&falls, and the wind carries leaves&across the land.";
         case SEASON_WINTER:
-            return "The rod wakes to %bWinter%w!&Snow falls, and water freezes hard&enough to walk on.";
+            return "The rod wakes to %bWinter%w! Snow&falls, and water freezes hard&enough to walk on.";
         default:
             return "The rod wakes to a new season!";
     }
@@ -1316,7 +1316,7 @@ static bool RegisterSeasonPickups(void) {
         pickup.getItemText = WakeMessage(season);
         pickup.onReceive = ReceiveSeason;
         pickup.randomizer = &logic;
-        pickup.drawSoulFlame = true;
+        pickup.drawSoulFlame = false;
         pickup.flameRed = sSeasonFlameColors[season][0];
         pickup.flameGreen = sSeasonFlameColors[season][1];
         pickup.flameBlue = sSeasonFlameColors[season][2];
@@ -1395,7 +1395,25 @@ static void DrawRodInHand(Actor* actor, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+
+static void DrawPickupFlameWithModel(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* item=CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const SOHCustomPickupVariant* variant=item?CustomItemRegistry_GetPickupVariant(item->key):NULL;
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++,8,(uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx,0,0,0,16,32,1,play->state.frames,-8*play->state.frames,16,32));
+    Matrix_Push();Matrix_Scale(2.0f,2.0f,2.0f,MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++,variant?variant->flameRed:160,variant?variant->flameGreen:230,variant?variant->flameBlue:255,255);
+    gSPGrayscale(POLY_XLU_DISP++,true);
+    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)"__OTR__objects/object_gi_fire/gGiBlueFireFlameDL");
+    gSPGrayscale(POLY_XLU_DISP++,false);Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawPickupFlameWithModel(play,getItemEntry);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Scale(SEASONS_GIVE_SCALE, SEASONS_GIVE_SCALE, SEASONS_GIVE_SCALE, MTXMODE_APPLY);
@@ -1422,9 +1440,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&rod, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&rod, 0, 23, 0);
-    Z64Items_SetTextbox(&rod, "You got the %rRod of Seasons%w!&A staff the old spirits answer to.^Press %y\xA1%w to "
-                              "turn the world through&the seasons it has woken to, or hold&%y\xA2%w to pick one.");
-    Z64Items_SetPauseText(&rod, "%rRod of Seasons&%wPress %y\xA1%w for the next season,&%y\xA2%w to pick one.");
+    Z64Items_SetTextbox(&rod, "You got the %rRod of Seasons%w!&A staff the old spirits&answer to.^"
+                              "Press %y\xA1%w to turn the world&through the seasons it has&"
+                              "woken to, or hold %y\xA2%w to pick one.");
+    Z64Items_SetPauseText(&rod, "%rRod of Seasons&%wPress %y\xA1%w for the next season, %y\xA2%w to&pick one.");
     Z64Items_SetAction(&rod, TakeOutRod, HoldRod);
     Z64Items_SetHeldCallbacks(&rod, TurnSeason, StowRod, NULL);
     rod.modelGroup = PLAYER_MODELGROUP_DEFAULT;

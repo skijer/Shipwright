@@ -12,6 +12,10 @@
 #include "functions.h"
 #include "macros.h"
 #include "regs.h"
+#include "overlays/actors/ovl_En_Elf/z_en_elf.h"
+#include "objects/object_link_boy/object_link_boy.h"
+#include "objects/object_link_child/object_link_child.h"
+#include "objects/object_gi_bottle/object_gi_bottle.h"
 #include "variables.h"
 #include "textures/item_name_static/item_name_static.h"
 
@@ -33,7 +37,7 @@
 #define NEB_CATCH_RANGE 90.0f
 #define NEB_CATCH_FIRST_FRAME 2
 #define NEB_CATCH_LAST_FRAME 6
-#define NEB_NET_GIVE_SCALE 0.05f
+#define NEB_NET_GIVE_SCALE 0.65f
 #define NEB_DEFAULT_USES 1
 #define NEB_LEGACY_WHEEL_SIZE 4
 #define NEB_LEGACY_BOTTLE_COUNT 8
@@ -91,6 +95,7 @@ static const NebButtonPos sDpadAmmoPos[] = {
 
 static const ALIGN_ASSET(2) char sNetIconTex[] = "__OTR__textures/icon_item_custom/gItemIconNetTex";
 static const ALIGN_ASSET(2) char sNetNameTex[] = "__OTR__textures/item_name_custom/gNetNameTex";
+static const ALIGN_ASSET(2) char sNetXluDL[]="__OTR__objects/object_nei_net/g_net_xlu_dl";
 static const ALIGN_ASSET(2) char sNetDL[] = "__OTR__objects/object_nei_net/g_net_dl";
 static const ALIGN_ASSET(2) char sBottomlessIconTex[] =
     "__OTR__textures/icon_item_custom/gItemIconBottomlessBottleTex";
@@ -142,17 +147,28 @@ static const int16_t sEmptyBottleAskers[] = { ACTOR_EN_OSSAN, ACTOR_EN_COW,     
 static const uint8_t sBeggarWants[] = { ITEM_BLUE_FIRE, ITEM_BUG, ITEM_FISH };
 
 static const char* const sRequiredHooks[] = { "OnPlayerUpdate",   "OnPlayerResolveItemAction", "OnResolveItemGive",
-                                              "OnKaleidoResolveName", "OnInterfaceDrawEnd",   "OnLoadFile",
+                                              "OnKaleidoResolveName", "OnInterfaceResolveButtonIcon", "OnKaleidoItemDraw", "OnInterfaceDrawEnd",   "OnLoadFile",
                                               "ShouldActorUpdate", "OnActorUpdate",       "OnFlagSet",
-                                              "OnGameFrameUpdate" };
+                                              "OnGameFrameUpdate", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
 static NebSave sSave;
+static u8 sChateauBottles[NEB_BOTTLE_COUNT+NEB_VANILLA_COUNT];
+static const ALIGN_ASSET(2) char sChateauContentIcon[]="__OTR__icon_item_static_yar/gItemIconChateauRomaniTex";
+static const ALIGN_ASSET(2) char sChateauContentName[]="__OTR__item_name_static/gItemNameChateauRomaniENGTex";
+static void DrinkChateauContent(PlayState* play) {
+    typedef void (*DrinkFunc)(PlayState*);
+    DrinkFunc drink=SOH_MOD_API_HAS(sApi,FindService)?(DrinkFunc)sApi->FindService("nei.chateau.drink"):NULL;
+    if(drink)drink(play);
+}
+static void StoreChateauBottles(void){sApi->StorageSet(NEB_MOD_NAME,"chateau_contents",sChateauBottles,sizeof(sChateauBottles));}
+
 static NebLoan sLoan = { NEB_NONE, NEB_NONE, ITEM_NONE, ITEM_NONE };
 static uint8_t sButtonsToRestore;
 static bool sIsCatchResolved;
+static int sNetCaptureFrames;
 static const char* sCatchMessage;
 
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
@@ -201,7 +217,7 @@ static int8_t BottleOnButton(int32_t button) {
 
 // The icon is the content's, so the bottle reads like a vanilla one; only an empty Bottomless keeps its own.
 static void ShowContent(int8_t bottle) {
-    const char* icon = bottle == NEB_BOTTOMLESS && IsEmpty(bottle) ? sBottomlessIconTex
+    const char* icon = sChateauBottles[bottle] ? sChateauContentIcon : bottle == NEB_BOTTOMLESS && IsEmpty(bottle) ? sBottomlessIconTex
                                                                    : (const char*)gItemIcons[sSave.content[bottle]];
 
     CustomItemRegistry_SetIconPath(sBottleKeys[bottle], icon);
@@ -218,6 +234,11 @@ static uint8_t BottomlessUsesFor(uint8_t item) {
 
 // Emptying the Bottomless Bottle spends one use instead of the bottle; filling it restarts the count.
 static void SetContent(int8_t bottle, uint8_t item) {
+    bool chateau=sChateauBottles[bottle]!=0;
+    if(chateau && (item==ITEM_BOTTLE || item==ITEM_MILK_HALF) && gPlayState) {
+        DrinkChateauContent(gPlayState);
+        item=ITEM_BOTTLE;
+    }
     if (bottle == NEB_BOTTOMLESS && !IsEmpty(bottle) && (item == ITEM_BOTTLE || item == ITEM_MILK_HALF) &&
         sSave.bottomlessUses > 1) {
         sSave.bottomlessUses--;
@@ -227,7 +248,8 @@ static void SetContent(int8_t bottle, uint8_t item) {
             sSave.bottomlessUses = item == ITEM_BOTTLE ? 0 : BottomlessUsesFor(item);
         }
     }
-    StoreBottles();
+    if(sSave.content[bottle]!=ITEM_MILK_BOTTLE && sSave.content[bottle]!=ITEM_MILK_HALF)sChateauBottles[bottle]=0;
+    StoreChateauBottles();StoreBottles();
     ShowContent(bottle);
 }
 
@@ -265,6 +287,40 @@ static int8_t FindVanillaSlot(uint8_t content) {
         }
     }
     return NEB_NONE;
+}
+
+static bool FillChateauBottle(PlayState* play) {
+    int bottle=FindOwnedHolding(ITEM_BOTTLE);
+    if(bottle!=NEB_NONE) {
+        SetContent(bottle,ITEM_MILK_BOTTLE);sChateauBottles[bottle]=1;
+        if(bottle==NEB_BOTTOMLESS)sSave.bottomlessUses=5;
+        StoreChateauBottles();StoreBottles();ShowContent(bottle);return true;
+    }
+    int slot=FindVanillaSlot(ITEM_BOTTLE);
+    if(slot==NEB_NONE)return false;
+    gSaveContext.inventory.items[slot]=ITEM_MILK_BOTTLE;
+    sChateauBottles[NEB_BOTTLE_COUNT+slot-SLOT_BOTTLE_1]=ITEM_MILK_BOTTLE;
+    StoreChateauBottles();
+    for(int b=1;b<NEB_BUTTON_COUNT;++b)if(gSaveContext.equips.cButtonSlots[b-1]==slot) {
+        gSaveContext.equips.buttonItems[b]=ITEM_MILK_BOTTLE;Interface_LoadItemIcon1(play,b);
+    }
+    return true;
+}
+static void WatchVanillaChateau(void) {
+    for(int b=0;b<NEB_VANILLA_COUNT;++b) {
+        u8* previous=&sChateauBottles[NEB_BOTTLE_COUNT+b];if(!*previous)continue;
+        u8 item=gSaveContext.inventory.items[SLOT_BOTTLE_1+b];
+        if(item==*previous)continue;
+        if(gPlayState && (item==ITEM_MILK_HALF || item==ITEM_BOTTLE)) {
+            DrinkChateauContent(gPlayState);
+            gSaveContext.inventory.items[SLOT_BOTTLE_1+b]=ITEM_BOTTLE;
+            for(int button=1;button<=3;++button) if(gSaveContext.equips.cButtonSlots[button-1]==SLOT_BOTTLE_1+b) {
+                gSaveContext.equips.buttonItems[button]=ITEM_BOTTLE;Interface_LoadItemIcon1(gPlayState,button);
+            }
+            item=ITEM_BOTTLE;
+        }
+        *previous=item==ITEM_MILK_HALF?item:0;StoreChateauBottles();
+    }
 }
 
 static bool HasEmptyBottle(void) {
@@ -317,11 +373,36 @@ static void ResolveBottleAction(int32_t item, int8_t* itemAction) {
     }
 }
 
+uint8_t KaleidoItemManager_GetVanillaSlot(uint8_t cell);
+
+// Pause pages name cells; a rearranged page puts any bottle slot in any cell.
+static int32_t InventorySlotForCell(int32_t cell) {
+    if (ModLayout_IsActive(SOH_LAYOUT_ITEMS)) {
+        return ModLayout_GetItemCellSlot((uint8_t)cell);
+    }
+    return KaleidoItemManager_GetVanillaSlot((uint8_t)cell);
+}
+
+static bool IsVanillaChateauSlot(PlayState* play, uint16_t item) {
+    int32_t bottle = InventorySlotForCell(play->pauseCtx.cursorPoint[PAUSE_ITEM]) - SLOT_BOTTLE_1;
+
+    return (item == ITEM_MILK_BOTTLE || item == ITEM_MILK_HALF) && bottle >= 0 && bottle < NEB_VANILLA_COUNT &&
+           sChateauBottles[NEB_BOTTLE_COUNT + bottle] != 0;
+}
+
 static void ResolveBottleName(PlayState* play, uint16_t item, const char** namePath) {
+    if (IsVanillaChateauSlot(play, item)) {
+        *namePath = sChateauContentName;
+        return;
+    }
     const SOHCustomItemDefinition* selected = CustomItemRegistry_GetPauseItem();
     int8_t bottle = item == ITEM_CUSTOM && selected != NULL ? BottleForKey(selected->key) : NEB_NONE;
 
     if (bottle == NEB_NONE || (bottle == NEB_BOTTOMLESS && IsEmpty(bottle))) {
+        return;
+    }
+    if (sChateauBottles[bottle] != 0) {
+        *namePath = sChateauContentName;
         return;
     }
     uint8_t language = gSaveContext.language <= LANGUAGE_FRA ? gSaveContext.language : LANGUAGE_ENG;
@@ -337,7 +418,8 @@ static void GiveIntoBottles(PlayState* play, uint8_t* item, bool* handled) {
     if (*handled) {
         return;
     }
-    if (given == ITEM_BOTTLE || *item == ITEM_MILK_BOTTLE) {
+    if (given == ITEM_BOTTLE || *item == ITEM_MILK_BOTTLE ||
+        (IsBottleContent(given) && (GET_PLAYER(play)->stateFlags1&PLAYER_STATE1_GETTING_ITEM))) {
         bottle = FindVanillaSlot(ITEM_NONE) == NEB_NONE ? FindUnownedExtra() : NEB_NONE;
         if (bottle != NEB_NONE) {
             Acquire(bottle, given);
@@ -439,7 +521,17 @@ static void CloseActorWindow(void* actor) {
     RestoreButtons();
 }
 
+static bool NetHeld(void);
+static void ResolveNetCatch(Player* player,PlayState* play);
 static void CloseFrame(void) {
+    WatchVanillaChateau();
+    if(gPlayState && NetHeld()) {
+        Player* player=GET_PLAYER(gPlayState);
+        for(int i=0;i<ARRAY_COUNT(player->meleeWeaponQuads);++i)player->meleeWeaponQuads[i].base.atFlags&=~AT_ON;
+        if(gPlayState->state.input[0].press.button&BTN_B)sNetCaptureFrames=12;
+        if(player->meleeWeaponState!=0 || sNetCaptureFrames>0)ResolveNetCatch(player,gPlayState);
+        if(sNetCaptureFrames>0)--sNetCaptureFrames;
+    }
     SettleLoan();
     RestoreButtons();
 }
@@ -505,6 +597,8 @@ static void AdoptLegacyBottles(void) {
 
 static void LoadBottles(int32_t fileNum) {
     ForgetBottles();
+    memset(sChateauBottles,0,sizeof(sChateauBottles));
+    sApi->StorageGet(NEB_MOD_NAME,"chateau_contents",sChateauBottles,sizeof(sChateauBottles));
     sLoan.slot = NEB_NONE;
     sButtonsToRestore = 0;
     sApi->StorageGet(NEB_MOD_NAME, NEB_SAVE_FIELD, &sSave, sizeof(sSave));
@@ -520,6 +614,8 @@ static void LoadBottles(int32_t fileNum) {
 }
 
 static uint8_t NetContentOf(Actor* actor) {
+    if(actor->id==ACTOR_FISHING && actor->params>=100)return ITEM_FISH;
+    if(actor->id==ACTOR_EN_BUTTE)return ITEM_FAIRY;
     for (uint8_t index = 0; index < ARRAY_COUNT(sNetCatch); index++) {
         if (sNetCatch[index].actorId == actor->id) {
             return sNetCatch[index].item;
@@ -528,22 +624,28 @@ static uint8_t NetContentOf(Actor* actor) {
     return ITEM_NONE;
 }
 
+static Vec3f sNetCatchPoints[9];
+static bool sNetCatchPointsValid;
 static bool IsInFrontOfPlayer(Player* player, Actor* actor) {
+    if(Math_Vec3f_DistXZ(&player->actor.world.pos,&actor->world.pos)<160.0f &&
+       fabsf(player->actor.world.pos.y-actor->world.pos.y)<120.0f)return true;
+    if(sNetCatchPointsValid) {
+        for(int i=0;i<ARRAY_COUNT(sNetCatchPoints);++i)
+            if(Math_Vec3f_DistXYZ(&actor->world.pos,&sNetCatchPoints[i])<100.0f)return true;
+        return false;
+    }
     f32 deltaX = actor->world.pos.x - player->actor.world.pos.x;
     f32 deltaZ = actor->world.pos.z - player->actor.world.pos.z;
-    s16 angleDiff = ABS((s16)(Math_Atan2S(deltaX, deltaZ) - player->actor.shape.rot.y));
+    s32 angleDiff = ABS((s16)(Math_Atan2S(deltaX, deltaZ) - player->actor.shape.rot.y));
 
     if (SQ(deltaX) + SQ(deltaZ) >= SQ(NEB_CATCH_RANGE)) {
         return false;
-    }
-    if (angleDiff > 0x4000) {
-        angleDiff = 0x7FFF - angleDiff;
     }
     return angleDiff < 0x4000;
 }
 
 static Actor* FindCatchableActor(Player* player, PlayState* play, uint8_t* content) {
-    static const uint8_t categories[] = { ACTORCAT_ITEMACTION, ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_MISC };
+    static const uint8_t categories[] = { ACTORCAT_SWITCH,ACTORCAT_BG,ACTORCAT_PLAYER,ACTORCAT_EXPLOSIVE,ACTORCAT_NPC,ACTORCAT_ENEMY,ACTORCAT_PROP,ACTORCAT_ITEMACTION,ACTORCAT_MISC,ACTORCAT_BOSS,ACTORCAT_DOOR,ACTORCAT_CHEST };
 
     for (uint8_t index = 0; index < ARRAY_COUNT(categories); index++) {
         for (Actor* actor = play->actorCtx.actorLists[categories[index]].head; actor != NULL; actor = actor->next) {
@@ -567,8 +669,13 @@ static void ResolveNetCatch(Player* player, PlayState* play) {
         return;
     }
     if (!HasEmptyBottle()) {
-        sCatchMessage = "The net comes up full, and there is&no empty bottle to hold what it&caught.";
+        sCatchMessage = "The net comes up full, and there&is no empty bottle to hold what&it caught.";
         return;
+    }
+    if(caught->id==ACTOR_EN_BUTTE) {
+        Vec3f at=caught->world.pos;
+        Actor_Spawn(&play->actorCtx,play,ACTOR_EN_ELF,at.x,at.y,at.z,0,0,0,FAIRY_HEAL_TIMED);
+        Actor_Kill(caught);sCatchMessage="The butterfly becomes a fairy!";return;
     }
     Item_Give(play, content);
     Actor_Kill(caught);
@@ -576,44 +683,51 @@ static void ResolveNetCatch(Player* player, PlayState* play) {
     sCatchMessage = "The net scoops it up, and it lands&in an empty bottle.";
 }
 
-static void NetSwingAction(Player* player, PlayState* play) {
-    s32 activeFrame = (s32)player->skelAnime.curFrame;
-
-    Player_ZeroSpeedXZ(player);
-    // The item's own update stops while this action owns the player, and a stalled item is put away.
-    Z64Items_KeepHeld(sApi);
-    if (!sIsCatchResolved && activeFrame >= NEB_CATCH_FIRST_FRAME && activeFrame <= NEB_CATCH_LAST_FRAME) {
-        sIsCatchResolved = true;
-        ResolveNetCatch(player, play);
+s32 Player_UpperAction_Sword(Player* player,PlayState* play);
+static int32_t HoldNet(Player* player,PlayState* play) {
+    int result=Player_UpperAction_Sword(player,play);
+    for(int i=0;i<ARRAY_COUNT(player->meleeWeaponQuads);++i)player->meleeWeaponQuads[i].base.atFlags&=~AT_ON;
+    if(player->meleeWeaponState) {
+        if(!sIsCatchResolved){sIsCatchResolved=true;ResolveNetCatch(player,play);}
+    } else sIsCatchResolved=false;
+    return result;
+}
+static bool NetHeld(void) {
+    const char* key=CustomItemRegistry_GetHeldKey();return key && !strcmp(key,NEB_NET_KEY);
+}
+static void NetSwordHand(Player* player,int32_t limb,Gfx** dl,Gfx* original,Vec3f* pos) {
+    if(NetHeld() && limb==PLAYER_LIMB_L_HAND)*dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
+}
+static void DrawNetInHand(PlayState* play,Player* player,int32_t limb) {
+    if(!NetHeld() || limb!=PLAYER_LIMB_L_HAND)return;
+    Matrix_Push();float scale=player->actor.scale.x!=0?1/player->actor.scale.x:1;
+    Matrix_Scale(scale,scale,scale,MTXMODE_APPLY);
+    Matrix_RotateX(-5.0f*M_PI/180.0f,MTXMODE_APPLY);
+    Matrix_RotateY(-169.0f*M_PI/180.0f,MTXMODE_APPLY);
+    Matrix_RotateZ(64.0f*M_PI/180.0f,MTXMODE_APPLY);
+    Matrix_Translate(3.2f,4.3f,-1.0f,MTXMODE_APPLY);
+    Matrix_Scale(.49f,.49f,.49f,MTXMODE_APPLY);
+    for(int i=0;i<ARRAY_COUNT(sNetCatchPoints);++i) {
+        float t=(float)i/(ARRAY_COUNT(sNetCatchPoints)-1);Vec3f sample={-57*t,55*t,0};
+        Matrix_MultVec3f(&sample,&sNetCatchPoints[i]);
     }
-    if (!LinkAnimation_Update(play, &player->skelAnime)) {
-        return;
-    }
-    if (sCatchMessage != NULL) {
-        sApi->ShowTextbox(play, sCatchMessage, false);
-        sCatchMessage = NULL;
-    }
-    func_80839FFC(player, play);
+    sNetCatchPointsValid=true;
+    OPEN_DISPS(play->state.gfxCtx);Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)sNetDL);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)sNetXluDL);
+    CLOSE_DISPS(play->state.gfxCtx);Matrix_Pop();
 }
 
-static s32 SwingNet(Player* player, PlayState* play) {
-    bool isInWater = player->actor.yDistToWater > 12.0f;
-
-    if (player->actionFunc == NetSwingAction) {
-        return 0;
-    }
-    Player_SetupAction(play, player, NetSwingAction, 0);
-    Player_ZeroSpeedXZ(player);
-    LinkAnimation_PlayOnce(play, &player->skelAnime,
-                           (LinkAnimationHeader*)(isInWater ? sSwingWaterAnim : sSwingAnim));
-    Player_PlaySfx(&player->actor, NA_SE_IT_SWORD_SWING);
-    Player_PlayVoiceSfx(player, NA_SE_VO_LI_AUTO_JUMP);
-    sIsCatchResolved = false;
-    sCatchMessage = NULL;
-    return 0;
+void func_80837948(PlayState* play,Player* player,s32 meleeWeaponAnim);
+static void SwingNetRequest(Player* player,PlayState* play) {
+    sNetCaptureFrames=12;
+    func_80837948(play,player,PLAYER_MWA_FORWARD_SLASH_1H);
 }
-
 static void TakeOutNet(PlayState* play, Player* player) {
+    sNetCatchPointsValid=false;
     sIsCatchResolved = false;
     sCatchMessage = NULL;
 }
@@ -625,6 +739,9 @@ static void DrawNetGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     Matrix_Scale(NEB_NET_GIVE_SCALE, NEB_NET_GIVE_SCALE, NEB_NET_GIVE_SCALE, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sNetDL);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)sNetXluDL);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -704,6 +821,20 @@ static void DrawBottomlessCount(PlayState* play) {
     }
 }
 
+static void ChateauButtonIcon(PlayState* play,u8 button,u16 item,const char** icon) {
+    if(button<1 || button>3)return;
+    int slot=gSaveContext.equips.cButtonSlots[button-1]-SLOT_BOTTLE_1;
+    if(slot>=0 && slot<NEB_VANILLA_COUNT && sChateauBottles[NEB_BOTTLE_COUNT+slot]) *icon=sChateauContentIcon;
+}
+void KaleidoScope_DrawQuadTextureRGBA32(GraphicsContext* gfxCtx,void* texture,s16 width,s16 height,u16 point);
+static void ChateauPauseIcon(PlayState* play,int32_t cell,int32_t item,Vtx* vertices) {
+    int bottle=InventorySlotForCell(cell)-SLOT_BOTTLE_1;
+    if(bottle<0 || bottle>=NEB_VANILLA_COUNT || !sChateauBottles[NEB_BOTTLE_COUNT+bottle])return;
+    OPEN_DISPS(play->state.gfxCtx);
+    gSPVertex(POLY_OPA_DISP++,(uintptr_t)vertices,4,0);
+    KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx,(void*)sChateauContentIcon,32,32,0);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
 // Each bottle tool is shuffled once by the randomizer; no vanilla logic needs them.
 static const SOHCustomItemRandomizer sNetRandomizer = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, NEB_NET_KEY, NEB_NET_KEY, "",
@@ -720,17 +851,38 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+// Same opaque stopper and translucent glass passes, matrices and scale as vanilla.
+static void DrawBottleModel(PlayState* play, bool black) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiBottleStopperDL);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    if (black) {
+        gDPSetGrayscaleColor(POLY_XLU_DISP++, 28, 28, 36, 255);
+        gSPGrayscale(POLY_XLU_DISP++, true);
+    }
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBottleDL);
+    if (black) { gSPGrayscale(POLY_XLU_DISP++, false); }
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+static void DrawExtraBottle(PlayState* play, GetItemEntry* entry) { DrawBottleModel(play, false); }
+static void DrawBottomlessBottle(PlayState* play, GetItemEntry* entry) { DrawBottleModel(play, true); }
+
 static bool RegisterNet(void) {
     SOHCustomItemDefinition net = Z64Items_Define(NEB_NET_KEY, sNetIconTex, sNetNameTex);
 
     Z64Items_SetButtons(&net, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&net, SOH_ITEM_PAGE_VANILLA, SLOT_BOTTLE_3, 0);
-    Z64Items_SetTextbox(&net, "You got the %rNet%w!&A long-handled net that scoops up&what a bottle would.^"
-                              "Swing it with %y\xA1%w at a fairy, a&fish, a bug or a flame and it lands&in an empty "
-                              "bottle.");
-    Z64Items_SetPauseText(&net, "%rNet&%wSwing it with %y\xA1%w to catch&something into an empty bottle.");
-    Z64Items_SetAction(&net, TakeOutNet, SwingNet);
-    Z64Items_SetHeldModel(&net, sNetDL, PLAYER_MODELGROUP_DEFAULT);
+    Z64Items_SetTextbox(&net, "You got the %rNet%w! A&long-handled net that scoops&up what a bottle would.^"
+                              "Swing it with %y\xA1%w at a fairy, a&fish, a bug or a flame and it&"
+                              "lands in an empty bottle.");
+    Z64Items_SetPauseText(&net, "%rNet&%wSwing it with %y\xA1%w to catch something&into an empty bottle.");
+    Z64Items_SetAction(&net, TakeOutNet, HoldNet);
+    Z64Items_SetMeleeWeapon(&net,2);
+    Z64Items_SetHeldCallbacks(&net,SwingNetRequest,NULL,NULL);
+    net.modelGroup=PLAYER_MODELGROUP_SWORD_AND_SHIELD;
     net.getItemEntry.drawFunc = DrawNetGetItem;
     Z64Items_SetLogic(&net, &sNetRandomizer);
     return Z64Items_Register(sApi, &net);
@@ -744,10 +896,12 @@ static bool RegisterBottomless(void) {
     Z64Items_SetPlacement(&bottomless, SOH_ITEM_PAGE_VANILLA, SLOT_BOTTLE_4, 0);
     Z64Items_SetAmmo(&bottomless, GetBottomlessUses);
     Z64Items_SetTextbox(&bottomless,
-                        "You got the %rBottomless Bottle%w!&A bottle that never empties at&once.^Whatever you put in "
-                        "it lasts for&several uses: the number on its&button counts them down.");
-    Z64Items_SetPauseText(&bottomless, "%rBottomless Bottle&%wIt holds one content for several&uses. The number "
-                                       "counts them down.");
+                        "You got the %rBottomless Bottle%w!&A bottle that never empties at&once.^"
+                        "Whatever you put in it lasts&for several uses: the number&on its button counts them&"
+                        "down.");
+    Z64Items_SetPauseText(&bottomless, "%rBottomless Bottle&%wIt holds one content for several&"
+                                       "uses. The number counts them&down.");
+    bottomless.getItemEntry.drawFunc = DrawBottomlessBottle;
     Z64Items_SetLogic(&bottomless, &sBottomlessRandomizer);
     return Z64Items_Register(sApi, &bottomless);
 }
@@ -762,8 +916,9 @@ static bool RegisterExtraBottle(int8_t bottle) {
     Z64Items_SetPlacement(&extra, SOH_ITEM_PAGE_VANILLA, sExtraCells[bottle], sExtraPriorities[bottle]);
     extra.getItemEntry = ItemTable_RetrieveEntry(MOD_NONE, GI_BOTTLE);
     extra.getItemEntry.textId = 0;
-    Z64Items_SetTextbox(&extra, "You got an %rEmpty Bottle%w!&You can put something in this&bottle.");
-    Z64Items_SetPauseText(&extra, "%rBottle&%wWhatever it holds, %y\xA1%w uses it&like any other bottle.");
+    extra.getItemEntry.drawFunc = DrawExtraBottle;
+    Z64Items_SetTextbox(&extra, "You got an %rEmpty Bottle%w! You&can put something in this&bottle.");
+    Z64Items_SetPauseText(&extra, "%rBottle&%wWhatever it holds, %y\xA1%w uses it like&any other bottle.");
     const SOHCustomItemRandomizer randomizer = {
         sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, sBottleKeys[bottle], sBottleKeys[bottle], "",
     };
@@ -792,7 +947,10 @@ SOH_MOD_EXPORT void ModInit(void) {
             return;
         }
     }
+    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.bottles.fill_chateau",(void*)FillChateauBottle);
     GroupVanillaBottles();
+    SOH_REGISTER_HOOK(sApi,OnPlayerResolveLimbDraw,NetSwordHand);
+    SOH_REGISTER_HOOK(sApi,OnPlayerPostLimbDraw,DrawNetInHand);
     sApi->RegisterVB(VB_UPDATE_BOTTLE_ITEM, CatchBottleWrite);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveItemAction, ResolveBottleAction);
     SOH_REGISTER_HOOK(sApi, OnResolveItemGive, GiveIntoBottles);
@@ -801,6 +959,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, CloseFrame);
     SOH_REGISTER_HOOK(sApi, OnFlagSet, TakeBackRutosLetter);
     SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, DrawBottomlessCount);
+    SOH_REGISTER_HOOK(sApi,OnInterfaceResolveButtonIcon,ChateauButtonIcon);
+    SOH_REGISTER_HOOK(sApi,OnKaleidoItemDraw,ChateauPauseIcon);
     SOH_REGISTER_HOOK(sApi, OnLoadFile, LoadBottles);
     SOH_REGISTER_HOOK_FOR_ID(sApi, ShouldActorUpdate, ACTOR_PLAYER, LendFairyToFallingLink);
     SOH_REGISTER_HOOK_FOR_ID(sApi, ShouldActorUpdate, ACTOR_EN_HY, LendForBeggar);

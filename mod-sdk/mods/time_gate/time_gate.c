@@ -6,7 +6,7 @@
 #include "variables.h"
 
 #define TIME_GATE_KEY "nei.time_gate"
-#define TIME_GATE_MAGIC_COST 48
+#define TIME_GATE_MAGIC_COST 24
 #define TIME_GATE_ANIM_SPEED 0.83f
 #define TIME_GATE_PROMPT_DELAY 10
 #define TIME_GATE_ITEM_FRAME 10.0f
@@ -384,10 +384,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&gate, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&gate, 0, 7, 0);
-    Z64Items_SetTextbox(&gate, "You got the %rTime Gate%w!&A relic of the Sages that folds&the years between "
-                               "past and future.^Press %y\xA1%w on solid ground to open&it and travel through "
-                               "%ytime%w.^Opening the gate costs %gmuch magic%w.");
-    Z64Items_SetPauseText(&gate, "%rTime Gate&%wPress %y\xA1%w on the ground, then choose&Yes to change age.");
+    Z64Items_SetTextbox(&gate, "You got the %rTime Gate%w! A relic&of the Sages that folds the&"
+                               "years between past and future.^Press %y\xA1%w on solid ground to open&"
+                               "it and travel through %ytime%w.^Opening the gate costs %gmuch&magic%w.");
+    Z64Items_SetPauseText(&gate, "%rTime Gate&%wPress %y\xA1%w on the ground, then&choose Yes to change age.");
     Z64Items_SetCanUse(&gate, CanOpenGate);
     Z64Items_SetAction(&gate, OpenGate, NULL);
     gate.flags |= SOH_CUSTOM_ITEM_INSTANT;

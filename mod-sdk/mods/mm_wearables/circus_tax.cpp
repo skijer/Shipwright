@@ -628,6 +628,13 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
 
 // ── Hijacked actor->update — runs in place of vanilla update during dialogue ──
 
+static bool CLM_HasMorePrizes(const CLMState& s) {
+    return (s.actorId==ACTOR_EN_BOM_BOWL_MAN &&
+            (!Flags_GetItemGetInf(ITEMGETINF_11)||!Flags_GetItemGetInf(ITEMGETINF_12))) ||
+           (s.actorId==ACTOR_EN_GE1 &&
+            (!Flags_GetInfTable(INFTABLE_190)||!Flags_GetItemGetInf(ITEMGETINF_0F)));
+}
+
 static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
     auto it = gStates.find(actor);
     if (it == gStates.end())
@@ -676,14 +683,20 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
                 CLM_PostAcceptItem(actor, state);
             }
 
-            state.phase = offeredItem ? CLMPhase::RewardOffered : CLMPhase::Done;
+            if(!offeredItem && state.firstTime && CLM_HasMorePrizes(state) && adapter!=nullptr) {
+                adapter->resolveTextId(actor,state);state.phase=CLMPhase::WaitingForClose;
+            } else state.phase = offeredItem ? CLMPhase::RewardOffered : CLMPhase::Done;
             break;
         }
         case CLMPhase::RewardOffered: {
             if (Actor_HasParent(actor, play)) {
                 CLM_PostAcceptItem(actor, state);
                 actor->parent = NULL;
-                state.phase = CLMPhase::Done;
+                // Collect every distinct prize from this minigame in the same tax visit.
+                bool more=CLM_HasMorePrizes(state);
+                if(more && adapter!=nullptr) {
+                    adapter->resolveTextId(actor,state);state.phase=CLMPhase::WaitingForClose;
+                } else state.phase = CLMPhase::Done;
             } else if (IS_RANDO) {
                 CLM_TryDirectRandoDelivery(actor, play, state);
             } else {

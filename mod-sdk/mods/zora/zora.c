@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -270,6 +272,15 @@ s32 Player_ActionHandler_2(Player* player, PlayState* play);
 #define SPEED_MODE_LINEAR 0.0f
 
 static const SOHModApi* sApi;
+static bool sBorrowedGyorgSwim;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
 
@@ -472,6 +483,10 @@ static void PitchSwimmingBody(Vec3f* pos) {
 }
 
 static void ResolveZoraBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
+    // Gyorg borrows the swim, never the Zora skeleton or its equipment.
+    if (sBorrowedGyorgSwim && !IsZora() && limbIndex == PLAYER_LIMB_ROOT && IsSwimMove() && pos != NULL) {
+        PitchSwimmingBody(pos);
+    }
     if (!IsZora() || limbIndex <= PLAYER_LIMB_NONE || limbIndex >= PLAYER_LIMB_MAX) {
         return;
     }
@@ -576,6 +591,12 @@ static void ScaleFireDamage(Player* player) {
 // In water A is the fast swim and B the heavy toggle; vanilla would dive and swing with them.
 static void FilterZoraInput(Player* player, Input* input) {
     if (!IsZora()) {
+        // Otherwise vanilla starts its A-button dive before the borrowed fast swim can run.
+        if (sBorrowedGyorgSwim && player->currentBoots != PLAYER_BOOTS_IRON && IsInWater(player) &&
+            player->interactRangeActor == NULL && (!IsGrounded(player) || !Player_IsZTargeting(player))) {
+            input->press.button &= ~BTN_A;
+            input->cur.button &= ~BTN_A;
+        }
         return;
     }
     ScaleFireDamage(player);
@@ -1393,6 +1414,10 @@ static void LeaveSwimMove(PlayState* play, Player* player) {
     player->stateFlags2 &= ~PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
     player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
     player->actor.gravity = GRAVITY_NORMAL;
+    if (sBorrowedGyorgSwim) {
+        player->actor.shape.rot.x = 0;
+        player->skelAnime.playSpeed = 1.0f;
+    }
 }
 
 static void ReturnToSwimming(PlayState* play, Player* player) {
@@ -2007,6 +2032,31 @@ static void ResolveZoraSfx(Actor* actor, int32_t kind, uint16_t* sfxId, bool* ha
     }
 }
 
+static void HumanGyorgSwim(PlayState* play,Player* player,bool enabled) {
+    if(IsZora()){sBorrowedGyorgSwim=false;return;}
+    const char* form = sApi->GetActiveForm();
+    if(!enabled || (form != NULL && form[0] != '\0') || player->currentBoots == PLAYER_BOOTS_IRON ||
+       !CanAct(player) || !HasSwimAbility()) {
+        if(sBorrowedGyorgSwim && IsSwimMove())LeaveSwimMove(play,player);
+        sBorrowedGyorgSwim=false;return;
+    }
+    if (!sBorrowedGyorgSwim) {
+        sSwimPitch = sSwimRoll = sSwimRollSmoothed = sSwimTurn = 0;
+        sSwimFloorTimer = 0;
+    }
+    sBorrowedGyorgSwim=true;
+    Input* input=&play->state.input[0];
+    // Human Link floats at his own age's depth, shallower than the Zora body's: a child never reaches 30.
+    bool isDeepEnough = player->actor.yDistToWater > player->ageProperties->unk_24;
+    if(!IsSwimMove() && IsInWater(player) && player->interactRangeActor == NULL &&
+       (!IsGrounded(player) || !Player_IsZTargeting(player)) && isDeepEnough && (input->press.button&BTN_A))
+        StartFastSwim(play,player,4.0f);
+    if (IsSwimMove()) {
+        player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
+    }
+    if(IsInWater(player))SpawnSwimEffects(play,player);
+}
+
 // ---- lifetime ----
 
 static bool IsZoraBusy(Player* player) {
@@ -2018,7 +2068,7 @@ static bool IsZoraBusy(Player* player) {
 static void DriveSwimMove(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
 
-    if (!IsZora() || !IsSwimMove() || gPlayState == NULL) {
+    if ((!IsZora() && !sBorrowedGyorgSwim) || !IsSwimMove() || gPlayState == NULL) {
         return;
     }
     if (!CanAct(player)) {
@@ -2142,6 +2192,7 @@ static void ForgetScene(int16_t sceneNum) {
     sFins[0] = sFins[1] = NULL;
     sIsHeavy = false;
     ResetState(NULL, NULL);
+    sBorrowedGyorgSwim = false;
 }
 
 // ---- mask ----
@@ -2152,7 +2203,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(ZORA_FORM_KEY);
+    ToggleConfiguredForm(ZORA_FORM_KEY);
 }
 
 // A vanilla GetItemEntry has no draw callback of its own, and the registry reads NULL as "no model".
@@ -2181,12 +2232,12 @@ static void RegisterMask(void) {
     mask.getItemEntry.drawFunc = DrawMaskGetItem;
     Z64Items_SetReplaces(&mask, ITEM_MASK_ZORA);
     Z64Items_SetVanillaMode(&mask, SOH_VANILLA_ITEM_REPLACE, RG_ZORA_MASK);
-    Z64Items_SetTextbox(&mask, "You got the %rZora Mask%w!&It holds the spirit of a Zora guitarist who sang to "
-                               "the sea.^Wear it with %y\xA1%w to become a Zora: swim like a fish and fight with "
-                               "blade-like fins.");
-    Z64Items_SetPauseText(&mask, "%rZora Mask&%wPress %y\xA1%w to become a Zora.&%y\xA0%w: punch  Hold %y\xA0%w: "
-                                 "fins  %y\xA3%w: guard  %y\xA3%w+%y\xA0%w: barrier&In water: %y\x9F%w: dash  "
-                                 "%y\xA0%w: sink");
+    Z64Items_SetTextbox(&mask, "You got the %rZora Mask%w! It&holds the spirit of a Zora&"
+                               "guitarist who sang to the sea.^Wear it with %y\xA1%w to become a&"
+                               "Zora: swim like a fish and fight&with blade-like fins.");
+    Z64Items_SetPauseText(&mask, "%rZora Mask&%wPress %y\xA1%w to become a Zora.&"
+                                 "%y\xA0%w: punch  Hold %y\xA0%w: fins  %y\xA3%w: guard^"
+                                 "%y\xA3%w+%y\xA0%w: barrier In water: %y\x9F%w dashes,&%y\xA0%w sinks.");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);
@@ -2287,6 +2338,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.zora.human_gyorg_swim",(void*)HumanGyorgSwim);
     LoadAnims();
     RegisterMask();
     RegisterForm();

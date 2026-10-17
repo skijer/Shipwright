@@ -183,7 +183,7 @@ static ColliderCylinderInit sBurstColliderInit = {
     { 34, 40, -10, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayDrawEnd", "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayDrawEnd", "OnSceneInit", "OnActorDrawEnd" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -275,47 +275,29 @@ static void RestoreFlipped(PacciFlip* flip) {
 
 // Anything physical that is not Link, a boss or an NPC, and that the game actually draws.
 static bool IsTargetable(Actor* actor) {
-    if (actor == NULL || actor->update == NULL || actor->draw == NULL || actor->id == ACTOR_PLAYER ||
-        actor->category == ACTORCAT_BOSS || actor->category == ACTORCAT_NPC) {
-        return false;
+    if (Player_GetStrength() < 1 || actor == NULL || actor->update == NULL || actor->draw == NULL || actor->id == ACTOR_PLAYER ||
+        actor->id == ACTOR_EN_OKARINA_TAG || actor->id == ACTOR_EN_OKARINA_EFFECT ||
+        FindFlip(actor) != NULL || actor == sLift.held) { return false; }
+    if (Player_GetStrength() >= PACCI_STRENGTH_GOLD) { return true; }
+    if (actor->category == ACTORCAT_ENEMY) {
+        return Player_GetStrength() >= 2 || actor->id == ACTOR_EN_TITE;
     }
-    if (actor->category == ACTORCAT_ENEMY && actor->colChkInfo.mass == MASS_IMMOVABLE) {
-        return false;
-    }
-    return !IsIdOneOf(actor->id, sUntouchable, ARRAY_COUNT(sUntouchable)) && FindFlip(actor) == NULL &&
-           actor != sLift.held;
+    return actor->category == ACTORCAT_PROP;
 }
 
-static bool IsFlippable(Actor* actor) {
-    return (actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_PROP) && IsTargetable(actor);
-}
-
-// The gauntlet vanilla asks for the same weight: a big rock wants silver, a block gold.
+static bool IsFlippable(Actor* actor) { return IsTargetable(actor); }
 static s32 RequiredStrength(Actor* actor) {
-    if (actor->category == ACTORCAT_BG) {
-        return PACCI_STRENGTH_GOLD;
-    }
-    if (actor->id == ACTOR_EN_ISHI) {
-        return (actor->params & 1) == ROCK_LARGE ? 2 : 1;
-    }
-    if (actor->category != ACTORCAT_ENEMY) {
-        return 1;
-    }
-    return actor->colChkInfo.mass <= PACCI_LIGHT_MASS ? 1 : actor->colChkInfo.mass <= PACCI_MEDIUM_MASS ? 2 : 3;
+    if (actor->category == ACTORCAT_PROP || actor->id == ACTOR_EN_TITE) { return 1; }
+    return actor->category == ACTORCAT_ENEMY ? 2 : 3;
 }
-
 static bool IsLiftable(Actor* actor) {
-    if (actor->category == ACTORCAT_BG && !IsIdOneOf(actor->id, sLiftableScenery, ARRAY_COUNT(sLiftableScenery))) {
-        return false;
-    }
-    return (actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_PROP ||
-            actor->category == ACTORCAT_BG) &&
-           IsTargetable(actor) && Player_GetStrength() >= RequiredStrength(actor);
+    return IsTargetable(actor) && Player_GetStrength() >= RequiredStrength(actor);
 }
 
 // What Link is looking at wins over what is merely closer: the cone is measured from his facing.
 static Actor* ScanAhead(PlayState* play, bool (*filter)(Actor*)) {
-    static const u8 sCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG };
+    static const u8 sCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG, ACTORCAT_NPC,
+        ACTORCAT_CHEST, ACTORCAT_BOSS, ACTORCAT_MISC, ACTORCAT_SWITCH, ACTORCAT_ITEMACTION, ACTORCAT_EXPLOSIVE, ACTORCAT_DOOR };
     Player* player = GET_PLAYER(play);
     Actor* best = NULL;
     s32 bestYawError = PACCI_SCAN_CONE;
@@ -347,9 +329,9 @@ static void GetHandPos(Player* player, Vec3f* pos) {
 
     *pos = hand;
     if (length > 0.001f) {
-        pos->x += (hand.x - forearm.x) / length * 16.0f;
-        pos->y += (hand.y - forearm.y) / length * 16.0f;
-        pos->z += (hand.z - forearm.z) / length * 16.0f;
+        pos->x += (hand.x - forearm.x) / length * 30.0f;
+        pos->y += (hand.y - forearm.y) / length * 30.0f;
+        pos->z += (hand.z - forearm.z) / length * 30.0f;
     }
 }
 
@@ -1098,6 +1080,29 @@ static void UpdatePacciWorld(void) {
     TrackButton(play, player);
 }
 
+// The host draws generic held models on the left hand. Pacci explicitly owns the right-hand limb.
+static void DrawPacciInRightHand(Actor* actor, PlayState* play) {
+    Player* player = (Player*)actor;
+    if (sPhase == PACCI_STOWED) { return; }
+    Vec3f hand = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+    Vec3f arm = player->bodyPartsPos[PLAYER_BODYPART_R_FOREARM];
+    f32 dx = hand.x - arm.x, dy = hand.y - arm.y, dz = hand.z - arm.z;
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Translate(hand.x, hand.y, hand.z, MTXMODE_NEW);
+    Matrix_RotateY(atan2f(dx, dz), MTXMODE_APPLY);
+    Matrix_RotateX(-atan2f(dy, sqrtf(dx*dx + dz*dz)), MTXMODE_APPLY);
+    // Calibrated by the user on 2026-10-14; two decimal places retain the measured pose.
+    Matrix_Translate(1.64f, -0.75f, 19.51f, MTXMODE_APPLY);
+    Matrix_RotateX(DEG_TO_RAD(83.14f), MTXMODE_APPLY);
+    Matrix_RotateY(DEG_TO_RAD(62.96f), MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(1.08f), MTXMODE_APPLY);
+    Matrix_Scale(0.08f, 0.08f, 0.08f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sCaneDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void DrawPacciEffects(void) {
     PlayState* play = gPlayState;
 
@@ -1153,14 +1158,14 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetButtons(&cane, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     // Shares the Cane of Somaria's cell, after it.
     Z64Items_SetPlacement(&cane, 0, 21, -1);
-    Z64Items_SetTextbox(&cane, "You got the %yCane of Pacci%w!&Its magic %yflips%w what it touches&onto its back.^"
-                               "Hold %y\xA1%w to %ylift%w it instead and let&go to throw it. How much it can&lift "
-                               "depends on your %rstrength%w.");
+    Z64Items_SetTextbox(&cane, "You got the %yCane of Pacci%w! Its&magic %yflips%w what it touches&"
+                               "onto its back. Hold %y\xA1%w to %ylift%w it&instead and let go to throw it.^"
+                               "How much it can lift depends&on your %rstrength%w.");
     Z64Items_SetPauseText(&cane, "%yCane of Pacci&%wTap %y\xA1%w to flip, hold to lift and&release to throw at your "
                                  "%g\xA4%w target.");
     Z64Items_SetAction(&cane, TakeOutCane, UpdateCane);
     Z64Items_SetHeldCallbacks(&cane, PressCane, PutCaneAway, NULL);
-    Z64Items_SetHeldModel(&cane, sCaneDL, PLAYER_MODELGROUP_DEFAULT);
+    cane.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     cane.getItemEntry.drawFunc = DrawGetItem;
 
     Z64Items_SetLogic(&cane, &sRandomizerItem);
@@ -1169,5 +1174,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdatePacciWorld);
     SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, DrawPacciEffects);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawPacciInRightHand);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
 }

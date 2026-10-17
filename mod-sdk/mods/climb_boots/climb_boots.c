@@ -11,6 +11,7 @@
 #include "variables.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "objects/object_gi_boots_2/object_gi_boots_2.h"
+#include "objects/object_link_boy/object_link_boy.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/ModApi/Player/PlayerHookTypes.h"
 
@@ -140,7 +141,7 @@ static bool IsTwoWordCommand(u8 opcode) {
 }
 
 // A local copy, never the shared resource: the vanilla Iron Boots must keep their own colours.
-static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built) {
+static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built, bool gray) {
     Gfx* source;
     s32 count = 0;
 
@@ -165,7 +166,12 @@ static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built) {
             continue;
         }
         if (opcode == G_SETPRIMCOLOR || opcode == G_SETENVCOLOR) {
-            out[count - 1].words.w1 = YellowIronRamp((u32)out[count - 1].words.w1);
+            u32 rgba = (u32)out[count - 1].words.w1;
+            if (gray) {
+                u32 lum = (((rgba >> 24) & 255) * 3 + ((rgba >> 16) & 255) * 6 + ((rgba >> 8) & 255)) / 10;
+                lum = CLAMP_MAX(lum * 1.15f + 30.0f, 255.0f);
+                out[count - 1].words.w1 = (lum << 24) | (lum << 16) | (lum << 8) | (rgba & 255);
+            } else { out[count - 1].words.w1 = YellowIronRamp(rgba); }
         }
     }
     *built = true;
@@ -175,10 +181,10 @@ static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built) {
 static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     static Gfx sBootsDL[GI_DL_CAPACITY];
     static Gfx sRivetsDL[GI_DL_CAPACITY];
-    static bool sBootsBuilt;
-    static bool sRivetsBuilt;
-    Gfx* boots = BuildRecoloredDL(gGiIronBootsDL, sBootsDL, &sBootsBuilt);
-    Gfx* rivets = BuildRecoloredDL(gGiIronBootsRivetsDL, sRivetsDL, &sRivetsBuilt);
+    bool sBootsBuilt = false;
+    bool sRivetsBuilt = false;
+    Gfx* boots = BuildRecoloredDL(gGiIronBootsDL, sBootsDL, &sBootsBuilt, false);
+    Gfx* rivets = BuildRecoloredDL(gGiIronBootsRivetsDL, sRivetsDL, &sRivetsBuilt, false);
 
     if (boots == NULL || rivets == NULL) {
         return;
@@ -194,7 +200,47 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerActionHandler" };
+// Keep the exact env colour emitted for this player, including custom tunics and cosmetics.
+static u32 CurrentPlayerEnv(PlayState* play) {
+    Gfx* begin=play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor=play->state.gfxCtx->polyOpa.p;
+    while (cursor>begin) {
+        --cursor;
+        if (((cursor->words.w0>>24)&255)==G_SETENVCOLOR) { return (u32)cursor->words.w1; }
+    }
+    return 0xFFFFFFFF;
+}
+// Visual-only iron boot overlays; currentBoots and vanilla equipment remain Kokiri boots.
+static void DrawClimbBootsOnFeet(PlayState* play, Player* player, int32_t limbIndex) {
+    if (!IsWorn() || (limbIndex != PLAYER_LIMB_L_FOOT && limbIndex != PLAYER_LIMB_R_FOOT)) { return; }
+    u32 savedEnv=CurrentPlayerEnv(play);
+    const char* path = limbIndex == PLAYER_LIMB_L_FOOT ? gLinkAdultLeftIronBootDL : gLinkAdultRightIronBootDL;
+    // Scope both the model transform and the tint; never leave Link's tunic env colour white.
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetGrayscaleColor(POLY_OPA_DISP++, 205, 210, 220, 150);
+    gSPGrayscale(POLY_OPA_DISP++, true);
+    Matrix_Push();
+    if (!LINK_IS_ADULT) { Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY); }
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
+    Matrix_Pop();
+    gSPGrayscale(POLY_OPA_DISP++, false);
+    gDPSetEnvColor(POLY_OPA_DISP++, savedEnv>>24, (savedEnv>>16)&255, (savedEnv>>8)&255, savedEnv&255);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Taking off custom boots writes 0 in the equipment slot; vanilla's draw requires a valid boot index.
+static void KeepBootDrawValid(Actor* actor, PlayState* play, bool* drawVanilla) {
+    if (actor != &GET_PLAYER(play)->actor) { return; }
+    if (CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) < EQUIP_VALUE_BOOTS_KOKIRI ||
+        CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) >= EQUIP_VALUE_BOOTS_MAX) {
+        Inventory_ChangeEquipment(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_KOKIRI);
+        Player_SetEquipmentData(play, (Player*)actor);
+    }
+}
+
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerActionHandler", "OnPlayerPostLimbDraw", "OnActorDraw" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -214,10 +260,10 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = CLIMB_BOOTS_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rClimb Boots&%wIce and steep slopes no longer move you, and %y\x9F%w jumps even from "
-                           "a slope.";
-    definition.getItemText = "You got the %rClimb Boots%w!&Iron soles with a miner's grip. Wear them and neither "
-                             "ice nor a steep slope will carry you away.";
+    definition.pauseText = "%rClimb Boots&%wIce and steep slopes no longer&"
+                           "move you, and %y\x9F%w jumps even from&a slope.";
+    definition.getItemText = "You got the %rClimb Boots%w! Iron&soles with a miner's grip.^"
+                             "Wear them and neither ice nor&a steep slope will carry you&away.";
     definition.slot = SOH_EQUIP_SLOT_BOOTS;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_BOOTS;
@@ -231,6 +277,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
 
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, KeepFootingOnSlopes);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_PLAYER, KeepBootDrawValid);
+    SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawClimbBootsOnFeet);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnPlayerActionHandler, SOH_PLAYER_ACTION_ZTARGET_A, JumpFromSteepSlope);
     sApi->RegisterVB(VB_SET_STATIC_FLOOR_TYPE, KeepGripOnIce);
 }

@@ -38,6 +38,7 @@
 #define BALL_SPIN_HEIGHT_MAX 55.0f
 #define BALL_SPIN_SPEED_MIN 0x1000
 #define BALL_SPIN_SPEED_MAX 0x2000
+#define BALL_QUICK_SPIN_MULTIPLIER 2.5f
 #define BALL_STICK_DEADZONE 5.0f
 #define BALL_LEAN_TILT 40.0f
 #define BALL_THROW_LEAN 3000
@@ -124,6 +125,7 @@ static u8 sPhase;
 static s16 sCharge;
 static s16 sSpinAngle;
 static s16 sThrowYaw;
+static s16 sQuickSpinFrames;
 static s16 sThrownFrames;
 static s16 sRestTimer;
 static u8 sBounces;
@@ -218,6 +220,7 @@ static void EndTrail(PlayState* play) {
 static void StrikeWithBall(Player* player, PlayState* play) {
     bool isAtFootLevel = sBallPos.y - player->actor.world.pos.y < 30.0f;
 
+    sBallCollider.base.acFlags &= ~(AC_ON | AC_HARD);
     sBallCollider.info.toucher.dmgFlags = isAtFootLevel ? DMG_HAMMER_JUMP : DMG_HAMMER_SWING;
     sBallCollider.info.toucher.damage = Strength() >= BALL_STRENGTH_GOLDEN ? BALL_GOLDEN_DAMAGE : BALL_DAMAGE;
     sBallCollider.dim.pos.x = (s16)sBallPos.x;
@@ -421,15 +424,20 @@ static void ReadStickLean(Player* player, PlayState* play) {
     }
 }
 
+static s16 SpinStep(void) {
+    f32 speed = BALL_SPIN_SPEED_MIN + (BALL_SPIN_SPEED_MAX - BALL_SPIN_SPEED_MIN) * (f32)sCharge / BALL_CHARGE_MAX;
+    return (s16)(speed * (sQuickSpinFrames > 0 ? BALL_QUICK_SPIN_MULTIPLIER : 1.0f));
+}
+
 static void OrbitBallOverhead(Player* player) {
     f32 chargeRatio = (f32)sCharge / BALL_CHARGE_MAX;
     f32 orbitX = Math_SinS(sSpinAngle) * BALL_SPIN_RADIUS;
     f32 orbitZ = Math_CosS(sSpinAngle) * BALL_SPIN_RADIUS;
     f32 orbitY = BALL_SPIN_HEIGHT_MIN + (BALL_SPIN_HEIGHT_MAX - BALL_SPIN_HEIGHT_MIN) * chargeRatio -
-                 Math_CosS(sSpinAngle) * sStickLeanY * BALL_LEAN_TILT - Math_SinS(sSpinAngle) * sStickLeanX * BALL_LEAN_TILT;
+                 Math_CosS(sSpinAngle) * sStickLeanY * (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT) - Math_SinS(sSpinAngle) * sStickLeanX * (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT);
     s16 yaw = player->actor.shape.rot.y;
 
-    sSpinAngle += (s16)(BALL_SPIN_SPEED_MIN + (BALL_SPIN_SPEED_MAX - BALL_SPIN_SPEED_MIN) * chargeRatio);
+    sSpinAngle += SpinStep();
     sBallPos.x = player->actor.world.pos.x + orbitX * Math_CosS(yaw) + orbitZ * Math_SinS(yaw);
     sBallPos.y = player->actor.world.pos.y + orbitY;
     sBallPos.z = player->actor.world.pos.z - orbitX * Math_SinS(yaw) + orbitZ * Math_CosS(yaw);
@@ -506,7 +514,7 @@ static void OrbitBallAround(Player* player) {
     f32 chargeRatio = (f32)sCharge / BALL_CHARGE_MAX;
     f32 radius = BALL_GUARD_RADIUS_MIN + (BALL_GUARD_RADIUS_MAX - BALL_GUARD_RADIUS_MIN) * chargeRatio;
 
-    sSpinAngle += (s16)(BALL_SPIN_SPEED_MIN + (BALL_SPIN_SPEED_MAX - BALL_SPIN_SPEED_MIN) * chargeRatio);
+    sSpinAngle += SpinStep();
     sBallPos.x = player->actor.world.pos.x + Math_SinS(sSpinAngle) * radius;
     sBallPos.y = player->actor.world.pos.y + BALL_GUARD_HEIGHT;
     sBallPos.z = player->actor.world.pos.z + Math_CosS(sSpinAngle) * radius;
@@ -535,15 +543,26 @@ static void UpdateSpinning(Player* player, PlayState* play) {
         StartAiming(player, play);
         return;
     }
+    if (Strength() == BALL_STRENGTH_BRACELET) {
+        FaceThrowDirection(player);
+        player->upperLimbYawSecondary = 0;
+    }
+    if (sQuickSpinFrames == 0 && !IsButtonHeld(play) && !IsBallSwungUp() && CanAimBall()) {
+        sQuickSpinFrames = 1;
+        s32 step = SpinStep();
+        sQuickSpinFrames = (s16)((0x10000 + step - 1) / step);
+    }
     ReadStickLean(player, play);
-    sCharge = MIN(sCharge + 1, BALL_CHARGE_MAX);
+    if (sQuickSpinFrames == 0) { sCharge = MIN(sCharge + 1, BALL_CHARGE_MAX); }
     SwingBall(player);
     StrikeAndBreak(player, play);
     FeedTrail(play);
     Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_SWORD_SWING - SFX_FLAG);
-    if (IsButtonHeld(play)) {
+    if (sQuickSpinFrames > 0) {
+        if (--sQuickSpinFrames == 0) { sPhase = BALL_HOLDING; }
         return;
     }
+    if (IsButtonHeld(play)) { return; }
     if (!IsBallSwungUp()) {
         sPhase = BALL_HOLDING;
         return;
@@ -553,13 +572,24 @@ static void UpdateSpinning(Player* player, PlayState* play) {
 
 // The return value is Link's "upper body is busy" flag: only the spin claims it, or the ball merely carried
 // in hand would block his rolls and his other item buttons.
+static void GuardWithHeldBall(Player* player, PlayState* play) {
+    sBallCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+    sBallCollider.base.acFlags = AC_ON | AC_HARD | AC_TYPE_ENEMY;
+    sBallCollider.info.bumper.dmgFlags = 0xFFFFFFFF;
+    sBallCollider.info.bumperFlags = BUMP_ON;
+    sBallCollider.dim.pos.x = (s16)sBallPos.x;
+    sBallCollider.dim.pos.y = (s16)(sBallPos.y - BALL_COLLIDER_HEIGHT / 2);
+    sBallCollider.dim.pos.z = (s16)sBallPos.z;
+    CollisionCheck_SetAC(play, &play->colChkCtx, &sBallCollider.base);
+}
+
 static int32_t UpdateBallInHand(Player* player, PlayState* play) {
     if ((player->stateFlags1 & PLAYER_STATE1_IN_WATER) || player->invincibilityTimer < 0) {
         sPhase = BALL_HOLDING;
     }
     if (sPhase == BALL_HOLDING) {
         HoldBallInHands(player);
-        StrikeWithBall(player, play);
+        GuardWithHeldBall(player, play);
         EndTrail(play);
         return 0;
     }
@@ -709,6 +739,7 @@ static void StartSpinning(Player* player, PlayState* play) {
     }
     sPhase = BALL_SPINNING;
     sCharge = 0;
+    sQuickSpinFrames = 0;
     sThrowYaw = player->actor.shape.rot.y;
     PlaySfxAt(NA_SE_IT_HAMMER_SWING, &player->actor.world.pos);
 }
@@ -801,6 +832,7 @@ static s16 GetBallBearing(Player* player) {
 static void LeanIntoSwing(Player* player) {
     s16 bearing = GetBallBearing(player);
     f32 pull = BALL_LEAN_MIN + (BALL_LEAN_MAX - BALL_LEAN_MIN) * sCharge / BALL_CHARGE_MAX;
+    if (Strength() == BALL_STRENGTH_BRACELET) { pull *= 0.2f; }
     s16 forwards = (s16)(Math_CosS(bearing) * pull);
     s16 sideways = (s16)(-Math_SinS(bearing) * pull);
 
@@ -825,6 +857,10 @@ static void PoseArmsAroundBall(Actor* actor, PlayState* play, bool* drawVanilla)
         return;
     }
     ApplyArmPose(player);
+    if (Strength() == BALL_STRENGTH_BRACELET && sPhase == BALL_SPINNING) {
+        FaceThrowDirection(player);
+        player->upperLimbYawSecondary = 0;
+    }
     if (sPhase == BALL_HOLDING) {
         player->upperLimbRot.x = player->upperLimbRot.y = player->upperLimbRot.z = 0;
         return;
@@ -892,6 +928,19 @@ static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Only the chain is arched; the ball retains its original orbit and position.
+static void DrawOverheadChain(PlayState* play, Vec3f* from, Vec3f* to) {
+    Vec3f previous = *from;
+    for (s32 i = 1; i <= 8; ++i) {
+        f32 t = i / 8.0f;
+        Vec3f point = { from->x + (to->x - from->x) * t,
+                        from->y + (to->y - from->y) * t + 4.0f * t * (1.0f - t) * 35.0f,
+                        from->z + (to->z - from->z) * t };
+        DrawChain(play, &previous, &point);
+        previous = point;
+    }
+}
+
 static void DrawBall(PlayState* play) {
     bool isSwung = sPhase != BALL_HOLDING;
     f32 scale = isSwung ? BALL_SWUNG_SCALE : BALL_HELD_SCALE;
@@ -915,11 +964,18 @@ static void DrawBall(PlayState* play) {
 static void DrawBallAndChain(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
 
+    if (sPhase == BALL_AIMING) {
+        Z64Aiming_DrawReticle(play, player, BALL_CHAIN_LENGTH);
+    }
     if (sPhase == BALL_IDLE || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
     DrawChain(play, &player->bodyPartsPos[PLAYER_BODYPART_L_HAND], &player->bodyPartsPos[PLAYER_BODYPART_R_HAND]);
-    DrawChain(play, &player->bodyPartsPos[PLAYER_BODYPART_R_HAND], &sBallPos);
+    if (Strength() == BALL_STRENGTH_GOLDEN && (sPhase == BALL_SPINNING || sPhase == BALL_AIMING)) {
+        DrawOverheadChain(play, &player->bodyPartsPos[PLAYER_BODYPART_R_HAND], &sBallPos);
+    } else {
+        DrawChain(play, &player->bodyPartsPos[PLAYER_BODYPART_R_HAND], &sBallPos);
+    }
     DrawBall(play);
 }
 
@@ -955,14 +1011,15 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&ball, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&ball, 0, 9, 0);
-    Z64Items_SetTextbox(&ball, "You got the %rBall and Chain%w!&A massive iron ball that only the&strongest arms "
-                               "can swing.^Press %y\xA1%w again and hold it to spin&the ball, then let go to "
-                               "%rhurl%w it.^Its weight roots you where %ywind%w&would move anyone else, and&it "
-                               "crushes %yarmor%w, shatters %cice%w&and smashes heavy pots.^Stronger arms carry it "
-                               "farther:&%gSilver Gauntlets%w free your feet&and your aim, and %gGolden%w ones&swing it "
-                               "one-handed to %rguard%w you.");
-    Z64Items_SetPauseText(&ball, "%rBall and Chain&%wHold %y\xA1%w to spin, release to throw.&%g\xA4%w or %y\xA5%w to "
-                                 "aim.");
+    Z64Items_SetTextbox(&ball, "You got the %rBall and Chain%w! A&massive iron ball that only the&"
+                               "strongest arms can swing.^Press %y\xA1%w again and hold it to&"
+                               "spin the ball, then let go to&%rhurl%w it.^Its weight roots you where&"
+                               "%ywind%w would move anyone else,&and it crushes %yarmor%w, shatters&"
+                               "%cice%w and smashes heavy pots.^Stronger arms carry it&"
+                               "farther: %gSilver Gauntlets%w free&your feet and your aim,^"
+                               "and %gGolden%w ones swing it&one-handed to %rguard%w you.");
+    Z64Items_SetPauseText(&ball, "%rBall and Chain&%wHold %y\xA1%w to spin, release to throw. %g\xA4%w&"
+                                 "or %y\xA5%w to aim.");
     Z64Items_SetCanUse(&ball, CanLiftBall);
     Z64Items_SetAction(&ball, TakeOutBall, UpdateBallInHand);
     Z64Items_SetHeldCallbacks(&ball, StartSpinning, PutBallAway, NULL);

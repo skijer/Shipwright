@@ -9,6 +9,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "soh/ModApi/Player/PlayerHookTypes.h"
 
 #define MOD_NAME "spiritual_stones"
 #define STATUE_ACTOR_KEY "spiritual_stones.statue"
@@ -76,17 +77,17 @@ static const Gfx sEmptySegment[4] = {
 
 static const StoneInfo sStones[STONE_MAX] = {
     { "nei.spiritual_stone.kokiri", sStoneIcons[STONE_KOKIRI], sStoneNames[STONE_KOKIRI], QUEST_KOKIRI_EMERALD,
-      "You got the %gKokiri's Emerald%w!&The forest quickens your step&while you carry it.^%rHold%w %y\xA1%w to "
-      "plant an owl statue&here, and press %y\xA1%w to return to it.",
-      "%gKokiri's Emerald&%wYou walk faster. Hold %y\xA1%w to plant&a warp, press %y\xA1%w to return." },
+      "You got the %gKokiri's Emerald%w!&The forest quickens your step&while you carry it.^"
+      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
+      "%gKokiri's Emerald&%wYou walk faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
     { "nei.spiritual_stone.goron", sStoneIcons[STONE_GORON], sStoneNames[STONE_GORON], QUEST_GORON_RUBY,
-      "You got the %rGoron's Ruby%w!&The mountain steadies your climb&while you carry it.^%rHold%w %y\xA1%w to "
-      "plant an owl statue&here, and press %y\xA1%w to return to it.",
-      "%rGoron's Ruby&%wYou climb faster. Hold %y\xA1%w to plant&a warp, press %y\xA1%w to return." },
+      "You got the %rGoron's Ruby%w! The&mountain steadies your climb&while you carry it.^"
+      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
+      "%rGoron's Ruby&%wYou climb faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
     { "nei.spiritual_stone.zora", sStoneIcons[STONE_ZORA], sStoneNames[STONE_ZORA], QUEST_ZORA_SAPPHIRE,
-      "You got the %cZora's Sapphire%w!&The lake carries you while you&carry it.^%rHold%w %y\xA1%w to plant an owl "
-      "statue&here, and press %y\xA1%w to return to it.",
-      "%cZora's Sapphire&%wYou swim faster. Hold %y\xA1%w to plant&a warp, press %y\xA1%w to return." },
+      "You got the %cZora's Sapphire%w!&The lake carries you while you&carry it.^"
+      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
+      "%cZora's Sapphire&%wYou swim faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
 };
 
 static const Color_RGB8 sStoneGlow[STONE_MAX] = {
@@ -99,7 +100,7 @@ static const u16 sItemButtons[BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, B
                                                 BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
 static const char* const sRequiredHooks[] = {
-    "OnPlayerUpdate",
+    "OnPlayerUpdate", "OnPlayerResolveMotionScale", "OnKaleidoInput", "OnPlayDrawBegin", "OnPlayDrawEnd",
     "OnSceneInit",
     "OnLoadFile",
     "OnSceneSpawnActors",
@@ -116,6 +117,39 @@ static bool sIsVoidDamageWaived;
 static uint8_t sStoneHoldFrames[STONE_MAX];
 static Actor* sStatues[STONE_MAX];
 static int8_t sPendingWarpStone = -1;
+static u8 sPassiveDisabled;
+// The vanilla quest renderer reads gItemIcons directly. Substitute only during the draw;
+// display-list texture pointers retain their own stable OTR names after restoration.
+static void* sQuestIconBackup[STONE_MAX];
+static bool sQuestIconsPatched;
+static const ALIGN_ASSET(2) char sPassiveOffIcons[STONE_MAX][80]={
+    "__OTR__textures/icon_item_custom/gStonePassiveOff0Tex",
+    "__OTR__textures/icon_item_custom/gStonePassiveOff1Tex",
+    "__OTR__textures/icon_item_custom/gStonePassiveOff2Tex"
+};
+static void RestoreQuestIcons(void) {
+    if(!sQuestIconsPatched)return;
+    for(int stone=0;stone<STONE_MAX;++stone)gItemIcons[ITEM_KOKIRI_EMERALD+stone]=sQuestIconBackup[stone];
+    sQuestIconsPatched=false;
+}
+static void DrawStoneState(void) {
+    RestoreQuestIcons();
+    if(!gPlayState || gPlayState->pauseCtx.state==0 || !KaleidoQuestManager_IsVanillaPageShown())return;
+    for(int stone=0;stone<STONE_MAX;++stone) {
+        sQuestIconBackup[stone]=gItemIcons[ITEM_KOKIRI_EMERALD+stone];
+        if(sPassiveDisabled&(1<<stone))gItemIcons[ITEM_KOKIRI_EMERALD+stone]=(void*)sPassiveOffIcons[stone];
+    }
+    sQuestIconsPatched=true;
+}
+static void ToggleStonePassive(PlayState* play,Input* input,bool* handled) {
+    if(*handled || !(input->press.button&BTN_A) || play->pauseCtx.pageIndex!=PAUSE_QUEST || !KaleidoQuestManager_IsVanillaPageShown())return;
+    int stone=play->pauseCtx.cursorPoint[PAUSE_QUEST]-QUEST_KOKIRI_EMERALD;
+    if(stone<0 || stone>=STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem))return;
+    sPassiveDisabled^=1<<stone;
+    sApi->StorageSet(MOD_NAME,"passive_disabled",&sPassiveDisabled,sizeof(sPassiveDisabled));
+    *handled=true;input->press.button&=~BTN_A;
+    Audio_PlaySfxGeneral(NA_SE_SY_DECIDE,&gSfxDefaultPos,4,&gSfxDefaultFreqAndVolScale,&gSfxDefaultFreqAndVolScale,&gSfxDefaultReverb);
+}
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
     Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -274,25 +308,28 @@ static void TickStoneButtons(Player* player, PlayState* play) {
     }
 }
 
-// The hook runs once the player has already stepped his speed toward the stick, so the buff scales the
-// result and speedXZ with it: the mover reads that one, not linearVelocity.
-static void Rush(Player* player, float boost) {
-    player->linearVelocity *= boost;
-    player->actor.speedXZ = player->linearVelocity;
+static void ResolveStoneMotion(Player* player,int32_t kind,float* scale) {
+    if(!gPlayState || IsPlayerBusy(player,gPlayState)) return;
+    if(kind==SOH_PLAYER_MOTION_WATER_SPEED && (player->stateFlags1&PLAYER_STATE1_IN_WATER) &&
+       !(sPassiveDisabled&(1<<STONE_ZORA)) && CHECK_QUEST_ITEM(QUEST_ZORA_SAPPHIRE)) {
+        *scale*=STONE_SWIM_BOOST;
+    } else if((kind==SOH_PLAYER_MOTION_STICK_SPEED || kind==SOH_PLAYER_MOTION_SPEED_CAP) &&
+        !(player->stateFlags1&(PLAYER_STATE1_IN_WATER|PLAYER_STATE1_CLIMBING_LADDER)) &&
+        (player->actor.bgCheckFlags&1) && !(sPassiveDisabled&(1<<STONE_KOKIRI)) && CHECK_QUEST_ITEM(QUEST_KOKIRI_EMERALD)) {
+        *scale*=STONE_WALK_BOOST;
+    }
 }
-
-static void ApplyStoneBuffs(Player* player) {
-    if (CHECK_QUEST_ITEM(QUEST_ZORA_SAPPHIRE) && (player->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
-        Rush(player, STONE_SWIM_BOOST);
-        return;
-    }
-    if (CHECK_QUEST_ITEM(QUEST_GORON_RUBY) && (player->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER)) {
-        player->skelAnime.playSpeed *= STONE_CLIMB_BOOST;
-        return;
-    }
-    if (CHECK_QUEST_ITEM(QUEST_KOKIRI_EMERALD) && (player->actor.bgCheckFlags & 1)) {
-        Rush(player, STONE_WALK_BOOST);
-    }
+void Player_Action_8084BF1C(Player*,PlayState*);
+static void BoostStoneClimb(bool* should,va_list args) {
+    Player* player=va_arg(args,Player*);
+    if(!*should || !gPlayState || IsPlayerBusy(player,gPlayState) ||
+       (sPassiveDisabled&(1<<STONE_GORON)) || !CHECK_QUEST_ITEM(QUEST_GORON_RUBY) ||
+       !(player->stateFlags1&PLAYER_STATE1_CLIMBING_LADDER) || player->actionFunc!=Player_Action_8084BF1C) return;
+    // Advance the native climb twice before its root movement is applied. Each step retains endpoint checks.
+    *should=false;
+    Player_Action_8084BF1C(player,gPlayState);
+    if(player->actionFunc==Player_Action_8084BF1C && (player->stateFlags1&PLAYER_STATE1_CLIMBING_LADDER))
+        Player_Action_8084BF1C(player,gPlayState);
 }
 
 static void StatueDraw(Actor* thisx, PlayState* play) {
@@ -342,6 +379,8 @@ static void ForgetSceneState(int16_t sceneNum) {
 
 static void ReloadState(int32_t fileNum) {
     LoadState();
+    sPassiveDisabled=0;
+    sApi->StorageGet(MOD_NAME,"passive_disabled",&sPassiveDisabled,sizeof(sPassiveDisabled));
     sOwnedQuestItems = 0xFFFFFFFF;
 }
 
@@ -358,7 +397,6 @@ static void TickMod(void) {
         return;
     }
     TickStoneButtons(player, play);
-    ApplyStoneBuffs(player);
 }
 
 static bool RegisterStatueActor(void) {
@@ -408,8 +446,13 @@ SOH_MOD_EXPORT void ModInit(void) {
             return;
         }
     }
-    LoadState();
+    ReloadState(0);
+    SOH_REGISTER_HOOK(sApi,OnPlayerResolveMotionScale,ResolveStoneMotion);
+    SOH_REGISTER_HOOK(sApi,OnKaleidoInput,ToggleStonePassive);
+    SOH_REGISTER_HOOK(sApi,OnPlayDrawBegin,DrawStoneState);
+    SOH_REGISTER_HOOK(sApi,OnPlayDrawEnd,RestoreQuestIcons);
     sApi->RegisterVB(VB_INFLICT_VOID_DAMAGE, WaiveVoidDamage);
+    sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC,BoostStoneClimb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickMod);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetSceneState);
     SOH_REGISTER_HOOK(sApi, OnLoadFile, ReloadState);

@@ -1217,10 +1217,11 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&hourglass, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&hourglass, 0, 17, 0);
-    Z64Items_SetTextbox(&hourglass, "You got the %rPhantom Hourglass%w!&Sand that remembers where&everything has "
-                                    "been.^Press %y\xA1%w to hold the world still,&look at something and press "
-                                    "again:&it walks its own path backwards.^Hold %y\xA3%w while it is up and %gyou%w "
-                                    "go&back instead. It spends %gmagic%w.");
+    Z64Items_SetTextbox(&hourglass, "You got the %rPhantom&Hourglass%w! Sand that&remembers where everything&"
+                                    "has been.^Press %y\xA1%w to hold the world still,&"
+                                    "look at something and press&again: it walks its own path&backwards.^"
+                                    "Hold %y\xA3%w while it is up and %gyou%w go&"
+                                    "back instead. It spends %gmagic%w.");
     Z64Items_SetPauseText(&hourglass, "%rPhantom Hourglass&%wPress %y\xA1%w to stop time and aim,&again to recall. "
                                       "%y\xA3%w rewinds you.");
     // The glass answers the button from its own tick, which runs after the engine has finished with the

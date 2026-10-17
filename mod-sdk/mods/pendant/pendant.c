@@ -1,7 +1,6 @@
 /**
- * Pendant of Memories: three borrowed moves on B. From a sheathed stand near an enemy, a Mortal Draw that kills
- * in one cut; in mid air, a ground pound that bounces off what it hits; locked on after three side hops, a
- * parry leap over the enemy. A on its cell turns the moves off.
+ * Pendant of Memories: Mortal Draw and aerial ground pound on B; hop, roll, hop and a timed B after
+ * Navi's cue launch the parry arc. A on the pendant's pause cell toggles the moves.
  */
 
 #include <math.h>
@@ -12,6 +11,9 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "regs.h"
+#include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/Player/PlayerHookTypes.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 
@@ -33,7 +35,7 @@
 #define PARRY_ARC_HEIGHT 80.0f
 #define PARRY_LAND_DIST 120.0f
 #define PARRY_LANDING_FRAMES 12
-#define PARRY_HOPS_TO_ARM 3
+#define PARRY_TIMING_FRAMES 6
 #define PARRY_HOP_WINDOW 60
 #define DEFAULT_GRAVITY (-1.2f)
 #define BGCHECK_ON_GROUND 0x0001
@@ -42,10 +44,12 @@
 static const ALIGN_ASSET(2) char sIcon[] = "__OTR__icon_item_static_yar/gItemIconPendantOfMemoriesTex";
 static const ALIGN_ASSET(2) char sName[] = "__OTR__item_name_static/gItemNamePendantOfMemoriesENGTex";
 static const ALIGN_ASSET(2) char sGetItemDL[] = "__OTR__objects/object_gi_reserve_c_01/gGiPendantOfMemoriesDL";
+static const ALIGN_ASSET(2) char sGroundPoundAnim[] = "__OTR__misc/link_animetion/nei_pendant_ground_pound";
 
 int Player_IsZTargeting(Player* player);
 void func_80837948(PlayState* play, Player* player, s32 meleeWeaponAnim);
 void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
+void func_80839FFC(Player* player, PlayState* play);
 
 typedef enum {
     PENDANT_IDLE,
@@ -62,6 +66,21 @@ typedef enum {
 static const SOHModApi* sApi;
 
 static ColliderCylinder sStrikeCollider;
+static ColliderJntSph sParryCollider;
+static ColliderJntSphElement sParryElement;
+static bool sParryReady;
+static bool sSecondHopPending;
+static bool sComboLandingPending;
+static bool sComboWasAirborne;
+static f32 sSavedGravity;
+static ColliderJntSphElementInit sParryElementInit = {
+    { ELEMTYPE_UNK2, { DMG_JUMP_SLASH, 0x00, 0x08 }, { 0, 0, 0 },
+      TOUCH_ON | TOUCH_NEAREST | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { 0, { { 0, 0, 0 }, 36 }, 100 },
+};
+static ColliderJntSphInit sParryInit = {
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_JNTSPH }, 1, &sParryElementInit,
+};
 
 static ColliderCylinderInit sStrikeColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
@@ -84,7 +103,8 @@ static struct {
 } sPendant;
 
 static bool IsActive(void) {
-    return CustomEquipRegistry_IsOwned(PENDANT_KEY) && CustomEquipRegistry_IsToggleOn(PENDANT_KEY);
+    return CustomEquipRegistry_IsOwned(PENDANT_KEY) && CustomEquipRegistry_IsToggleOn(PENDANT_KEY) &&
+           !CustomEquipRegistry_IsWorn("nei.equip.trident") && !CustomEquipRegistry_IsWorn("nei.equip.byrna");
 }
 
 static bool IsGrounded(Player* player) {
@@ -93,7 +113,8 @@ static bool IsGrounded(Player* player) {
 
 static bool IsPlayerBusy(Player* player) {
     return (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
-                                   PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM)) != 0;
+                                   PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_DAMAGED |
+                                   PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_IN_WATER | PLAYER_STATE1_TALKING)) != 0;
 }
 
 static bool IsBPressed(PlayState* play) {
@@ -137,6 +158,9 @@ static void ReturnToIdle(void) {
 }
 
 static void ResetMoves(void) {
+    sSecondHopPending = false;
+    sComboLandingPending = false;
+    sComboWasAirborne = false;
     ReturnToIdle();
     sPendant.hops = 0;
     sPendant.hopTimer = 0;
@@ -151,6 +175,14 @@ static void EnsureStrikeCollider(PlayState* play, Player* player) {
     Collider_InitCylinder(play, &sStrikeCollider);
     Collider_SetCylinder(play, &sStrikeCollider, &player->actor, &sStrikeColliderInit);
     sPendant.isColliderReady = true;
+}
+
+static void EnsureParryCollider(PlayState* play, Player* player) {
+    if (!sParryReady) {
+        Collider_InitJntSph(play, &sParryCollider);
+        Collider_SetJntSph(play, &sParryCollider, &player->actor, &sParryInit, &sParryElement);
+        sParryReady = true;
+    }
 }
 
 static void StrikeAround(PlayState* play, Player* player, Vec3f* center) {
@@ -263,7 +295,7 @@ static void UpdateDrawRecovery(Player* player) {
 // ---- Ground Pound ----
 
 static bool CanGroundPound(Player* player, PlayState* play) {
-    return (player->stateFlags3 & PLAYER_STATE3_MIDAIR) && Player_GetMeleeWeaponHeld(player) != 0 && IsBPressed(play);
+    return !IsGrounded(player) && Player_GetMeleeWeaponHeld(player) != 0 && IsBPressed(play);
 }
 
 static void HoldStill(Player* player) {
@@ -275,14 +307,17 @@ static void HoldStill(Player* player) {
 }
 
 static void PlantSwordPose(Player* player, PlayState* play, f32 playSpeed, f32 morph) {
-    ChangeAnim(play, player, gPlayerAnim_002840, playSpeed, GetLastFrame(gPlayerAnim_002840), 0.0f, ANIMMODE_ONCE,
-               morph);
+    LinkAnimationHeader* clip = ResourceMgr_LoadPlayerAnimAsHeader(sGroundPoundAnim);
+    if (clip == NULL) return;
+    LinkAnimation_Change(play, &player->skelAnime, clip, playSpeed, 89.0f,
+                         playSpeed < 0.0f ? 0.0f : 89.0f, playSpeed < 0.0f ? ANIMMODE_ONCE : ANIMMODE_LOOP, morph);
 }
 
-// The sword is raised with the pedestal plant played backwards and frozen on its last frame.
+// MM's return-to-the-past clip is held on frame 89 until the landing starts its reverse playback.
 static void StartGroundPound(Player* player, PlayState* play) {
     sPendant.state = PENDANT_GPOUND_STALL;
     sPendant.timer = 0;
+    sSavedGravity = player->actor.gravity;
     HoldStill(player);
     PlantSwordPose(player, play, 0.0f, -3.0f);
     EnsureStrikeCollider(play, player);
@@ -291,6 +326,7 @@ static void StartGroundPound(Player* player, PlayState* play) {
 
 static void UpdateGroundPoundStall(Player* player, PlayState* play) {
     HoldStill(player);
+    LinkAnimation_Update(play, &player->skelAnime);
     if (++sPendant.timer < GPOUND_STALL_FRAMES) {
         return;
     }
@@ -298,9 +334,7 @@ static void UpdateGroundPoundStall(Player* player, PlayState* play) {
     sPendant.timer = 0;
     player->actor.velocity.y = GPOUND_FALL_VELOCITY;
     player->actor.gravity = GPOUND_FALL_GRAVITY;
-    // The swing sets the sword's damage and takes over the animation, so the slam pose goes on after it.
-    func_80837948(play, player, PLAYER_MWA_JUMPSLASH_START);
-    PlantSwordPose(player, play, -2.0f, 0.0f);
+    PlantSwordPose(player, play, 0.0f, 0.0f);
 }
 
 static void LandGroundPound(Player* player, PlayState* play) {
@@ -310,23 +344,23 @@ static void LandGroundPound(Player* player, PlayState* play) {
     Rumble_Request(0.0f, 255, 20, 150);
     ShakeCamera(play, 28000, 14, 2, 100, 16);
     PlaySfx(player, NA_SE_IT_HAMMER_HIT);
-    ChangeAnim(play, player, gPlayerAnim_link_normal_landing, 1.0f, 0.0f, GetLastFrame(gPlayerAnim_link_normal_landing),
-               ANIMMODE_ONCE, -6.0f);
-    player->actor.gravity = -1.0f;
+    PlantSwordPose(player, play, -1.0f, -3.0f);
+    player->actor.gravity = sSavedGravity;
+    player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
+    player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
 }
 
 static void UpdateGroundPoundFall(Player* player, PlayState* play) {
     sPendant.timer++;
     player->actor.gravity = GPOUND_FALL_GRAVITY;
     player->linearVelocity = 0.0f;
-    // The melee action keeps putting its own clip back.
-    if (player->skelAnime.animation != (LinkAnimationHeader*)gPlayerAnim_002840) {
-        PlantSwordPose(player, play, -2.0f, 0.0f);
-    }
+    // One held pose throughout the fall; playback begins only on impact, in reverse.
+    PlantSwordPose(player, play, 0.0f, 0.0f);
+    LinkAnimation_Update(play, &player->skelAnime);
     // Last frame's hit is read before the collider is registered again: a pogo off whatever it struck.
     if (ConsumeStrikeHit()) {
         player->actor.velocity.y = GPOUND_BOUNCE_VELOCITY;
-        player->actor.gravity = DEFAULT_GRAVITY;
+        player->actor.gravity = sSavedGravity;
         sStrikeCollider.base.atFlags &= ~AT_ON;
         PlaySfx(player, NA_SE_IT_SWORD_STRIKE);
         ReturnToIdle();
@@ -337,7 +371,7 @@ static void UpdateGroundPoundFall(Player* player, PlayState* play) {
         LandGroundPound(player, play);
     }
     if (sPendant.timer > GPOUND_TIMEOUT) {
-        player->actor.gravity = DEFAULT_GRAVITY;
+        player->actor.gravity = sSavedGravity;
         ReturnToIdle();
     }
 }
@@ -350,150 +384,13 @@ static void UpdateGroundPoundLanding(Player* player, PlayState* play) {
             PlaySfx(player, NA_SE_IT_SWORD_STRIKE);
         }
     }
-    if (sPendant.timer > GPOUND_LANDING_FRAMES) {
+    if (LinkAnimation_Update(play, &player->skelAnime)) {
+        player->actor.gravity = sSavedGravity;
         ReturnToIdle();
     }
 }
 
-// ---- Parry Leap ----
-
-static void TrackSideHops(Player* player) {
-    bool isHopping = (player->stateFlags2 & PLAYER_STATE2_HOPPING) != 0;
-
-    if (!Player_IsZTargeting(player)) {
-        sPendant.hops = 0;
-        sPendant.isLeapArmed = false;
-        sPendant.wasHopping = false;
-        return;
-    }
-    if (isHopping && !sPendant.wasHopping) {
-        sPendant.hops++;
-        sPendant.hopTimer = 0;
-        if (sPendant.hops >= PARRY_HOPS_TO_ARM && !sPendant.isLeapArmed) {
-            sPendant.isLeapArmed = true;
-            Sfx_PlaySfxCentered(NA_SE_SY_LOCK_ON);
-        }
-    }
-    sPendant.wasHopping = isHopping;
-    if (++sPendant.hopTimer > PARRY_HOP_WINDOW) {
-        sPendant.hops = 0;
-        sPendant.isLeapArmed = false;
-    }
-}
-
-static bool CanParryLeap(Player* player, PlayState* play) {
-    if (!sPendant.isLeapArmed || !IsBPressed(play)) {
-        return false;
-    }
-    sPendant.isLeapArmed = false;
-    sPendant.hops = 0;
-    return player->focusActor != NULL;
-}
-
-static void PlayRollLoop(Player* player, PlayState* play) {
-    ChangeAnim(play, player, gPlayerAnim_link_normal_landing_roll, 3.0f, 0.0f,
-               GetLastFrame(gPlayerAnim_link_normal_landing_roll), ANIMMODE_LOOP, -3.0f);
-}
-
-// A negative invincibility timer is intangibility without the red flash.
-static void StartParryLeap(Player* player, PlayState* play) {
-    Actor* target = player->focusActor;
-    f32 dx = target->world.pos.x - player->actor.world.pos.x;
-    f32 dz = target->world.pos.z - player->actor.world.pos.z;
-    f32 distXZ = MAX(sqrtf(SQ(dx) + SQ(dz)), 1.0f);
-    s16 yaw = Actor_WorldYawTowardActor(&player->actor, target);
-
-    sPendant.state = PENDANT_PARRY_ARC;
-    sPendant.timer = 0;
-    sPendant.target = target;
-    sPendant.hasParryHit = false;
-    sPendant.arcStart = player->actor.world.pos;
-    sPendant.arcEnd.x = target->world.pos.x + (dx / distXZ) * PARRY_LAND_DIST;
-    sPendant.arcEnd.y = sPendant.arcStart.y;
-    sPendant.arcEnd.z = target->world.pos.z + (dz / distXZ) * PARRY_LAND_DIST;
-    HoldStill(player);
-    player->actor.bgCheckFlags &= ~BGCHECK_ON_GROUND;
-    player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
-    player->invincibilityTimer = -(PARRY_ARC_FRAMES + 5);
-    func_80837948(play, player, PLAYER_MWA_JUMPSLASH_START);
-    player->actor.shape.rot.y = yaw;
-    player->yaw = yaw;
-    PlayRollLoop(player, play);
-    EnsureStrikeCollider(play, player);
-    PlaySfx(player, NA_SE_IT_SWORD_SWING_HARD);
-}
-
-static void SilenceSwordQuads(Player* player) {
-    player->meleeWeaponQuads[0].base.atFlags &= ~AT_ON;
-    player->meleeWeaponQuads[1].base.atFlags &= ~AT_ON;
-    player->meleeWeaponState = 0;
-}
-
-// One hit only, on the enemy itself: the melee system would otherwise land a second one on the way down.
-static void StrikeParryTarget(Player* player, PlayState* play) {
-    if (sPendant.hasParryHit) {
-        SilenceSwordQuads(player);
-        return;
-    }
-    StrikeAround(play, player, &sPendant.target->world.pos);
-    if (!ConsumeStrikeHit()) {
-        return;
-    }
-    sPendant.hasParryHit = true;
-    sStrikeCollider.base.atFlags &= ~AT_ON;
-    SilenceSwordQuads(player);
-    PlaySfx(player, NA_SE_IT_SWORD_STRIKE);
-}
-
-static void EndParryArc(Player* player, PlayState* play) {
-    sPendant.state = PENDANT_PARRY_LANDING;
-    sPendant.timer = 0;
-    player->actor.gravity = DEFAULT_GRAVITY;
-}
-
-static void UpdateParryArc(Player* player, PlayState* play) {
-    f32 t;
-
-    if (!IsActorAlive(play, sPendant.target)) {
-        EndParryArc(player, play);
-        return;
-    }
-    t = MIN((f32)++sPendant.timer / PARRY_ARC_FRAMES, 1.0f);
-    if (player->skelAnime.animation != (LinkAnimationHeader*)gPlayerAnim_link_normal_landing_roll) {
-        PlayRollLoop(player, play);
-    }
-    player->actor.world.pos.x = sPendant.arcStart.x + (sPendant.arcEnd.x - sPendant.arcStart.x) * t;
-    player->actor.world.pos.z = sPendant.arcStart.z + (sPendant.arcEnd.z - sPendant.arcStart.z) * t;
-    player->actor.world.pos.y = sPendant.arcStart.y + (sPendant.arcEnd.y - sPendant.arcStart.y) * t +
-                                PARRY_ARC_HEIGHT * 4.0f * t * (1.0f - t);
-    HoldStill(player);
-    player->cylinder.base.ocFlags1 &= ~OC1_ON;
-    StrikeParryTarget(player, play);
-    player->actor.shape.rot.y = Actor_WorldYawTowardActor(&player->actor, sPendant.target);
-    player->yaw = player->actor.shape.rot.y;
-
-    if (sPendant.timer >= PARRY_ARC_FRAMES) {
-        EndParryArc(player, play);
-        ChangeAnim(play, player, gPlayerAnim_link_normal_landing, 1.5f, 0.0f,
-                   GetLastFrame(gPlayerAnim_link_normal_landing), ANIMMODE_ONCE, -3.0f);
-        PlaySfx(player, NA_SE_PL_WALK_GROUND);
-    } else if (player->actor.bgCheckFlags & BGCHECK_TOUCHING_CEILING) {
-        EndParryArc(player, play);
-    }
-}
-
-static void UpdateParryLanding(Player* player) {
-    if (!IsGrounded(player) && ++sPendant.timer <= PARRY_LANDING_FRAMES) {
-        return;
-    }
-    player->linearVelocity = 0.0f;
-    player->actor.velocity.x = 0.0f;
-    player->actor.velocity.y = 0.0f;
-    player->actor.velocity.z = 0.0f;
-    player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
-    player->cylinder.base.ocFlags1 |= OC1_ON;
-    ReturnToIdle();
-}
+#include "pendant_combo.inc.c"
 
 static void StartMoveFromIdle(Player* player, PlayState* play) {
     Actor* drawTarget;
@@ -503,10 +400,10 @@ static void StartMoveFromIdle(Player* player, PlayState* play) {
         StartMortalDraw(player, play, drawTarget);
     } else if (CanGroundPound(player, play)) {
         StartGroundPound(player, play);
-    } else if (CanParryLeap(player, play)) {
-        StartParryLeap(player, play);
     }
 }
+
+static void ReleasePendantAction(Player* player);
 
 static void TickPendant(void) {
     PlayState* play = gPlayState;
@@ -517,6 +414,7 @@ static void TickPendant(void) {
     }
     player = GET_PLAYER(play);
     if (!IsActive() || IsPlayerBusy(player)) {
+        ReleasePendantAction(player);
         if (sPendant.state != PENDANT_IDLE) {
             player->cylinder.base.ocFlags1 |= OC1_ON;
             player->skelAnime.playSpeed = 1.0f;
@@ -524,6 +422,7 @@ static void TickPendant(void) {
         ResetMoves();
         return;
     }
+    if (sSecondHopPending && sPendant.state == PENDANT_IDLE) ConfigureSecondHopAnimation(player);
     switch (sPendant.state) {
         case PENDANT_IDLE:
             StartMoveFromIdle(player, play);
@@ -538,23 +437,54 @@ static void TickPendant(void) {
             UpdateDrawRecovery(player);
             break;
         case PENDANT_GPOUND_STALL:
-            UpdateGroundPoundStall(player, play);
-            break;
         case PENDANT_GPOUND_FALLING:
-            UpdateGroundPoundFall(player, play);
-            break;
         case PENDANT_GPOUND_LANDING:
-            UpdateGroundPoundLanding(player, play);
-            break;
         case PENDANT_PARRY_ARC:
-            UpdateParryArc(player, play);
-            break;
         case PENDANT_PARRY_LANDING:
-            UpdateParryLanding(player);
+            // These run in place of the native action, before physics, rather than fighting its poses afterward.
             break;
         default:
             ReturnToIdle();
             break;
+    }
+}
+
+static bool OwnsPendantAction(void) {
+    return sPendant.state >= PENDANT_GPOUND_STALL;
+}
+
+static void ReleasePendantAction(Player* player) {
+    if (!OwnsPendantAction()) return;
+    player->actor.gravity = sSavedGravity;
+    player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
+    player->stateFlags2 &= ~PLAYER_STATE2_HOPPING;
+    player->cylinder.base.ocFlags1 |= OC1_ON;
+    player->skelAnime.playSpeed = 1.0f;
+    if (sParryReady) sParryCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+    if (sPendant.isColliderReady) sStrikeCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+}
+
+static void DrivePendantAction(bool* should, va_list args) {
+    Player* player = va_arg(args, Player*);
+    PlayState* play = gPlayState;
+    if (play == NULL || !OwnsPendantAction()) return;
+    if (!IsActive() || IsPlayerBusy(player)) {
+        ReleasePendantAction(player);
+        ResetMoves();
+        return;
+    }
+    *should = false;
+    SilenceSwordQuads(player);
+    switch (sPendant.state) {
+        case PENDANT_GPOUND_STALL: UpdateGroundPoundStall(player,play); break;
+        case PENDANT_GPOUND_FALLING: UpdateGroundPoundFall(player,play); break;
+        case PENDANT_GPOUND_LANDING: UpdateGroundPoundLanding(player,play); break;
+        case PENDANT_PARRY_ARC: UpdateParryArc(player,play); break;
+        case PENDANT_PARRY_LANDING:
+            LinkAnimation_Update(play,&player->skelAnime);
+            UpdateParryLanding(player);
+            break;
+        default: break;
     }
 }
 
@@ -572,13 +502,17 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
 static void ForgetSceneState(int16_t sceneNum) {
     ResetMoves();
     sPendant.isColliderReady = false;
+    sParryReady = false;
+    sBoundsActor = NULL;
 }
 
 static void TurnOff(const char* key) {
+    if (gPlayState != NULL) ReleasePendantAction(GET_PLAYER(gPlayState));
     ResetMoves();
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnSceneInit", "OnPlayerResolveAnimSite",
+    "OnPlayerFilterInput", "OnActorUpdate", "OnPlayerPostLimbDraw", "OnActorResolveMotionScale" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -598,11 +532,13 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = PENDANT_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rPendant of Memories&%w%y\xA0%w near an enemy with your sword sheathed draws and "
-                           "strikes. %y\xA0%w in mid air slams down. Locked on, three side hops then %y\xA0%w leap "
-                           "over the foe. %y\x9F%w turns it off.";
-    definition.getItemText = "You got the %rPendant of Memories%w!&A keepsake from Kafei, proof of his promise. "
-                             "It remembers the moves of heroes from other tales, and they answer to %y\xA0%w.";
+    definition.pauseText = "%rPendant of Memories&%w%y\xA0%w near an enemy with your sword&"
+                           "sheathed draws and strikes. %y\xA0%w in&mid air slams down.^"
+                           "Locked on: %y\x9F%w, %y\x9F%w, %y\x9F%w.&Hop, roll, hop. At the Hey and&"
+                           "sword glow, tap %y\xA0%w. No bosses.^"
+                           "The timing window is brief.&%y\x9F%w on this slot turns it off.";
+    definition.getItemText = "You got the %rPendant of&Memories%w! A keepsake from&Kafei, proof of his promise.^"
+                             "It remembers the moves of&heroes from other tales, and&they answer to %y\xA0%w.";
     definition.slot = SOH_EQUIP_SLOT_UPGRADE;
     definition.page = 0;
     definition.row = 1;
@@ -617,4 +553,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickPendant);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetSceneState);
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveAnimSite, ResolveComboHop);
+    SOH_REGISTER_HOOK(sApi, OnActorResolveMotionScale, ExtendComboHopTravel);
+    SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, ReadParryInput);
+    SOH_REGISTER_HOOK(sApi, OnActorUpdate, SampleTargetBounds);
+    SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawParryCue);
+    sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC, DrivePendantAction);
 }

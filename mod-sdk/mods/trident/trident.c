@@ -14,6 +14,8 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "overlays/actors/ovl_En_M_Thunder/z_en_m_thunder.h"
+#include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "objects/object_link_boy/object_link_boy.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
@@ -360,6 +362,7 @@ typedef enum {
 } LanceState;
 
 static const SOHModApi* sApi;
+static Input sLanceInput;
 static s16 sProjectileActorId = -1;
 static s16 sProjectileGrace;
 static Projectile* sLiveProjectiles[16];
@@ -600,7 +603,7 @@ static void StartSwing(PlayState* play, Player* player, const Swing* swing, bool
         return;
     }
     if (!IsInLanceAction(player)) {
-        Player_SetupAction(play, player, LanceAction, 0);
+        Player_SetupActionPreserveItemAction(play, player, LanceAction, 0);
     }
     sLance.state = LANCE_SWING;
     sLance.swing = swing;
@@ -1021,13 +1024,19 @@ static void UpdateFlight(PlayState* play, Player* player, Input* input) {
     TouchDown(play, player, vy);
 }
 
+static int sFlightStartupFrames;
 static void TakeOff(PlayState* play, Player* player) {
     if (LoadClip(CLIP_FLY_START) == NULL) {
         return;
     }
-    Player_SetupAction(play, player, LanceAction, 0);
+    player->itemAction=player->heldItemAction;
+    Player_SetupActionPreserveItemAction(play, player, LanceAction, 0);
+    player->actor.world.pos.y+=20.0f;
+    player->actor.prevPos=player->actor.world.pos;
+    player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
     sLance.swing = NULL;
-    sLance.flyMagicTick = 0;
+    sLance.flyMagicTick = 0;sFlightStartupFrames=4;
+    sLance.areBootsHeavy=false;Player_SetBootData(play,player);
     sLance.launchTarget = NULL;
     player->meleeWeaponState = 0;
     player->linearVelocity = 0.0f;
@@ -1074,7 +1083,7 @@ static void StartDash(PlayState* play, Player* player) {
     if (LoadClip(CLIP_DASH_START) == NULL) {
         return;
     }
-    Player_SetupAction(play, player, LanceAction, 0);
+    Player_SetupActionPreserveItemAction(play, player, LanceAction, 0);
     sLance.swing = NULL;
     sLance.state = LANCE_DASH_START;
     player->linearVelocity = 0.0f;
@@ -1085,7 +1094,7 @@ static void StartDash(PlayState* play, Player* player) {
 
 // Its own action, so damage, water or a cutscene replace it the way they replace any vanilla one.
 static void LanceAction(Player* player, PlayState* play) {
-    Input* input = &play->state.input[0];
+    Input* input = &sLanceInput;
 
     player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
     if (IsFlightState(sLance.state)) {
@@ -1802,7 +1811,7 @@ static bool CanTakeOff(Player* player) {
 
 // R+B is tested before the R+A hold, so a deliberate dash is never swallowed by the take-off counter.
 static void ReadGuardButtons(PlayState* play, Player* player) {
-    Input* input = &play->state.input[0];
+    Input* input = &sLanceInput;
     bool isRHeld = CHECK_BTN_ALL(input->cur.button, BTN_R);
 
     if (isRHeld && CHECK_BTN_ALL(input->press.button, BTN_B) && IsGrounded(player)) {
@@ -1833,7 +1842,7 @@ static void TickComboIdle(Player* player) {
 }
 
 static void TickBHold(PlayState* play) {
-    if (CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_B)) {
+    if (CHECK_BTN_ALL(sLanceInput.cur.button, BTN_B)) {
         sLance.bHold = MIN(sLance.bHold + 1, B_HOLD_TO_CHARGE);
     } else {
         sLance.bHold = 0;
@@ -1852,12 +1861,34 @@ static void TickTrident(void) {
     if (sProjectileGrace > 0) {
         sProjectileGrace--;
     }
+    // Vanilla can select its falling action on leaving a ledge; retain the flight action
+    // until a real interrupt (damage, water, cutscene) gives control back to vanilla.
+    if (IsFlightState(sLance.state) && !IsInLanceAction(player) && CanAct(player)) {
+        player->itemAction = player->heldItemAction;
+        Player_SetupActionPreserveItemAction(play, player, LanceAction, 0);
+        PlayClip(play, player, (ClipId)(CLIP_FLY_START + sLance.state - LANCE_FLY_START),
+                 sLance.state == LANCE_FLY_IDLE, 0.0f);
+    }
+    if(sFlightStartupFrames>0 && IsFlightState(sLance.state)) {
+        --sFlightStartupFrames;
+        player->itemAction=player->heldItemAction;
+        Player_SetupActionPreserveItemAction(play,player,LanceAction,0);
+        player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
+        player->actor.gravity = 0.0f;
+        player->actor.bgCheckFlags&=~BGCHECK_ON_GROUND;
+        player->actor.velocity.y=6.0f;
+        return;
+    }
     if (!IsInLanceAction(player) && sLance.state != LANCE_SWING) {
         ResetFlight(player);
     }
     isDrawn = CanAct(player) && IsWielding(player);
-    WeighDown(play, player, isDrawn);
+    WeighDown(play, player, isDrawn && !IsFlightState(sLance.state));
     SheatheInWater(play, player);
+    if (isDrawn && !IsFlightState(sLance.state) && (sLanceInput.cur.button & BTN_R)) {
+        ReadGuardButtons(play, player);
+        if (IsFlightState(sLance.state)) return;
+    }
     TickBHold(play);
     TickComboIdle(player);
     TickCharge(play, player);
@@ -1865,16 +1896,12 @@ static void TickTrident(void) {
         return;
     }
     ReskinVanillaStrikes(play, player);
-    if (isDrawn) {
-        ReadGuardButtons(play, player);
-    } else {
-        sLance.flyHold = 0;
-    }
+    if (!isDrawn || !(sLanceInput.cur.button & BTN_R)) sLance.flyHold = 0;
 }
 
 // With R+B from the guard the thrust is not a swing either.
 static void TakeMeleeButton(PlayState* play, Player* player, int32_t action, bool* consumed, bool* startedAction) {
-    Input* input = &play->state.input[0];
+    Input* input = &sLanceInput;
     bool isThrust;
 
     if (*consumed || !IsWielding(player) || !IsGrounded(player) || !CanAct(player) ||
@@ -1897,6 +1924,7 @@ static void TakeMeleeButton(PlayState* play, Player* player, int32_t action, boo
 // belongs to the lance.
 static void KeepButtonsFromVanilla(Player* player, Input* input) {
     u16 taken = 0;
+    sLanceInput=gPlayState!=NULL?gPlayState->state.input[0]:*input;
 
     if (!IsWorn()) {
         return;
@@ -1948,6 +1976,8 @@ static void ApplyLanceTrailMatrix(void) {
     Matrix_Translate(TRAIL_BASE, 0.0f, 0.0f, MTXMODE_APPLY);
     Matrix_Scale(1.0f, TRAIL_WIDTH, TRAIL_WIDTH, MTXMODE_APPLY);
 }
+
+#include "trident_thunder.inc.c"
 
 static void TraceLanceSwing(PlayState* play, Player* player) {
     static Vec3f sTipLocal = { TRAIL_TIP - TRAIL_BASE, 0.0f, 0.0f };
@@ -2178,10 +2208,10 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = TRIDENT_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rTrident&%wHold %y\xA0%w to charge. %y\xA3%w+%y\xA0%w dashes; hold %y\xA3%w+%y\x9F%w "
-                           "to fly.";
-    definition.getItemText = "You got the %rTrident%w!&Phantom Ganon's lance. Charge it to call down his master's "
-                             "magic, or hold it high and take to the air as he did.";
+    definition.pauseText = "%rTrident&%wHold %y\xA0%w to charge. %y\xA3%w+%y\xA0%w dashes;&"
+                           "hold %y\xA3%w+%y\x9F%w to fly.";
+    definition.getItemText = "You got the %rTrident%w! Phantom&Ganon's lance.^Charge it to call down his&"
+                             "master's magic, or hold it high&and take to the air as he did.";
     definition.slot = SOH_EQUIP_SLOT_SWORD;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_SWORD;
@@ -2203,6 +2233,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, GripLance);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawLance);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_PLAYER, HideSwingFromSwordHand);
+    SOH_REGISTER_HOOK_FOR_ID(sApi,OnActorDraw,ACTOR_EN_M_THUNDER,ReplaceTridentThunder);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawChargeEffects);
     SOH_REGISTER_HOOK(sApi, OnResolveSwordDamage, StrikeHeavily);
     SOH_REGISTER_HOOK(sApi, OnCollisionResolveDamage, KeepFixedDamage);

@@ -93,15 +93,17 @@ static const Z64WheelEntry sWheelEntries[SLATE_RUNE_COUNT] = {
 };
 
 static const SlateRuneText sRuneTexts[SLATE_RUNE_COUNT] = {
-    { "", "Press %y\xA1%w to draw the slate.", "" },
-    { "%bRemote Bomb%w", "%y\xA1%w draws the slate, again for a&bomb, again to set it off.",
-      "A bomb of its own making, that waits&for your word and never for a fuse." },
-    { "%yStasis%w", "%y\xA1%w draws the slate, again to hold&what you aim at still.",
-      "What it holds leaves time behind, and&keeps every blow you land until it&comes back." },
-    { "%bCryonis%w", "%y\xA1%w draws the slate, again to aim;&%y\x9F%w raises a pillar of ice.",
-      "It pulls a pillar of ice out of any&water, tall enough to climb." },
-    { "%gMaster Cycle Zero%w", "%y\xA1%w draws the slate, again to call&the cycle.",
-      "An ancient machine that answers the&slate and outruns any horse." },
+    { "", "Press %y\xA1%w to draw the slate. Hold&%y\xA2%w for the rune wheel.", "" },
+    { "%bRemote Bomb%w",
+      "%y\xA1%w draws the slate, again for a&bomb, again to set it off. Hold %y\xA2%w&for the rune wheel.",
+      "A bomb of its own making, that&waits for your word and never&for a fuse." },
+    { "%yStasis%w", "%y\xA1%w draws the slate, again to hold&what you aim at still. Hold %y\xA2%w for&the rune wheel.",
+      "What it holds leaves time&behind, and keeps every blow&you land until it comes back." },
+    { "%bCryonis%w",
+      "%y\xA1%w draws the slate, again to aim;&%y\x9F%w raises a pillar of ice. Hold %y\xA2%w&for the rune wheel.",
+      "It pulls a pillar of ice out of&any water, tall enough to climb." },
+    { "%gMaster Cycle Zero%w", "%y\xA1%w draws the slate, again to call&the cycle. Hold %y\xA2%w for the rune&wheel.",
+      "An ancient machine that&answers the slate and outruns&any horse." },
 };
 
 static const u16 sItemButtons[SLATE_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
@@ -111,7 +113,7 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
                                               "OnActorDrawEnd",
                                               "OnSceneInit",
                                               "OnPlayerPostLimbDraw",
-                                              "OnPlayDrawEnd",
+                                              "OnPlayDrawEnd", "OnPlayerFilterInput",
                                               "OnActorDraw",
                                               "OnActorResolveGrayscale",
                                               "OnBgCheckResolveWallFlags",
@@ -204,7 +206,7 @@ static void DescribeRune(u8 rune) {
     if (sShownRune == rune) {
         return;
     }
-    snprintf(sPauseText, sizeof(sPauseText), "%%rSheikah Slate&%%w%s Hold %%y\xA2%%w for the rune wheel.",
+    snprintf(sPauseText, sizeof(sPauseText), "%%rSheikah Slate&%%w%s",
              sRuneTexts[rune].castLine);
     Z64Items_UpdateText(sApi, SLATE_KEY, SOH_ITEM_TEXT_PAUSE, sPauseText);
     sShownRune = rune;
@@ -253,8 +255,8 @@ static bool RegisterRunePickups(void) {
         SOHCustomItemRandomizer logic = sSlateLogic;
         char text[SLATE_TEXT_LENGTH];
 
-        snprintf(text, sizeof(text), "You unlocked %s for the %%rSheikah Slate%%w!^%s^%s Hold %%y\xA2%%w for the "
-                 "rune wheel.", sRuneTexts[rune].name, sRuneTexts[rune].loreLine, sRuneTexts[rune].castLine);
+        snprintf(text, sizeof(text), "The %%rSheikah Slate%%w learned&%s!^%s^%s", sRuneTexts[rune].name,
+                 sRuneTexts[rune].loreLine, sRuneTexts[rune].castLine);
         logic.flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
         logic.poolCount = 1;
         logic.logicKey = sPickupKeys[rune];
@@ -263,7 +265,7 @@ static bool RegisterRunePickups(void) {
         pickup.getItemText = text;
         pickup.onReceive = ReceiveSlateRune;
         pickup.randomizer = &logic;
-        pickup.drawSoulFlame = true;
+        pickup.drawSoulFlame = false;
         pickup.flameRed = sRuneFlameColors[rune][0];
         pickup.flameGreen = sRuneFlameColors[rune][1];
         pickup.flameBlue = sRuneFlameColors[rune][2];
@@ -1512,7 +1514,7 @@ static u8 ClassifyBody(PlayState* play, Actor* actor, s32* bgIdOut) {
     if (bgIdOut != NULL) {
         *bgIdOut = -1;
     }
-    if ((actor == NULL) || (actor->update == NULL) || (actor->id == ACTOR_PLAYER)) {
+    if ((actor == NULL) || (actor->update == NULL) || (actor->id == ACTOR_PLAYER) || actor==sCryonis.pillar) {
         return STASIS_KIND_NONE;
     }
     if (actor->category == ACTORCAT_BOSS) {
@@ -3025,7 +3027,8 @@ static void DrawLaunchArrow(PlayState* play, Gfx** gfxP) {
 }
 
 // The chains and the arrow are world geometry, not part of any actor, so they draw after the scene.
-static void DrawStasis(PlayState* play) {
+static void DrawStasis(void) {
+    PlayState* play=gPlayState;if(!play)return;
     Actor* actor = sStasis.actor;
     Gfx* gfx;
 
@@ -3108,6 +3111,8 @@ static void StowSlate(Player* player, PlayState* play) {
 }
 
 // Each rune's own cast lands here as it is ported; a rune with nothing behind it yet answers that it cannot.
+#include "master_cycle.inc.c"
+
 static void CastRune(Player* player, PlayState* play) {
     u8 rune = CurrentRune();
     bool cast = false;
@@ -3123,6 +3128,9 @@ static void CastRune(Player* player, PlayState* play) {
             break;
         case SLATE_RUNE_STASIS:
             cast = CastStasis(play, player);
+            break;
+        case SLATE_RUNE_MASTER_CYCLE:
+            cast = MasterCycle_Cast(play,player);
             break;
         case SLATE_RUNE_CRYONIS:
             cast = CastCryonis(play, player);
@@ -3162,6 +3170,7 @@ static void RunSlate(void) {
     if (play == NULL || player == NULL) {
         return;
     }
+    MasterCycle_Tick(play,player);
     SyncReceivedRunes();
     if (!sApi->IsCustomItemOwned(SLATE_KEY)) {
         return;
@@ -3190,6 +3199,8 @@ static void RunSlate(void) {
 
 // The scene took everything the runes owned with it.
 static void ForgetRunes(int16_t sceneNum) {
+    sMcSceneChanged = 1;
+    MasterCycle_Forget();
     ForgetRemoteBomb();
     LeaveAiming(false);
     ForgetPillar();
@@ -3214,7 +3225,6 @@ static void DrawSlateInHand(Actor* actor, PlayState* play) {
     // Before the gate below: these are world geometry, not part of the tablet, and they have to keep
     // drawing on any frame the tablet itself declines to.
     DrawAimGhost();
-    DrawStasis(play);
 
     if (!sIsSlateDrawn || !sHasHandMatrix || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
@@ -3238,7 +3248,25 @@ static void DrawSlateInHand(Actor* actor, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+
+static void DrawPickupFlameWithModel(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* item=CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const SOHCustomPickupVariant* variant=item?CustomItemRegistry_GetPickupVariant(item->key):NULL;
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++,8,(uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx,0,0,0,16,32,1,play->state.frames,-8*play->state.frames,16,32));
+    Matrix_Push();Matrix_Scale(2.0f,2.0f,2.0f,MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++,variant?variant->flameRed:160,variant?variant->flameGreen:230,variant?variant->flameBlue:255,255);
+    gSPGrayscale(POLY_XLU_DISP++,true);
+    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)"__OTR__objects/object_gi_fire/gGiBlueFireFlameDL");
+    gSPGrayscale(POLY_XLU_DISP++,false);Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawPickupFlameWithModel(play,getItemEntry);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Scale(SLATE_GIVE_SCALE, SLATE_GIVE_SCALE, SLATE_GIVE_SCALE, MTXMODE_APPLY);
@@ -3320,8 +3348,7 @@ static void StasisSfx_Mix(s16* samples, u32 frameCount) {
     }
     advance = (sSfx.rate * (f32)STASIS_SFX_RATE) / STASIS_SFX_OUT_RATE;
     // Read per buffer rather than cached, so a slider moved mid-cue is heard at once.
-    volume = sSfx.volume * ((f32)CVarGetInteger("gSettings.Volume.Master", 40) / 100.0f) *
-             ((f32)CVarGetInteger("gSettings.Volume.SFX", 100) / 100.0f);
+    volume = sSfx.volume; // The host applies master and SFX gains to this mix group.
 
     for (u32 i = 0; i < frameCount; i++) {
         s32 index = (s32)sSfx.pos;
@@ -3358,7 +3385,10 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+static bool IsCryonisPillar(Actor* actor){return actor!=NULL && actor==sCryonis.pillar;}
+
 SOH_MOD_EXPORT void ModInit(void) {
+    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.slate.is_cryonis_pillar",(void*)IsCryonisPillar);
     if (!SOH_MOD_API_HAS(sApi, SetCustomItemText)) {
         return;
     }
@@ -3367,9 +3397,9 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&slate, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&slate, 0, 15, 0);
-    Z64Items_SetTextbox(&slate, "You got the %rSheikah Slate%w!&An ancient tablet of the Sheikah.");
-    Z64Items_SetPauseText(&slate, "%rSheikah Slate&%wPress %y\xA1%w to draw the slate,&hold %y\xA2%w for the rune "
-                                  "wheel.");
+    Z64Items_SetTextbox(&slate, "You got the %rSheikah Slate%w! An ancient tablet of the Sheikah.");
+    Z64Items_SetPauseText(&slate, "%rSheikah Slate&%wPress %y\xA1%w to draw the slate, hold %y\xA2%w&"
+                                  "for the rune wheel.");
     Z64Items_SetAction(&slate, TakeOutSlate, HoldSlate);
     Z64Items_SetHeldCallbacks(&slate, CastRune, StowSlate, NULL);
     slate.modelGroup = PLAYER_MODELGROUP_DEFAULT;
@@ -3389,6 +3419,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     sApi->RegisterVB(VB_THROW_OR_PUT_DOWN_HELD_ITEM, HoldOntoRemoteBomb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, RunSlate);
+    SOH_REGISTER_HOOK(sApi,OnPlayDrawEnd,DrawStasis);
+    SOH_REGISTER_HOOK(sApi,OnPlayerFilterInput,MasterCycle_FilterInput);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetRunes);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureHandMatrix);
     SOH_REGISTER_HOOK(sApi, OnBgCheckResolveWallFlags, ResolveRuneWallFlags);

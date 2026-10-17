@@ -367,7 +367,7 @@ static f32 GetRocsVelocity(void) {
 static void LoadClip(RitoClip id) {
     const ClipSource* source = &sClipSources[id];
     LinkAnimationHeader* raw =
-        ResourceMgr_FileExists(source->path) ? ResourceMgr_LoadPlayerAnimAsHeader(source->path) : NULL;
+        sApi->HasResource(source->path) ? ResourceMgr_LoadPlayerAnimAsHeader(source->path) : NULL;
 
     if (raw == NULL || raw->common.frameCount <= 0) {
         return;
@@ -608,7 +608,7 @@ static void TickUpdraft(PlayState* play, bool isHolding, f32 fill) {
 
 // The column stands on its tip; the matrix is built fresh, so it is pushed to leave the caller's untouched.
 static void DrawUpdraft(PlayState* play) {
-    if (!sUpdraft.isOn || !ResourceMgr_FileExists(sTornadoMatDL) || !ResourceMgr_FileExists(sTornadoTriDL)) {
+    if (!sUpdraft.isOn || !sApi->HasResource(sTornadoMatDL) || !sApi->HasResource(sTornadoTriDL)) {
         return;
     }
     const WindCone* cone = &sUpdraft.cone;
@@ -1705,7 +1705,7 @@ static void DrawRitoParts(PlayState* play, Player* player, int32_t limbIndex) {
     }
     bool isShieldInHand =
         player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD && (player->stateFlags1 & PLAYER_STATE1_SHIELDING);
-    if (!IsBowOut() && ResourceMgr_FileExists(sShieldDL)) {
+    if (!IsBowOut() && sApi->HasResource(sShieldDL)) {
         if (limbIndex == PLAYER_LIMB_R_HAND && isShieldInHand) {
             DrawShield(play, player, &sShieldInHand);
         } else if (limbIndex == PLAYER_LIMB_SHEATH && !isShieldInHand) {
@@ -1715,9 +1715,9 @@ static void DrawRitoParts(PlayState* play, Player* player, int32_t limbIndex) {
     if (limbIndex != PLAYER_LIMB_L_HAND) {
         return;
     }
-    if (IsHarpOut() && ResourceMgr_FileExists(sHarpDL)) {
+    if (IsHarpOut() && sApi->HasResource(sHarpDL)) {
         DrawHarp(play);
-    } else if (IsBowOut() && ResourceMgr_FileExists(sBowDL)) {
+    } else if (IsBowOut() && sApi->HasResource(sBowDL)) {
         DrawBow(play);
     }
 }
@@ -1916,11 +1916,12 @@ static void RegisterMask(void) {
     Z64Items_SetButtons(&mask, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     mask.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
     Z64Items_SetPlacement(&mask, RITO_MASK_PAGE, RITO_MASK_SLOT, RITO_MASK_WHEEL_PRIORITY);
-    Z64Items_SetTextbox(&mask, "You got the %rRito Mask%w!&The face of a proud bird of the north wind.^Wear it "
-                               "with %y\xA1%w to become a %rRito%w: an updraft to ride, wings to glide and a bow "
-                               "that never runs dry.");
-    Z64Items_SetPauseText(&mask, "%rRito Mask&%wPress %y\xA1%w to become a Rito.&Hold %y\x9F%w: updraft (magic)  "
-                                 "%y\x9F%w in the air: glide&%y\xA0%w: bow, tap for a seed  %y\xA3%w: shield");
+    Z64Items_SetTextbox(&mask, "You got the %rRito Mask%w! The&face of a proud bird of the&north wind.^"
+                               "Wear it with %y\xA1%w to become a&%rRito%w: an updraft to ride, wings&"
+                               "to glide and a bow that never&runs dry.");
+    Z64Items_SetPauseText(&mask, "%rRito Mask&%wPress %y\xA1%w to become a Rito.&"
+                                 "Hold %y\x9F%w: updraft (magic)  %y\x9F%w in the&"
+                                 "air: glide %y\xA0%w: bow, tap for a seed^%y\xA3%w: shield");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

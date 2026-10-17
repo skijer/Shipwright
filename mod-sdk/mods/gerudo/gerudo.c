@@ -9,6 +9,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include <stdbool.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
@@ -281,6 +282,14 @@ Gfx* Gfx_TextureIA8(Gfx* displayListHead, void* texture, s16 textureWidth, s16 t
 SoundFontSample* ResourceMgr_LoadAudioSample(const char* path);
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static CachedClip sClipCache[CLIP_CACHE_MAX];
 static s32 sClipCacheCount;
 static LinkAnimationHeader sMaskOnAnim;
@@ -2190,7 +2199,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(GERUDO_FORM_KEY);
+    ToggleConfiguredForm(GERUDO_FORM_KEY);
 }
 
 // A vanilla GetItemEntry has no draw callback of its own, and the registry reads NULL as "no model".
@@ -2221,10 +2230,11 @@ static void RegisterMask(void) {
     mask.getItemEntry.drawFunc = DrawMaskGetItem;
     Z64Items_SetReplaces(&mask, ITEM_MASK_GERUDO);
     Z64Items_SetVanillaMode(&mask, SOH_VANILLA_ITEM_REPLACE, RG_GERUDO_MASK);
-    Z64Items_SetTextbox(&mask, "You got the %rGerudo Mask%w!&The face of a desert warrior.^Wear it with %y\xA1%w to "
-                               "become a %rGerudo%w: twin scimitars, a blade guard, and the fury of Urbosa.");
-    Z64Items_SetPauseText(&mask, "%rGerudo Mask&%wPress %y\xA1%w to become a Gerudo.&%y\xA0%w: dual blades  Hold "
-                                 "%y\x9F%w: sprint  %y\xA3%w+%y\xA0%w: Urbosa's Fury");
+    Z64Items_SetTextbox(&mask, "You got the %rGerudo Mask%w! The&face of a desert warrior.^"
+                               "Wear it with %y\xA1%w to become a&%rGerudo%w: twin scimitars, a blade&"
+                               "guard, and the fury of Urbosa.");
+    Z64Items_SetPauseText(&mask, "%rGerudo Mask&%wPress %y\xA1%w to become a Gerudo.&"
+                                 "%y\xA0%w: dual blades  Hold %y\x9F%w: sprint&%y\xA3%w+%y\xA0%w: Urbosa's Fury");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

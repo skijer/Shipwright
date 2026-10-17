@@ -910,8 +910,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.update = EnSbeetle_Update;
     definition.draw = EnSbeetle_Draw;
     definition.enemyFlags = SOH_ACTOR_ENEMY;
-    definition.naviHint = "Scissors Beetle&%cIt attacks by throwing its pincers like boomerangs! Keep moving, then "
-                          "strike when they return!%w";
+    definition.naviHint = "Scissors Beetle&%cIt attacks by throwing its pincers&like boomerangs! Keep moving,&"
+                          "then strike when they return!%w";
 
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " SBEETLE_KEY);

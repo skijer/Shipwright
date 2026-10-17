@@ -502,13 +502,13 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetButtons(&leaf, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&leaf, 0, 6, 0);
     Z64Items_SetAge(&leaf, SOH_CUSTOM_ITEM_AGE_CHILD);
-    Z64Items_SetTextbox(&leaf, "You got the %rDeku Leaf%w!&A leaf of the Great Deku Tree,&wide enough to ride the "
-                               "wind.^"
-                               "On the ground, %y\xA1%w beats it into a&%ggust%w that stuns what stands&ahead and "
-                               "hurls it away.^"
-                               "In the air, hold %y\xA1%w to open it&and %gglide%w. Every moment aloft&spends a little "
-                               "%gmagic%w.");
-    Z64Items_SetPauseText(&leaf, "%rDeku Leaf&%wPress %y\xA1%w to fan a gust. Hold it&in midair to glide. As Deku: flower.");
+    Z64Items_SetTextbox(&leaf, "You got the %rDeku Leaf%w! A leaf&of the Great Deku Tree, wide&"
+                               "enough to ride the wind.^On the ground, %y\xA1%w beats it into&"
+                               "a %ggust%w that stuns what stands&ahead and hurls it away.^"
+                               "In the air, hold %y\xA1%w to open it and&%gglide%w. Every moment aloft&"
+                               "spends a little %gmagic%w.");
+    Z64Items_SetPauseText(&leaf, "%rDeku Leaf&%wPress %y\xA1%w to fan a gust. Hold it in&"
+                                 "midair to glide. As Deku: flower.");
     Z64Items_SetCanUse(&leaf, CanSwingLeaf);
     leaf.flags |= SOH_CUSTOM_ITEM_INSTANT;
     leaf.getItemEntry.drawFunc = DrawGetItem;

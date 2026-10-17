@@ -58,6 +58,7 @@ typedef struct {
 // the owner refreshes, and many actors build theirs once, in their init.
 typedef struct {
     Actor* owner;
+    Vec3f basePos;
     bool isActive;
     u8 count;
     Vec3f focusOffset;
@@ -69,7 +70,7 @@ typedef struct {
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/gItemIconSwitchHookTex";
 static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/gSwitchHookNameTex";
 static const ALIGN_ASSET(2) char sGiveDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookGiveDL";
-static const ALIGN_ASSET(2) char sTipDL[] = "__OTR__objects/object_link_boy/gLinkAdultHookshotTipDL";
+static const ALIGN_ASSET(2) char sTipDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookGiveDL";
 static const ALIGN_ASSET(2) char sChainLinkDL[] = "__OTR__objects/object_link_boy/gLinkAdultHookshotChainDL";
 static const ALIGN_ASSET(2) char sAimAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_hook_shot_ready";
 
@@ -79,12 +80,14 @@ static const u16 sItemButtons[SWITCH_HOOK_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, 
 static const u8 sSwappableCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_CHEST, ACTORCAT_NPC };
 
 static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDrawEnd", "OnSceneInit",
-                                              "OnPlayerResolveItemActionInit" };
+                                              "OnPlayerResolveItemActionInit", "OnActorUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
 static u8 sPhase;
+static bool sThrowAnimating;
+static const ALIGN_ASSET(2) char sThrowAnim[]="__OTR__objects/gameplay_keep/gPlayerAnim_link_boom_throwR";
 static bool sIsAimPending;
 static s16 sFlightTimer;
 static s16 sHoldTimer;
@@ -330,10 +333,12 @@ static void CollectColliders(AnchorSlot* slot, Collider** list, s32 count) {
                 goto next;
             }
         }
+        Vec3f base=slot->owner->world.pos;
+        if(Math_Vec3f_DistXYZ(&reference,&slot->basePos)<Math_Vec3f_DistXYZ(&reference,&base))base=slot->basePos;
         slot->anchors[slot->count].collider = list[i];
-        slot->anchors[slot->count].offset.x = reference.x - slot->owner->world.pos.x;
-        slot->anchors[slot->count].offset.y = reference.y - slot->owner->world.pos.y;
-        slot->anchors[slot->count].offset.z = reference.z - slot->owner->world.pos.z;
+        slot->anchors[slot->count].offset.x = reference.x - base.x;
+        slot->anchors[slot->count].offset.y = reference.y - base.y;
+        slot->anchors[slot->count].offset.z = reference.z - base.z;
         slot->anchors[slot->count].hasLastSet = false;
         slot->count++;
     next:;
@@ -345,6 +350,7 @@ static void CaptureColliders(PlayState* play, u8 slotIndex, Actor* actor) {
     AnchorSlot* slot = &sAnchorSlots[slotIndex];
 
     slot->owner = actor;
+    slot->basePos=actor->world.pos;
     slot->isActive = true;
     slot->count = 0;
     slot->hasFocusLast = false;
@@ -459,6 +465,7 @@ static void StartSwap(Player* player, PlayState* play, Actor* target) {
     PlantActorAt(&player->actor, &linkDestination);
     PlantActorAt(target, &targetDestination);
     target->home.pos = targetDestination;
+    ReanchorColliders(play);
     player->linearVelocity = 0.0f;
     player->invincibilityTimer = SWITCH_HOOK_INVINCIBLE_FRAMES;
     Actor_SetColorFilter(target, 0, 255, 0, SWITCH_HOOK_TINT_FRAMES);
@@ -522,7 +529,8 @@ static void FlyHook(Player* player, PlayState* play) {
     Actor* target = NULL;
 
     if (isArmed && sSelection != NULL && sSelection->update != NULL &&
-        Math_Vec3f_DistXYZ(&sHookPos, &sSelection->world.pos) < SWITCH_HOOK_GRAB_DISTANCE) {
+        (Math_Vec3f_DistXYZ(&sHookPos, &sSelection->focus.pos) < SWITCH_HOOK_GRAB_DISTANCE ||
+         Math_Vec3f_DistXYZ(&sHookPos, &sSelection->world.pos) < SWITCH_HOOK_GRAB_DISTANCE)) {
         target = sSelection;
     } else if (isArmed && sSelection == NULL) {
         target = FindSwappableNear(play, &sHookPos, SWITCH_HOOK_BLIND_GRAB_DISTANCE);
@@ -557,7 +565,9 @@ static void ReelHookIn(Player* player, PlayState* play) {
 static void ShotAction(Player* player, PlayState* play) {
     Player_ZeroSpeedXZ(player);
     player->actor.shape.rot.y = player->actor.world.rot.y = player->yaw = sShotYaw;
-    Player_UpdateUpperBody(player, play);
+    if(sThrowAnimating) {if(LinkAnimation_Update(play,&player->skelAnime))sThrowAnimating=false;}
+    // Keep the custom item alive while the shot owns the body.
+    Z64Items_KeepHeld(sApi);
     switch (sPhase) {
         case SWITCH_HOOK_FLYING:
             FlyHook(player, play);
@@ -586,7 +596,9 @@ static void FireHook(Player* player, PlayState* play, s16 yaw, s16 pitch) {
     sHookPos.z = player->actor.world.pos.z;
     sFlightTimer = SWITCH_HOOK_FLIGHT_FRAMES;
     sPhase = SWITCH_HOOK_FLYING;
-    Player_SetupAction(play, player, ShotAction, 1);
+    player->itemAction = player->heldItemAction;
+    Player_SetupActionPreserveItemAction(play, player, ShotAction, 0);
+    LinkAnimation_PlayOnce(play,&player->skelAnime,(LinkAnimationHeader*)sThrowAnim);sThrowAnimating=true;
     Player_ZeroSpeedXZ(player);
 }
 
@@ -636,16 +648,19 @@ static void AimOrFire(Player* player, PlayState* play) {
         Z64Aiming_GetDirection(player, &yaw, &pitch);
         StopAiming(player, play);
         FireHook(player, play, yaw, pitch);
-        func_80839FFC(player, play);
         return;
     }
     if (sPhase != SWITCH_HOOK_IN_HAND) {
         return;
     }
     if (sSelection != NULL && sSelection->update != NULL) {
-        f32 dx = sSelection->focus.pos.x - player->actor.world.pos.x;
-        f32 dy = sSelection->focus.pos.y - (player->actor.world.pos.y + SWITCH_HOOK_HAND_HEIGHT);
-        f32 dz = sSelection->focus.pos.z - player->actor.world.pos.z;
+        Vec3f aim=sSelection->focus.pos;
+        if(Math_Vec3f_DistXYZ(&aim,&sSelection->world.pos)>150.0f) {
+            aim=sSelection->world.pos;aim.y+=MIN(MAX(sSelection->colChkInfo.cylHeight*.5f,15.0f),45.0f);
+        }
+        f32 dx = aim.x - player->actor.world.pos.x;
+        f32 dy = aim.y - (player->actor.world.pos.y + SWITCH_HOOK_HAND_HEIGHT);
+        f32 dz = aim.z - player->actor.world.pos.z;
 
         FireHook(player, play, Math_Atan2S(dz, dx), Math_Atan2S(sqrtf(SQ(dx) + SQ(dz)), -dy));
         return;
@@ -705,6 +720,11 @@ static void UpdateSwitchHook(void) {
     Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
 
     TickCharges();
+    static const char* icons[]={
+        "__OTR__textures/icon_item_custom/gSwitchHookCharge0Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge1Tex",
+        "__OTR__textures/icon_item_custom/gSwitchHookCharge2Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge3Tex",
+        "__OTR__textures/icon_item_custom/gSwitchHookCharge4Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge5Tex"};
+    CustomItemRegistry_SetIconPath(SWITCH_HOOK_KEY,icons[sDepletedTimer>0?0:sCharges]);
     if (play == NULL || player == NULL) {
         return;
     }
@@ -715,16 +735,32 @@ static void UpdateSwitchHook(void) {
         StopAiming(player, play);
     }
     if (sPhase >= SWITCH_HOOK_FLYING && player->actionFunc != ShotAction) {
-        ReturnHookToHand(player, play);
+        if (!(player->stateFlags1 & (PLAYER_STATE1_DEAD|PLAYER_STATE1_DAMAGED|PLAYER_STATE1_IN_CUTSCENE|PLAYER_STATE1_IN_WATER))) {
+            player->itemAction=player->heldItemAction;
+            Player_SetupActionPreserveItemAction(play,player,ShotAction,0);
+        } else ReturnHookToHand(player, play);
     }
     MarkSelection(player, play);
     if (sSettleTimer > 0) {
         ReanchorColliders(play);
         if (--sSettleTimer == 0) {
-            ClearColliderAnchors();
+            // Anchors remain active: static colliders do not rebuild after 40 frames.
         }
     }
 }
+
+static void SyncSwappedActor(void* actorRef) {
+    Actor* actor=actorRef;PlayState* play=gPlayState;if(!play)return;
+    bool tracked=false;
+    for(int i=0;i<SWITCH_HOOK_ANCHOR_SLOTS;++i) {
+        AnchorSlot* slot=&sAnchorSlots[i];if(!slot->isActive || slot->owner!=actor)continue;tracked=true;
+        CollectColliders(slot,play->colChkCtx.colAT,play->colChkCtx.colATCount);
+        CollectColliders(slot,play->colChkCtx.colAC,play->colChkCtx.colACCount);
+        CollectColliders(slot,play->colChkCtx.colOC,play->colChkCtx.colOCCount);
+    }
+    if(tracked)ReanchorColliders(play);
+}
+static int32_t HookAmmo(const char* key){return sDepletedTimer>0?0:sCharges;}
 
 static void ForgetScene(int16_t sceneNum) {
     ClearColliderAnchors();
@@ -773,7 +809,7 @@ static void DrawSwitchHook(Actor* actor, PlayState* play) {
     if (sPhase == SWITCH_HOOK_STOWED || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
-    DrawSegment(play, &hand, BINANG_TO_RAD(player->actor.shape.rot.y), 0.0f, SWITCH_HOOK_HELD_SCALE, (Gfx*)sGiveDL);
+    if(sPhase<SWITCH_HOOK_FLYING)DrawSegment(play, &hand, BINANG_TO_RAD(player->actor.shape.rot.y), 0.0f, SWITCH_HOOK_HELD_SCALE, (Gfx*)sGiveDL);
     if (sPhase == SWITCH_HOOK_FLYING || sPhase == SWITCH_HOOK_RETURNING) {
         DrawChain(play, &hand, &sHookPos);
     }
@@ -814,15 +850,16 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&hook, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&hook, 0, 14, 0);
-    Z64Items_SetTextbox(&hook, "You got the %rSwitch Hook%w!&A hook that trades places with whatever&it catches."
-                               "^Face a %yfoe%w, a %ypot%w or a %ychest%w and it&glows blue: press %y\xA1%w and you "
-                               "stand&where it stood.^Press %y\xA5%w first to aim it by hand.^It holds %g5 shots%w, "
-                               "and they come back&on their own.");
+    Z64Items_SetTextbox(&hook, "You got the %rSwitch Hook%w! A&hook that trades places with&whatever it catches.^"
+                               "Face a %yfoe%w, a %ypot%w or a %ychest%w&and it glows blue: press %y\xA1%w and&"
+                               "you stand where it stood.^Press %y\xA5%w first to aim it by hand.^"
+                               "It holds %g5 shots%w, and they come&back on their own.");
     Z64Items_SetPauseText(&hook, "%rSwitch Hook&%wPress %y\xA1%w to trade places with the&blue target. %y\xA5%w aims "
                                  "it by hand.");
     Z64Items_SetCanUse(&hook, CanUseSwitchHook);
     Z64Items_SetAction(&hook, TakeOutSwitchHook, HoldSwitchHook);
     Z64Items_SetHeldCallbacks(&hook, AimOrFire, StowSwitchHook, NULL);
+    Z64Items_SetAmmo(&hook,HookAmmo);
     hook.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     hook.getItemEntry.drawFunc = DrawGetItem;
 
@@ -831,6 +868,7 @@ SOH_MOD_EXPORT void ModInit(void) {
         return;
     }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateSwitchHook);
+    SOH_REGISTER_HOOK(sApi,OnActorUpdate,SyncSwappedActor);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawSwitchHook);
 }

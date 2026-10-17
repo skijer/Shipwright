@@ -257,12 +257,12 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&zonai, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&zonai, 0, 11, 0);
-    Z64Items_SetTextbox(&zonai, "You got the %rZonai Permafrost%w!&A Zonai device that holds the&flow of time "
-                                "perfectly still.^Press %y\xA1%w to %cstop time%w. Only you&keep moving, and "
-                                "enemies stay open&to your blows.^It spends %gmagic%w for as long as the&world "
-                                "is frozen.");
-    Z64Items_SetPauseText(&zonai, "%rZonai Permafrost&%wPress %y\xA1%w to stop time, again to&let it run. "
-                                  "Drains magic.");
+    Z64Items_SetTextbox(&zonai, "You got the %rZonai Permafrost%w!&A Zonai device that holds the&"
+                                "flow of time perfectly still.^Press %y\xA1%w to %cstop time%w. Only you&"
+                                "keep moving, and enemies stay&open to your blows.^"
+                                "It spends %gmagic%w for as long as&the world is frozen.");
+    Z64Items_SetPauseText(&zonai, "%rZonai Permafrost&%wPress %y\xA1%w to stop time, again to let&"
+                                  "it run. Drains magic.");
     Z64Items_SetCanUse(&zonai, CanToggleTime);
     Z64Items_SetAction(&zonai, ToggleTime, NULL);
     zonai.flags |= SOH_CUSTOM_ITEM_INSTANT;

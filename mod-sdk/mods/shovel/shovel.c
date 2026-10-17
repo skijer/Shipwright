@@ -314,11 +314,12 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&shovel, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&shovel, 0, 22, 0);
-    Z64Items_SetTextbox(&shovel, "You got %rDampé's Shovel%w!&The old gravekeeper's tool,&worn smooth by years of work.^"
-                                 "Press %y\xA1%w to dig. %ySoft soil%w wakes&what sleeps beneath it, and a&%yhidden "
-                                 "grotto%w opens where the&ground rings hollow.^"
-                                 "Loose earth turns up %grupees%w and&%gbombs%w, and once in a while a&%cfairy%w. The "
-                                 "%ygraveyard%w keeps a&reward for the first to dig there.");
+    Z64Items_SetTextbox(&shovel, "You got %rDampé's Shovel%w! The&old gravekeeper's tool, worn&"
+                                 "smooth by years of work.^Press %y\xA1%w to dig. %ySoft soil%w wakes&"
+                                 "what sleeps beneath it, and a&%yhidden grotto%w opens where the&"
+                                 "ground rings hollow.^Loose earth turns up %grupees%w&"
+                                 "and %gbombs%w, and once in a while&a %cfairy%w.^"
+                                 "The %ygraveyard%w keeps a reward&for the first to dig there.");
     Z64Items_SetPauseText(&shovel, "%rDampé's Shovel&%wPress %y\xA1%w to dig. Soft soil, grottos&and graves hide the "
                                    "most.");
     Z64Items_SetCanUse(&shovel, CanDig);

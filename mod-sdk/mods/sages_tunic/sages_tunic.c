@@ -323,11 +323,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = SAGES_TUNIC_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rSage's Tunic&%wEach medallion you carry shields you from one danger: ice, fire, "
+    definition.pauseText = "%rSage's Tunic&%wEach medallion you carry shields&you from one danger: ice, fire,&"
                            "lightning, grabs, falls and wind.";
-    definition.getItemText = "You got the %rSage's Tunic%w!&Woven for the Sages of the Temples. Every medallion you "
-                             "hold becomes a resistance you wear, and the cloth shines with its colour when it saves "
-                             "you.";
+    definition.getItemText = "You got the %rSage's Tunic%w!&Woven for the Sages of the&Temples.^"
+                             "Every medallion you hold&becomes a resistance you wear,&"
+                             "and the cloth shines with its&colour when it saves you.";
     definition.slot = SOH_EQUIP_SLOT_TUNIC;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_TUNIC;

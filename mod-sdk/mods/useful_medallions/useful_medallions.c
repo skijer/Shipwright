@@ -32,7 +32,7 @@ static const Sw97ActorInfo* const sArrowActorInfos[SW97_ELEM_COUNT] = {
 };
 
 static const char* const sRequiredHooks[] = {
-    "OnPlayerUpdate",
+    "OnPlayerUpdate", "OnGameFrameUpdate", "OnInterfaceDrawEnd",
     "OnPlayDestroy",
     "OnLoadFile",
     "OnActorInit",

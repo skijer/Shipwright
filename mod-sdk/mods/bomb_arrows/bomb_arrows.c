@@ -34,6 +34,18 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
 
 static const SOHModApi* sApi;
 static bool sIsArmed;
+void Player_UseItem(PlayState* play, Player* player, s32 item);
+static bool BombModeAvailable(void) {
+    return sApi->IsCustomItemOwned(BOMB_ARROWS_KEY) ||
+        (SOH_MOD_API_HAS(sApi, GetRandoOption) && sApi->GetRandoOption("nei.bomb_arrows_auto") == 1 &&
+         CUR_UPG_VALUE(UPG_BOMB_BAG) > 0 && CUR_UPG_VALUE(UPG_QUIVER) > 0);
+}
+static void SelectBombMode(bool armed);
+static bool GetBombMode(void) { return sIsArmed; }
+static void ClearBombOnNormalBow(int8_t action, PlayerItemActionInitFunc* init) {
+    if (action == PLAYER_IA_SLINGSHOT || (action >= PLAYER_IA_BOW && action <= PLAYER_IA_BOW_0E)) { sIsArmed = false; }
+}
+
 static TrackedArrow sTrackedArrows[BOMB_ARROWS_TRACKED];
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
@@ -128,15 +140,26 @@ static void ArmArrow(Actor* actor) {
     TrackArrow(actor);
 }
 
+// Changing ammunition while aiming also updates the projectile already held by Link.
+static void SelectBombMode(bool armed) {
+    sIsArmed=armed && BombModeAvailable();
+    if(gPlayState==NULL)return;
+    Actor* held=GET_PLAYER(gPlayState)->heldActor;
+    if(held==NULL || held->id!=ACTOR_EN_ARROW)return;
+    TrackedArrow* tracked=FindTracked(held);
+    if(!sIsArmed && tracked!=NULL) {
+        tracked->arrow=NULL;
+        Inventory_ChangeAmmo(ITEM_BOMB,1);
+    } else if(sIsArmed && tracked==NULL)ArmArrow(held);
+}
 static void ForgetArrows(int16_t sceneNum) {
     memset(sTrackedArrows, 0, sizeof(sTrackedArrows));
 }
 
 // A toggle, not a weapon of its own: the bow stays the bow, and every arrow it looses carries a bomb.
 static void ToggleBombArrows(PlayState* play, Player* player) {
-    sIsArmed = !sIsArmed;
-    PlaySfxAt(sIsArmed ? NA_SE_IT_BOMB_IGNIT : NA_SE_IT_SWORD_PUTAWAY, &player->actor.world.pos);
-    Sfx_PlaySfxCentered(sIsArmed ? NA_SE_SY_GET_ITEM : NA_SE_SY_CAMERA_ZOOM_DOWN);
+    Player_UseItem(play, player, ITEM_BOW);
+    sIsArmed = BombModeAvailable();
 }
 
 static bool CanArmBombArrows(Player* player, PlayState* play) {
@@ -180,10 +203,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&arrows, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&arrows, SOH_ITEM_PAGE_VANILLA, SLOT_ARROW_LIGHT, 0);
-    Z64Items_SetTextbox(&arrows, "You got the %rBomb Arrows%w!&Powder packed behind the arrowhead.^Press %y\xA1%w to "
-                                 "tip your arrows, and&every shot bursts where it lands.^Each one spends a %rbomb%w "
-                                 "as well as&an arrow, so keep your bag full.");
-    Z64Items_SetPauseText(&arrows, "%rBomb Arrows&%wPress %y\xA1%w to tip your arrows.&Each shot spends a bomb.");
+    Z64Items_SetTextbox(&arrows, "You got the %rBomb Arrows%w!&Powder packed behind the&arrowhead.^"
+                                 "Press %y\xA1%w to tip your arrows, and&every shot bursts where it&lands.^"
+                                 "Each one spends a %rbomb%w as&well as an arrow, so keep your&bag full.");
+    Z64Items_SetPauseText(&arrows, "%rBomb Arrows&%wPress %y\xA1%w to tip your arrows. Each&shot spends a bomb.");
     Z64Items_SetCanUse(&arrows, CanArmBombArrows);
     Z64Items_SetAmmo(&arrows, GetBombArrowShots);
     Z64Items_SetAction(&arrows, ToggleBombArrows, NULL);
@@ -194,6 +217,17 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!Z64Items_Register(sApi, &arrows)) {
         return;
     }
+    static const char* const options[] = { "Obtained item", "Automatic: bomb bag + quiver" };
+    SOHModRandoOption option = { sizeof(SOHModRandoOption), "nei.bomb_arrows_auto", "Bomb Arrows",
+        "Unlock bomb arrows from their item, or automatically when both bomb bag and quiver are owned.",
+        options, 2, 0 };
+    if (SOH_MOD_API_HAS(sApi, RegisterRandoOption)) { sApi->RegisterRandoOption(&option); }
+    if (SOH_MOD_API_HAS(sApi, PublishService)) {
+        sApi->PublishService("nei.bomb_arrows.available", (void*)BombModeAvailable);
+        sApi->PublishService("nei.bomb_arrows.select", (void*)SelectBombMode);
+        sApi->PublishService("nei.bomb_arrows.selected", (void*)GetBombMode);
+    }
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveItemActionInit, ClearBombOnNormalBow);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorInit, ACTOR_EN_ARROW, ArmArrow);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorUpdate, ACTOR_EN_ARROW, FollowArrow);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetArrows);

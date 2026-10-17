@@ -417,10 +417,10 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = MAGIC_CAPE_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rMagic Cape&%wEvery spell costs half its magic while you own it. %y\x9F%w hides the "
-                           "cloth.";
-    definition.getItemText = "You got the %rMagic Cape%w!&Cloth cut from the King of Evil's own mantle. Magic "
-                             "flows through it so freely that every spell costs you half, rounded down.";
+    definition.pauseText = "%rMagic Cape&%wEvery spell costs half its magic&"
+                           "while you own it. %y\x9F%w hides the cloth.";
+    definition.getItemText = "You got the %rMagic Cape%w! Cloth&cut from the King of Evil's own&mantle.^"
+                             "Magic flows through it so&freely that every spell costs&you half, rounded down.";
     definition.slot = SOH_EQUIP_SLOT_UPGRADE;
     definition.page = 0;
     definition.row = 0;

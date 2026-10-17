@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -243,6 +245,14 @@ s32 Player_ActionHandler_12(Player* player, PlayState* play);
 void Player_SetupRoll(Player* player, PlayState* play);
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static MmSfxPlayFunc sPlayMmSfx;
 static PlayerAgeProperties sFdBody;
 static LinkAnimationHeader sMaskOnAnim;
@@ -1170,7 +1180,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(FD_FORM_KEY);
+    ToggleConfiguredForm(FD_FORM_KEY);
 }
 
 static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
@@ -1195,11 +1205,11 @@ static void RegisterMask(void) {
     mask.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
     Z64Items_SetPlacement(&mask, FD_MASK_PAGE, FD_MASK_SLOT, 0);
     mask.getItemEntry.drawFunc = DrawMaskGetItem;
-    Z64Items_SetTextbox(&mask, "You got the %rFierce Deity's Mask%w!&It holds the dark power of a god "
-                               "of battle.^Wear it with %y\xA1%w to become the %rFierce Deity%w: a towering "
-                               "warrior whose great blade sends out beams of light.");
-    Z64Items_SetPauseText(&mask, "%rFierce Deity's Mask&%wPress %y\xA1%w to become the Fierce Deity.&%y\xA0%w: "
-                                 "two-handed sword  With %y\xA4%w: sword beams (magic)");
+    Z64Items_SetTextbox(&mask, "You got the %rFierce Deity's&Mask%w! It holds the dark power&of a god of battle.^"
+                               "Wear it with %y\xA1%w to become the&%rFierce Deity%w: a towering&"
+                               "warrior whose great blade&sends out beams of light.");
+    Z64Items_SetPauseText(&mask, "%rFierce Deity's Mask&%wPress %y\xA1%w to become the Fierce&"
+                                 "Deity.  %y\xA0%w: two-handed sword&With %y\xA4%w: sword beams (magic)");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

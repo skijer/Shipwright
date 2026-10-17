@@ -10,7 +10,7 @@
 #define TURBO_BUTTONS_CVAR "gMods.Turbo.Buttons"
 #define TURBO_SPEED_CVAR "gMods.Turbo.Speed"
 #define TURBO_TOGGLE_CVAR "gMods.Turbo.Toggle"
-#define TURBO_SIDEBAR "Turbo"
+#define TURBO_SIDEBAR "Mods"
 
 // Mirrors BTN_CUSTOM_MODIFIER1/2 in soh/OTRGlobals.h, a C++ header a C mod cannot include.
 #define TURBO_BTN_MODIFIER1 0x0040
@@ -130,7 +130,7 @@ static void RegisterMenu(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterMenuSidebar) || !SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
         return;
     }
-    sApi->RegisterMenuSidebar("Enhancements", TURBO_SIDEBAR, "gMods.Turbo.Menu", 1);
+    sApi->RegisterMenuSidebar("Enhancements", TURBO_SIDEBAR, "gMods.Menu", 1);
 
     SOHModMenuWidget speed = { sizeof(SOHModMenuWidget) };
     speed.section = "Enhancements";

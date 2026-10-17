@@ -927,10 +927,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = KITE_SHIELD_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rKite Shield&%wPress %y\xA3%w in mid air to ride it. %y\x9F%w hops, %y\xA0%w spins, "
-                           "%y\xA3%w + %y\xA0%w gets off.";
-    definition.getItemText = "You got the %rKite Shield%w!&Light enough to ride. Press %y\xA3%w in mid air and it goes "
-                             "under your feet: slopes speed you up, and narrow ledges become rails.";
+    definition.pauseText = "%rKite Shield&%wPress %y\xA3%w in mid air to ride it. %y\x9F%w&"
+                           "hops, %y\xA0%w spins, %y\xA3%w + %y\xA0%w gets off.";
+    definition.getItemText = "You got the %rKite Shield%w! Light&enough to ride.^"
+                             "Press %y\xA3%w in mid air and it goes&under your feet: slopes speed&"
+                             "you up, and narrow ledges&become rails.";
     definition.slot = SOH_EQUIP_SLOT_SHIELD;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_SHIELD;

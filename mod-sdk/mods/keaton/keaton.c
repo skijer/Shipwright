@@ -8,6 +8,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include <stdbool.h>
 #include <libultraship/bridge/consolevariablebridge.h>
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
@@ -145,7 +146,7 @@ static const ALIGN_ASSET(2) char sPunchEffectDL[] =
 
 #include "keaton_tail_anim.inc.c"
 
-static const char* const sRequiredHooks[] = { "OnPlayerPostLimbDraw", "OnPlayerActionHandler", "OnActorUpdate",
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerPostLimbDraw", "OnPlayerActionHandler", "OnActorUpdate",
                                               "OnSceneInit", "OnActorPlaySfx", "OnPlayerFilterInput",
                                               "OnBgCheckResolveWallFlags", "OnPlayerResolveLimbDraw" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
@@ -162,6 +163,14 @@ typedef enum {
 } KeatonState;
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 
 #define MM_ANIM_SLOTS 3
 static LinkAnimationHeader sMmAnims[MM_ANIM_SLOTS];
@@ -1560,7 +1569,7 @@ static void ResolveKeatonBody(Player* player, int32_t limbIndex, Gfx** dList, Gf
                        : KEATON_MODEL_PATH "/object_link_boy/gLinkAdultRightHandNearDL";
         }
     }
-    if (path != NULL && ResourceMgr_FileExists(path)) {
+    if (path != NULL && sApi->HasResource(path)) {
         *dList = ResourceMgr_LoadGfxByName(path);
     }
 }
@@ -1687,18 +1696,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(KEATON_FORM_KEY);
-}
-
-// El guardia de Kakariko ya no puede comprar la máscara, porque ahora te la quedas: conseguirla concede lo
-// que él daba al vérsela puesta, y así la cadena de la tienda de máscaras sigue su curso.
-static void GrantGuardReward(const char* key) {
-    if (Flags_GetInfTable(INFTABLE_GATE_GUARD_PUT_ON_KEATON_MASK)) {
-        return;
-    }
-    Rupees_ChangeBy(KEATON_GUARD_REWARD);
-    Flags_SetInfTable(INFTABLE_GATE_GUARD_PUT_ON_KEATON_MASK);
-    Flags_SetItemGetInf(ITEMGETINF_38);
+    ToggleConfiguredForm(KEATON_FORM_KEY);
 }
 
 // A vanilla GetItemEntry has no custom draw callback: its gid selects the host's internal draw table.
@@ -1723,6 +1721,18 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, KEATON_MASK_KEY, KEATON_MASK_KEY, "",
 };
 
+static bool sGuardBorrowedMask;
+static void OfferKeatonToGuard(void) {
+    if (gPlayState == NULL) { sGuardBorrowedMask = false; return; }
+    Player* player = GET_PLAYER(gPlayState);
+    if (sApi->IsFormActive(KEATON_FORM_KEY)) { player->currentMask = PLAYER_MASK_KEATON; sGuardBorrowedMask = true; }
+    else if (sGuardBorrowedMask) {
+        if (player->currentMask == PLAYER_MASK_KEATON) { player->currentMask = PLAYER_MASK_NONE; }
+        sGuardBorrowedMask = false;
+    }
+}
+static void KeepBorrowedMask(bool* should, va_list args) { if (sApi->IsFormActive(KEATON_FORM_KEY)) { *should = false; } }
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(KEATON_MASK_KEY, sIconTex, sNameTex);
 
@@ -1736,14 +1746,14 @@ static void RegisterMask(void) {
     mask.getItemEntry.drawFunc = DrawKeatonGetItem;
     Z64Items_SetReplaces(&mask, ITEM_MASK_KEATON);
     Z64Items_SetVanillaMode(&mask, SOH_VANILLA_ITEM_REPLACE, RG_KEATON_MASK);
-    Z64Items_SetTextbox(&mask, "You got the %rKeaton Mask%w!&The gate guard paid you for a&look at it and let you "
-                               "keep it.^"
-                               "Wear it with %y\xA1%w and you don't just&look like Keaton: you become him.");
-    Z64Items_SetPauseText(&mask, "%rKeaton Mask&%wPress %y\xA1%w to become Keaton.&As Keaton: %y\xA1%w punches, held "
-                                 "%y\xA1%w&throws fire, %y\xA0%w leaps and climbs.");
+    Z64Items_SetTextbox(&mask, "You got the %rKeaton Mask%w!&Wear it to show the gate&guard your disguise and&"
+                               "keep it.^Wear it with %y\xA1%w and you don't&just look like Keaton: you&"
+                               "become him.");
+    Z64Items_SetPauseText(&mask, "%rKeaton Mask&%wPress %y\xA1%w to become Keaton. As&"
+                                 "Keaton: %y\xA1%w punches, held %y\xA1%w throws&fire, %y\xA0%w leaps and climbs.");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
-    mask.onAcquire = GrantGuardReward;
+    // The guard check is earned at the guard, never on receiving the mask.
 
     Z64Items_SetLogic(&mask, &sRandomizerItem);
     Z64Items_Register(sApi, &mask);
@@ -1813,4 +1823,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, CaptureFistBlock);
     SOH_REGISTER_HOOK(sApi, OnBgCheckResolveWallFlags, AllowKeatonWall);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveKeatonStrength);
+    sApi->RegisterVB(VB_DRAW_PLAYER_MASK, KeepBorrowedMask);
+    sApi->RegisterVB(VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON, KeepBorrowedMask);
+    SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, OfferKeatonToGuard);
 }

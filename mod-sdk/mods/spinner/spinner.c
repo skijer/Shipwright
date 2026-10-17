@@ -582,9 +582,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&spinner, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&spinner, 0, 1, 0);
-    Z64Items_SetTextbox(&spinner, "You got the %rSpinner%w!&An ancient spinning top that&rides on its own grinding "
-                                  "force.^Hold %y\xA1%w to wind it up, then let go&to ride. Press %y\xA1%w again to "
-                                  "%rspin&attack%w.^Let go while %yZ-targeting%w and it&homes in on your foe.");
+    Z64Items_SetTextbox(&spinner, "You got the %rSpinner%w! An&ancient spinning top that rides&"
+                                  "on its own grinding force.^Hold %y\xA1%w to wind it up, then let&"
+                                  "go to ride. Press %y\xA1%w again to&%rspin attack%w.^"
+                                  "Let go while %y\xA4%w-targeting and it&homes in on your foe.");
     Z64Items_SetPauseText(&spinner, "%rSpinner&%wHold %y\xA1%w to charge, release to ride.&Press %y\xA1%w to spin "
                                     "attack.");
     Z64Items_SetCanUse(&spinner, CanUseSpinner);

@@ -473,8 +473,8 @@ static void CatchFire(Player* player, PlayState* play, Actor* source, u8 fire) {
 static const char* CatchMessage(u8 fire) {
     switch (fire) {
         case LANTERN_BLUE:
-            return "The lamp swallows a %bblue flame%w!&It gives off a cold light, and&melts %bred ice%w where you "
-                   "set it&down.";
+            return "The lamp swallows a %bblue flame%w! It&gives off a cold light, and melts&"
+                   "%bred ice%w where you set it down.";
         case LANTERN_POE:
             return "The lamp swallows a %pghost fire%w!&Its light shows you what hides&from ordinary eyes while you "
                    "hold&it.";
@@ -482,8 +482,8 @@ static const char* CatchMessage(u8 fire) {
             return "The lamp swallows a %ggreen flame%w!&Stand still by its light and it&mends you, little by "
                    "little.";
         default:
-            return "The lamp swallows the %rflame%w!&It lights your way, and burns&grass and cobwebs where you set "
-                   "it&down.";
+            return "The lamp swallows the %rflame%w! It&lights your way, and burns grass&"
+                   "and cobwebs where you set it&down.";
     }
 }
 
@@ -790,11 +790,12 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&lantern, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&lantern, 0, 19, 0);
-    Z64Items_SetTextbox(&lantern, "You got the %rLantern%w!&A gravekeeper's lamp, empty and&waiting for a flame.^"
-                                  "Swing it at a fire with %y\xA1%w to&drink the flame in: the lamp&lights your way "
-                                  "in that colour.^Swing it away from a fire to&set the flame down and burn what&it "
-                                  "finds. %y\xA2%w picks your flames.");
-    Z64Items_SetPauseText(&lantern, "%rLantern&%wSwing %y\xA1%w at a fire to catch it,&away from one to set it down.");
+    Z64Items_SetTextbox(&lantern, "You got the %rLantern%w! A&gravekeeper's lamp, empty and&waiting for a flame.^"
+                                  "Swing it at a fire with %y\xA1%w to&drink the flame in: the lamp&"
+                                  "lights your way in that colour.^Swing it away from a fire to&"
+                                  "set the flame down and burn&what it finds. %y\xA2%w picks your&flames.");
+    Z64Items_SetPauseText(&lantern, "%rLantern&%wSwing %y\xA1%w at a fire to catch it, away&"
+                                    "from one to set it down.");
     Z64Items_SetAction(&lantern, TakeOutLantern, SwingLantern);
     Z64Items_SetHeldCallbacks(&lantern, NULL, PutLanternAway, NULL);
     lantern.modelGroup = PLAYER_MODELGROUP_DEFAULT;

@@ -4,6 +4,7 @@
  */
 
 #include <math.h>
+#include <string.h>
 
 #include "z64items.h"
 
@@ -12,6 +13,7 @@
 #include "macros.h"
 #include "variables.h"
 #include "objects/object_gi_clothes/object_gi_clothes.h"
+#include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 
 #define CHAMPION_TUNIC_KEY "nei.equip.champion_tunic"
@@ -86,8 +88,14 @@ static bool IsAimableAction(s8 itemAction) {
 }
 
 // heldItemAction lags itemAction while the airborne hand-off runs; either side keeps the permission alive.
+const char* CustomItemRegistry_GetHeldKey(void);
 static bool HoldsAimableItem(Player* player) {
-    return IsAimableAction(player->heldItemAction) || IsAimableAction(player->itemAction);
+    const char* key = CustomItemRegistry_GetHeldKey();
+    const SOHCustomItemDefinition* item = key != NULL && SOH_MOD_API_HAS(sApi, FindCustomItem) ? sApi->FindCustomItem(key) : NULL;
+    return IsAimableAction(player->heldItemAction) || IsAimableAction(player->itemAction) ||
+           (item != NULL && item->firstPersonModelPath != NULL) ||
+           (key != NULL && (strcmp(key, "nei.beetle") == 0 || strcmp(key, "nei.dominion_rod") == 0 ||
+                           strcmp(key, "nei.ball_and_chain") == 0 || strcmp(key, "nei.whip") == 0));
 }
 
 static bool IsAiming(Player* player) {
@@ -311,6 +319,9 @@ static void CommitFlurry(Player* player, PlayState* play) {
 }
 
 static void EnterBulletTime(Player* player, PlayState* play) {
+    // Establish the rest pose once; bow and other item animations own subsequent frames.
+    AnimationContext_SetLoadFrame(play,(LinkAnimationHeader*)gPlayerAnim_link_normal_wait_free,
+        0,player->skelAnime.limbCount,player->skelAnime.jointTable);
     sChampion.state = CHAMPION_BULLET_TIME;
     SlowWorld(true);
     player->actor.speedXZ = 0.0f;
@@ -321,7 +332,7 @@ static void EnterBulletTime(Player* player, PlayState* play) {
 static void UpdateIdle(Player* player, PlayState* play) {
     bool isHopping = (player->stateFlags2 & PLAYER_STATE2_HOPPING) != 0;
 
-    if (!IsGrounded(player) && HoldsAimableItem(player) && IsAiming(player)) {
+    if (!IsGrounded(player) && player->actor.world.pos.y - player->actor.floorHeight >= 5.0f && HoldsAimableItem(player) && IsAiming(player)) {
         EnterBulletTime(player, play);
         return;
     }
@@ -359,7 +370,8 @@ static void UpdateRush(PlayState* play, bool tookDamage) {
 
 // The fall is suspended and nothing else: aiming is the game's own first-person aim.
 static void UpdateBulletTime(Player* player, PlayState* play) {
-    if (IsGrounded(player) || !HoldsAimableItem(player) || !IsAiming(player)) {
+    if (IsGrounded(player) || player->actor.world.pos.y - player->actor.floorHeight < 5.0f || !HoldsAimableItem(player) || !IsAiming(player) ||
+        (play->state.input[0].rel.button & (BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
         ReturnToIdle(play);
         return;
     }
@@ -518,10 +530,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = CHAMPION_TUNIC_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rChampion's Tunic&%wLocked on, hop past an attack and swing %y\xA0%w for a flurry "
-                           "rush. Aim in mid air to slow time.";
-    definition.getItemText = "You got the %rChampion's Tunic%w!&The blue of a knight chosen to guard the princess. "
-                             "Dodge an attack at the last moment or aim while airborne, and the world slows for you.";
+    definition.pauseText = "%rChampion's Tunic&%wLocked on, hop past an attack and&"
+                           "swing %y\xA0%w for a flurry rush. Aim in&mid air to slow time.";
+    definition.getItemText = "You got the %rChampion's Tunic%w!&The blue of a knight chosen to&"
+                             "guard the princess.^Dodge an attack at the last&moment or aim while airborne,&"
+                             "and the world slows for you:&%ybullet time%w.";
     definition.slot = SOH_EQUIP_SLOT_TUNIC;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_TUNIC;

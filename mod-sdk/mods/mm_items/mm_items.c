@@ -15,6 +15,8 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "regs.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 
 #define MM_ITEMS_MOD "mm_items"
@@ -31,15 +33,14 @@
 #define PICTO_PHOTO_FIELD "picto_photo"
 
 void FB_WriteFramebufferSliceToCPU(Gfx** gfxp, void* buffer, u8 byteSwap);
-u8 ResourceMgr_FileExists(const char* resourcePath);
 
-static const ALIGN_ASSET(2) char sKegIconTex[] = "__OTR__textures/icon_item_custom/gItemIconPowerKegTex";
-static const ALIGN_ASSET(2) char sKegNameTex[] = "__OTR__textures/item_name_custom/gPowerKegNameTex";
-static const ALIGN_ASSET(2) char sPictoIconTex[] = "__OTR__textures/icon_item_custom/gItemIconPictoBoxTex";
-static const ALIGN_ASSET(2) char sPictoNameTex[] = "__OTR__textures/item_name_custom/gPictoBoxNameTex";
+static const ALIGN_ASSET(2) char sKegIconTex[] = "__OTR__icon_item_static_yar/gItemIconPowderKegTex";
+static const ALIGN_ASSET(2) char sKegNameTex[] = "__OTR__item_name_static/gItemNamePowderKegENGTex";
+static const ALIGN_ASSET(2) char sPictoIconTex[] = "__OTR__icon_item_static_yar/gItemIconPictographBoxTex";
+static const ALIGN_ASSET(2) char sPictoNameTex[] = "__OTR__item_name_static/gItemNamePictographBoxENGTex";
 
 // Majora's Mask models, extracted by the mm_assets mod. Absent without it, which is why every use is gated
-// on ResourceMgr_FileExists instead of the manifest's "requires": the items work either way.
+// on HasResource instead of the manifest's "requires": the items work either way.
 static const ALIGN_ASSET(2) char sKegBarrelDL[] = "__OTR__objects/object_gi_bigbomb/gGiPowderKegBarrelDL";
 static const ALIGN_ASSET(2) char sKegSkullDL[] = "__OTR__objects/object_gi_bigbomb/gGiPowderKegGoronSkullAndFuseDL";
 static const ALIGN_ASSET(2) char sPictoBodyDL[] = "__OTR__objects/object_gi_camera/gGiPictoBoxBodyAndLensDL";
@@ -253,7 +254,7 @@ static void PullPowerKeg(PlayState* play, Player* player) {
 // The barrel is opaque and the Goron skull and its fuse translucent, the way MM's own get-item draw splits
 // them. The transform is rebuilt from the actor's position so the bomb's collision scale cannot shrink it.
 static void DrawKeg(Actor* actor, PlayState* play, bool* drawVanilla) {
-    if (actor != sKeg || actor->params != BOMB_BODY || !ResourceMgr_FileExists(sKegBarrelDL)) {
+    if (actor != sKeg || actor->params != BOMB_BODY || !sApi->HasResource(sKegBarrelDL)) {
         return;
     }
     *drawVanilla = false;
@@ -272,10 +273,10 @@ static void DrawKeg(Actor* actor, PlayState* play, bool* drawVanilla) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-#define POWER_KEG_GIVE_SCALE 0.4f
+#define POWER_KEG_GIVE_SCALE 1.6f
 
 static void DrawKegGetItem(PlayState* play, GetItemEntry* entry) {
-    if (!ResourceMgr_FileExists(sKegBarrelDL)) {
+    if (!sApi->HasResource(sKegBarrelDL)) {
         return;
     }
     OPEN_DISPS(play->state.gfxCtx);
@@ -315,6 +316,9 @@ static void DrawKegGetItem(PlayState* play, GetItemEntry* entry) {
 static u16 sFrameRgba16[SCREEN_WIDTH * SCREEN_HEIGHT];
 static u8 sPhotoI8[PICTO_PHOTO_SIZE];
 static u8 sPhotoI5[PICTO_PHOTO_COMPRESSED_SIZE];
+static u16 sPhotoColor[PICTO_PHOTO_SIZE];
+static bool sPhotoHasColor;
+#define PICTO_COLOR_FIELD "picto_rgba16"
 
 static void ConvertRgba16ToIntensity(u8* dest, const u16* src, s32 left, s32 top, s32 right, s32 bottom) {
     for (s32 y = top; y <= bottom; y++) {
@@ -562,6 +566,7 @@ static bool sIsPhotoFresh;
 static bool sIsPromptShown;
 
 static void LoadPictoSave(void) {
+    sPhotoHasColor=sApi->StorageGet(MM_ITEMS_MOD,PICTO_COLOR_FIELD,sPhotoColor,sizeof(sPhotoColor))==sizeof(sPhotoColor);
     sIsPhotoStored = sApi->StorageGet(MM_ITEMS_MOD, PICTO_PHOTO_FIELD, sPhotoI5, sizeof(sPhotoI5)) == sizeof(sPhotoI5);
     sPictoFlags[0] = 0;
     sPictoFlags[1] = 0;
@@ -571,6 +576,7 @@ static void LoadPictoSave(void) {
 static void ClearStoredPhoto(void) {
     sApi->StorageRemove(MM_ITEMS_MOD, PICTO_PHOTO_FIELD);
     sIsPhotoStored = false;
+    sApi->StorageRemove(MM_ITEMS_MOD,PICTO_COLOR_FIELD);sPhotoHasColor=false;
 }
 
 // The box owns A and B: A is the shutter and B puts it away, so neither may reach Link underneath. The stick
@@ -645,6 +651,9 @@ static void ShowStoredPhoto(void) {
 }
 
 static void DevelopCapture(Player* player, PlayState* play) {
+    for(int y=0;y<PICTO_PHOTO_HEIGHT;++y)
+        memcpy(&sPhotoColor[y*PICTO_PHOTO_WIDTH],&sFrameRgba16[(y+PICTO_PHOTO_TOPLEFT_Y)*SCREEN_WIDTH+PICTO_PHOTO_TOPLEFT_X],PICTO_PHOTO_WIDTH*sizeof(u16));
+    sPhotoHasColor=true;
     ConvertRgba16ToIntensity(sPhotoI8, sFrameRgba16, PICTO_PHOTO_TOPLEFT_X, PICTO_PHOTO_TOPLEFT_Y,
                              PICTO_PHOTO_TOPLEFT_X + PICTO_PHOTO_WIDTH - 1,
                              PICTO_PHOTO_TOPLEFT_Y + PICTO_PHOTO_HEIGHT - 1);
@@ -658,6 +667,9 @@ static void KeepPhoto(Player* player, PlayState* play) {
     if (sIsPhotoFresh) {
         CompressI8ToI5(sPhotoI8, sPhotoI5, PICTO_PHOTO_SIZE);
         sApi->StorageSet(MM_ITEMS_MOD, PICTO_PHOTO_FIELD, sPhotoI5, sizeof(sPhotoI5));
+        if(CVarGetInteger("gMods.Pictobox.Color",0) && sPhotoHasColor)
+            sApi->StorageSet(MM_ITEMS_MOD,PICTO_COLOR_FIELD,sPhotoColor,sizeof(sPhotoColor));
+        else sApi->StorageRemove(MM_ITEMS_MOD,PICTO_COLOR_FIELD);
         sIsPhotoStored = true;
     }
     LeaveBox(player, play);
@@ -788,10 +800,10 @@ static void StartPendingAim(Player* player, PlayState* play) {
     Z64Aiming_Request(player, play);
 }
 
-#define PICTO_GIVE_SCALE 0.5f
+#define PICTO_GIVE_SCALE 2.0f
 
 static void DrawPictoGetItem(PlayState* play, GetItemEntry* entry) {
-    if (!ResourceMgr_FileExists(sPictoBodyDL)) {
+    if (!sApi->HasResource(sPictoBodyDL)) {
         return;
     }
     OPEN_DISPS(play->state.gfxCtx);
@@ -807,45 +819,33 @@ static void DrawPictoGetItem(PlayState* play, GetItemEntry* entry) {
 
 // MM's own frame: four corner brackets on the R_PICTO_FOCUS_BORDER positions and a crosshair at its icon.
 // The message box draws after this, so the cycle type goes back before leaving.
+static const ALIGN_ASSET(2) char sFocusBorder[]="__OTR__parameter_static/gPictoBoxFocusBorderTex";
+static const ALIGN_ASSET(2) char sFocusIcon[]="__OTR__parameter_static/gPictoBoxFocusIconTex";
+static const ALIGN_ASSET(2) char sFocusText[]="__OTR__parameter_static/gPictoBoxFocusTextTex";
 static void DrawViewfinder(PlayState* play) {
-    const s32 left = PICTO_VIEWFINDER_LEFT;
-    const s32 top = PICTO_VIEWFINDER_TOP;
-    const s32 right = PICTO_VIEWFINDER_RIGHT + PICTO_VIEWFINDER_CORNER;
-    const s32 bottom = PICTO_VIEWFINDER_BOTTOM + PICTO_VIEWFINDER_CORNER;
-    const s32 arm = PICTO_VIEWFINDER_CORNER;
-    const s32 crossX = PICTO_CROSSHAIR_X;
-    const s32 crossY = PICTO_CROSSHAIR_Y;
-    const s32 reach = PICTO_CROSSHAIR_ARM;
-    const s32 strokes[][4] = {
-        { left, top, left + arm, top + 2 },
-        { left, top, left + 2, top + arm },
-        { right - arm, top, right, top + 2 },
-        { right - 2, top, right, top + arm },
-        { left, bottom - 2, left + arm, bottom },
-        { left, bottom - arm, left + 2, bottom },
-        { right - arm, bottom - 2, right, bottom },
-        { right - 2, bottom - arm, right, bottom },
-        { crossX - reach, crossY, crossX + reach, crossY + 1 },
-        { crossX, crossY - reach, crossX + 1, crossY + reach },
-    };
-
-    OPEN_DISPS(play->state.gfxCtx);
-    gDPPipeSync(OVERLAY_DISP++);
-    gDPSetCycleType(OVERLAY_DISP++, G_CYC_FILL);
-    gDPSetRenderMode(OVERLAY_DISP++, G_RM_NOOP, G_RM_NOOP2);
-    gDPSetFillColor(OVERLAY_DISP++, 0xFFFFFFFF);
-    for (u32 i = 0; i < ARRAY_COUNT(strokes); i++) {
-        gDPFillRectangle(OVERLAY_DISP++, strokes[i][0], strokes[i][1], strokes[i][2], strokes[i][3]);
-    }
-    gDPPipeSync(OVERLAY_DISP++);
-    gDPSetCycleType(OVERLAY_DISP++, G_CYC_1CYCLE);
-    CLOSE_DISPS(play->state.gfxCtx);
+ OPEN_DISPS(play->state.gfxCtx);Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+ gDPSetAlphaCompare(OVERLAY_DISP++,G_AC_THRESHOLD);
+ gDPSetRenderMode(OVERLAY_DISP++,G_RM_XLU_SURF,G_RM_XLU_SURF2);
+ gDPSetCombineMode(OVERLAY_DISP++,G_CC_MODULATEIA_PRIM,G_CC_MODULATEIA_PRIM);
+ gDPSetPrimColor(OVERLAY_DISP++,0,0,255,255,155,255);
+ gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusBorder,G_IM_FMT_IA,16,16,0,G_TX_MIRROR|G_TX_WRAP,G_TX_MIRROR|G_TX_WRAP,4,4,G_TX_NOLOD,G_TX_NOLOD);
+ for(int i=0;i<4;++i) {
+  int x=(i&1)?PICTO_VIEWFINDER_RIGHT:PICTO_VIEWFINDER_LEFT;
+  int y=(i&2)?PICTO_VIEWFINDER_BOTTOM:PICTO_VIEWFINDER_TOP;
+  gSPTextureRectangle(OVERLAY_DISP++,x*4,y*4,(x+16)*4,(y+16)*4,G_TX_RENDERTILE,(i&1)?512:0,(i&2)?512:0,1<<10,1<<10);
+ }
+ gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusIcon,G_IM_FMT_I,32,16,0,G_TX_WRAP,G_TX_WRAP,G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+ gSPTextureRectangle(OVERLAY_DISP++,142*4,108*4,174*4,124*4,G_TX_RENDERTILE,0,0,1<<10,1<<10);
+ gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusText,G_IM_FMT_I,32,8,0,G_TX_WRAP,G_TX_WRAP,G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+ gSPTextureRectangle(OVERLAY_DISP++,142*4,128*4,174*4,136*4,G_TX_RENDERTILE,0,0,1<<10,1<<10);
+ gDPSetAlphaCompare(OVERLAY_DISP++,G_AC_NONE);CLOSE_DISPS(play->state.gfxCtx);
 }
 
 // The print on its grey mount, MM's own layout. Sepia is not a filter: the I8 image runs through
 // MODULATEI_PRIM and the prim colour is the tone.
 static void DrawPhoto(PlayState* play) {
     s32 top = PICTO_PHOTO_TOPLEFT_Y - PICTO_PHOTO_RAISE;
+    bool color=sPhotoHasColor && CVarGetInteger("gMods.Pictobox.Color",0);
 
     OPEN_DISPS(play->state.gfxCtx);
     gDPPipeSync(OVERLAY_DISP++);
@@ -859,15 +859,22 @@ static void DrawPhoto(PlayState* play) {
     gDPSetRenderMode(OVERLAY_DISP++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
     gDPSetTextureFilter(OVERLAY_DISP++, G_TF_POINT);
     gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEI_PRIM, G_CC_MODULATEI_PRIM);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 250, 160, 160, 255);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, color?255:250, color?255:160, color?255:160, 255);
 
     for (s32 y = 0; y < PICTO_PHOTO_HEIGHT; y += PICTO_PHOTO_STRIP, top += PICTO_PHOTO_STRIP) {
         // The buffer never moves, so the renderer's texture cache would keep serving the previous photo
         // unless each strip is invalidated after a new capture overwrites it.
-        gSPInvalidateTexCache(OVERLAY_DISP++, (uintptr_t)&sPhotoI8[y * PICTO_PHOTO_WIDTH]);
-        gDPLoadTextureBlock(OVERLAY_DISP++, &sPhotoI8[y * PICTO_PHOTO_WIDTH], G_IM_FMT_I, G_IM_SIZ_8b,
-                            PICTO_PHOTO_WIDTH, PICTO_PHOTO_STRIP, 0, G_TX_NOMIRROR | G_TX_WRAP,
-                            G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+        if(color) {
+            gSPInvalidateTexCache(OVERLAY_DISP++,(uintptr_t)&sPhotoColor[y*PICTO_PHOTO_WIDTH]);
+            gDPLoadTextureBlock(OVERLAY_DISP++,&sPhotoColor[y*PICTO_PHOTO_WIDTH],G_IM_FMT_RGBA,G_IM_SIZ_16b,
+                PICTO_PHOTO_WIDTH,PICTO_PHOTO_STRIP,0,G_TX_NOMIRROR|G_TX_WRAP,G_TX_NOMIRROR|G_TX_WRAP,
+                G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+        } else {
+            gSPInvalidateTexCache(OVERLAY_DISP++,(uintptr_t)&sPhotoI8[y*PICTO_PHOTO_WIDTH]);
+            gDPLoadTextureBlock(OVERLAY_DISP++,&sPhotoI8[y*PICTO_PHOTO_WIDTH],G_IM_FMT_I,G_IM_SIZ_8b,
+                PICTO_PHOTO_WIDTH,PICTO_PHOTO_STRIP,0,G_TX_NOMIRROR|G_TX_WRAP,G_TX_NOMIRROR|G_TX_WRAP,
+                G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+        }
         gSPTextureRectangle(OVERLAY_DISP++, PICTO_PHOTO_TOPLEFT_X << 2, top << 2,
                             (PICTO_PHOTO_TOPLEFT_X + PICTO_PHOTO_WIDTH) << 2, (top + PICTO_PHOTO_STRIP) << 2,
                             G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
@@ -876,7 +883,45 @@ static void DrawPhoto(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Use the native ammo renderer so HUD anchors, margins, scaling and widescreen agree.
+void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha);
+static void DrawPictoPhotoCount(PlayState* play) {
+    if (play->pauseCtx.state != 0 || play->gameOverCtx.state != 0) {
+        return;
+    }
+    const s16 alpha[MM_ITEMS_BUTTON_COUNT] = {
+        play->interfaceCtx.bAlpha, play->interfaceCtx.cLeftAlpha, play->interfaceCtx.cDownAlpha,
+        play->interfaceCtx.cRightAlpha, play->interfaceCtx.dpadUpAlpha, play->interfaceCtx.dpadDownAlpha,
+        play->interfaceCtx.dpadLeftAlpha, play->interfaceCtx.dpadRightAlpha,
+    };
+    for (s16 button = 0; button < MM_ITEMS_BUTTON_COUNT; button++) {
+        const char* key = sApi->GetEquippedCustomItem(button);
+        if (key == NULL || strcmp(key, PICTO_BOX_KEY) != 0 || alpha[button] == 0 ||
+            (button >= 4 && !CVarGetInteger("gEnhancements.DpadEquips", 0))) {
+            continue;
+        }
+        OPEN_DISPS(play->state.gfxCtx);
+        Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, alpha[button]);
+        gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
+                          PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
+        CLOSE_DISPS(play->state.gfxCtx);
+        // The native renderer accepts vanilla ammo items. Borrow a slot only for this draw;
+        // the custom item's getAmmo callback already supplies the separate pause-menu count.
+        u8 savedItem = gSaveContext.equips.buttonItems[button];
+        s8 savedAmmo = AMMO(ITEM_BEAN);
+        gSaveContext.equips.buttonItems[button] = ITEM_BEAN;
+        AMMO(ITEM_BEAN) = sIsPhotoStored ? 1 : 0;
+        Interface_DrawAmmoCount(play, button, alpha[button]);
+        AMMO(ITEM_BEAN) = savedAmmo;
+        gSaveContext.equips.buttonItems[button] = savedItem;
+    }
+}
+
 static void DrawPictoOverlay(PlayState* play) {
+    DrawPictoPhotoCount(play);
     if (sPictoState == PICTO_LENS && sPictoCapture == PICTO_CAPTURE_IDLE) {
         DrawViewfinder(play);
         return;
@@ -932,7 +977,17 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+static int32_t PictoPhotoCount(const char* key){return sIsPhotoStored?1:0;}
+static void RegisterPictoOptions(void) {
+    if(!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
+    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Enhancements","Mods","gMods.Menu",1);
+    SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Mods";
+    w.type=SOH_MOD_MENU_CHECKBOX;w.label="Save pictographs in color";w.cvar="gMods.Pictobox.Color";
+    w.tooltip="Keep a color photograph in the save file. Existing monochrome photographs remain readable.";
+    sApi->RegisterMenuWidget(&w);
+}
 SOH_MOD_EXPORT void ModInit(void) {
+    RegisterPictoOptions();
     if (!SOH_MOD_API_HAS(sApi, ShowTextbox) || !SOH_MOD_API_HAS(sApi, StorageSet)) {
         return;
     }
@@ -942,10 +997,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&keg, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&keg, MM_ITEMS_PAGE, POWER_KEG_SLOT, 0);
-    Z64Items_SetTextbox(&keg, "You got a %rPowder Keg%w!&The blasting barrel the Gorons&trust to move a mountain.^"
-                              "Press %y\xA1%w to set one down, then get&clear: the fuse is short.^It shatters every "
-                              "boulder and heavy&stone block around it, but you need&the %rSilver Gauntlets%w to lift "
-                              "one.");
+    Z64Items_SetTextbox(&keg, "You got a %rPowder Keg%w! The&blasting barrel the Gorons&"
+                              "trust to move a mountain.^Press %y\xA1%w to set one down, then&"
+                              "get clear: the fuse is short.^It shatters every boulder and&"
+                              "heavy stone block around it,&but you need the %rSilver&Gauntlets%w to lift one.");
     Z64Items_SetPauseText(&keg, "%rPowder Keg&%wPress %y\xA1%w to set one down and run.&Needs the Silver Gauntlets.");
     Z64Items_SetCanUse(&keg, CanUsePowerKeg);
     Z64Items_SetAmmo(&keg, GetKegCount);
@@ -956,11 +1011,12 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&picto, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&picto, MM_ITEMS_PAGE, PICTO_BOX_SLOT, 0);
-    Z64Items_SetTextbox(&picto, "You got the %rPictograph Box%w!&A curiosity out of Termina that&keeps a moment "
-                                "behind glass.^Press %y\xA1%w to raise the lens and&%y\x9F%w to take the picture.^"
-                                "Only one pictograph fits inside, so&choose what you keep.");
-    Z64Items_SetPauseText(&picto, "%rPictograph Box&%wPress %y\xA1%w to raise the lens,&%y\x9F%w to shoot, %y\xA0%w to "
-                                  "put it away.");
+    Z64Items_SetTextbox(&picto, "You got the %rPictograph Box%w! A&curiosity out of Termina that&"
+                                "keeps a moment behind glass.^Press %y\xA1%w to raise the lens and %y\x9F%w&"
+                                "to take the picture.^Only one pictograph fits inside,&so choose what you keep.");
+    Z64Items_SetPauseText(&picto, "%rPictograph Box&%wPress %y\xA1%w to raise the lens, %y\x9F%w to&"
+                                  "shoot, %y\xA0%w to put it away.");
+    Z64Items_SetAmmo(&picto,PictoPhotoCount);
     Z64Items_SetCanUse(&picto, CanUsePictoBox);
     Z64Items_SetAction(&picto, TakeOutPictoBox, UpdatePictoBox);
     Z64Items_SetHeldCallbacks(&picto, NULL, StowPictoBox, NULL);

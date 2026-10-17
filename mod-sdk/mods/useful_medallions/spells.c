@@ -121,16 +121,16 @@ static const MedallionInfo sMedallions[SW97_SPELL_COUNT] = {
     { "nei.medallion.forest", QUEST_MEDALLION_FOREST, SW97_SPELL_WIND, sForestIcon, sForestName,
       "%gForest Medallion&%wWind spell, 12 MP. A tornado that&drags enemies in and grinds them." },
     { "nei.medallion.fire", QUEST_MEDALLION_FIRE, SW97_SPELL_FIRE, sFireIcon, sFireName,
-      "%rFire Medallion&%wFire spell, 12 MP. A column of flame&that burns harder the longer it stands." },
+      "%rFire Medallion&%wFire spell, 12 MP. A column of&flame that burns harder the&longer it stands." },
     { "nei.medallion.water", QUEST_MEDALLION_WATER, SW97_SPELL_ICE, sWaterIcon, sWaterName,
-      "%cWater Medallion&%wIce spell, 12 MP. Freezes every enemy&it touches for 6 seconds." },
+      "%cWater Medallion&%wIce spell, 12 MP. Freezes every&enemy it touches for 6 seconds." },
     { "nei.medallion.spirit", QUEST_MEDALLION_SPIRIT, SW97_SPELL_SOUL, sSpiritIcon, sSpiritName,
-      "%oSpirit Medallion&%wSoul spell, 24 MP. Turns you into a&fairy until you cast it again." },
+      "%ySpirit Medallion&%wSoul spell, 24 MP. Turns you into&a fairy until you cast it again." },
     { "nei.medallion.shadow", QUEST_MEDALLION_SHADOW, SW97_SPELL_DARK, sShadowIcon, sShadowName,
-      "%pShadow Medallion&%wDark spell, 24 MP. A shield that blocks&all damage for a minute. Hold %y\xA1%w to&trade "
-      "3 hearts for magic." },
+      "%pShadow Medallion&%wDark spell, 24 MP. A shield that&blocks all damage for a minute.^"
+      "Hold %y\xA1%w to trade 3 hearts for&magic." },
     { "nei.medallion.light", QUEST_MEDALLION_LIGHT, SW97_SPELL_LIGHT, sLightIcon, sLightName,
-      "%yLight Medallion&%wLight spell, 24 MP. Undead freeze for&30 seconds and you heal 6 hearts." },
+      "%yLight Medallion&%wLight spell, 24 MP. Undead freeze&for 30 seconds and you heal 6&hearts." },
 };
 
 static s8 sPendingSpell = -1;

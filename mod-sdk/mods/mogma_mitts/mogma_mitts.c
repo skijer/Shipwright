@@ -4,7 +4,9 @@
 #include "z64items.h"
 
 #include "align_asset_macro.h"
+#define Player_Action_8084BDFC Player_Action_8084BDFC_FunctionDeclaration
 #include "functions.h"
+#undef Player_Action_8084BDFC
 #include "macros.h"
 #include "variables.h"
 #include <libultraship/bridge/consolevariablebridge.h>
@@ -30,6 +32,8 @@ static const ALIGN_ASSET(2) char sRightFistPlateDL[] = "__OTR__objects/object_li
 static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDrawEnd", "OnLoadGame" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+extern HOST_DATA void Player_Action_8084BDFC(Player* player, PlayState* play);
 
 static const SOHModApi* sApi;
 static bool sIsGripping;
@@ -150,12 +154,25 @@ static void UpdateMitts(void) {
         StopGripping();
         return;
     }
-    LendClimbEverything(HasClimbAbility());
+    LendClimbEverything(true);
     DrainMagic(player);
 }
 
 static void StopGrippingOnLoad(int32_t fileNum) {
     StopGripping();
+}
+
+// Register directly: changing a CVar does not rerun the host's conditional hook installer.
+static void GripAnySurface(bool* should, va_list args) {
+    if (sIsGripping) { *should = true; }
+}
+static void KeepGripOnLedge(bool* should, va_list args) {
+    if (sIsGripping && gPlayState != NULL) {
+        Player* player = GET_PLAYER(gPlayState);
+        if (player->actionFunc == Player_Action_8084BDFC) {
+            player->actor.bgCheckFlags |= BGCHECKFLAG_GROUND;
+        }
+    }
 }
 
 static bool IsShowingVanillaGauntlets(void) {
@@ -213,9 +230,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&mitts, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&mitts, 0, 13, 0);
-    Z64Items_SetTextbox(&mitts, "You got the %rMogma Mitts%w!&Digging claws of the Mogma tribe,&tough enough to "
-                                "bite into stone.^Press %y\xA1%w to grip. Link climbs and&crawls where he couldn't, "
-                                "and a&climber grips %yany wall%w.^The grip spends %gmagic%w while&it holds.");
+    Z64Items_SetTextbox(&mitts, "You got the %rMogma Mitts%w!&Digging claws of the Mogma&"
+                                "tribe, tough enough to bite&into stone.^Press %y\xA1%w to grip. Link climbs and&"
+                                "crawls where he couldn't, and a&climber grips %yany wall%w.^"
+                                "The grip spends %gmagic%w while it&holds.");
     Z64Items_SetPauseText(&mitts, "%rMogma Mitts&%wPress %y\xA1%w to grip walls and crawl.&Press again to stop. "
                                   "Drains magic.");
     Z64Items_SetAction(&mitts, ToggleGrip, NULL);
@@ -228,6 +246,9 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     sApi->RegisterVB(VB_CLIMB, GrantClimbing);
     sApi->RegisterVB(VB_CRAWL, GrantCrawling);
+    sApi->RegisterVB(VB_SURFACE_IS_CLIMBABLE, GripAnySurface);
+    sApi->RegisterVB(VB_SURFACE_ANGLE_IS_CLIMBABLE, GripAnySurface);
+    sApi->RegisterVB(VB_AFTER_PROCESS_SCENE_COLLISION, KeepGripOnLedge);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateMitts);
     SOH_REGISTER_HOOK(sApi, OnLoadGame, StopGrippingOnLoad);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawGauntlets);

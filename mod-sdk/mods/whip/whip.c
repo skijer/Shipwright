@@ -1096,13 +1096,14 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&whip, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&whip, 0, 2, 0);
-    Z64Items_SetTextbox(&whip, "You got the %rWhip%w!&A snake-headed lash from the land of spirit tracks, and its "
-                               "fangs still bite. Take aim with %y\xA1%w and press it again to crack it, or let "
-                               "%g\xA4%w send it straight at a foe. It bites into %ybeams%w, %ybars%w and %ytorch "
-                               "stands%w so you can swing where you cannot jump, and it drags %cKeese%w and "
-                               "%cBubbles%w to your feet.");
-    Z64Items_SetPauseText(&whip, "%rWhip&%wAim with %y\xA1%w, press again to lash. Tilt the stick to swing, let go "
-                                 "with %y\x9F%w or %y\xA0%w.");
+    Z64Items_SetTextbox(&whip, "You got the %rWhip%w! A&snake-headed lash from the&"
+                               "land of spirit tracks, and its&fangs still bite.^"
+                               "Take aim with %y\xA1%w and press it&again to crack it, or let %g\xA4%w send&"
+                               "it straight at a foe.^It bites into %ybeams%w, %ybars%w and&"
+                               "%ytorch stands%w so you can swing&where you cannot jump,^"
+                               "and it drags %cKeese%w and %cBubbles%w&to your feet.");
+    Z64Items_SetPauseText(&whip, "%rWhip&%wAim with %y\xA1%w, press again to lash.&"
+                                 "Tilt the stick to swing, let go&with %y\x9F%w or %y\xA0%w.");
     Z64Items_SetAction(&whip, TakeOutWhip, UpdateWhipInHand);
     Z64Items_SetHeldCallbacks(&whip, RequestWhipAction, PutWhipAway, NULL);
     whip.modelGroup = PLAYER_MODELGROUP_DEFAULT;

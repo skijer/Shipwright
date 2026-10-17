@@ -13,7 +13,13 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "objects/object_link_boy/object_link_boy.h"
+#include "objects/object_link_child/object_link_child.h"
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
+#include "overlays/actors/ovl_En_Vm/z_en_vm.h"
+#include "overlays/actors/ovl_En_Am/z_en_am.h"
+#include "overlays/actors/ovl_En_Anubice/z_en_anubice.h"
+#include "overlays/actors/ovl_En_Anubice_Fire/z_en_anubice_fire.h"
 #include "overlays/effects/ovl_Effect_Ss_Fhg_Flash/z_eff_ss_fhg_flash.h"
 
 #define DOMROD_KEY "nei.dominion_rod"
@@ -72,7 +78,7 @@ static ColliderCylinderInit sColliderInit = {
     { DOMROD_COLLIDER_RADIUS, DOMROD_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayDrawEnd", "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerActionHandler", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnActorDrawEnd", "OnPlayDrawEnd", "OnSceneInit", "OnActorUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -86,6 +92,23 @@ static bool sWasLinkAirborne;
 static u8 sPhase;
 static s16 sTimer;
 static s16 sAttackCooldown;
+static s16 sCommandFrames;
+static u8 sBeamosAT;
+static u32 sBeamosDamageFlags;
+static u8 sBeamosDamage;
+static bool sSlashActive;
+static ColliderCylinder sPoundCollider;
+static bool sPoundReady;
+static s16 sPoundFrames;
+static Vec3f sPoundPos;
+void EnAm_SetupRecoilFromDamage(EnAm* actor, PlayState* play);
+void EnAnubice_SetupDie(EnAnubice* actor, PlayState* play);
+static const ALIGN_ASSET(2) char sSlashAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_fighter_normal_kiru";
+static ColliderCylinderInit sPoundInit = {
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
+    { ELEMTYPE_UNK0, { DMG_HAMMER_JUMP, 0, 8 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { 100, 45, 0, { 0, 0, 0 } },
+};
 static s16 sLastInvincibility;
 static Vec3f sOrbPos;
 static Vec3s sOrbRot;
@@ -97,6 +120,7 @@ static LightInfo sLightInfo;
 static s16 sSummonIds[ARRAY_COUNT(sSummonKeys)] = { -1, -1, -1, -1 };
 
 s32 Player_IsZTargeting(Player* player);
+s32 Player_UpperAction_Sword(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
     Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
@@ -205,12 +229,23 @@ static Actor* FindPossessionTarget(PlayState* play) {
     return FindNearest(play, IsPossessable, DOMROD_POSSESS_REACH);
 }
 
+static void RestoreBeamosAttack(void) {
+    if (sPossessed != NULL && sPossessed->update != NULL && sPossessed->id == ACTOR_EN_VM) {
+        EnVm* beam = (EnVm*)sPossessed;
+        beam->colliderQuad1.base.atFlags = sBeamosAT & ~(AT_HIT | AT_BOUNCED);
+        beam->colliderQuad1.info.toucher.dmgFlags = sBeamosDamageFlags;
+        beam->colliderQuad1.info.toucher.damage = sBeamosDamage;
+        beam->beamScale.x = beam->beamScale.z = 0.0f;
+    }
+}
+
 static void Stow(Player* player, PlayState* play) {
     if (sPhase == DOMROD_AIMING) {
         Z64Aiming_Release(player, play);
     }
     RemoveLight(play);
     sCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+    RestoreBeamosAttack();
     sPossessed = NULL;
     sIsAimPending = false;
     sIsDamagePaused = false;
@@ -219,6 +254,7 @@ static void Stow(Player* player, PlayState* play) {
 }
 
 static void StartReturn(void) {
+    RestoreBeamosAttack();
     sPossessed = NULL;
     sPhase = DOMROD_RETURNING;
     PlaySfxAt(NA_SE_IT_SHIELD_BOUND, &sOrbPos);
@@ -259,6 +295,8 @@ static void Launch(Player* player, PlayState* play) {
     sLaunchPos = player->actor.world.pos;
     sTimer = DOMROD_FLIGHT_FRAMES;
     sPhase = DOMROD_FLYING;
+    LinkAnimation_PlayOnce(play, &player->upperSkelAnime, (LinkAnimationHeader*)sSlashAnim);
+    sSlashActive = true;
     Collider_SetCylinder(play, &sCollider, &player->actor, &sColliderInit);
     CreateLight(play);
     PlaySfxAt(NA_SE_IT_ARROW_SHOT, &player->actor.world.pos);
@@ -266,6 +304,14 @@ static void Launch(Player* player, PlayState* play) {
 
 static void StartPossession(Player* player, Actor* target) {
     sPossessed = target;
+    sCommandFrames = 0;
+    if (target->id == ACTOR_EN_VM) {
+        EnVm* beam = (EnVm*)target;
+        sBeamosAT = beam->colliderQuad1.base.atFlags;
+        sBeamosDamageFlags = beam->colliderQuad1.info.toucher.dmgFlags;
+        sBeamosDamage = beam->colliderQuad1.info.toucher.damage;
+        beam->colliderQuad1.base.atFlags = AT_ON | AT_TYPE_PLAYER;
+    }
     sAttackCooldown = 0;
     sIsDamagePaused = false;
     sLastLinkPos = player->actor.world.pos;
@@ -428,76 +474,137 @@ static void CountDownAttack(void) {
     }
 }
 
-static void ControlBeamos(Player* player, Actor* actor, bool isAttacking) {
+static bool IsCommandTargeting(Player* player) {
+    return (player->stateFlags1&(PLAYER_STATE1_Z_TARGETING|PLAYER_STATE1_PARALLEL))!=0 ||
+        Player_IsZTargeting(player) || (gPlayState!=NULL && (gPlayState->state.input[0].cur.button&BTN_Z));
+}
+static Actor* CommandTarget(Player* player, Actor* possessed) {
+    Actor* target = player->focusActor;
+    if (target != NULL && target != possessed && target->update != NULL) { return target; }
+    // Z with no locked enemy is still a directed command, including a target into open air.
+    if (IsCommandTargeting(player)) {
+        static Actor point;
+        point.focus.pos = player->actor.focus.pos;
+        point.focus.pos.x += Math_SinS(player->actor.shape.rot.y)*800.0f;
+        point.focus.pos.z += Math_CosS(player->actor.shape.rot.y)*800.0f;
+        return &point;
+    }
+    return NULL;
+}
+
+static bool ExplodePossessed(PlayState* play, Actor* actor) {
+    EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, actor->world.pos.x,
+        actor->world.pos.y, actor->world.pos.z, 0, 0, 0x6FF, BOMB_BODY);
+    if (bomb == NULL) { return true; }
+    bomb->timer = 0;
+    Actor_Kill(actor);
+    return false;
+}
+
+static bool ControlBeamos(Player* player, PlayState* play, Actor* actor, bool isAttacking) {
+    EnVm* beamos = (EnVm*)actor;
+    Actor* target = CommandTarget(player, actor);
     HaltOwnMovement(actor, false);
     MimicLink(player, actor, false, true);
-    if (isAttacking && sAttackCooldown == 0) {
-        PlaySfxAt(NA_SE_EN_VALVAISA_FIRE, &actor->world.pos);
-        sAttackCooldown = DOMROD_BEAMOS_COOLDOWN;
+    if (isAttacking && target == NULL) { return ExplodePossessed(play, actor); }
+    if (isAttacking && sAttackCooldown == 0) { sCommandFrames = 30; sAttackCooldown = 40; }
+    if (sCommandFrames > 0 && target != NULL) {
+        --sCommandFrames;
+        beamos->beamRot.y = Math_Vec3f_Yaw(&beamos->beamPos1, &target->focus.pos);
+        beamos->beamRot.x = Math_Vec3f_Pitch(&beamos->beamPos1, &target->focus.pos);
+        beamos->headRotY = beamos->beamRot.y - actor->shape.rot.y;
+        beamos->beamScale.x = 0.1f;
+        beamos->beamScale.z = Math_Vec3f_DistXYZ(&beamos->beamPos1, &target->focus.pos);
+        beamos->colliderQuad1.base.atFlags = AT_ON | AT_TYPE_PLAYER;
+        beamos->colliderQuad1.info.toucher.dmgFlags = DMG_ARROW_FIRE;
+        beamos->colliderQuad1.info.toucher.damage = 4;
+        CollisionCheck_SetAT(play, &play->colChkCtx, &beamos->colliderQuad1.base);
+        PlaySfxAt(NA_SE_EN_BIMOS_LAZER - SFX_FLAG, &actor->world.pos);
+    } else {
+        beamos->beamScale.x = beamos->beamScale.z = 0.0f;
     }
     CountDownAttack();
+    return true;
 }
 
 static bool ControlArmos(Player* player, PlayState* play, Actor* actor, bool isAttacking) {
     HaltOwnMovement(actor, false);
     MimicLink(player, actor, false, true);
-    if (!isAttacking) {
-        return true;
+    if (!isAttacking) { return true; }
+    if (CommandTarget(player, actor) == NULL) {
+        actor->colChkInfo.health = 0;
+        EnAm_SetupRecoilFromDamage((EnAm*)actor, play);
+        return false;
     }
-    EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, actor->world.pos.x, actor->world.pos.y,
-                                      actor->world.pos.z, 0, 0, 0x6FF, BOMB_BODY);
-    if (bomb != NULL) {
-        bomb->timer = 0;
+    if (sAttackCooldown == 0) {
+        if (!sPoundReady) { Collider_InitCylinder(play, &sPoundCollider); sPoundReady = true; }
+        Collider_SetCylinder(play, &sPoundCollider, &player->actor, &sPoundInit);
+        sPoundPos = actor->world.pos;
+        sPoundFrames = 3;
+        sAttackCooldown = 25;
+        PlaySfxAt(NA_SE_IT_HAMMER_HIT, &actor->world.pos);
+        Vec3f zero = { 0 };
+        EffectSsBlast_SpawnWhiteShockwave(play, &actor->world.pos, &zero, &zero);
     }
-    PlaySfxAt(NA_SE_IT_BOMB_EXPLOSION, &actor->world.pos);
-    Actor_Kill(actor);
-    return false;
+    return true;
 }
 
-static void ControlAnubis(Player* player, PlayState* play, Actor* actor, bool isAttacking) {
+static bool ControlAnubis(Player* player, PlayState* play, Actor* actor, bool isAttacking) {
     HaltOwnMovement(actor, true);
     MimicLink(player, actor, true, false);
+    Actor* target = CommandTarget(player, actor);
+    if (isAttacking && target == NULL) {
+        EnAnubice_SetupDie((EnAnubice*)actor, play);
+        return false;
+    }
     if (isAttacking && sAttackCooldown == 0) {
-        s16 yaw = actor->shape.rot.y;
-
-        Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ANUBICE_FIRE,
-                    actor->world.pos.x + Math_SinS(yaw) * DOMROD_ANUBIS_FIRE_REACH, actor->world.pos.y + 30.0f,
-                    actor->world.pos.z + Math_CosS(yaw) * DOMROD_ANUBIS_FIRE_REACH, 0, yaw, 0, 0);
+        s16 yaw = Math_Vec3f_Yaw(&actor->focus.pos, &target->focus.pos);
+        s16 pitch = Math_Vec3f_Pitch(&actor->focus.pos, &target->focus.pos);
+        EnAnubiceFire* fire = (EnAnubiceFire*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ANUBICE_FIRE, actor->focus.pos.x,
+            actor->focus.pos.y, actor->focus.pos.z, pitch, yaw, 0, 0);
+        if (fire != NULL) {
+            fire->cylinder.base.atFlags = AT_ON | AT_TYPE_PLAYER;
+            fire->cylinder.info.toucher.dmgFlags = DMG_ARROW_FIRE;
+            fire->cylinder.info.toucher.damage = 4;
+        }
         PlaySfxAt(NA_SE_EN_ANUBIS_FIRE, &actor->world.pos);
         sAttackCooldown = DOMROD_ANUBIS_COOLDOWN;
     }
     CountDownAttack();
+    return true;
 }
 
 static bool DriveActor(Player* player, PlayState* play, Actor* actor, bool isAttacking) {
     switch (actor->id) {
-        case ACTOR_EN_VM:
-            ControlBeamos(player, actor, isAttacking);
-            return true;
-        case ACTOR_EN_AM:
-            return ControlArmos(player, play, actor, isAttacking);
-        case ACTOR_EN_ANUBICE:
-            ControlAnubis(player, play, actor, isAttacking);
-            return true;
-        default:
-            return false;
+        case ACTOR_EN_VM: return ControlBeamos(player, play, actor, isAttacking);
+        case ACTOR_EN_AM: CountDownAttack(); return ControlArmos(player, play, actor, isAttacking);
+        case ACTOR_EN_ANUBICE: return ControlAnubis(player, play, actor, isAttacking);
+        default: return false;
     }
 }
 
 // A hit only pauses the possession: the actor holds still until Link can act again.
+static bool sTargetACommand;
+static void CommandWithTargetA(PlayState* play, Player* player, int32_t action, bool* consumed, bool* started) {
+    if (sPhase!=DOMROD_CONTROLLING || !IsCommandTargeting(player) ||
+        !(play->state.input[0].press.button&BTN_A)) { return; }
+    sTargetACommand=true;*consumed=true;*started=true;
+}
 static void UpdateControlling(Player* player, PlayState* play) {
     u16 rodButton = FindEquippedButtonMask();
     u16 pressed = play->state.input[0].press.button;
+    bool targetA = sTargetACommand || (IsCommandTargeting(player) && (pressed & BTN_A));
+    sTargetACommand=false;
 
     if (sPossessed == NULL || sPossessed->update == NULL ||
         Math_Vec3f_DistXYZ(&player->actor.world.pos, &sPossessed->world.pos) > DOMROD_MAX_RANGE ||
-        (pressed & (sReleaseButtons & ~rodButton))) {
+        (pressed & (sReleaseButtons & ~rodButton & (targetA ? ~BTN_A : 0xFFFF)))) {
         ReleasePossessed();
         return;
     }
     sIsDamagePaused = player->invincibilityTimer > 0;
     if (!sIsDamagePaused) {
-        if (!DriveActor(player, play, sPossessed, (pressed & rodButton) != 0)) {
+        if (!DriveActor(player, play, sPossessed, targetA || (pressed & rodButton) != 0)) {
             ReleasePossessed();
             return;
         }
@@ -532,7 +639,7 @@ static void UpdateAiming(Player* player, PlayState* play) {
 // Busy only while aiming: with the orb away Link keeps his hands, since a possessed foe copies his steps.
 static int32_t UpdateRodInHand(Player* player, PlayState* play) {
     if (sPhase != DOMROD_AIMING) {
-        return 0;
+        return Player_UpperAction_Sword(player, play);
     }
     UpdateAiming(player, play);
     return 1;
@@ -595,6 +702,14 @@ static void UpdateRodWorld(void) {
         return;
     }
     RunPendingAim(player, play);
+    if (sSlashActive) { sSlashActive = !LinkAnimation_Update(play, &player->upperSkelAnime); }
+    if (sPoundFrames > 0) {
+        --sPoundFrames;
+        sPoundCollider.dim.pos.x = (s16)sPoundPos.x;
+        sPoundCollider.dim.pos.y = (s16)sPoundPos.y;
+        sPoundCollider.dim.pos.z = (s16)sPoundPos.z;
+        CollisionCheck_SetAT(play, &play->colChkCtx, &sPoundCollider.base);
+    }
     if (!IsAway()) {
         return;
     }
@@ -622,10 +737,37 @@ static void UpdateRodWorld(void) {
     }
 }
 
+// Native Beamos steering runs after Link; the command must also own the final beam state.
+static void ResolveControlledBeam(void* instance) {
+    Actor* actor = (Actor*)instance;
+    if (actor != sPossessed || actor->id != ACTOR_EN_VM || gPlayState == NULL) { return; }
+    EnVm* beam = (EnVm*)actor;
+    Player* player = GET_PLAYER(gPlayState);
+    Actor* target = CommandTarget(player, actor);
+    beam->colliderQuad1.base.atFlags = AT_ON | AT_TYPE_PLAYER;
+    if (sCommandFrames <= 0 || target == NULL || sIsDamagePaused) {
+        beam->beamScale.x = beam->beamScale.z = 0.0f;
+        beam->unk_260 = 0;
+        return;
+    }
+    beam->beamRot.y = Math_Vec3f_Yaw(&beam->beamPos1, &target->focus.pos);
+    beam->beamRot.x = Math_Vec3f_Pitch(&beam->beamPos1, &target->focus.pos);
+    beam->headRotY = beam->beamRot.y - actor->shape.rot.y;
+    beam->beamScale.x = 0.1f;
+    beam->beamScale.z = Math_Vec3f_DistXYZ(&beam->beamPos1, &target->focus.pos);
+    beam->unk_260 = 3;
+    beam->colliderQuad1.info.toucher.dmgFlags = DMG_ARROW_FIRE;
+    beam->colliderQuad1.info.toucher.damage = 4;
+    CollisionCheck_SetAT(gPlayState, &gPlayState->colChkCtx, &beam->colliderQuad1.base);
+}
+
 // The light list, the camera and the possessed actor all belong to the scene that is ending.
 static void ForgetScene(int16_t sceneNum) {
     Z64Aiming_Drop();
     sLightNode = NULL;
+    sPoundReady = false;
+    sPoundFrames = sCommandFrames = 0;
+    sSlashActive = false;
     sPossessed = NULL;
     sIsAimPending = false;
     sPhase = DOMROD_STOWED;
@@ -649,6 +791,37 @@ static void DrawOrb(PlayState* play) {
 }
 
 // Drawn from the play's end, not Link's: in first person he is not drawn, and the reticle must be.
+static MtxF sWeaponHand;
+static bool sWeaponHandReady;
+static void ReplaceSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* original, Vec3f* pos) {
+    if (!(sPhase!=DOMROD_STOWED) || limb!=PLAYER_LIMB_L_HAND) { return; }
+    *dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
+}
+static void CaptureSwordHand(PlayState* play, Player* player, int32_t limb) {
+    if ((sPhase!=DOMROD_STOWED) && limb==PLAYER_LIMB_L_HAND) { Matrix_Get(&sWeaponHand); sWeaponHandReady=true; }
+}
+static void DrawSwordReplacement(Actor* actor, PlayState* play) {
+    Player* player=(Player*)actor;
+    if (!(sPhase!=DOMROD_STOWED) || !sWeaponHandReady || (player->stateFlags2&PLAYER_STATE2_DISABLE_DRAW)) { return; }
+    Matrix_Push();
+    Matrix_Put(&sWeaponHand);
+    float unscale=player->actor.scale.x!=0?1.0f/player->actor.scale.x:1.0f;
+    Matrix_Scale(unscale,unscale,unscale,MTXMODE_APPLY);
+    Matrix_RotateZ(-M_PI/2,MTXMODE_APPLY); Matrix_Translate(0,10,0,MTXMODE_APPLY);
+    Matrix_Scale(.1f,.1f,.1f,MTXMODE_APPLY);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)(sRodDL));
+    if ((sRodXluDL)!=NULL) {
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++,(Gfx*)(sRodXluDL));
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Pop();
+}
+
 static void DrawRodEffects(void) {
     PlayState* play = gPlayState;
 
@@ -698,22 +871,29 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetButtons(&rod, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     // Shares the Shovel's cell, after it.
     Z64Items_SetPlacement(&rod, 0, 22, -1);
-    Z64Items_SetTextbox(&rod, "You got the %pDominion Rod%w!&An ancient artifact that can&possess and control "
-                              "enemies.^Hold %y\xA1%w to aim and let go to fire&a golden orb. It possesses&%rBeamos%w, "
-                              "%yArmos%w and %cAnubis%w.^A possessed enemy %gcopies your&steps%w. %y\xA1%w makes it "
-                              "attack,&%y\xA0%w lets it go.");
-    Z64Items_SetPauseText(&rod, "%pDominion Rod&%wHold %y\xA1%w to aim, release to fire.&A possessed foe copies your "
-                                "steps.");
+    Z64Items_SetTextbox(&rod, "You got the %pDominion Rod%w!&Hold %y\xA1%w to aim and release it to&"
+                              "fire a control orb.^Possess Beamos, Armos or&"
+                              "Anubis. Hold %y\xA4%w and press %y\x9F%w to&command an attack, even&"
+                              "without a locked target.^Press %y\xA1%w without targeting to&"
+                              "detonate or ignite the&possessed enemy.");
+    Z64Items_SetPauseText(&rod, "%pDominion Rod&%wHold %y\xA1%w to aim, release to fire. A&"
+                                "possessed foe copies your steps.");
     Z64Items_SetAction(&rod, TakeOutRod, UpdateRodInHand);
     Z64Items_SetHeldCallbacks(&rod, RequestAim, PutRodAway, NULL);
-    rod.modelGroup = PLAYER_MODELGROUP_DEFAULT;
+    Z64Items_SetHeldModel(&rod, NULL, PLAYER_MODELGROUP_SWORD_AND_SHIELD);
+    Z64Items_SetMeleeWeapon(&rod, Z64ITEMS_MELEE_KOKIRI_SWORD);
     rod.getItemEntry.drawFunc = DrawGetItem;
 
     Z64Items_SetLogic(&rod, &sRandomizerItem);
     if (!Z64Items_Register(sApi, &rod)) {
         return;
     }
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnPlayerActionHandler, SOH_PLAYER_ACTION_ZTARGET_A, CommandWithTargetA);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateRodWorld);
     SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, DrawRodEffects);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawSwordReplacement);
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, ReplaceSwordHand);
+    SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureSwordHand);
+    SOH_REGISTER_HOOK(sApi, OnActorUpdate, ResolveControlledBeam);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
 }

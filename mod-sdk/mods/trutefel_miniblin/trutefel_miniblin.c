@@ -586,7 +586,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.update = EnMiniblin_Update;
     definition.draw = EnMiniblin_Draw;
     definition.enemyFlags = SOH_ACTOR_ENEMY;
-    definition.naviHint = "Miniblin&%cIt steals %wRupees%c with its tail! Beat it quickly to get them back!%w";
+    definition.naviHint = "Miniblin&%cIt steals %wRupees%c with its tail!&Beat it quickly to get them back!%w";
 
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " MINIBLIN_KEY);

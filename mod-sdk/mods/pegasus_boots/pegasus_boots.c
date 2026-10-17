@@ -547,10 +547,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = PEGASUS_BOOTS_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rPegasus Boots&%wHold %y\xA0%w where a spin attack would charge and you dash instead. "
-                           "The wind in front costs magic.";
-    definition.getItemText = "You got the %rPegasus Boots%w!&Boots that never tire. Hold %y\xA0%w as a spin would "
-                             "charge and you run blade first, behind a wind that strikes whatever stands in the way.";
+    definition.pauseText = "%rPegasus Boots&%wHold %y\xA0%w where a spin attack would&"
+                           "charge and you dash instead. The&wind in front costs magic.";
+    definition.getItemText = "You got the %rPegasus Boots%w!&Boots that never tire.^"
+                             "Hold %y\xA0%w as a spin would charge&and you run blade first, behind&"
+                             "a wind that strikes whatever&stands in the way.";
     definition.slot = SOH_EQUIP_SLOT_BOOTS;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_BOOTS;

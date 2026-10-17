@@ -213,10 +213,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.key = MAGIC_TUNIC_KEY;
     definition.iconPath = sIcon;
     definition.namePath = sName;
-    definition.pauseText = "%rMagic Tunic&%wWhile you carry rupees, hits cost rupees instead of hearts and heat and "
-                           "water stop counting down.";
-    definition.getItemText = "You got the %rMagic Tunic%w!&Armor woven from the wallet itself. Every blow is paid in "
-                             "rupees and some of them spill out; with an empty purse it only weighs you down.";
+    definition.pauseText = "%rMagic Tunic&%wWhile you carry rupees, hits cost&rupees instead of hearts and heat&"
+                           "and water stop counting down.";
+    definition.getItemText = "You got the %rMagic Tunic%w!&Armor woven from the wallet&itself.^"
+                             "Every blow is paid in rupees&and some of them spill out;&"
+                             "with an empty purse it only&weighs you down.";
     definition.slot = SOH_EQUIP_SLOT_TUNIC;
     definition.page = 0;
     definition.row = SOH_EQUIP_SLOT_TUNIC;

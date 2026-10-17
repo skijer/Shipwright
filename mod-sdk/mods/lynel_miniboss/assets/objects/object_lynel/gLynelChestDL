@@ -1,0 +1,37 @@
+<DisplayList Version="0">
+	<PipeSync/>
+	<SetCombineLERP A0="G_CCMUX_PRIMITIVE" B0="G_CCMUX_0" C0="G_CCMUX_SHADE" D0="G_CCMUX_0" Aa0="G_ACMUX_0" Ab0="G_ACMUX_0" Ac0="G_ACMUX_0" Ad0="G_ACMUX_PRIMITIVE" A1="G_CCMUX_PRIMITIVE" B1="G_CCMUX_0" C1="G_CCMUX_SHADE" D1="G_CCMUX_0" Aa1="G_ACMUX_0" Ab1="G_ACMUX_0" Ac1="G_ACMUX_0" Ad1="G_ACMUX_PRIMITIVE"/>
+	<ClearGeometryMode G_TEXTURE_GEN="1" G_CULL_BACK="1" G_CULL_FRONT="1" />
+	<SetGeometryMode G_ZBUFFER="1" G_SHADE="1" G_SHADING_SMOOTH="1" G_LIGHTING="1" />
+	<Matrix Path=">0x0D000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelChestDL_vtx" VertexBufferIndex="0" VertexOffset="0" Count="9"/>
+	<Matrix Path=">0x0D000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelChestDL_vtx" VertexBufferIndex="9" VertexOffset="9" Count="21"/>
+	<SetPrimColor M="0" L="0" R="57" G="46" B="24" A="255"/>
+	<Triangle1 V00="0" V01="1" V02="9" Flag0="0"/>
+	<Triangle1 V00="10" V01="11" V02="12" Flag0="0"/>
+	<Triangle1 V00="13" V01="14" V02="15" Flag0="0"/>
+	<Triangle1 V00="2" V01="3" V02="16" Flag0="0"/>
+	<SetPrimColor M="0" L="0" R="72" G="29" B="5" A="255"/>
+	<Triangle1 V00="17" V01="18" V02="19" Flag0="0"/>
+	<Triangle1 V00="20" V01="21" V02="22" Flag0="0"/>
+	<SetPrimColor M="0" L="0" R="80" G="63" B="35" A="255"/>
+	<Triangle1 V00="4" V01="23" V02="24" Flag0="0"/>
+	<Triangle1 V00="5" V01="25" V02="6" Flag0="0"/>
+	<Triangle1 V00="26" V01="7" V02="8" Flag0="0"/>
+	<Triangle1 V00="27" V01="28" V02="29" Flag0="0"/>
+	<Matrix Path=">0x0D000040" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelChestDL_vtx" VertexBufferIndex="0" VertexOffset="30" Count="7"/>
+	<Matrix Path=">0x0D000080" Param="G_MTX_LOAD"/>
+	<LoadVertices Path="objects/object_lynel/gLynelChestDL_vtx" VertexBufferIndex="7" VertexOffset="37" Count="14"/>
+	<SetPrimColor M="0" L="0" R="80" G="63" B="35" A="255"/>
+	<Triangle1 V00="7" V01="8" V02="9" Flag0="0"/>
+	<Triangle1 V00="10" V01="11" V02="12" Flag0="0"/>
+	<Triangle1 V00="13" V01="14" V02="15" Flag0="0"/>
+	<Triangle1 V00="0" V01="16" V02="17" Flag0="0"/>
+	<Triangle1 V00="1" V01="18" V02="2" Flag0="0"/>
+	<Triangle1 V00="3" V01="19" V02="4" Flag0="0"/>
+	<SetPrimColor M="0" L="0" R="103" G="84" B="51" A="255"/>
+	<Triangle1 V00="20" V01="5" V02="6" Flag0="0"/>
+	<EndDisplayList/>
+</DisplayList>

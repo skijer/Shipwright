@@ -33,7 +33,7 @@
 #define BEETLE_MODEL_SCALE 0.06f
 #define BEETLE_HELD_SCALE 0.048f
 #define BEETLE_HELD_REACH 8.0f
-#define BEETLE_GIVE_SCALE 0.5f
+#define BEETLE_GIVE_SCALE 0.35f
 #define BEETLE_WING_BEAT 0.7f
 #define BEETLE_WING_MIN 0.3f
 #define BEETLE_WING_MAX 1.0f
@@ -683,6 +683,9 @@ static void OfferCandidate(PlayState* play) {
 static void DrawBeetle(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
 
+    if (sPhase == BEETLE_AIMING) {
+        Z64Aiming_DrawReticle(play, player, BEETLE_MAX_DISTANCE);
+    }
     if (sPhase == BEETLE_STOWED || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
@@ -731,12 +734,14 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&beetle, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&beetle, 0, 8, 0);
-    Z64Items_SetTextbox(&beetle, "You got the %rBeetle%w!&A clockwork flier from the sky above the clouds, and it "
-                                 "answers to your hand. Hold %y\xA1%w to aim and let go to fly it: steer with the "
-                                 "stick, hurry it with %y\x9F%w, lock on with %g\xA4%w, or leave it to finish alone "
-                                 "with %y\xA0%w. It carries %grupees%w home and knocks the wind out of what it hits.");
-    Z64Items_SetPauseText(&beetle, "%rBeetle&%wHold %y\xA1%w to aim, release to fly. Steer with the stick, %y\x9F%w to "
-                                   "hurry, %g\xA4%w to lock on.");
+    Z64Items_SetTextbox(&beetle, "You got the %rBeetle%w! A&clockwork flier from the sky&"
+                                 "above the clouds, and it&answers to your hand.^"
+                                 "Hold %y\xA1%w to aim and let go to fly&it: steer with the stick, hurry&"
+                                 "it with %y\x9F%w, lock on with %g\xA4%w, or&"
+                                 "leave it to finish alone with %y\xA0%w.^It carries %grupees%w home and&"
+                                 "knocks the wind out of what it&hits.");
+    Z64Items_SetPauseText(&beetle, "%rBeetle&%wHold %y\xA1%w to aim, release to fly.&"
+                                   "Steer with the stick, %y\x9F%w to hurry, %g\xA4%w&to lock on.");
     Z64Items_SetAction(&beetle, TakeOutBeetle, UpdateBeetleInHand);
     Z64Items_SetHeldCallbacks(&beetle, RequestAim, PutBeetleAway, NULL);
     beetle.modelGroup = PLAYER_MODELGROUP_DEFAULT;

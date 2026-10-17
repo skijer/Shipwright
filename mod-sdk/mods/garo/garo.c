@@ -1,3 +1,5 @@
+#include <stdbool.h>
+#include <libultraship/bridge/consolevariablebridge.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -239,7 +241,7 @@ typedef struct {
     s16 trailIndex;
 } RodOrb;
 
-// Link limb → hybrid joint. The shoulders also drive the robe's side panels, done apart in PoseHybrid.
+// Link limb â†’ hybrid joint. The shoulders also drive the robe's side panels, done apart in PoseHybrid.
 static const s8 sLinkToHybridJoint[PLAYER_LIMB_MAX] = {
     -1, 1, 13, -1, 14, 15, 16, 17, 18, 19, 2, 12, -1, -1, 3, -1, 4, 5, -1, 6, -1, -1,
 };
@@ -299,6 +301,14 @@ int Player_IsZTargeting(Player* player);
 void BgIceShelter_SetupMelt(BgIceShelter* ice);
 
 static const SOHModApi* sApi;
+extern bool FormRegistry_ApplyActive(const char* key);
+static bool ToggleConfiguredForm(const char* key) {
+    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
+        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
+    }
+    return sApi->ToggleForm(key);
+}
+
 static MmSfxPlayFunc sPlayMmSfx;
 static LinkAnimationHeader* sAnims[ANIM_COUNT];
 static LinkAnimationHeader sMaskOnAnim;
@@ -2297,7 +2307,7 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    sApi->ToggleForm(GARO_FORM_KEY);
+    ToggleConfiguredForm(GARO_FORM_KEY);
 }
 
 // A light ninja's body, the Zora's grip: bushes and bomb flowers, nothing heavier.
@@ -2324,18 +2334,31 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GARO_MASK_KEY, GARO_MASK_KEY, "",
 };
 
+static const ALIGN_ASSET(2) char sGetItemCloak[] = "__OTR__objects/object_gi_mask09/gGiGarosMaskCloakDL";
+static void DrawCompleteGaroMask(PlayState* play, GetItemEntry* entry) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sGetItemCloak);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sGetItemDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(GARO_MASK_KEY, sIconTex, sNameTex);
 
     Z64Items_SetButtons(&mask, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     mask.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
     Z64Items_SetPlacement(&mask, GARO_MASK_PAGE, GARO_MASK_SLOT, 0);
-    Z64Items_SetGetItemModel(&mask, sGetItemDL);
-    Z64Items_SetTextbox(&mask, "You got %rGaro's Mask%w!&The face of the Garo, Ikana's ninja spies.^Wear it with "
-                               "%y\xA1%w to become a %rGaro%w: twin blades, a guard that answers every blow, and a "
-                               "rod of elemental magic.");
-    Z64Items_SetPauseText(&mask, "%rGaro's Mask&%wPress %y\xA1%w to become a Garo.&%y\xA0%w: spin  Hold %y\xA0%w: rod "
-                                 "(%y\xA2%w/%y\xA3%w element)  %y\x9F%w: dash  %y\xA3%w: guard");
+    mask.getItemEntry.drawFunc = DrawCompleteGaroMask;
+    Z64Items_SetTextbox(&mask, "You got %rGaro's Mask%w! The face&of the Garo, Ikana's ninja spies.^"
+                               "Wear it with %y\xA1%w to become a&%rGaro%w: twin blades, a guard that&"
+                               "answers every blow, and a rod&of elemental magic.");
+    Z64Items_SetPauseText(&mask, "%rGaro's Mask&%wPress %y\xA1%w to become a Garo.&"
+                                 "%y\xA0%w: spin  Hold %y\xA0%w: rod (%y\xA2%w/%y\xA3%w&"
+                                 "element) %y\x9F%w: dash  %y\xA3%w: guard");
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

@@ -230,16 +230,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
 
     SOHCustomItemDefinition feather = Z64Items_Define(ROCS_FEATHER_KEY, sFeatherIconTex, sFeatherNameTex);
-    Z64Items_SetTextbox(&feather, "You got %rRoc's Feather%w!&A plume of the giant bird Roc,&light as the wind "
-                                  "itself.^"
-                                  "Press %y\xA1%w to leap higher than&any run-up could carry you,&or to hop up out of "
-                                  "the %bwater%w.");
-    Z64Items_SetPauseText(&feather, "%rRoc's Feather&%wPress %y\xA1%w to jump, or to hop up&out of the water.");
+    Z64Items_SetTextbox(&feather, "You got %rRoc's Feather%w! A&plume of the giant bird Roc,&"
+                                  "light as the wind itself.^Press %y\xA1%w to leap higher than any&"
+                                  "run-up could carry you, or to&hop up out of the %bwater%w.");
+    Z64Items_SetPauseText(&feather, "%rRoc's Feather&%wPress %y\xA1%w to jump, or to hop up out&of the water.");
 
     SOHCustomItemDefinition cape = Z64Items_Define(ROCS_CAPE_KEY, sCapeIconTex, sCapeNameTex);
-    Z64Items_SetTextbox(&cape, "You got %rRoc's Cape%w!&Roc's feathers woven whole, so&the wind carries you twice.^"
-                               "Press %y\xA1%w to jump, then %y\xA1%w again&in midair to ride the wind a&%gsecond "
-                               "time%w, even as you fall.");
+    Z64Items_SetTextbox(&cape, "You got %rRoc's Cape%w! Roc's&feathers woven whole, so the&"
+                               "wind carries you twice.^Press %y\xA1%w to jump, then %y\xA1%w again&"
+                               "in midair to ride the wind a&%gsecond time%w, even as you fall.");
     Z64Items_SetPauseText(&cape, "%rRoc's Cape&%wPress %y\xA1%w to jump, again in midair&for a second jump.");
 
     SOHCustomItemDefinition progressive = Z64Items_Define(ROCS_PROGRESSIVE_KEY, NULL, NULL);
