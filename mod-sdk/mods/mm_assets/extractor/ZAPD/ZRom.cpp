@@ -72,7 +72,7 @@
 #define MM_NTSC_JP_GC 0x8473D0C1
 
 bool ZRom::IsMQ() {
-    int crc = BitConverter::ToInt32BE(romData, 0x10);
+    uint32_t crc = BitConverter::ToUInt32BE(romData, 0x10);
     switch (crc) {
         case OOT_NTSC_10:
         case OOT_NTSC_11:
@@ -109,7 +109,7 @@ ZRom::ZRom(std::string romPath)
 
 	BitConverter::RomToBigEndian(romData.data(), romData.size());
 
-	version.crc = BitConverter::ToInt32BE(romData, 0x10);
+	version.crc = BitConverter::ToUInt32BE(romData, 0x10);
 
 	switch (version.crc)
 	{

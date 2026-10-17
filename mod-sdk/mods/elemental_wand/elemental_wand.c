@@ -401,10 +401,12 @@ static ColliderCylinderInit sStormRayColliderInit = {
 int32_t Player_IsZTargeting(Player* player);
 void Player_ZeroSpeedXZ(Player* player);
 void Player_AnimPlayLoop(PlayState* play, Player* player, LinkAnimationHeader* anim);
+void Player_AnimPlayOnce(PlayState* play, Player* player, LinkAnimationHeader* anim);
 LinkAnimationHeader* Player_GetIdleAnim(Player* player);
 void func_800F436C(Vec3f* pos, u16 sfxId, f32 arg2);
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
+void Player_SetupActionPreserveItemAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
 
 static void ChargeWindAction(Player* player, PlayState* play);

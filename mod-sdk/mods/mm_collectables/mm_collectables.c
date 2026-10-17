@@ -9,6 +9,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "soh/ResourceManagerHelpers.h"
 
 #define MM_COLLECTABLES_PAGE (SOH_ITEM_PAGE_QUEST_VANILLA + 1)
 #define MM_LAYOUT_KEY "nei.mm_collectables"

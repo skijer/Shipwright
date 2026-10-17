@@ -161,6 +161,7 @@ extern HOST_DATA void Player_Action_808502D0(Player* player, PlayState* play);
 extern HOST_DATA void Player_Action_80844AF4(Player* player, PlayState* play);
 extern HOST_DATA Vec3f D_80126080;
 s32 Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
+void Player_SetupActionPreserveItemAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
 s32 func_80842DF4(PlayState* play, Player* player);
 void func_80837918(Player* player, s32 quadIndex, u32 dmgFlags);

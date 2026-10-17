@@ -106,6 +106,7 @@ void func_80839FFC(Player*,PlayState*);
 void func_8008EC70(Player*);
 int Player_IsZTargeting(Player*);
 void Player_PlayVoiceSfx(Player*,u16);
+s8 Player_ItemToItemAction(s32);
 static void ApplyCaneMatrix(void);
 #include "byrna_runtime.inc.c"
 void BossGoma_SetupFloorStunned(BossGoma*);

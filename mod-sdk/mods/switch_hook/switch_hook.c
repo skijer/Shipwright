@@ -120,6 +120,7 @@ s32 Player_UpdateUpperBody(Player* player, PlayState* play);
 s32 Player_UpperAction_ChangeHeldItem(Player* player, PlayState* play);
 s32 Player_IsZTargeting(Player* player);
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
+void Player_SetupActionPreserveItemAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
