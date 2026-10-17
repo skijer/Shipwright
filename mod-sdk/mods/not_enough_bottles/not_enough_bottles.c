@@ -4,6 +4,7 @@
  * engine's bottle code through the item-action and bottle-write hooks it already has.
  */
 
+#include <math.h>
 #include <string.h>
 
 #include "z64items.h"
@@ -38,6 +39,13 @@
 #define NEB_CATCH_FIRST_FRAME 2
 #define NEB_CATCH_LAST_FRAME 6
 #define NEB_NET_GIVE_SCALE 0.65f
+#define NEB_NET_HELD_ROT_X (-5.0f)
+#define NEB_NET_HELD_ROT_Y (-169.0f)
+#define NEB_NET_HELD_ROT_Z 64.0f
+#define NEB_NET_HELD_OFFSET_X 3.2f
+#define NEB_NET_HELD_OFFSET_Y 4.3f
+#define NEB_NET_HELD_OFFSET_Z (-1.0f)
+#define NEB_NET_HELD_SCALE 0.49f
 #define NEB_DEFAULT_USES 1
 #define NEB_LEGACY_WHEEL_SIZE 4
 #define NEB_LEGACY_BOTTLE_COUNT 8
@@ -146,7 +154,7 @@ static const int16_t sEmptyBottleAskers[] = { ACTOR_EN_OSSAN, ACTOR_EN_COW,     
 // The beggar buys any of these, and asks Inventory_HasSpecificBottle for each.
 static const uint8_t sBeggarWants[] = { ITEM_BLUE_FIRE, ITEM_BUG, ITEM_FISH };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",   "OnPlayerResolveItemAction", "OnResolveItemGive",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",   "OnPlayerResolveItemAction", "OnResolveItemGive",
                                               "OnKaleidoResolveName", "OnInterfaceResolveButtonIcon", "OnKaleidoItemDraw", "OnInterfaceDrawEnd",   "OnLoadFile",
                                               "ShouldActorUpdate", "OnActorUpdate",       "OnFlagSet",
                                               "OnGameFrameUpdate", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw" };
@@ -154,6 +162,20 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static uint32_t CaptureRemoteLimbEnv(PlayState* play);
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
 static NebSave sSave;
 static u8 sChateauBottles[NEB_BOTTLE_COUNT+NEB_VANILLA_COUNT];
 static const ALIGN_ASSET(2) char sChateauContentIcon[]="__OTR__icon_item_static_yar/gItemIconChateauRomaniTex";
@@ -696,22 +718,43 @@ static bool NetHeld(void) {
     const char* key=CustomItemRegistry_GetHeldKey();return key && !strcmp(key,NEB_NET_KEY);
 }
 static void NetSwordHand(Player* player,int32_t limb,Gfx** dl,Gfx* original,Vec3f* pos) {
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (limb == PLAYER_LIMB_L_HAND && ReadRemoteVisual(player, &visual)) {
+            *dl = (Gfx*)(visual.adult ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+        }
+        return;
+    }
+
+    if (gPlayState == NULL || player != GET_PLAYER(gPlayState)) {
+        return;
+    }
+
     if(NetHeld() && limb==PLAYER_LIMB_L_HAND)*dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
 }
 static void DrawNetInHand(PlayState* play,Player* player,int32_t limb) {
-    if(!NetHeld() || limb!=PLAYER_LIMB_L_HAND)return;
+    RemoteVisualState visual;
+    bool local = player == GET_PLAYER(play);
+    bool held = local ? NetHeld() : ReadRemoteVisual(player, &visual);
+    if (!held || limb != PLAYER_LIMB_L_HAND) {
+        return;
+    }
     Matrix_Push();float scale=player->actor.scale.x!=0?1/player->actor.scale.x:1;
     Matrix_Scale(scale,scale,scale,MTXMODE_APPLY);
-    Matrix_RotateX(-5.0f*M_PI/180.0f,MTXMODE_APPLY);
-    Matrix_RotateY(-169.0f*M_PI/180.0f,MTXMODE_APPLY);
-    Matrix_RotateZ(64.0f*M_PI/180.0f,MTXMODE_APPLY);
-    Matrix_Translate(3.2f,4.3f,-1.0f,MTXMODE_APPLY);
-    Matrix_Scale(.49f,.49f,.49f,MTXMODE_APPLY);
-    for(int i=0;i<ARRAY_COUNT(sNetCatchPoints);++i) {
-        float t=(float)i/(ARRAY_COUNT(sNetCatchPoints)-1);Vec3f sample={-57*t,55*t,0};
-        Matrix_MultVec3f(&sample,&sNetCatchPoints[i]);
+    Matrix_RotateX(DEG_TO_RAD(NEB_NET_HELD_ROT_X), MTXMODE_APPLY);
+    Matrix_RotateY(DEG_TO_RAD(NEB_NET_HELD_ROT_Y), MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(NEB_NET_HELD_ROT_Z), MTXMODE_APPLY);
+    Matrix_Translate(NEB_NET_HELD_OFFSET_X, NEB_NET_HELD_OFFSET_Y, NEB_NET_HELD_OFFSET_Z, MTXMODE_APPLY);
+    Matrix_Scale(NEB_NET_HELD_SCALE, NEB_NET_HELD_SCALE, NEB_NET_HELD_SCALE, MTXMODE_APPLY);
+    if (local) {
+        for (int i = 0; i < ARRAY_COUNT(sNetCatchPoints); i++) {
+            float t = (float)i / (ARRAY_COUNT(sNetCatchPoints) - 1);
+            Vec3f sample = { -57 * t, 55 * t, 0 };
+            Matrix_MultVec3f(&sample, &sNetCatchPoints[i]);
+        }
+        sNetCatchPointsValid = true;
     }
-    sNetCatchPointsValid=true;
+    uint32_t savedRemoteEnv = CaptureRemoteLimbEnv(play);
     OPEN_DISPS(play->state.gfxCtx);Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
     gSPDisplayList(POLY_OPA_DISP++,(Gfx*)sNetDL);
@@ -719,6 +762,10 @@ static void DrawNetInHand(PlayState* play,Player* player,int32_t limb) {
     gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
     gSPDisplayList(POLY_XLU_DISP++,(Gfx*)sNetXluDL);
     CLOSE_DISPS(play->state.gfxCtx);Matrix_Pop();
+
+    if (player != GET_PLAYER(play)) {
+        RestoreRemoteLimbEnv(play, savedRemoteEnv);
+    }
 }
 
 void func_80837948(PlayState* play,Player* player,s32 meleeWeaponAnim);
@@ -843,6 +890,101 @@ static const SOHCustomItemRandomizer sBottomlessRandomizer = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, NEB_BOTTOMLESS_KEY, NEB_BOTTOMLESS_KEY, "",
 };
 
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.not_enough_bottles.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (NetHeld());
+        if (visual.active) {
+
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.not_enough_bottles.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.not_enough_bottles.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
+
+static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        cursor--;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (uint32_t)cursor->words.w1;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, color >> 24, (color >> 16) & 255, (color >> 8) & 255, color & 255);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -936,6 +1078,7 @@ static void GroupVanillaBottles(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if (!SOH_MOD_API_HAS(sApi, StorageRemove) || !SOH_MOD_API_HAS(sApi, KeepCustomItemHeld)) {
         return;
     }

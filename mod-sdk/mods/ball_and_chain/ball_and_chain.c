@@ -112,13 +112,27 @@ static ColliderCylinderInit sBallColliderInit = {
     { BALL_COLLIDER_RADIUS, BALL_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",   "OnActorDraw",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",   "OnActorDraw",
                                               "OnActorDrawEnd",  "OnPlayerFilterInput",
                                               "OnPlayerResolveMotionScale", "OnPlayerResolveItemActionInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+
 static ColliderCylinder sBallCollider;
 static bool sIsColliderReady;
 static u8 sPhase;
@@ -851,6 +865,10 @@ static void LeanIntoSwing(Player* player) {
 
 // Runs just before Link is drawn, the only point in the frame where the joint table is his final pose.
 static void PoseArmsAroundBall(Actor* actor, PlayState* play, bool* drawVanilla) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player = (Player*)actor;
 
     if (sPhase == BALL_IDLE) {
@@ -963,6 +981,29 @@ static void DrawBall(PlayState* play) {
 
 static void DrawBallAndChain(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
+    if (player != GET_PLAYER(play)) {
+        RemoteVisualState visual;
+        if (!ReadRemoteVisual(player, &visual)) {
+            return;
+        }
+        Vec3f position = { visual.values[0], visual.values[1], visual.values[2] };
+        Vec3f savedPosition = sBallPos;
+        int32_t savedPhase = sPhase;
+        sBallPos = position;
+        sPhase = visual.flags[0] ? BALL_SPINNING : BALL_HOLDING;
+        DrawChain(play, &player->bodyPartsPos[PLAYER_BODYPART_L_HAND], &player->bodyPartsPos[PLAYER_BODYPART_R_HAND]);
+        if (visual.flags[1]) {
+            DrawOverheadChain(play, &player->bodyPartsPos[PLAYER_BODYPART_R_HAND], &position);
+        } else {
+            DrawChain(play, &player->bodyPartsPos[PLAYER_BODYPART_R_HAND], &position);
+        }
+        DrawBall(play);
+        sPhase = savedPhase;
+        sBallPos = savedPosition;
+        return;
+    }
+
+
 
     if (sPhase == BALL_AIMING) {
         Z64Aiming_DrawReticle(play, player, BALL_CHAIN_LENGTH);
@@ -994,6 +1035,88 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BALL_KEY, BALL_KEY, "",
 };
 
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.ball_and_chain.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sPhase != BALL_IDLE);
+        if (visual.active) {
+            visual.flags[0] = sPhase != BALL_HOLDING;
+            visual.flags[1] = Strength() == BALL_STRENGTH_GOLDEN && (sPhase == BALL_SPINNING || sPhase == BALL_AIMING);
+            visual.values[0] = sBallPos.x;
+            visual.values[1] = sBallPos.y;
+            visual.values[2] = sBallPos.z;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.ball_and_chain.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+static void DrawRemotePlayer(Actor* actor, PlayState* play) {
+    if (actor->id == ACTOR_PLAYER || !sRemoteVisualReady || sApi->GetNetPeerIdForActor(actor) == 0) {
+        return;
+    }
+    DrawBallAndChain(actor, play);
+}
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.ball_and_chain.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
+    }
+}
+
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1003,6 +1126,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if (!SOH_MOD_API_HAS(sApi, RegisterCustomItem)) {
         return;
     }

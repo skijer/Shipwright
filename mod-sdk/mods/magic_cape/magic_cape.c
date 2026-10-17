@@ -75,6 +75,22 @@ static const u16 sVertexMap[CAPE_STRANDS * CAPE_JOINTS] = {
 };
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static void CaptureRemoteShoulder(PlayState* play, Player* player, int32_t limb);
+static void DrawRemoteCape(Actor* actor, PlayState* play);
+static Vtx* sRemoteCapeVertices;
+static float sRemoteCapeSpeed;
 
 static CapeStrand sStrands[CAPE_STRANDS];
 static u8 sMaskTex[CAPE_TEX_WIDTH * CAPE_TEX_HEIGHT];
@@ -156,6 +172,11 @@ static void ResetCloth(void) {
 }
 
 static void CaptureShoulder(PlayState* play, Player* player, int32_t limbIndex) {
+    if (player != GET_PLAYER(play)) {
+        CaptureRemoteShoulder(play, player, limbIndex);
+        return;
+    }
+
     Vec3f origin = { 0.0f, 200.0f, 0.0f };
 
     if (!IsVisible() || player != GET_PLAYER(play)) {
@@ -250,7 +271,8 @@ static void UpdateStrand(Vec3f* actorPos, CapeStrand* strand, CapeStrand* neighb
 }
 
 static void UpdateVertices(void) {
-    Vtx* vertices = ResourceMgr_LoadVtxByName((char*)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
+    Vtx* vertices = sRemoteCapeVertices != NULL ? sRemoteCapeVertices :
+                        ResourceMgr_LoadVtxByName((char*)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
     Vec3f up = { 0.0f, 30.0f, 0.0f };
     Vec3f normal;
 
@@ -285,7 +307,7 @@ static void SimulateCloth(Player* player) {
     Vec3f midpoint = { right->x + xDiff * 0.5f, right->y + yDiff * 0.5f, right->z + zDiff * 0.5f };
     f32 yaw = Math_Atan2F(zDiff, xDiff);
     f32 halfSpan = sqrtf(SQ(xDiff) + SQ(yDiff) + SQ(zDiff)) * 0.5f;
-    f32 speed = player->actor.speedXZ;
+    f32 speed = sRemoteCapeVertices != NULL ? sRemoteCapeSpeed : player->actor.speedXZ;
     f32 minY = player->actor.world.pos.y + CAPE_FLOOR_OFFSET;
 
     Matrix_RotateY(yaw, MTXMODE_NEW);
@@ -346,6 +368,11 @@ static void TickCloth(void) {
 
 // The cloth runs its physics where it draws, once per updated frame, off the shoulders the limbs just placed.
 static void DrawCloth(Actor* actor, PlayState* play) {
+    if (actor != &GET_PLAYER(play)->actor && sRemoteCapeVertices == NULL) {
+        DrawRemoteCape(actor, play);
+        return;
+    }
+
     Player* player = (Player*)actor;
 
     if (!sCape.isInitialized || (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) ||
@@ -363,7 +390,11 @@ static void DrawCloth(Actor* actor, PlayState* play) {
     Matrix_Translate(0.0f, 0.0f, 0.0f, MTXMODE_NEW);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gMantMaterialDL);
-    gSPSegmentLoadRes(POLY_OPA_DISP++, 0x0C, (uintptr_t)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
+    if (sRemoteCapeVertices != NULL) {
+        gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sRemoteCapeVertices);
+    } else {
+        gSPSegmentLoadRes(POLY_OPA_DISP++, 0x0C, (uintptr_t)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
+    }
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gMantDL);
     // The skeleton's cull jump lives on segment 0x0C: left on the cape's vertices, the next limb or clone
     // drawn would execute vertex data as opcodes.
@@ -395,12 +426,209 @@ static void HideCloth(const char* key) {
     ResetCloth();
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",   "OnPlayerPostLimbDraw", "OnActorDrawEnd",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",   "OnPlayerPostLimbDraw", "OnActorDrawEnd",
                                               "OnMagicResolveCost", "ShouldActorInit",    "OnActorInit",
                                               "ShouldActorUpdate", "OnActorUpdate",       "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.magic_cape.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = IsVisible() && !(player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_DEAD |
+                                                               PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                                                               PLAYER_STATE1_IN_ITEM_CS));
+        if (visual.active) {
+            visual.values[0] = player->actor.speedXZ;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.magic_cape.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void DrawRemotePlayer(Actor* actor, PlayState* play) {
+    if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
+        DrawCloth(actor, play);
+    }
+}
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor) ||
+        !SOH_MOD_API_HAS(sApi, FindNetPeer)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.magic_cape.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
+    }
+}
+
+
+
+#define REMOTE_CAPE_CAPACITY 64
+
+typedef struct {
+    uint32_t peer;
+    uint32_t seen;
+    uint32_t simulated;
+    int16_t scene;
+    uint8_t captured;
+    uint8_t initialized;
+    Vec3f shoulders[2];
+    uint8_t cape[sizeof(sCape)];
+    CapeStrand strands[CAPE_STRANDS];
+} RemoteCape;
+
+static RemoteCape sRemoteCapes[REMOTE_CAPE_CAPACITY];
+
+static RemoteCape* FindRemoteCape(Player* player, PlayState* play) {
+    uint32_t peer = sApi->GetNetPeerIdForActor(&player->actor);
+    RemoteCape* available = NULL;
+    if (peer == 0) {
+        return NULL;
+    }
+    for (uint32_t i = 0; i < REMOTE_CAPE_CAPACITY; i++) {
+        RemoteCape* cape = &sRemoteCapes[i];
+        if (cape->peer == peer) {
+            if (cape->scene != play->sceneNum || (uint32_t)(play->gameplayFrames - cape->seen) > 30u) {
+                memset(cape, 0, sizeof(*cape));
+                cape->peer = peer;
+                cape->scene = play->sceneNum;
+            }
+            cape->seen = play->gameplayFrames;
+            return cape;
+        }
+        SOHNetPeer info = { 0 };
+        info.structSize = sizeof(info);
+        if (cape->peer == 0 || !sApi->FindNetPeer(cape->peer, &info) || !info.isOnline) {
+            available = cape;
+        }
+    }
+    if (available != NULL) {
+        memset(available, 0, sizeof(*available));
+        available->peer = peer;
+        available->scene = play->sceneNum;
+        available->seen = play->gameplayFrames;
+    }
+    return available;
+}
+
+static void CaptureRemoteShoulder(PlayState* play, Player* player, int32_t limb) {
+    RemoteVisualState visual;
+    if ((limb != PLAYER_LIMB_L_SHOULDER && limb != PLAYER_LIMB_R_SHOULDER) ||
+        !ReadRemoteVisual(player, &visual)) {
+        return;
+    }
+    RemoteCape* cape = FindRemoteCape(player, play);
+    if (cape == NULL) {
+        return;
+    }
+    Vec3f origin = { 0.0f, 200.0f, 0.0f };
+    uint32_t side = limb == PLAYER_LIMB_L_SHOULDER ? 0 : 1;
+    Matrix_MultVec3f(&origin, &cape->shoulders[side]);
+    cape->captured |= side == 0 ? LEFT_SHOULDER_CAPTURED : RIGHT_SHOULDER_CAPTURED;
+}
+
+static void DrawRemoteCape(Actor* actor, PlayState* play) {
+    RemoteVisualState visual;
+    Player* player = (Player*)actor;
+    if (!ReadRemoteVisual(player, &visual) || (player->stateFlags1 & PLAYER_STATE1_ON_HORSE)) {
+        return;
+    }
+    RemoteCape* cape = FindRemoteCape(player, play);
+    if (cape == NULL || cape->captured != BOTH_SHOULDERS_CAPTURED) {
+        return;
+    }
+    const uint32_t vertexCount = CAPE_STRANDS * CAPE_JOINTS;
+    Vtx* source = ResourceMgr_LoadVtxByName((char*)gMant1Vtx);
+    Vtx* vertices = Graph_Alloc(play->state.gfxCtx, vertexCount * sizeof(Vtx));
+    if (source == NULL || vertices == NULL) {
+        return;
+    }
+    memcpy(vertices, source, vertexCount * sizeof(Vtx));
+    uint8_t localCape[sizeof(sCape)];
+    CapeStrand localStrands[CAPE_STRANDS];
+    memcpy(localCape, &sCape, sizeof(sCape));
+    memcpy(localStrands, sStrands, sizeof(sStrands));
+    bool registered = sCape.isTexRegistered;
+    memcpy(&sCape, cape->cape, sizeof(sCape));
+    memcpy(sStrands, cape->strands, sizeof(sStrands));
+    sCape.isTexRegistered = registered;
+    InitCloth();
+    sCape.shoulders[0] = cape->shoulders[0];
+    sCape.shoulders[1] = cape->shoulders[1];
+    sCape.capturedShoulders = cape->captured;
+    sCape.hasUpdatedThisFrame = !cape->initialized || cape->simulated != play->gameplayFrames;
+    if (sCape.hasUpdatedThisFrame) {
+        sCape.frame++;
+    }
+    sRemoteCapeSpeed = visual.values[0];
+    sRemoteCapeVertices = vertices;
+    if (!sCape.hasUpdatedThisFrame) {
+        UpdateVertices();
+    }
+    DrawCloth(actor, play);
+    sRemoteCapeVertices = NULL;
+    memcpy(cape->cape, &sCape, sizeof(sCape));
+    memcpy(cape->strands, sStrands, sizeof(sStrands));
+    cape->initialized = true;
+    cape->simulated = play->gameplayFrames;
+    cape->captured = 0;
+    registered = sCape.isTexRegistered;
+    memcpy(&sCape, localCape, sizeof(sCape));
+    memcpy(sStrands, localStrands, sizeof(sStrands));
+    sCape.isTexRegistered = registered;
+}
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -411,6 +639,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
 
     definition.structSize = sizeof(definition);

@@ -118,13 +118,29 @@ static ColliderCylinderInit sLashColliderInit = {
     { WHIP_COLLIDER_RADIUS, WHIP_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",      "OnActorDrawEnd",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerPostLimbDraw", "OnPlayerUpdate",      "OnActorDrawEnd",
                                               "OnSceneInit",         "OnPlayerFilterInput",
                                               "OnPlayerPostLimbDraw", "OnPlayerResolveItemActionInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static uint32_t CaptureRemoteLimbEnv(PlayState* play);
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
+static void DrawRemoteWhip(Actor* actor, PlayState* play);
+static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb);
 static ColliderCylinder sLashCollider;
 static bool sIsColliderReady;
 static bool sIsLashPending;
@@ -968,6 +984,10 @@ static void ForgetScene(int16_t sceneNum) {
 // Nothing touches the matrix between the hand limb and the end of the post-limb pass while the whip is out
 // (no held actor, no shield), so this is the hand bone's own matrix: position and full orientation.
 static void CaptureHandMatrix(PlayState* play, Player* player, int32_t limbIndex) {
+    if (gPlayState == NULL || player != GET_PLAYER(gPlayState)) {
+        return;
+    }
+
     if (limbIndex != PLAYER_LIMB_R_HAND) {
         return;
     }
@@ -1041,6 +1061,10 @@ static void DrawWhipInHand(PlayState* play, Player* player) {
 }
 
 static void DrawWhip(Actor* actor, PlayState* play) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player = (Player*)actor;
     // The swing animation hangs Link from his left hand, so that is the hand the rope leaves from.
     s32 bodyPart = sPhase == WHIP_SWINGING ? PLAYER_BODYPART_L_HAND : PLAYER_BODYPART_R_HAND;
@@ -1079,6 +1103,145 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, WHIP_KEY, WHIP_KEY, "",
 };
 
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.whip.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > WHIP_SWINGING || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sPhase != WHIP_IDLE);
+        if (visual.active) {
+            visual.flags[0] = sPhase;
+            Vec3f tip = sPhase == WHIP_SWINGING ? sAnchorPos : sTipPos;
+            visual.values[0] = tip.x;
+            visual.values[1] = tip.y;
+            visual.values[2] = tip.z;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.whip.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.whip.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemoteWhip);
+        SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawRemoteLimb);
+    }
+}
+
+
+
+static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb) {
+    RemoteVisualState visual;
+    if (limb != PLAYER_LIMB_R_HAND || !ReadRemoteVisual(player, &visual) || visual.flags[0] == WHIP_SWINGING) {
+        return;
+    }
+    MtxF localHand = sHandMatrix;
+    bool localReady = sHasHandMatrix;
+    int32_t phase = sPhase;
+    uint32_t savedRemoteEnv = CaptureRemoteLimbEnv(play);
+    Matrix_Push();
+    Matrix_Get(&sHandMatrix);
+    sHasHandMatrix = true;
+    sPhase = visual.flags[0];
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    DrawWhipInHand(play, player);
+    sPhase = phase;
+    sHasHandMatrix = localReady;
+    sHandMatrix = localHand;
+    Matrix_Pop();
+
+    RestoreRemoteLimbEnv(play, savedRemoteEnv);
+}
+
+static void DrawRemoteWhip(Actor* actor, PlayState* play) {
+    if (actor->id == ACTOR_PLAYER || !sRemoteVisualReady || sApi->GetNetPeerIdForActor(actor) == 0) {
+        return;
+    }
+    Player* player = (Player*)actor;
+    RemoteVisualState visual;
+    if (!ReadRemoteVisual(player, &visual) || visual.flags[0] == WHIP_COILED || visual.flags[0] == WHIP_AIMING) {
+        return;
+    }
+    bool swinging = visual.flags[0] == WHIP_SWINGING;
+    Vec3f hand = player->bodyPartsPos[swinging ? PLAYER_BODYPART_L_HAND : PLAYER_BODYPART_R_HAND];
+    Vec3f tip = { visual.values[0], visual.values[1], visual.values[2] };
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    DrawLash(play, &hand, &tip, swinging ? WHIP_SWING_ROPE_SAG : 0.0f);
+}
+
+static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        cursor--;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (uint32_t)cursor->words.w1;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, color >> 24, (color >> 16) & 255, (color >> 8) & 255, color & 255);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1088,6 +1251,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if (!SOH_MOD_API_HAS(sApi, GetEquippedCustomItem)) {
         return;
     }

@@ -362,6 +362,20 @@ typedef enum {
 } LanceState;
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static uint32_t CaptureRemoteLimbEnv(PlayState* play);
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
 static Input sLanceInput;
 static s16 sProjectileActorId = -1;
 static s16 sProjectileGrace;
@@ -1953,6 +1967,14 @@ static void RunWithLance(int32_t group, int32_t animType, LinkAnimationHeader** 
 }
 
 static void GripLance(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (limbIndex == PLAYER_LIMB_L_HAND && ReadRemoteVisual(player, &visual)) {
+            *dList = ResourceMgr_LoadGfxByName(gLinkAdultLeftHandNearDL);
+        }
+        return;
+    }
+
     if (limbIndex == PLAYER_LIMB_L_HAND && IsWielding(player)) {
         *dList = ResourceMgr_LoadGfxByName(gLinkAdultLeftHandNearDL);
     }
@@ -2001,10 +2023,16 @@ static void TraceLanceSwing(PlayState* play, Player* player) {
 }
 
 static void DrawLance(PlayState* play, Player* player, int32_t limbIndex) {
-    if (limbIndex != PLAYER_LIMB_L_HAND || player != GET_PLAYER(play) || !IsWielding(player)) {
+    RemoteVisualState visual;
+    bool local = player == GET_PLAYER(play);
+    bool visible = local ? IsWielding(player) : ReadRemoteVisual(player, &visual);
+    if (limbIndex != PLAYER_LIMB_L_HAND || !visible) {
         return;
     }
-    TraceLanceSwing(play, player);
+    if (local) {
+        TraceLanceSwing(play, player);
+    }
+    uint32_t savedRemoteEnv = CaptureRemoteLimbEnv(play);
     OPEN_DISPS(play->state.gfxCtx);
     Matrix_Push();
     ApplyLanceMatrix();
@@ -2013,11 +2041,19 @@ static void DrawLance(PlayState* play, Player* player, int32_t limbIndex) {
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sLanceDL);
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
+
+    if (player != GET_PLAYER(play)) {
+        RestoreRemoteLimbEnv(play, savedRemoteEnv);
+    }
 }
 
 // The vanilla hand block would lay the trail along the hidden sword first; it sees no swing until the lance's own
 // post-limb puts the state back.
 static void HideSwingFromSwordHand(Actor* actor, PlayState* play, bool* drawVanilla) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player = (Player*)actor;
 
     if (actor != &GET_PLAYER(play)->actor || !IsWielding(player) || player->meleeWeaponState == 0) {
@@ -2064,6 +2100,10 @@ static void DrawDome(PlayState* play, Player* player) {
 }
 
 static void DrawChargeEffects(Actor* actor, PlayState* play) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player = (Player*)actor;
 
     if (actor != &GET_PLAYER(play)->actor) {
@@ -2176,7 +2216,7 @@ static bool RegisterProjectileActor(void) {
     return sProjectileActorId >= 0;
 }
 
-static const char* const sRequiredHooks[] = {
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
     "OnPlayerUpdate",       "OnPlayerActionHandler", "OnPlayerFilterInput", "OnPlayerResolveAnim",
     "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnActorDraw",      "OnActorDrawEnd",
     "OnResolveSwordDamage", "OnCollisionResolveDamage", "OnSceneInit",
@@ -2184,6 +2224,101 @@ static const char* const sRequiredHooks[] = {
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.trident.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (IsWielding(player));
+        if (visual.active) {
+
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.trident.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.trident.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
+
+static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        cursor--;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (uint32_t)cursor->words.w1;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, color >> 24, (color >> 16) & 255, (color >> 8) & 255, color & 255);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -2194,6 +2329,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
 
     if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !RegisterProjectileActor()) {

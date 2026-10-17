@@ -1,3 +1,5 @@
+#include <string.h>
+#include <math.h>
 /**
  * Magic Tunic: while the wallet holds rupees every hit is paid in rupees instead of hearts, and heat and water
  * stop counting down. A third of each payment spills out as real rupees. Broke, it is a heavy black shirt.
@@ -29,6 +31,19 @@ void Player_SetIntangibility(Player* player, s32 timer);
 void Rumble_Request(f32 distSq, u8 strength, u8 duration, u8 decreaseRate);
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static void CaptureLocalTunicColor(Color_RGB8* color, ...);
 static s16 sDrainTimer;
 
 static bool IsWorn(void) {
@@ -159,8 +174,20 @@ static void SkipHeatAndWater(PlayState* play, int16_t* hazard) {
 static void DyeTunic(bool* should, va_list args) {
     Color_RGB8* color;
 
-    va_arg(args, void*);
+    Player* player = va_arg(args, Player*);
     color = va_arg(args, Color_RGB8*);
+    if (gPlayState == NULL) {
+        return;
+    }
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (ReadRemoteVisual(player, &visual)) {
+            color->r = visual.flags[0];
+            color->g = visual.flags[1];
+            color->b = visual.flags[2];
+        }
+        return;
+    }
     if (!IsWorn()) {
         return;
     }
@@ -192,11 +219,96 @@ static void ResetDrain(const char* key) {
     sDrainTimer = 0;
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerFilterInput", "OnPlayerHealthChange",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerFilterInput", "OnPlayerHealthChange",
                                               "OnPlayerResolveMotionScale", "OnResolveEnvHazard" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+static void CaptureLocalTunicColor(Color_RGB8* color, ...) {
+    va_list args;
+    bool apply = true;
+    va_start(args, color);
+    DyeTunic(&apply, args);
+    va_end(args);
+}
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.magic_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (IsWorn());
+        if (visual.active) {
+            Color_RGB8 color = { 0 };
+            CaptureLocalTunicColor(&color, player, &color);
+            visual.flags[0] = color.r;
+            visual.flags[1] = color.g;
+            visual.flags[2] = color.b;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.magic_tunic.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.magic_tunic.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -207,6 +319,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
 
     definition.structSize = sizeof(definition);

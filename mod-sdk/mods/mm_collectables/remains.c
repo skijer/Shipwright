@@ -1,3 +1,4 @@
+#include <math.h>
 // The four boss remains worn on Link's face, NEI's boss_remains for Ship. Odolwa: a run on A, his sword, shield,
 // stance and trail, moths from the sword and his beetles on R+B, a moth cloud to fly on near soft soil. Goht: a
 // bull charge on A, a quake pound on R+A, charged thunder on B, a bombchu on R+B. Gyorg: endless breath, a faster
@@ -149,6 +150,19 @@ typedef struct {
 } TrailSample;
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static bool sDrawingRemoteRemains;
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
 static s32 sWornRemains = REMAINS_NONE;
@@ -385,11 +399,25 @@ static void StopOdolwaSfx(void) {
     }
 }
 
+static void SetWornRemains(s32 remains) {
+    static const char* const keys[REMAINS_COUNT] = {
+        "nei.mm_remains_odolwa", "nei.mm_remains_goht", "nei.mm_remains_gyorg", "nei.mm_remains_twinmold",
+    };
+
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn) && sWornRemains >= 0 && sWornRemains < REMAINS_COUNT) {
+        sApi->SetCustomItemWorn(keys[sWornRemains], false);
+    }
+    sWornRemains = remains;
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn) && sWornRemains >= 0 && sWornRemains < REMAINS_COUNT) {
+        sApi->SetCustomItemWorn(keys[sWornRemains], true);
+    }
+}
+
 static void TakeOff(void) {
     if (sWornRemains == REMAINS_ODOLWA) {
         StopOdolwaSfx();
     }
-    sWornRemains = REMAINS_NONE;
+    SetWornRemains(REMAINS_NONE);
 }
 
 void Remains_Toggle(PlayState* play, Player* player, s32 remains) {
@@ -405,7 +433,7 @@ void Remains_Toggle(PlayState* play, Player* player, s32 remains) {
     typedef void (*RemoveMaskFunc)(PlayState*,Player*);
     RemoveMaskFunc remove=SOH_MOD_API_HAS(sApi,FindService)?(RemoveMaskFunc)sApi->FindService("nei.masks.take_off"):NULL;
     if(remove)remove(play,player);
-    sWornRemains = remains;
+    SetWornRemains(remains);
     player->currentMask = PLAYER_MASK_NONE;
     Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
 }
@@ -477,6 +505,20 @@ static void DrawOdolwaEquipment(PlayState* play, const char* dl, f32 scale, Vec3
 }
 
 static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
+    if (player != GET_PLAYER(play) && !sDrawingRemoteRemains) {
+        RemoteVisualState visual;
+        if (!ReadRemoteVisual(player, &visual)) {
+            return;
+        }
+        int32_t localRemains = sWornRemains;
+        sWornRemains = visual.flags[0];
+        sDrawingRemoteRemains = true;
+        DrawOnLimb(play, player, limbIndex);
+        sDrawingRemoteRemains = false;
+        sWornRemains = localRemains;
+        return;
+    }
+
     if (sWornRemains == REMAINS_NONE || player->actor.scale.y < 0.0f) {
         return;
     }
@@ -504,8 +546,20 @@ static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
 
 // Odolwa trades Link's sword and shield for his own, drawn over a bare hand; Goht carries no sword at all.
 static void HideNativeEquipment(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
-    bool hidesSword = IsWorn(REMAINS_ODOLWA) || IsWorn(REMAINS_GOHT);
-    if(IsWorn(REMAINS_ODOLWA) && limbIndex==PLAYER_LIMB_SHEATH) {
+    if (gPlayState == NULL) {
+        return;
+    }
+    int32_t remains = sWornRemains;
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (!ReadRemoteVisual(player, &visual)) {
+            return;
+        }
+        remains = visual.flags[0];
+    }
+
+    bool hidesSword = (remains == REMAINS_ODOLWA) || (remains == REMAINS_GOHT);
+    if((remains == REMAINS_ODOLWA) && limbIndex==PLAYER_LIMB_SHEATH) {
         static const ALIGN_ASSET(2) char bare[2][80]={"__OTR__objects/object_link_boy/gLinkAdultSheathNearDL","__OTR__objects/object_link_child/gLinkChildSheathNearDL"};
         static const ALIGN_ASSET(2) char sword[2][96]={"__OTR__objects/object_link_boy/gLinkAdultMasterSwordAndSheathNearDL","__OTR__objects/object_link_child/gLinkChildSwordAndSheathNearDL"};
         *dList=(Gfx*)(player->sheathType==PLAYER_MODELTYPE_SHEATH_18?sword[gSaveContext.linkAge]:bare[gSaveContext.linkAge]);
@@ -514,7 +568,7 @@ static void HideNativeEquipment(Player* player, int32_t limbIndex, Gfx** dList, 
 
     if (limbIndex == PLAYER_LIMB_L_HAND && hidesSword && IsHoldingSword(player)) {
         *dList = (Gfx*)(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
-    } else if (limbIndex == PLAYER_LIMB_R_HAND && IsWorn(REMAINS_ODOLWA) &&
+    } else if (limbIndex == PLAYER_LIMB_R_HAND && (remains == REMAINS_ODOLWA) &&
                player->rightHandType == PLAYER_MODELTYPE_RH_SHIELD) {
         *dList = (Gfx*)(LINK_IS_ADULT ? gLinkAdultRightHandNearDL : gLinkChildRightHandNearDL);
     }
@@ -1265,7 +1319,7 @@ static void UpdateWornPowers(PlayState* play, Player* player) {
         case REMAINS_NONE:
             break;
         default:
-            sWornRemains = REMAINS_NONE;
+            SetWornRemains(REMAINS_NONE);
             break;
     }
 }
@@ -1313,6 +1367,10 @@ static void UpdateWornRemains(void) {
 }
 
 static void DrawRemainsEffects(Actor* actor, PlayState* play) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     DrawGroundCrater(play);
     DrawGyorgWhirlpool(play);
     Player* player = (Player*)actor;
@@ -1346,7 +1404,7 @@ static void SurviveChargeFall(bool* should, va_list args) {
 }
 
 void Remains_ResetFile(void) {
-    sWornRemains = REMAINS_NONE;
+    SetWornRemains(REMAINS_NONE);
     sFlightState = 0;
     sSummonLock = 0;
     sSummonChant = 0;
@@ -1365,8 +1423,81 @@ static void ForgetSceneFunnel(int16_t sceneNum) {
     ForgetWhirlpoolFunnel();
 }
 
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.mm_collectables.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > REMAINS_COUNT - 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sWornRemains >= 0 && sWornRemains < REMAINS_COUNT && !CVarGetInteger("gMods.MMMasks.Hide", 0));
+        if (visual.active) {
+            visual.flags[0] = sWornRemains;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.mm_collectables.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.mm_collectables.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
 void Remains_Init(const SOHModApi* api) {
     sApi = api;
+    InitRemoteVisuals();
     if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.remains.take_off",(void*)TakeOff);
     if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.mm_remains.shield_override",(void*)OdolwaOwnsShield);
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, CaptureInput);

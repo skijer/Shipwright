@@ -294,7 +294,7 @@ static const uint8_t sFrogSongShifts[FROG_SONG_COUNT] = {
     EVENTCHKINF_SONGS_FOR_FROGS_CHOIR_SHIFT,
 };
 
-static const char* const sRequiredHooks[] = {
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
     "OnPlayerUpdate", "OnLoadFile", "OnPlayerFilterInput", "ShouldActorUpdate",
     "OnPlayerPostLimbDraw", "OnPlayerResolveLimbDraw",
     "OnPlayerResolveMotionScale",
@@ -310,6 +310,19 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static void DrawRemoteMask(PlayState* play, Player* player, int32_t limb);
 static int32_t sWorn = MASK_NONE;
 static int8_t sResourcePresent[MASK_GRID_SIZE];
 static bool sLentPersistentMasks;
@@ -492,6 +505,16 @@ static void ClearGiant(Player* player) {
     Actor_SetScale(&player->actor, GIANT_DEFAULT_SCALE);
 }
 
+static void SetWornMask(int32_t index) {
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn) && sWorn != MASK_NONE) {
+        sApi->SetCustomItemWorn(sMasks[sWorn].key, false);
+    }
+    sWorn = index;
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn) && sWorn != MASK_NONE) {
+        sApi->SetCustomItemWorn(sMasks[sWorn].key, true);
+    }
+}
+
 static void TakeOff(PlayState* play, Player* player) {
     if (sWorn == MASK_NONE) {
         return;
@@ -509,7 +532,7 @@ static void TakeOff(PlayState* play, Player* player) {
     sScentsSniffing = false;
     sCaptainTimer = 0;
     sDonGeroOffering = false;
-    sWorn = MASK_NONE;
+    SetWornMask(MASK_NONE);
     ClaimButtonB();
 }
 
@@ -517,7 +540,7 @@ static void ResetFairyHair(void);
 
 static void PutOn(Player* player, int32_t index) {
     if (index == MASK_GREAT_FAIRY) ResetFairyHair();
-    sWorn = index;
+    SetWornMask(index);
     sPoseFrame = 0.0f;
 
     if (sMasks[index].vanillaMask != PLAYER_MASK_NONE) {
@@ -636,7 +659,7 @@ static void RestoreLimbState(PlayState* play, Player* player,u32 savedEnv) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static void DrawWornMask(PlayState* play, Player* player, int32_t limbIndex) {
+static void DrawWornMaskModel(PlayState* play, Player* player, int32_t limbIndex) {
     if (CVarGetInteger("gMods.MMMasks.Hide",0) || limbIndex != PLAYER_LIMB_HEAD || sWorn == MASK_NONE || !HasWornModel(sWorn)) {
         return;
     }
@@ -655,6 +678,14 @@ static void DrawWornMask(PlayState* play, Player* player, int32_t limbIndex) {
         CLOSE_DISPS(play->state.gfxCtx);
     }
     RestoreLimbState(play, player, savedEnv);
+}
+
+static void DrawWornMask(PlayState* play, Player* player, int32_t limbIndex) {
+    if (player == GET_PLAYER(play)) {
+        DrawWornMaskModel(play, player, limbIndex);
+    } else {
+        DrawRemoteMask(play, player, limbIndex);
+    }
 }
 
 // ---- what other actors know about Link ----
@@ -1136,8 +1167,15 @@ static void GiantPushEnd(void* actorRef) {
 }
 
 static void BlastSwordHand(Player* player,int32_t limb,Gfx** dl,Gfx* original,Vec3f* pos) {
-    if(IsWearing(MASK_BLAST) && limb==PLAYER_LIMB_L_HAND)
-        *dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
+    if (gPlayState == NULL) {
+        return;
+    }
+    RemoteVisualState visual;
+    bool wearing = player == GET_PLAYER(gPlayState) ? IsWearing(MASK_BLAST) :
+                       ReadRemoteVisual(player, &visual) && visual.flags[0] == MASK_BLAST;
+    if (wearing && limb == PLAYER_LIMB_L_HAND) {
+        *dl = (Gfx*)(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+    }
 }
 static void BlastBIcon(PlayState* play) {
     if(!IsWearing(MASK_BLAST) || play->pauseCtx.state!=0)return;
@@ -1249,7 +1287,7 @@ static void ForgetScene(int16_t sceneNum) {
 
 static void ForgetFile(int32_t fileNum) {
     LendPersistentMasks(false);
-    sWorn = MASK_NONE;
+    SetWornMask(MASK_NONE);
     ClaimButtonB();
     sBlastCooldown = 0;
     sGiantTransformTimer = -1;
@@ -1330,6 +1368,162 @@ static void RegisterMaskOptions(void) {
         w.type=SOH_MOD_MENU_CHECKBOX;w.label=labels[i];w.cvar=cvars[i];sApi->RegisterMenuWidget(&w);
     }
 }
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.mm_wearables.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > MASK_GRID_SIZE - 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sWorn != MASK_NONE && !CVarGetInteger("gMods.MMMasks.Hide", 0));
+        if (visual.active) {
+            visual.flags[0] = sWorn;
+            visual.values[0] = sBlastCooldown;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.mm_wearables.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor) ||
+        !SOH_MOD_API_HAS(sApi, FindNetPeer)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.mm_wearables.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
+#define REMOTE_HAIR_CAPACITY 64
+
+typedef struct {
+    uint32_t peer;
+    uint32_t frame;
+    int16_t scene;
+    int32_t initialized;
+    FairyHairLink strands[3][3];
+} RemoteHair;
+
+static RemoteHair sRemoteHair[REMOTE_HAIR_CAPACITY];
+
+static RemoteHair* FindRemoteHair(uint32_t peer, PlayState* play) {
+    RemoteHair* available = NULL;
+    for (uint32_t i = 0; i < REMOTE_HAIR_CAPACITY; i++) {
+        RemoteHair* hair = &sRemoteHair[i];
+        if (hair->peer == peer) {
+            if (hair->scene != play->sceneNum || (uint32_t)(play->gameplayFrames - hair->frame) > 30u) {
+                memset(hair, 0, sizeof(*hair));
+                hair->peer = peer;
+                hair->scene = play->sceneNum;
+            }
+            return hair;
+        }
+        SOHNetPeer info = { 0 };
+        info.structSize = sizeof(info);
+        if (hair->peer == 0 || !sApi->FindNetPeer(hair->peer, &info) || !info.isOnline) {
+            available = hair;
+        }
+    }
+    if (available != NULL) {
+        memset(available, 0, sizeof(*available));
+        available->peer = peer;
+        available->scene = play->sceneNum;
+    }
+    return available;
+}
+
+static void DrawRemoteMask(PlayState* play, Player* player, int32_t limb) {
+    RemoteVisualState visual;
+    if (limb != PLAYER_LIMB_HEAD || !ReadRemoteVisual(player, &visual) ||
+        sMasks[visual.flags[0]].key == NULL || visual.values[0] < 0.0f || visual.values[0] > 32767.0f) {
+        return;
+    }
+    int32_t worn = sWorn;
+    int32_t cooldown = sBlastCooldown;
+    int32_t initialized = sFairyHairInited;
+    int32_t activated = sFairyHairActivated;
+    uint32_t physicsFrame = sHairLastPhysicsFrame;
+    FairyHairLink localStrands[3][3];
+    HairChainParam localParams[ARRAY_COUNT(sHairChainParams)];
+    memcpy(localStrands, sFairyHairStrands, sizeof(localStrands));
+    memcpy(localParams, sHairChainParams, sizeof(localParams));
+    sWorn = visual.flags[0];
+    sBlastCooldown = visual.values[0];
+    RemoteHair* hair = NULL;
+    if (sWorn == MASK_GREAT_FAIRY) {
+        hair = FindRemoteHair(sApi->GetNetPeerIdForActor(&player->actor), play);
+        if (hair == NULL) {
+            sWorn = worn;
+            sBlastCooldown = cooldown;
+            return;
+        }
+        memcpy(sFairyHairStrands, hair->strands, sizeof(hair->strands));
+        sFairyHairInited = hair->initialized;
+        sHairLastPhysicsFrame = hair->initialized ? hair->frame : UINT32_MAX;
+    }
+    DrawWornMaskModel(play, player, limb);
+    if (hair != NULL) {
+        memcpy(hair->strands, sFairyHairStrands, sizeof(hair->strands));
+        hair->initialized = sFairyHairInited;
+        hair->frame = play->gameplayFrames;
+    }
+    memcpy(sFairyHairStrands, localStrands, sizeof(localStrands));
+    memcpy(sHairChainParams, localParams, sizeof(localParams));
+    sFairyHairInited = initialized;
+    sFairyHairActivated = activated;
+    sHairLastPhysicsFrame = physicsFrame;
+    sWorn = worn;
+    sBlastCooldown = cooldown;
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1340,6 +1534,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 
 static void RemoveForOtherMask(PlayState* play,Player* player){if(sWorn!=MASK_NONE)TakeOff(play,player);}
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.masks.take_off",(void*)RemoveForOtherMask);
     RegisterMaskOptions();
     SOH_REGISTER_HOOK(sApi,OnPlayerUpdate,GiantHammerSword);

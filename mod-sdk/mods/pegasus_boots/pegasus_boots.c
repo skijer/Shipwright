@@ -1,3 +1,4 @@
+#include <string.h>
 /**
  * Pegasus Boots: holding B where a spin attack would charge turns the charge into a blade-first dash, with a wind
  * cone in front that strikes while there is magic to pay for it. Walls, crates and trees stop it with a bonk.
@@ -52,6 +53,18 @@ typedef enum {
 } PegasusState;
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
 
 static ColliderCylinder sWindCollider;
 
@@ -418,7 +431,7 @@ static void DrawWindCone(Player* player, PlayState* play) {
 // The anklet is the hover boots dyed red, drawn where the body drew no boots of its own: these boots sit on a
 // Kokiri base. The skeleton's limb matrices on segment 0x0D are still loaded right after the player draws.
 static void DrawRedBoots(Player* player, PlayState* play) {
-    if (!LINK_IS_ADULT || (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) ||
+    if ((player == GET_PLAYER(play) && !LINK_IS_ADULT) || (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) ||
         (player->stateFlags2 & PLAYER_STATE2_CRAWLING)) {
         return;
     }
@@ -433,13 +446,18 @@ static void DrawRedBoots(Player* player, PlayState* play) {
 }
 
 static void DrawOnPlayer(Actor* actor, PlayState* play) {
+    RemoteVisualState visual;
+    bool local = actor == &GET_PLAYER(play)->actor;
+    bool visible = local ? IsWorn() : ReadRemoteVisual((Player*)actor, &visual);
     Player* player = (Player*)actor;
 
-    if (!IsWorn() || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (!visible || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
-    DrawRedBoots(player, play);
-    if (sPegasus.state == PEGASUS_RUNNING && gSaveContext.magic > 0) {
+    if (local || visual.adult) {
+        DrawRedBoots(player, play);
+    }
+    if (local ? sPegasus.state == PEGASUS_RUNNING && gSaveContext.magic > 0 : visual.flags[0]) {
         DrawWindCone(player, play);
     }
 }
@@ -522,11 +540,91 @@ static void ReleaseDash(const char* key) {
     }
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerFilterInput", "OnActorDrawEnd",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerFilterInput", "OnActorDrawEnd",
                                               "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.pegasus_boots.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (IsWorn());
+        if (visual.active) {
+            visual.flags[0] = sPegasus.state == PEGASUS_RUNNING && gSaveContext.magic > 0;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.pegasus_boots.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void DrawRemotePlayer(Actor* actor, PlayState* play) {
+    if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
+        DrawOnPlayer(actor, play);
+    }
+}
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.pegasus_boots.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
+    }
+}
+
+
+
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -537,6 +635,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
 
     for (s32 limb = PLAYER_LIMB_UPPER; limb < PLAYER_LIMB_MAX; limb++) {

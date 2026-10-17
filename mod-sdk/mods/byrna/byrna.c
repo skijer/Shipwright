@@ -87,6 +87,20 @@ static const ALIGN_ASSET(2) char sCaneDL[]="__OTR__objects/object_somaria/g_byrn
 static const ALIGN_ASSET(2) char sCaneGiveDL[]="__OTR__objects/object_somaria/g_byrna_cane_give_dl";
 static const char* const sGripDL[]={gLinkAdultLeftHandNearDL,gLinkChildLeftHandNearDL};
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static uint32_t CaptureRemoteLimbEnv(PlayState* play);
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
 s32 Player_SetupAction(PlayState*,Player*,PlayerActionFunc,s32);
 void func_80839FFC(Player*,PlayState*);
 void func_8008EC70(Player*);
@@ -116,6 +130,14 @@ static void WieldWithBothHands(Player* player, int32_t itemAction, int32_t* mode
     }
 }
 static void GripCane(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (limbIndex == PLAYER_LIMB_L_HAND && ReadRemoteVisual(player, &visual)) {
+            *dList = ResourceMgr_LoadGfxByName(sGripDL[gSaveContext.linkAge]);
+        }
+        return;
+    }
+
     if (limbIndex == PLAYER_LIMB_L_HAND && IsWielding(player)) {
         *dList = ResourceMgr_LoadGfxByName(sGripDL[gSaveContext.linkAge]);
     }
@@ -133,4 +155,98 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 #include "byrna_visuals.inc.c"
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.byrna.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (IsWielding(player));
+        if (visual.active) {
+
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.byrna.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.byrna.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
+static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        cursor--;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (uint32_t)cursor->words.w1;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, color >> 24, (color >> 16) & 255, (color >> 8) & 255, color & 255);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 #include "byrna_register.inc.c"

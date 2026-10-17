@@ -2,5 +2,6 @@
     "name": "byrna",
     "author": "Skijer",
     "version": "1.2",
-    "description": "Cane of Byrna: interpolated Insect Glaive actions, single B slash, A vault replacing roll, aerial attacks and rebounds, and an R magic shield costing 2 MP every 20 frames."
+    "description": "Cane of Byrna: interpolated Insect Glaive actions, single B slash, A vault replacing roll, aerial attacks and rebounds, and an R magic shield costing 2 MP every 20 frames.",
+    "permissions": ["network"]
 }

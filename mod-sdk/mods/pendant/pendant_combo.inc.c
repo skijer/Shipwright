@@ -255,8 +255,13 @@ static void ReadParryInput(Player* player, Input* input) {
 }
 
 static void DrawParryCue(PlayState* play, Player* player, int32_t limbIndex) {
-    if (!IsActive() || !sPendant.isLeapArmed || sPendant.hopTimer<=0 || limbIndex!=PLAYER_LIMB_L_HAND ||
-        Player_GetMeleeWeaponHeld(player)==0) return;
+    RemoteVisualState visual;
+    bool visible = player == GET_PLAYER(play) ?
+                       IsActive() && sPendant.isLeapArmed && sPendant.hopTimer > 0 && Player_GetMeleeWeaponHeld(player) != 0 :
+                       ReadRemoteVisual(player, &visual);
+    if (!visible || limbIndex != PLAYER_LIMB_L_HAND) {
+        return;
+    }
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     Matrix_Push();

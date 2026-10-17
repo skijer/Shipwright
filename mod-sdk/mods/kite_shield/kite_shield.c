@@ -1,3 +1,4 @@
+#include <string.h>
 /**
  * Kite Shield: press R in mid air and the shield goes under Link's feet. Downhill builds speed with no cap, uphill
  * bleeds it; a narrow strip of floor becomes a grind rail he is pinned to. A hops, B spins, R + B gets off, and
@@ -137,6 +138,18 @@ typedef enum {
 } SurfState;
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
 
 static struct {
     SurfState state;
@@ -774,6 +787,10 @@ static bool TakesStance(Player* player) {
 }
 
 static void PoseBeforeDraw(Actor* actor, PlayState* play, bool* drawVanilla) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player = (Player*)actor;
     Vec3s* joints = player->skelAnime.jointTable;
 
@@ -788,6 +805,10 @@ static void PoseBeforeDraw(Actor* actor, PlayState* play, bool* drawVanilla) {
 }
 
 static void RestorePoseAfterDraw(Actor* actor, PlayState* play) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Vec3s* joints = ((Player*)actor)->skelAnime.jointTable;
 
     if (!sSurf.isPoseApplied) {
@@ -810,9 +831,11 @@ static bool IsShieldInHand(Player* player) {
 }
 
 static void HideVanillaShield(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
+    RemoteVisualState visual;
+    bool visible = player == GET_PLAYER(gPlayState) ? IsWorn() : ReadRemoteVisual(player, &visual);
     s32 age = gSaveContext.linkAge;
 
-    if (!IsWorn()) {
+    if (!visible) {
         return;
     }
     if (limbIndex == PLAYER_LIMB_R_HAND && IsShieldInHand(player)) {
@@ -861,18 +884,33 @@ static void DrawBoard(PlayState* play) {
 // While riding the board is under his feet, so neither the hand nor the back copy draws. The vanilla base is the
 // Hylian Shield, which collides as metal; this one is wood.
 static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
-    if (!IsWorn() || player != GET_PLAYER(play)) {
+    RemoteVisualState visual;
+    bool local = player == GET_PLAYER(play);
+    bool visible = local ? IsWorn() : ReadRemoteVisual(player, &visual);
+    bool riding = visible && (local ? IsRiding() : visual.flags[0]);
+    if (!local && visible && (visual.values[0] < -32768.0f || visual.values[0] > 32767.0f)) {
         return;
     }
-    if (limbIndex == PLAYER_LIMB_ROOT && IsRiding()) {
+
+    if (!visible) {
+        return;
+    }
+    if (limbIndex == PLAYER_LIMB_ROOT && riding) {
+        int16_t spin = sSurf.boardSpin;
+        if (!local) {
+            sSurf.boardSpin = visual.values[0];
+        }
         DrawBoard(play);
+        sSurf.boardSpin = spin;
         return;
     }
-    if (IsRiding()) {
+    if (riding) {
         return;
     }
     if (limbIndex == PLAYER_LIMB_R_HAND && IsShieldInHand(player)) {
-        player->shieldQuad.base.colType = COLTYPE_WOOD;
+        if (local) {
+            player->shieldQuad.base.colType = COLTYPE_WOOD;
+        }
         DrawShieldModel(play);
     } else if (limbIndex == PLAYER_LIMB_SHEATH && IsShieldOnBack(player) && !IsShieldInHand(player) &&
                player->rightHandType != PLAYER_MODELTYPE_RH_FF) {
@@ -906,11 +944,85 @@ static void HandBackPlayer(const char* key) {
     sSurf.remountLockout = 0;
 }
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",       "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",       "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw",
                                               "OnActorDraw",          "OnActorDrawEnd",          "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
+
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.kite_shield.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (IsWorn());
+        if (visual.active) {
+            visual.flags[0] = IsRiding();
+            visual.values[0] = sSurf.boardSpin;
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.kite_shield.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.kite_shield.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+    }
+}
+
+
+
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -921,6 +1033,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
 
     definition.structSize = sizeof(definition);

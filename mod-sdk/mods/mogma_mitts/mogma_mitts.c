@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -29,13 +30,25 @@ static const ALIGN_ASSET(2) char sLeftFistPlateDL[] = "__OTR__objects/object_lin
 static const ALIGN_ASSET(2) char sRightOpenPlateDL[] = "__OTR__objects/object_link_boy/gLinkAdultRightGauntletPlate2DL";
 static const ALIGN_ASSET(2) char sRightFistPlateDL[] = "__OTR__objects/object_link_boy/gLinkAdultRightGauntletPlate3DL";
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDrawEnd", "OnLoadGame" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnActorDrawEnd", "OnLoadGame" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 extern HOST_DATA void Player_Action_8084BDFC(Player* player, PlayState* play);
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
 static bool sIsGripping;
 static bool sIsClimbEverythingLent;
 static s32 sClimbEverythingBefore;
@@ -82,6 +95,9 @@ static bool HasMagicToGrip(void) {
 
 static void StartGripping(Player* player) {
     sIsGripping = true;
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn)) {
+        sApi->SetCustomItemWorn(MITTS_KEY, true);
+    }
     sDrainTimer = 0;
     sPreviousInvincibility = player->invincibilityTimer;
     PlaySfxAt(NA_SE_SY_LOCK_ON, &player->actor.world.pos);
@@ -89,6 +105,9 @@ static void StartGripping(Player* player) {
 
 static void StopGripping(void) {
     sIsGripping = false;
+    if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn)) {
+        sApi->SetCustomItemWorn(MITTS_KEY, false);
+    }
     LendClimbEverything(false);
 }
 
@@ -182,8 +201,13 @@ static bool IsShowingVanillaGauntlets(void) {
 static void DrawGauntlets(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
 
-    if (!sIsGripping || IsShowingVanillaGauntlets() || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) ||
-        (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) || (player->stateFlags2 & PLAYER_STATE2_CRAWLING)) {
+    RemoteVisualState visual;
+    bool visible = player == GET_PLAYER(play) ?
+                       sIsGripping && !IsShowingVanillaGauntlets() &&
+                           !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
+                           !(player->stateFlags2 & PLAYER_STATE2_CRAWLING) :
+                       ReadRemoteVisual(player, &visual);
+    if (!visible || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
     OPEN_DISPS(play->state.gfxCtx);
@@ -213,6 +237,86 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, MITTS_KEY, MITTS_KEY, "",
 };
 
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.mogma_mitts.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sIsGripping && !IsShowingVanillaGauntlets() && !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) && !(player->stateFlags2 & PLAYER_STATE2_CRAWLING));
+        if (visual.active) {
+
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.mogma_mitts.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void DrawRemotePlayer(Actor* actor, PlayState* play) {
+    if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
+        DrawGauntlets(actor, play);
+    }
+}
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.mogma_mitts.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
+    }
+}
+
+
+
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -222,6 +326,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if (!SOH_MOD_API_HAS(sApi, RegisterCustomItem)) {
         return;
     }

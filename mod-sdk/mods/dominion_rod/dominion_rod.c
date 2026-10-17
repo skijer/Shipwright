@@ -1,3 +1,4 @@
+#include <math.h>
 /**
  * Dominion Rod: hold the button to aim, let go to fire a golden orb. It possesses a Beamos, an Armos or an
  * Anubis, which then copies Link's steps; the rod's button makes it attack, and anything else lets it go.
@@ -23,6 +24,9 @@
 #include "overlays/effects/ovl_Effect_Ss_Fhg_Flash/z_eff_ss_fhg_flash.h"
 
 #define DOMROD_KEY "nei.dominion_rod"
+#define DOMROD_HELD_ROT_Z (-90.0f)
+#define DOMROD_HELD_OFFSET_Y 10.0f
+#define DOMROD_HELD_SCALE 0.1f
 #define DOMROD_BUTTON_COUNT 8
 #define DOMROD_ORB_SPEED 18.0f
 #define DOMROD_ORB_SPEED_HOMING 22.0f
@@ -78,11 +82,26 @@ static ColliderCylinderInit sColliderInit = {
     { DOMROD_COLLIDER_RADIUS, DOMROD_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnPlayerActionHandler", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnActorDrawEnd", "OnPlayDrawEnd", "OnSceneInit", "OnActorUpdate" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerPostLimbDraw", "OnPlayerUpdate", "OnPlayerActionHandler", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnActorDrawEnd", "OnPlayDrawEnd", "OnSceneInit", "OnActorUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+#define REMOTE_VISUAL_INTERVAL 5u
+
+typedef struct {
+    int16_t scene;
+    uint8_t active;
+    uint8_t adult;
+    uint8_t flags[8];
+    float values[12];
+} RemoteVisualState;
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
+static void InitRemoteVisuals(void);
+static uint32_t CaptureRemoteLimbEnv(PlayState* play);
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
+static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb);
 static ColliderCylinder sCollider;
 static bool sIsColliderReady;
 static bool sIsAimPending;
@@ -794,21 +813,42 @@ static void DrawOrb(PlayState* play) {
 static MtxF sWeaponHand;
 static bool sWeaponHandReady;
 static void ReplaceSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* original, Vec3f* pos) {
+    if (player != GET_PLAYER(gPlayState)) {
+        RemoteVisualState visual;
+        if (limb == PLAYER_LIMB_L_HAND && ReadRemoteVisual(player, &visual)) {
+            *dl = (Gfx*)(visual.adult ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
+        }
+        return;
+    }
+
+    if (gPlayState == NULL || player != GET_PLAYER(gPlayState)) {
+        return;
+    }
+
     if (!(sPhase!=DOMROD_STOWED) || limb!=PLAYER_LIMB_L_HAND) { return; }
     *dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
 }
 static void CaptureSwordHand(PlayState* play, Player* player, int32_t limb) {
+    if (gPlayState == NULL || player != GET_PLAYER(gPlayState)) {
+        return;
+    }
+
     if ((sPhase!=DOMROD_STOWED) && limb==PLAYER_LIMB_L_HAND) { Matrix_Get(&sWeaponHand); sWeaponHandReady=true; }
 }
 static void DrawSwordReplacement(Actor* actor, PlayState* play) {
+    if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
+        return;
+    }
+
     Player* player=(Player*)actor;
     if (!(sPhase!=DOMROD_STOWED) || !sWeaponHandReady || (player->stateFlags2&PLAYER_STATE2_DISABLE_DRAW)) { return; }
     Matrix_Push();
     Matrix_Put(&sWeaponHand);
     float unscale=player->actor.scale.x!=0?1.0f/player->actor.scale.x:1.0f;
     Matrix_Scale(unscale,unscale,unscale,MTXMODE_APPLY);
-    Matrix_RotateZ(-M_PI/2,MTXMODE_APPLY); Matrix_Translate(0,10,0,MTXMODE_APPLY);
-    Matrix_Scale(.1f,.1f,.1f,MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(DOMROD_HELD_ROT_Z), MTXMODE_APPLY);
+    Matrix_Translate(0.0f, DOMROD_HELD_OFFSET_Y, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(DOMROD_HELD_SCALE, DOMROD_HELD_SCALE, DOMROD_HELD_SCALE, MTXMODE_APPLY);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
@@ -853,6 +893,128 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DOMROD_KEY, DOMROD_KEY, "",
 };
 
+static bool sRemoteVisualReady;
+static bool sRemoteVisualSent;
+static uint32_t sRemoteVisualFrame;
+static RemoteVisualState sLastRemoteVisual;
+
+static void ReceiveRemoteVisual(const SOHNetMessage* message) {
+    (void)message;
+}
+
+static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
+    if (!sRemoteVisualReady || gPlayState == NULL || player == GET_PLAYER(gPlayState)) {
+        return false;
+    }
+    uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
+    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.dominion_rod.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+        return false;
+    }
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
+        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return false;
+    }
+    for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
+        if (!isfinite(visual->values[i]) || fabsf(visual->values[i]) > 10000000.0f) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void PublishRemoteVisual(void) {
+    if (!sRemoteVisualReady) {
+        return;
+    }
+    RemoteVisualState visual = { 0 };
+    PlayState* play = gPlayState;
+    visual.scene = -1;
+    if (play != NULL) {
+        Player* player = GET_PLAYER(play);
+        visual.scene = play->sceneNum;
+        visual.adult = LINK_IS_ADULT;
+        visual.active = (sPhase != DOMROD_STOWED);
+        if (visual.active) {
+
+        }
+        if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
+            return;
+        }
+    }
+    if (!sRemoteVisualSent || memcmp(&visual, &sLastRemoteVisual, sizeof(visual)) != 0) {
+        if (sApi->SetNetPeerState("nei.dominion_rod.visual", &visual, sizeof(visual))) {
+            sLastRemoteVisual = visual;
+            sRemoteVisualSent = true;
+            sRemoteVisualFrame = play != NULL ? play->gameplayFrames : 0;
+        }
+    }
+}
+
+
+
+static void InitRemoteVisuals(void) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
+        !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
+        return;
+    }
+    sRemoteVisualReady = sApi->RegisterNetChannel("nei.dominion_rod.visual", 1, ReceiveRemoteVisual);
+    if (sRemoteVisualReady) {
+        SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
+        SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawRemoteLimb);
+    }
+}
+
+
+
+static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb) {
+    RemoteVisualState visual;
+    if (limb != PLAYER_LIMB_L_HAND || !ReadRemoteVisual(player, &visual)) {
+        return;
+    }
+    uint32_t savedRemoteEnv = CaptureRemoteLimbEnv(play);
+    Matrix_Push();
+    float unscale = player->actor.scale.x != 0.0f ? 1.0f / player->actor.scale.x : 1.0f;
+    Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
+    Matrix_RotateZ(DEG_TO_RAD(DOMROD_HELD_ROT_Z), MTXMODE_APPLY);
+    Matrix_Translate(0.0f, DOMROD_HELD_OFFSET_Y, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(DOMROD_HELD_SCALE, DOMROD_HELD_SCALE, DOMROD_HELD_SCALE, MTXMODE_APPLY);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sRodDL);
+    if (sRodXluDL != NULL) {
+        Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sRodXluDL);
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Pop();
+
+    RestoreRemoteLimbEnv(play, savedRemoteEnv);
+}
+
+static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        cursor--;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (uint32_t)cursor->words.w1;
+        }
+    }
+    return UINT32_MAX;
+}
+
+static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, color >> 24, (color >> 16) & 255, (color >> 8) & 255, color & 255);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -862,6 +1024,7 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     if (!SOH_MOD_API_HAS(sApi, GetEquippedCustomItem) || !SOH_MOD_API_HAS(sApi, GetActorId)) {
         return;
     }

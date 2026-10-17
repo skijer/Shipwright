@@ -9,5 +9,6 @@
         "objects/object_bsmask/gRemainsOdolwaDL",
         "objects/object_ob/gMoonChildOdolwasMaskDL",
         "objects/object_boss01/gOdolwaBugSkel"
-    ]
+    ],
+    "permissions": ["network"]
 }

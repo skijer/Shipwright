@@ -8,7 +8,7 @@ static void PutCaneAway(const char* key) {
     if (gPlayState && sTrail>=0) Effect_Delete(gPlayState,sTrail);
     ForgetSceneState(0);
 }
-static const char* const sRequiredHooks[]={"OnPlayerUpdate","OnPlayerActionHandler","OnPlayerFilterInput",
+static const char* const sRequiredHooks[]={"OnGameFrameUpdate","OnPlayerUpdate","OnPlayerActionHandler","OnPlayerFilterInput",
     "OnPlayerResolveAnim","OnPlayerResolveAnimSite","OnPlayerResolveModelGroup","OnPlayerResolveLimbDraw",
     "OnPlayerPostLimbDraw","OnActorDrawEnd","OnActorUpdate","OnActorKill","ShouldActorUpdate","OnSceneInit",
     "OnCollisionRegisterAC","OnCollisionResolveDamage","OnResolveSwordDamage"};
@@ -16,6 +16,7 @@ static const SOHModRequirements sRequirements={sizeof(SOHModRequirements),sRequi
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {sApi=api;}
 SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {return &sRequirements;}
 SOH_MOD_EXPORT void ModInit(void) {
+    InitRemoteVisuals();
     SOHCustomEquipDefinition definition={0};definition.structSize=sizeof(definition);definition.key=BYRNA_KEY;
     definition.iconPath=sIcon;definition.namePath=sName;
     definition.pauseText="%rCane of Byrna&%w%y\xA0%w: slash  Run + %y\xA0%w: dash&%y\x9F%w replaces roll with a vault.^"

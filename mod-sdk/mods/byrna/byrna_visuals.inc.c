@@ -26,14 +26,26 @@ static void TraceCaneTrail(PlayState* play) {
     EffectBlure_AddVertex(trail,&tip,&base);
 }
 static void DrawCane(PlayState* play,Player* player,int32_t limbIndex) {
-    if (limbIndex!=PLAYER_LIMB_L_HAND || player!=GET_PLAYER(play) || !IsWielding(player)) return;
-    TraceCaneTrail(play);
+    RemoteVisualState visual;
+    bool local = player == GET_PLAYER(play);
+    bool visible = local ? IsWielding(player) : ReadRemoteVisual(player, &visual);
+    if (limbIndex != PLAYER_LIMB_L_HAND || !visible) {
+        return;
+    }
+    if (local) {
+        TraceCaneTrail(play);
+    }
+    uint32_t savedRemoteEnv = CaptureRemoteLimbEnv(play);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);Matrix_Push();ApplyCaneMatrix();
     Matrix_Scale(CANE_SCALE_X,CANE_SCALE_Y,CANE_SCALE_Z,MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
     gSPDisplayList(POLY_OPA_DISP++,(Gfx*)sCaneDL);Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
+
+    if (player != GET_PLAYER(play)) {
+        RestoreRemoteLimbEnv(play, savedRemoteEnv);
+    }
 }
 static s32 FairyLimb(PlayState* play,s32 limbIndex,Gfx** dList,Vec3f* pos,Vec3s* rot,void* unused) {
     if (limbIndex==4 || limbIndex==7 || limbIndex==11 || limbIndex==14) *dList=NULL;

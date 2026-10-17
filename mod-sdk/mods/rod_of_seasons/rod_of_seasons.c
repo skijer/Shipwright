@@ -1447,6 +1447,13 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetAction(&rod, TakeOutRod, HoldRod);
     Z64Items_SetHeldCallbacks(&rod, TurnSeason, StowRod, NULL);
     rod.modelGroup = PLAYER_MODELGROUP_DEFAULT;
+    rod.appearance.modelPath = sRodDL;
+    rod.appearance.limb = PLAYER_LIMB_R_HAND;
+    rod.appearance.rotation[0] = SEASONS_HELD_ROT_X;
+    rod.appearance.rotation[1] = SEASONS_HELD_ROT_Y;
+    rod.appearance.offset[1] = SEASONS_HELD_OFFSET_Y;
+    rod.appearance.offset[2] = SEASONS_HELD_OFFSET_Z;
+    rod.appearance.scale = SEASONS_HELD_SCALE;
     rod.getItemEntry.drawFunc = DrawGetItem;
     rod.onReceive = WakeAllSeasons;
     // The seed places the seasons, never the bare rod; logic asking for the rod is met by any season.

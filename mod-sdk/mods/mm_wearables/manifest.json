@@ -25,5 +25,6 @@
         "misc/link_animetion/gPlayerAnim_cl_setmask_Data",
         "misc/link_animetion/gPlayerAnim_cl_setmaskend_Data",
         "objects/object_pst/gPostboxFrameDL"
-    ]
+    ],
+    "permissions": ["network"]
 }

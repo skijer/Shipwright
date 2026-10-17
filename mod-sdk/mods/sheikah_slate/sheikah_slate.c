@@ -3403,6 +3403,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetAction(&slate, TakeOutSlate, HoldSlate);
     Z64Items_SetHeldCallbacks(&slate, CastRune, StowSlate, NULL);
     slate.modelGroup = PLAYER_MODELGROUP_DEFAULT;
+    slate.appearance.modelPath = sSlateDL;
+    slate.appearance.limb = PLAYER_LIMB_R_HAND;
+    slate.appearance.rotation[0] = SLATE_HELD_ROT_X;
+    slate.appearance.rotation[1] = SLATE_HELD_ROT_Y;
+    slate.appearance.offset[1] = SLATE_HELD_OFFSET_Y;
+    slate.appearance.scale = SLATE_HELD_SCALE;
     slate.getItemEntry.drawFunc = DrawGetItem;
     slate.onReceive = GrantAllRunes;
     // The seed places the runes, never the bare tablet; logic asking for the tablet is met by any rune.
