@@ -49,7 +49,9 @@ the game's services:
 | `microphone` | `OpenMicrophone`, `ReadMicrophone`, `CloseMicrophone` | Asked once per mod (the answer is kept in `mods/.unbound-mod-permissions.json`); a microphone icon with the mod's name stays in the corner while it records |
 | `files` | `PickUserFile`, `SaveToModsFolder`, and the older `ExportArchiveFiles` | Asked every time: a file is only read once the player picks it, and nothing is written without a yes. Writes only land in `mods/` |
 
-`AskPlayer`, `TellPlayer` and `RequestRestart` need no permission; their dialogs carry the mod's name.
+`AskPlayer`, `TellPlayer` and `RequestRestart` need no permission; their dialogs carry the mod's name. `RestartGame`
+needs none either. It restarts the game with no dialog, so call it only right after telling the player, for example
+when they've answered the mod's own question. The log names the mod that asked.
 
 The game identifies which mod is calling each service by the binary the call comes from, so one mod cannot use
 another's permission. A service the manifest does not declare is refused at run time, and the scan refuses a

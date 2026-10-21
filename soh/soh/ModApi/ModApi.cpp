@@ -406,6 +406,7 @@ SOHModApi BuildTable() {
     api.StopNetRoomCountdown = ModNetwork_StopRoomCountdown;
     api.SetCustomItemWorn = CustomItemRegistry_SetWorn;
     api.IsCustomItemWorn = CustomItemRegistry_IsWorn;
+    api.RestartGame = ModDialogs_Restart;
     return api;
 }
 

@@ -44,11 +44,10 @@ constexpr std::string_view DangerousRuntimeImports[] = {
     "_wsopen",  "_wsopen_s", "_creat",  "remove",    "_wremove", "rename",       "_wrename",     "_unlink",
     "_wunlink", "_rmdir",    "_wrmdir", "_mkdir",    "_wmkdir",  "_Thrd_create", "_beginthread", "_beginthreadex",
 };
-constexpr std::string_view HostTrustInternals[] = { "ModPermissions_",     "ModLoader_",
-                                                    "ModTrust_",           "UserFiles_ApplyPending",
-                                                    "crypto_",             "kTrustedModSigningKey",
-                                                    "kRevokedMod",         "ModNetwork_Deliver",
-                                                    "ModNetwork_OnPeerOnlineChange" };
+constexpr std::string_view HostTrustInternals[] = {
+    "ModPermissions_",       "ModLoader_",  "ModTrust_",          "UserFiles_ApplyPending",        "crypto_",
+    "kTrustedModSigningKey", "kRevokedMod", "ModNetwork_Deliver", "ModNetwork_OnPeerOnlineChange", "ModRestart_"
+};
 constexpr std::string_view DangerousRuntimeImportPrefixes[] = { "_execl", "_execv",  "_wexecl",   "_wexecv",
                                                                 "_spawn", "_wspawn", "__std_fs_", "?_Fiopen" };
 

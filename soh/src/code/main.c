@@ -10,6 +10,7 @@
 #include <soh/Enhancements/bootcommands.h>
 #include "soh/OTRGlobals.h"
 #include "soh/CrashHandlerExt.h"
+#include "soh/ModApi/ModDialogs/ModDialogs.h"
 
 s32 gScreenWidth = SCREEN_WIDTH;
 s32 gScreenHeight = SCREEN_HEIGHT;
@@ -58,6 +59,7 @@ int SDL_main(int argc, char* argv[]) {
 #else //_WIN32
 int main(int argc, char* argv[]) {
 #endif
+    ModRestart_WaitForPrevious();
     GameConsole_Init();
     InitOTR(argc, argv);
     // TODO: Was moved to below InitOTR because it requires window to be setup. But will be late to catch crashes.
@@ -68,6 +70,7 @@ int main(int argc, char* argv[]) {
     Main(0);
     DeinitOTR();
     Heaps_Free();
+    ModRestart_RelaunchIfRequested(argc, argv);
     return 0;
 }
 
