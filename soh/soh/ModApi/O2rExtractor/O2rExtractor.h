@@ -15,6 +15,7 @@ typedef bool (*SOHArchivePathFunc)(const char* path, void* userData);
 
 uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinationDir);
 uint32_t O2rExtractor_ReadFiles(const char* searchMask, SOHArchiveFileFunc visit, void* userData);
+uint32_t O2rExtractor_ReadGameFiles(const char* searchMask, SOHArchiveFileFunc visit, void* userData);
 uint32_t O2rExtractor_ListFiles(const char* searchMask, SOHArchivePathFunc visit, void* userData);
 
 #ifdef __cplusplus

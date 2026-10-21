@@ -10,6 +10,7 @@
 #include <libultraship/libultraship.h>
 
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
+#include "soh/ResourceManagerHelpers.h"
 
 namespace {
 
@@ -112,6 +113,44 @@ uint32_t O2rExtractor_ReadFiles(const char* searchMask, SOHArchiveFileFunc visit
         visited++;
         const auto* data = reinterpret_cast<const uint8_t*>(file->Buffer->data());
         if (!visit(path.c_str(), data, file->Buffer->size(), userData)) {
+            break;
+        }
+    }
+    return visited;
+}
+
+// The game's own copy of each matching file: the top Ocarina of Time archive that holds it (oot.o2r, oot-mq.o2r,
+// Unbound's conversion), as if no mod covered it. Paths only mods hold are skipped. Read-only, like ReadFiles.
+uint32_t O2rExtractor_ReadGameFiles(const char* searchMask, SOHArchiveFileFunc visit, void* userData) {
+    if (searchMask == nullptr || visit == nullptr) {
+        return 0;
+    }
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
+    auto archives = archiveManager->GetArchives();
+    std::vector<std::shared_ptr<Ship::Archive>> game;
+    for (auto archive = archives->rbegin(); archive != archives->rend(); ++archive) {
+        if ((*archive)->HasGameVersion() && ResourceMgr_IsOcarinaOfTimeVersion((*archive)->GetGameVersion())) {
+            game.push_back(*archive);
+        }
+    }
+    auto paths = archiveManager->ListFiles(searchMask);
+    uint32_t visited = 0;
+
+    for (const std::string& path : *paths) {
+        for (const auto& archive : game) {
+            if (!archive->HasFile(path)) {
+                continue;
+            }
+            auto file = archive->LoadFile(path);
+            if (file == nullptr || file->Buffer == nullptr) {
+                SPDLOG_WARN("[O2rExtractor] Could not read '{}' from '{}'", path, archive->GetPath());
+                break;
+            }
+            visited++;
+            const auto* data = reinterpret_cast<const uint8_t*>(file->Buffer->data());
+            if (!visit(path.c_str(), data, file->Buffer->size(), userData)) {
+                return visited;
+            }
             break;
         }
     }

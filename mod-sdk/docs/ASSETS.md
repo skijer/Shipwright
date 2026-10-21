@@ -151,3 +151,10 @@ The game ships no ZAPD. A mod that extracts a ROM brings its own, working in mem
 `PickUserFile`, the XML description from its own archive through `ReadArchiveFiles` (read-only, no permission),
 and the finished archive goes to `SaveToModsFolder`. `mm_assets` is the reference. `ExportArchiveFiles` writes files
 from mounted archives to disk for tools. ROM data is never distributed: only the XML offsets are.
+
+`ReadArchiveFiles` reads each path from the top archive that holds it, so a mod covering a vanilla file hides the
+original. `ReadGameArchiveFiles` takes the same arguments but reads only the game's own archives, the ones with an
+Ocarina of Time version (`oot.o2r`, `oot-mq.o2r`, Unbound's conversion), as if no mod were mounted. It is also
+read-only and needs no permission. A mod that builds an archive from vanilla files can build its next version while
+its current one is still mounted, then save it with `SaveToModsFolder`. The new file waits as `.pending` and
+replaces the old one on the next start. Check `SOH_MOD_API_HAS(api, ReadGameArchiveFiles)` first: older hosts lack it.
