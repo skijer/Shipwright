@@ -15,6 +15,8 @@
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 bool gRandoLogicHasCapabilityGrants = false;
+bool gRandoLogicHasItemGrants = false;
+bool gRandoLogicHasEnemyGrants = false;
 
 namespace {
 
@@ -22,12 +24,6 @@ const char* const kCapabilityNames[RLC_MAX] = {
 #define RANDO_LOGIC_CAPABILITY_NAME(name) #name,
     RANDO_LOGIC_CAPABILITIES(RANDO_LOGIC_CAPABILITY_NAME)
 #undef RANDO_LOGIC_CAPABILITY_NAME
-};
-
-struct CapabilityGrant {
-    std::string owner;
-    SOHLogicCondition condition;
-    void* userData;
 };
 
 struct Selector {
@@ -62,8 +58,21 @@ struct WorldEntry {
     const std::string* condition;
 };
 
-std::array<std::vector<CapabilityGrant>, RLC_MAX> sCapabilityGrants;
+struct Grant {
+    std::string owner;
+    SOHLogicCondition condition;
+    void* userData;
+    std::vector<Selector> include;
+    std::vector<Selector> exclude;
+    bool evaluating;
+};
+
+std::array<std::vector<Grant>, RLC_MAX> sCapabilityGrants;
 std::array<bool, RLC_MAX> sCapabilityEvaluating{};
+std::unordered_map<int32_t, std::vector<Grant>> sItemGrants;
+std::unordered_map<int32_t, std::vector<Grant>> sEnemyGrants;
+// The check, entrance or event whose condition is being evaluated, innermost last.
+std::vector<WorldEntry> sEntryStack;
 std::list<Rule> sRules;
 
 std::vector<std::vector<Rule*>> sLocationRules;
@@ -275,6 +284,101 @@ void ReindexWhenWorldBuilt() {
     }
 }
 
+// Outside any check, entrance or event (a helper asked directly) only unscoped grants apply.
+bool IsInScope(const Grant& grant) {
+    if (sEntryStack.empty()) {
+        return grant.include.empty();
+    }
+    const WorldEntry& entry = sEntryStack.back();
+    if (!grant.include.empty() && !MatchesAny(grant.include, entry)) {
+        return false;
+    }
+    return !MatchesAny(grant.exclude, entry);
+}
+
+// A grant whose condition asks for what it grants answers false to itself instead of recursing.
+bool AnyGrantHolds(std::vector<Grant>& grants) {
+    for (Grant& grant : grants) {
+        if (grant.evaluating || !IsInScope(grant)) {
+            continue;
+        }
+        grant.evaluating = true;
+        bool holds = grant.condition(grant.userData);
+        grant.evaluating = false;
+        if (holds) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool AnyMappedGrantHolds(std::unordered_map<int32_t, std::vector<Grant>>& grants, int32_t key) {
+    auto found = grants.find(key);
+    return found != grants.end() && AnyGrantHolds(found->second);
+}
+
+Grant ReadGrant(const SOHLogicGrant& source) {
+    Grant grant{};
+    grant.owner = source.owner;
+    grant.condition = source.condition;
+    grant.userData = source.userData;
+    for (uint32_t index = 0; index < source.includeCount; index++) {
+        grant.include.push_back(ReadSelector(source.include[index]));
+    }
+    for (uint32_t index = 0; index < source.excludeCount; index++) {
+        grant.exclude.push_back(ReadSelector(source.exclude[index]));
+    }
+    return grant;
+}
+
+void RemoveOwnerGrants(std::vector<Grant>& grants, const std::string& owner) {
+    grants.erase(std::remove_if(grants.begin(), grants.end(), [&owner](const Grant& grant) { return grant.owner == owner; }),
+                 grants.end());
+}
+
+class EntryScope {
+  public:
+    explicit EntryScope(const WorldEntry& entry) {
+        sEntryStack.push_back(entry);
+    }
+    ~EntryScope() {
+        sEntryStack.pop_back();
+    }
+};
+
+int32_t GetCheckScene(int32_t check) {
+    if (check < 0 || check >= RC_MAX) {
+        return -1;
+    }
+    Rando::Location* location = Rando::StaticData::GetLocation(static_cast<RandomizerCheck>(check));
+    return location != nullptr ? static_cast<int32_t>(location->GetScene()) : -1;
+}
+
+bool ResolveLocation(int32_t check, bool vanillaResult) {
+    if (!sHasLocationRules || check < 0 || check >= RC_MAX) {
+        return vanillaResult;
+    }
+    return ApplyRules(sLocationRules[check], vanillaResult);
+}
+
+bool ResolveEntrance(int32_t fromRegion, int32_t toRegion, bool vanillaResult) {
+    if (sEntranceRules.empty()) {
+        return vanillaResult;
+    }
+    auto found = sEntranceRules.find(EntranceKey(fromRegion, toRegion));
+    if (found == sEntranceRules.end()) {
+        return vanillaResult;
+    }
+    return ApplyRules(found->second, vanillaResult);
+}
+
+bool ResolveEvent(int32_t logicEvent, bool vanillaResult) {
+    if (!sHasEventRules || logicEvent < 0 || logicEvent >= LOGIC_MAX) {
+        return vanillaResult;
+    }
+    return ApplyRules(sEventRules[logicEvent], vanillaResult);
+}
+
 } // namespace
 
 bool RandoLogic_GrantCapability(const char* owner, const char* capability, SOHLogicCondition condition,
@@ -284,9 +388,49 @@ bool RandoLogic_GrantCapability(const char* owner, const char* capability, SOHLo
         SPDLOG_ERROR("Rejected a grant of logic capability {}", capability != nullptr ? capability : "(null)");
         return false;
     }
-    sCapabilityGrants[index].push_back({ owner, condition, userData });
+    Grant grant{};
+    grant.owner = owner;
+    grant.condition = condition;
+    grant.userData = userData;
+    sCapabilityGrants[index].push_back(grant);
     gRandoLogicHasCapabilityGrants = true;
     return true;
+}
+
+bool RandoLogic_Grant(const SOHLogicGrant* definition) {
+    if (definition == nullptr || definition->structSize < sizeof(SOHLogicGrant) || definition->owner == nullptr ||
+        definition->condition == nullptr) {
+        SPDLOG_ERROR("Rejected a logic grant with no owner, no condition or an older struct");
+        return false;
+    }
+    switch (definition->kind) {
+        case SOH_LOGIC_GRANT_CAPABILITY: {
+            int32_t index = FindCapability(definition->capability);
+            if (index < 0) {
+                SPDLOG_ERROR("{}: no logic capability {}", definition->owner,
+                             definition->capability != nullptr ? definition->capability : "(null)");
+                return false;
+            }
+            sCapabilityGrants[index].push_back(ReadGrant(*definition));
+            gRandoLogicHasCapabilityGrants = true;
+            return true;
+        }
+        case SOH_LOGIC_GRANT_ITEM:
+            if (definition->value <= RG_NONE) {
+                SPDLOG_ERROR("{}: a logic item grant needs a RandomizerGet", definition->owner);
+                return false;
+            }
+            sItemGrants[definition->value].push_back(ReadGrant(*definition));
+            gRandoLogicHasItemGrants = true;
+            return true;
+        case SOH_LOGIC_GRANT_ENEMY_KILL:
+            sEnemyGrants[definition->value].push_back(ReadGrant(*definition));
+            gRandoLogicHasEnemyGrants = true;
+            return true;
+        default:
+            SPDLOG_ERROR("{}: unknown logic grant kind {}", definition->owner, static_cast<int>(definition->kind));
+            return false;
+    }
 }
 
 bool RandoLogic_RegisterRule(const SOHLogicRule* definition) {
@@ -327,10 +471,14 @@ void RandoLogic_RemoveOwner(const char* name) {
     }
     std::string owner = name;
     sRules.remove_if([&owner](const Rule& rule) { return rule.name == owner; });
-    for (std::vector<CapabilityGrant>& grants : sCapabilityGrants) {
-        grants.erase(std::remove_if(grants.begin(), grants.end(),
-                                    [&owner](const CapabilityGrant& grant) { return grant.owner == owner; }),
-                     grants.end());
+    for (std::vector<Grant>& grants : sCapabilityGrants) {
+        RemoveOwnerGrants(grants, owner);
+    }
+    for (auto& [item, grants] : sItemGrants) {
+        RemoveOwnerGrants(grants, owner);
+    }
+    for (auto& [enemy, grants] : sEnemyGrants) {
+        RemoveOwnerGrants(grants, owner);
     }
     ReindexWhenWorldBuilt();
 }
@@ -358,49 +506,67 @@ bool RandoLogic_IsCapabilityGranted(RandoLogicCapability capability) {
         return false;
     }
     sCapabilityEvaluating[capability] = true;
-    bool granted = false;
-    for (const CapabilityGrant& grant : sCapabilityGrants[capability]) {
-        if (grant.condition(grant.userData)) {
-            granted = true;
-            break;
-        }
-    }
+    bool granted = AnyGrantHolds(sCapabilityGrants[capability]);
     sCapabilityEvaluating[capability] = false;
     return granted;
 }
 
-bool RandoLogic_ResolveLocation(int32_t check, bool vanillaResult) {
+bool RandoLogic_IsItemGranted(int32_t randoGet) {
+    return AnyMappedGrantHolds(sItemGrants, randoGet);
+}
+
+bool RandoLogic_IsEnemyKillGranted(int32_t enemy) {
+    return AnyMappedGrantHolds(sEnemyGrants, enemy);
+}
+
+// Mod checks, exits and events answer with their own condition language, never with the vanilla one.
+bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate) {
     if (DungeonRegistry_IsModCheck(check)) {
         return DungeonRegistry_EvaluateCheck(check);
     }
-    if (!sHasLocationRules || check < 0 || check >= RC_MAX) {
-        return vanillaResult;
-    }
-    return ApplyRules(sLocationRules[check], vanillaResult);
+    WorldEntry entry{};
+    entry.target = SOH_LOGIC_TARGET_LOCATIONS;
+    entry.id = check;
+    entry.region = -1;
+    entry.scene = GetCheckScene(check);
+    entry.entranceTo = -1;
+    entry.checkType = entry.scene >= 0 ? GetCheckType(check) : -1;
+    entry.condition = &condition;
+    EntryScope scope(entry);
+    return ResolveLocation(check, evaluate());
 }
 
-bool RandoLogic_ResolveEntrance(int32_t fromRegion, int32_t toRegion, bool vanillaResult) {
+bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
+                                 const std::function<bool()>& evaluate) {
     if (fromRegion >= RR_MAX || toRegion >= RR_MAX) {
         return DungeonRegistry_EvaluateExit(fromRegion, toRegion);
     }
-    if (sEntranceRules.empty()) {
-        return vanillaResult;
-    }
-    auto found = sEntranceRules.find(EntranceKey(fromRegion, toRegion));
-    if (found == sEntranceRules.end()) {
-        return vanillaResult;
-    }
-    return ApplyRules(found->second, vanillaResult);
+    WorldEntry entry{};
+    entry.target = SOH_LOGIC_TARGET_ENTRANCES;
+    entry.id = -1;
+    entry.region = fromRegion;
+    entry.scene = fromRegion > RR_NONE ? static_cast<int32_t>(areaTable[fromRegion].scene) : -1;
+    entry.entranceTo = toRegion;
+    entry.checkType = -1;
+    entry.condition = &condition;
+    EntryScope scope(entry);
+    return ResolveEntrance(fromRegion, toRegion, evaluate());
 }
 
-bool RandoLogic_ResolveEvent(int32_t logicEvent, bool vanillaResult) {
+bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, const std::function<bool()>& evaluate) {
     if (DungeonRegistry_IsModEvent(logicEvent)) {
         return DungeonRegistry_EvaluateEvent(logicEvent);
     }
-    if (!sHasEventRules || logicEvent < 0 || logicEvent >= LOGIC_MAX) {
-        return vanillaResult;
-    }
-    return ApplyRules(sEventRules[logicEvent], vanillaResult);
+    WorldEntry entry{};
+    entry.target = SOH_LOGIC_TARGET_EVENTS;
+    entry.id = logicEvent;
+    entry.region = -1;
+    entry.scene = -1;
+    entry.entranceTo = -1;
+    entry.checkType = -1;
+    entry.condition = &condition;
+    EntryScope scope(entry);
+    return ResolveEvent(logicEvent, evaluate());
 }
 
 bool RandoLogic_CanUseItem(int32_t randoGet) {

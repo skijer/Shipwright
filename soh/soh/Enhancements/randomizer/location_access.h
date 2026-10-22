@@ -35,7 +35,7 @@ class EventAccess {
     bool ConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return RandoLogic_ResolveEvent(event, condition_function());
+            return RandoLogic_EvaluateEvent(event, condition_str, condition_function);
         }
         return true;
     }
@@ -90,7 +90,7 @@ class LocationAccess {
     bool GetConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return RandoLogic_ResolveLocation(location, condition_function());
+            return RandoLogic_EvaluateLocation(location, condition_str, condition_function);
         }
         return true;
     }

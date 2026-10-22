@@ -246,6 +246,7 @@ struct NativeModPackage {
     std::shared_ptr<std::vector<char>> binary;
     std::vector<std::string> requiredResources;
     std::vector<std::string> permissions;
+    int modApiMajor = SOH_MOD_API_MAJOR;
     ModProvenance provenance;
 };
 
@@ -362,8 +363,7 @@ void ReportRefusedMods() {
     if (sRefusedMods.empty()) {
         return;
     }
-    std::string message = "This build of Unbound only runs native mods signed by its sign-mod workflow. "
-                          "These were not loaded:\n\n";
+    std::string message = "These native mods were not loaded:\n\n";
     for (const std::string& refused : sRefusedMods) {
         message += "- " + refused + "\n";
     }
@@ -419,6 +419,8 @@ std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship:
     package.binary = file->Buffer;
     package.requiredResources = ReadStringArray(manifest, "requires");
     package.permissions = ReadStringArray(manifest, "permissions");
+    // Packages from before the field existed were all built for major 1.
+    package.modApiMajor = manifest.value("modapi", 1);
     package.provenance = ModTrust_Verify(*archive);
     return package;
 }
@@ -540,6 +542,11 @@ void ModLoader_LoadMods() {
         if (!modNames.insert(package.name).second) {
             SPDLOG_ERROR("[ModApi] Native mod name '{}' is duplicated; ignoring '{}'", package.name,
                          package.archivePath);
+            continue;
+        }
+        if (package.modApiMajor != SOH_MOD_API_MAJOR) {
+            sRefusedMods.push_back(package.name + ": built for mod API " + std::to_string(package.modApiMajor) +
+                                   ", this Unbound has " + std::to_string(SOH_MOD_API_MAJOR) + "; update it");
             continue;
         }
 

@@ -57,6 +57,7 @@ def main():
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--platform", choices=PLATFORMS, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--modapi-major", type=int, help="SOH_MOD_API_MAJOR of the game the binary was built for")
     args = parser.parse_args()
 
     manifest = read_manifest(args.mod_directory)
@@ -65,6 +66,8 @@ def main():
     payload = collect_assets(args.mod_directory)
     binary_path = binary_archive_path(args.platform, args.binary)
     manifest["binaries"] = {args.platform: binary_path}
+    if args.modapi_major is not None:
+        manifest["modapi"] = args.modapi_major
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.output, "w", compression=zipfile.ZIP_DEFLATED) as archive:

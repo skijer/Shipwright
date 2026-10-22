@@ -41,8 +41,9 @@ POSIX_DANGEROUS_IMPORTS = {
 }
 POSIX_DANGEROUS_SYMBOL_PARTS = re.compile(r"basic_ofstream|basic_ifstream|basic_fstream|basic_filebuf|filesystem|"
                                           r"St6thread")
-HOST_TRUST_INTERNALS = re.compile(r"ModPermissions_|ModLoader_|ModTrust_|UserFiles_ApplyPending|crypto_|"
-                                  r"kTrustedModSigningKey|kRevokedMod")
+HOST_TRUST_INTERNALS = re.compile(r"ModPermissions_|ModLoader_|ModTrust_|ModStore_|UserFiles_ApplyPending|crypto_|"
+                                  r"kTrustedModSigningKey|kTrustedReleaseSigningKey|kRevokedMod|"
+                                  r"ModNetwork_Deliver|ModNetwork_OnPeerOnlineChange")
 EXECUTABLE_MAGIC = (b"MZ", b"\x7fELF", b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf", b"\xce\xfa\xed\xfe",
                     b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe")
 

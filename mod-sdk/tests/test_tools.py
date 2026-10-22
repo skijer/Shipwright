@@ -11,9 +11,11 @@ from PIL import Image
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
+import build_catalog  # noqa: E402
 import check_mod_binary  # noqa: E402
 import mod_signature  # noqa: E402
 import otex  # noqa: E402
+import release_manifest  # noqa: E402
 import scan_mod_sources  # noqa: E402
 import sign_queue  # noqa: E402
 import sign_request  # noqa: E402
@@ -305,10 +307,10 @@ class ScanModSourcesTests(unittest.TestCase):
         self.assertEqual(used, {"probe": {"microphone", "files"}})
 
     def test_unknown_permissions_in_the_manifest_are_refused(self):
-        (self.mod / "manifest.json").write_text('{"name": "probe", "permissions": ["microphone", "network"]}',
+        (self.mod / "manifest.json").write_text('{"name": "probe", "permissions": ["microphone", "camera"]}',
                                                 encoding="utf-8")
         self.assertEqual(scan_mod_sources.check_manifests(self.mods),
-                         ["probe/manifest.json: 'network' is not a permission the game knows"])
+                         ["probe/manifest.json: 'camera' is not a permission the game knows"])
 
 
 class CheckModBinaryTests(unittest.TestCase):
@@ -363,6 +365,153 @@ class SignQueueTests(unittest.TestCase):
     def test_repository_lists_parse(self):
         self.assertIn("skijer", sign_queue.read_trusted_authors())
         self.assertEqual(sign_queue.read_revoked_authors(), set())
+
+    def test_a_signed_issue_stays_open_without_requeueing_itself(self):
+        self.assertIsNone(sign_queue.triage(self.issue("Skijer", ["signed"]), {"skijer"}, set()))
+        self.assertIsNone(sign_queue.triage(self.issue(labels=["approved", "sign-failed"]), set(), set()))
+
+
+class SignCommandTests(unittest.TestCase):
+    def test_commands_are_read_from_their_own_line(self):
+        self.assertEqual(sign_request.parse_command("Thanks!\n/sign v1.2.0\n"), ("sign", "v1.2.0"))
+        self.assertEqual(sign_request.parse_command("/unlist whip"), ("unlist", "whip"))
+        self.assertIsNone(sign_request.parse_command("please /sign this"))
+
+    def test_malformed_arguments_are_refused(self):
+        with self.assertRaisesRegex(ValueError, "tag, branch or commit"):
+            sign_request.parse_command("/sign")
+        with self.assertRaisesRegex(ValueError, "folder name"):
+            sign_request.parse_command("/unlist ../whip")
+
+    def test_only_the_workflow_writes_markers(self):
+        marker = sign_request.write_marker("sign", {"commit": "a" * 40})
+        comments = [{"author": "someone", "body": sign_request.write_marker("sign", {"commit": "b" * 40})},
+                    {"author": "github-actions", "body": f"Queued.\n\n{marker}"}]
+        self.assertEqual(sign_request.read_markers(comments, "sign"), [{"commit": "a" * 40}])
+        self.assertEqual(sign_request.read_markers(comments, "held"), [])
+
+    def test_marker_values_cannot_close_the_comment(self):
+        with self.assertRaises(ValueError):
+            sign_request.write_marker("sign", {"commit": "x -->"})
+
+
+@unittest.skipUnless(has_module("cryptography"), "needs the cryptography package")
+class SignedDocumentTests(unittest.TestCase):
+    def setUp(self):
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        self.key = Ed25519PrivateKey.generate()
+        self.public_key = self.key.public_key().public_bytes_raw()
+
+    def test_a_signed_catalog_opens_with_its_key(self):
+        envelope = mod_signature.sign_document('{"format": 1}', "catalog", self.key)
+        self.assertEqual(mod_signature.open_document(envelope, "catalog", self.public_key), '{"format": 1}')
+
+    def test_a_catalog_signature_does_not_open_a_release_manifest(self):
+        envelope = mod_signature.sign_document('{"format": 1}', "catalog", self.key)
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            mod_signature.open_document(envelope, "release", self.public_key)
+
+
+class BuildCatalogTests(unittest.TestCase):
+    REQUEST = {"issue": 7, "repository": "someone/mods", "directory": "mods", "commit": "c" * 40,
+               "author": "someone"}
+
+    def setUp(self):
+        self.workspace = tempfile.TemporaryDirectory()
+        self.addCleanup(self.workspace.cleanup)
+        self.root = Path(self.workspace.name)
+        (self.root / "packages").mkdir()
+
+    def package(self, mod_id, permissions=(), modapi=1):
+        path = self.root / "packages" / f"{mod_id}.o2r"
+        manifest = {"name": mod_id, "version": "1.0", "permissions": list(permissions), "modapi": modapi}
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("manifest.json", json.dumps(manifest))
+        return path
+
+    def plan(self, catalog, hashes, trusted=False, approved=False, held=frozenset()):
+        packages = sorted((self.root / "packages").glob("*.o2r"))
+        return build_catalog.plan(catalog, packages, hashes, 7, trusted, approved, set(held), 1)
+
+    def test_first_request_publishes_everything_it_built(self):
+        self.package("whip", ["network"])
+        result = self.plan(build_catalog.empty_catalog(), {"whip": "h1"})
+        self.assertEqual(result["publish"], ["whip"])
+
+    def test_unchanged_sources_are_not_signed_again(self):
+        self.package("whip")
+        catalog = build_catalog.apply(build_catalog.empty_catalog(), self.plan(build_catalog.empty_catalog(),
+                                      {"whip": "h1"}), self.REQUEST, self.root / "packages", {"whip": "h1"}, [], [],
+                                      "https://example.invalid")
+        self.assertEqual(self.plan(catalog, {"whip": "h1"})["unchanged"], ["whip"])
+        self.assertEqual(self.plan(catalog, {"whip": "h2"})["publish"], ["whip"])
+
+    def test_new_permissions_wait_for_a_maintainer(self):
+        self.package("whip")
+        first = self.plan(build_catalog.empty_catalog(), {"whip": "h1"})
+        catalog = build_catalog.apply(build_catalog.empty_catalog(), first, self.REQUEST, self.root / "packages",
+                                      {"whip": "h1"}, [], [], "https://example.invalid")
+        self.package("whip", ["network"])
+        self.assertEqual(self.plan(catalog, {"whip": "h2"}, approved=True)["held"], {"whip": ["network"]})
+        self.assertEqual(self.plan(catalog, {"whip": "h2"}, approved=True, held={"network"})["publish"], ["whip"])
+        self.assertEqual(self.plan(catalog, {"whip": "h2"}, trusted=True)["publish"], ["whip"])
+
+    def test_a_name_belongs_to_the_issue_that_published_it(self):
+        catalog = build_catalog.empty_catalog()
+        catalog["mods"]["whip"] = {"issue": 3, "builds": {}}
+        self.package("whip")
+        self.assertIn("whip", self.plan(catalog, {"whip": "h1"})["rejected"])
+
+    def test_packages_for_another_mod_api_are_refused(self):
+        self.package("whip", modapi=2)
+        self.assertIn("whip", self.plan(build_catalog.empty_catalog(), {"whip": "h1"})["rejected"])
+
+    def test_packs_keep_only_mods_of_their_issue(self):
+        self.package("whip")
+        result = self.plan(build_catalog.empty_catalog(), {"whip": "h1"})
+        packs = [{"id": "items", "name": "Items", "mods": ["whip", "other"]}]
+        catalog = build_catalog.apply(build_catalog.empty_catalog(), result, self.REQUEST, self.root / "packages",
+                                      {"whip": "h1"}, packs, [], "https://example.invalid")
+        self.assertEqual(catalog["packs"][0]["id"], "7-items")
+        self.assertEqual(catalog["packs"][0]["mods"], ["whip"])
+        self.assertEqual(catalog["mods"]["whip"]["builds"]["1"]["file"], "whip-api1.o2r")
+
+    def test_only_the_owning_issue_can_unlist_a_mod(self):
+        catalog = build_catalog.empty_catalog()
+        catalog["mods"]["whip"] = {"issue": 7, "builds": {}}
+        self.assertFalse(build_catalog.set_listed(catalog, 7, "whip", False)["mods"]["whip"]["listed"])
+        with self.assertRaisesRegex(ValueError, "not one of the mods"):
+            build_catalog.set_listed(catalog, 8, "whip", False)
+
+    def test_packs_must_name_mods_of_the_folder(self):
+        mods = self.root / "mods"
+        (mods / "whip").mkdir(parents=True)
+        (mods / "whip" / "manifest.json").write_text('{"name": "whip"}', encoding="utf-8")
+        (mods / "packs.json").write_text('{"packs": [{"id": "items", "name": "Items", "mods": ["whip", "nope"]}]}',
+                                         encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "nope"):
+            build_catalog.read_packs(mods)
+
+
+class ReleaseManifestTests(unittest.TestCase):
+    def test_version_matches_what_the_build_reports(self):
+        self.assertRegex(release_manifest.read_version(), r"^[0-9.]+-unbound[0-9.]+$")
+        self.assertGreaterEqual(release_manifest.read_modapi_major(), 1)
+
+
+class StoreScanTests(unittest.TestCase):
+    def test_packs_file_and_dependencies_are_accepted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mods = Path(directory)
+            (mods / "goron").mkdir()
+            (mods / "goron" / "manifest.json").write_text('{"name": "goron", "dependencies": ["mm_assets"]}',
+                                                          encoding="utf-8")
+            (mods / "packs.json").write_text('{"packs": []}', encoding="utf-8")
+            self.assertEqual(scan_mod_sources.check_layout(mods) + scan_mod_sources.check_manifests(mods), [])
+            (mods / "goron" / "manifest.json").write_text('{"name": "goron", "dependencies": ["../x"]}',
+                                                          encoding="utf-8")
+            self.assertEqual(len(scan_mod_sources.check_manifests(mods)), 1)
 
 
 if __name__ == "__main__":

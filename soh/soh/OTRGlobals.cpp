@@ -98,6 +98,7 @@
 #include "Enhancements/game-interactor/GameInteractor.h"
 #include "EmbedderBridge.h"
 #include "ModApi/ModApi.h"
+#include "ModApi/ModStore/ModStore.h"
 #include "Enhancements/randomizer/draw.h"
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <fast/resource/ResourceType.h>
@@ -1789,6 +1790,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 #ifdef __linux__
     SetAppImageHome();
 #endif
+    ModStore_ApplyStagedUpdate();
     OTRGlobals::Instance = new OTRGlobals();
     OTRGlobals::Instance->RunExtract(argc, argv);
 

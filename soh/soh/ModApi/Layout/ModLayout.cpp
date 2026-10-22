@@ -253,6 +253,11 @@ std::vector<Entry> NativeEntries(uint8_t kind) {
             entry.owned = i == 24 ? (gSaveContext.inventory.questItems >> 28) != 0 : CHECK_QUEST_ITEM(i);
             entry.icon = static_cast<const char*>(gItemIcons[entry.item]);
         }
+        // Match the native item/equipment pages: upgrades can replace the
+        // current vanilla item's icon without registering a separate cell.
+        if (entry.owned && kind != SOH_LAYOUT_COLLECTABLES) {
+            GameInteractor_ExecuteOnKaleidoResolveItemIcon(gPlayState, entry.item, &entry.icon);
+        }
         entry.placement = GetPlacement(entry.key, { NativePage, i });
         entries.push_back(std::move(entry));
     }

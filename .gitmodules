@@ -1,7 +1,7 @@
 [submodule "libultraship"]
 	path = libultraship
-	url = https://github.com/roborich/libultraship.git
-	branch = unbound
+	url = https://github.com/skijer/libultraship.git
+	branch = unbound-toon
 [submodule "torch"]
 	path = torch
 	url = https://github.com/HarbourMasters/Torch.git

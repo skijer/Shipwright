@@ -27,6 +27,7 @@ mods/
 | Put my item in the randomizer, change its logic | [Randomizer](docs/RANDOMIZER.md) |
 | Replace a boss fight, or the final battle | [Bosses](docs/BOSSES.md) |
 | Add a whole dungeon, shuffled with the vanilla ones | [Dungeons](docs/DUNGEONS.md) |
+| Turn a new grass patch, pot or sign in a vanilla area into a randomizer check | [Checks](docs/CHECKS.md) |
 | Ship one `.o2r` for Windows, Linux and macOS from CI | [Publishing](docs/PUBLISHING.md) |
 | Get my mod signed so release builds run it | [Signing](docs/SIGNING.md) |
 
@@ -81,3 +82,15 @@ the reference layout for a fork whose mods live in `mod-sdk/mods/` and are built
   [services](docs/HOOKS.md#services-between-mods).
 - Everything is keyed, nothing is numbered: actor ids, message ids and randomizer ids depend on which mods are
   installed, so ask for them by key every session and never store them.
+
+### Native pool contributions
+
+A custom item's `SOHCustomItemRandomizer` may supply `poolSources` and `poolSourceCount`.
+The registry owns a copy of that native `RandomizerGet` list. Each of the item's
+`poolCount` contributions is selected from that list using the randomizer seed RNG,
+instead of inserting its custom item ID. A single source adds extra copies of one
+native item; several sources can use the same content choices as native bottles.
+With an empty list, existing custom item pool behavior is preserved. These optional
+trailing fields keep older descriptors compatible through `structSize`.
+
+This changes future generation only; regenerate an existing seed to change its pool.

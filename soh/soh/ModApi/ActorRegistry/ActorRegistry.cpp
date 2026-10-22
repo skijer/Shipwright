@@ -9,6 +9,7 @@
 
 #include "soh/ActorDB.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/ModApi/ModApi.h"
 #include "soh/ModApi/ModMessages/ModMessages.h"
 
 extern "C" {
@@ -21,6 +22,7 @@ namespace {
 constexpr uint8_t NoNaviEnemyId = 0xFF;
 
 std::unordered_map<std::string, int16_t> sCustomIds;
+std::unordered_map<std::string, std::string> sOwners;
 std::deque<std::string> sNames;
 std::vector<SOHCustomEnemy> sEnemies;
 
@@ -113,6 +115,7 @@ int16_t ActorRegistry_Register(const SOHActorDefinition* definition) {
     int16_t actorId = (int16_t)ActorDB::Instance->AddEntry(init).entry.id;
 
     sCustomIds.emplace(definition->key, actorId);
+    sOwners.emplace(definition->key, ModApi_GetCurrentMod());
     if (IsEnemyDefinition(definition)) {
         AddEnemy(definition, actorId);
     }
@@ -126,6 +129,16 @@ uint32_t ActorRegistry_GetEnemyCount(void) {
 
 const SOHCustomEnemy* ActorRegistry_GetEnemyAt(uint32_t index) {
     return index < sEnemies.size() ? &sEnemies[index] : nullptr;
+}
+
+std::vector<SOHRegisteredActor> ActorRegistry_List() {
+    std::vector<SOHRegisteredActor> actors;
+    for (const auto& [key, actorId] : sCustomIds) {
+        actors.push_back({ key, sOwners[key], actorId });
+    }
+    std::sort(actors.begin(), actors.end(),
+              [](const SOHRegisteredActor& left, const SOHRegisteredActor& right) { return left.key < right.key; });
+    return actors;
 }
 
 const SOHCustomEnemy* ActorRegistry_FindEnemyById(int16_t actorId) {

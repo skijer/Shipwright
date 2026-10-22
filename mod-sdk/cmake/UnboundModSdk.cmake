@@ -11,6 +11,12 @@ set(UNBOUND_GAME_DIR "" CACHE PATH "Game folder; when set, every built mod is co
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
+file(STRINGS "${UNBOUND_ROOT}/soh/soh/ModApi/ModApi.h" modApiMajorLine REGEX "^#define SOH_MOD_API_MAJOR [0-9]+$")
+string(REGEX REPLACE "^#define SOH_MOD_API_MAJOR " "" UNBOUND_MODAPI_MAJOR "${modApiMajorLine}")
+if(NOT UNBOUND_MODAPI_MAJOR MATCHES "^[0-9]+$")
+    message(FATAL_ERROR "${UNBOUND_ROOT}/soh/soh/ModApi/ModApi.h does not define SOH_MOD_API_MAJOR")
+endif()
+
 if(WIN32)
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         set(UNBOUND_MOD_PLATFORM windows_x64)
@@ -121,6 +127,7 @@ function(unbound_add_mod name)
             --binary "$<TARGET_FILE:${name}>"
             --platform "${UNBOUND_MOD_PLATFORM}"
             --output "${package}"
+            --modapi-major "${UNBOUND_MODAPI_MAJOR}"
         VERBATIM
     )
     if(UNBOUND_GAME_DIR)

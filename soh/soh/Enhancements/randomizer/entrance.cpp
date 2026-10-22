@@ -39,7 +39,7 @@ void Entrance::SetCondition(ConditionFn newCondition) {
 bool Entrance::GetConditionsMet() const {
     auto ctx = Rando::Context::GetInstance();
     if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-        return RandoLogic_ResolveEntrance(parentRegion, originalConnectedRegion, condition_function());
+        return RandoLogic_EvaluateEntrance(parentRegion, originalConnectedRegion, condition_str, condition_function);
     }
     return true;
 }

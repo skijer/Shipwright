@@ -11,6 +11,7 @@
 #include "soh/Enhancements/randomizer/fishsanity.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/SohGui/ImGuiUtils.h"
@@ -1313,7 +1314,13 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             } else if (item00->actor.params == ITEM00_SOH_GIVE_ITEM_ENTRY) {
                 Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                      &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-                if (item00->itemEntry.modIndex == MOD_NONE) {
+                const bool isCustom = CustomItemRegistry_IsCustomGetItem(&item00->itemEntry);
+                if (isCustom) {
+                    if (!CustomItemRegistry_ReceiveFastGetItem(&item00->actor, gPlayState, &item00->itemEntry)) {
+                        *should = false;
+                        break;
+                    }
+                } else if (item00->itemEntry.modIndex == MOD_NONE) {
                     if (item00->itemEntry.getItemId == GI_SWORD_BGS) {
                         gSaveContext.bgsFlag = true;
                     }
@@ -1326,7 +1333,7 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
                     }
                 }
 
-                if (item00->itemEntry.modIndex == MOD_NONE) {
+                if (!isCustom && item00->itemEntry.modIndex == MOD_NONE) {
                     std::string message;
 
                     switch (gSaveContext.language) {

@@ -64,6 +64,8 @@ void DungeonRegistry_AddToPool();
 std::vector<ModDungeonFillInfo> DungeonRegistry_GetFillInfo();
 
 bool DungeonRegistry_IsModCheck(int32_t check);
+// SOH [Unbound] A vanilla-region check's own flag, above RAND_INF_MAX (RandoInfCustom); RAND_INF_MAX when it has none.
+int32_t DungeonRegistry_GetCheckRandomizerInf(int32_t check);
 Rando::Location* DungeonRegistry_GetLocation(int32_t check);
 Rando::ItemLocation* DungeonRegistry_GetItemLocation(int32_t check);
 void DungeonRegistry_AddLocations(std::vector<RandomizerCheck>& allLocations);

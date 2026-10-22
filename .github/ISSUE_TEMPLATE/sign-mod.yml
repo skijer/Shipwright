@@ -1,5 +1,5 @@
 name: Sign a mod
-description: Scan, build and sign the mods of your repository so release builds of Unbound will run them.
+description: Scan, build and sign the mods of your repository and list them in the in-game NEI-Store.
 title: "Sign mods: "
 labels: [sign-mod]
 body:
@@ -8,8 +8,13 @@ body:
       value: |
         The sign-mod workflow checks out your repository at the commit you give, scans the sources, builds them
         with Unbound's own build files, checks what the binaries import and signs the packages with your GitHub
-        name, repository and commit. If any step fails nothing is signed, and the log says why.
-        Requests are signed one at a time; your first one waits for a maintainer's approval.
+        name, repository and commit. Signed mods go straight into the NEI-Store (Network > NEI-Store in game).
+        If any step fails nothing is signed, and the log says why.
+
+        Open **one issue per repository and keep it open**: it is your mods' page. A maintainer approves it once.
+        After that, publish a GitHub release in your repository, or comment `/sign <tag or commit>`, and only the
+        mods whose sources changed are signed again. `/unlist <mod>` takes a mod out of the store, `/relist <mod>`
+        brings it back. A `packs.json` next to your mods groups them into packs players can pick parts of.
         See mod-sdk/docs/SIGNING.md for the rules.
   - type: input
     id: repository

@@ -24,6 +24,8 @@ class Logic {
     bool IsChild = false;
     bool IsAdult = false;
     uint8_t BigPoes = 0;
+    // Extra native bottle rewards must not overwrite the fourth solver inventory slot.
+    std::vector<uint8_t> extraBottleContents;
     // hearts we start the seed with, health itself lives in the save context
     uint8_t BaseHearts = 0;
     bool AtDay = false;

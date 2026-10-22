@@ -41,6 +41,8 @@ SERVICE_PERMISSIONS = {
     "ModNetwork_StartRoomCountdown": "network",
 }
 BUILD_SETTINGS = {"includeDirectories", "definitions"}
+PACKS_FILE = "packs.json"
+MOD_ID = re.compile(r"^[a-z0-9_-]{1,64}$")
 INCLUDE_DIRECTORY = re.compile(r"^[A-Za-z0-9_\-]+(/[A-Za-z0-9_\-]+)*$")
 DEFINITION = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(=[0-9]+)?$")
 INCLUDE = re.compile(r'^\s*#\s*include\s*([<"])([^>"]+)[>"]', re.MULTILINE)
@@ -66,7 +68,8 @@ def check_layout(mods_directory):
         name = path.name.lower()
         suffix = path.suffix.lower()
         in_assets = len(relative.parts) > 2 and relative.parts[1] == "assets"
-        is_known_file = name == "manifest.json" or suffix in SOURCE_SUFFIXES | DOCUMENT_SUFFIXES
+        is_packs = relative.as_posix() == PACKS_FILE
+        is_known_file = name == "manifest.json" or is_packs or suffix in SOURCE_SUFFIXES | DOCUMENT_SUFFIXES
         if name in BUILD_SCRIPT_NAMES or suffix == ".cmake":
             problems.append(f"{relative}: build scripts are not allowed; the signing build uses its own")
         elif suffix in EXECUTABLE_SUFFIXES or starts_like_executable(path):
@@ -167,10 +170,19 @@ def check_build_settings(mod):
     return problems
 
 
+def check_dependencies(mod):
+    """'dependencies' names other mods, by folder name, that the store installs along with this one."""
+    dependencies = read_manifest(mod).get("dependencies", [])
+    if not is_list_of_strings(dependencies) or not all(MOD_ID.match(name) for name in dependencies):
+        return [f"{mod.name}/manifest.json: 'dependencies' must be a list of mod folder names"]
+    return []
+
+
 def check_manifests(mods_directory):
     problems = []
     for mod in find_mod_directories(mods_directory):
         problems += check_build_settings(mod)
+        problems += check_dependencies(mod)
         declared = read_declared_permissions(mod)
         if declared is None:
             problems.append(f"{mod.name}/manifest.json: 'permissions' must be a list of names")

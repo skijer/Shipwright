@@ -11,6 +11,7 @@
 #include "mod_menu.h"
 #include "soh/Enhancements/audio/OotrsArchive.h"
 #include "soh/ModApi/ModApi.h"
+#include "soh/ModApi/ModStore/ModStore.h"
 #include "soh/OTRGlobals.h"
 #include "soh/util.h"
 #include "soh/SohGui/MenuTypes.h"
@@ -278,6 +279,7 @@ void UpdateModFiles(bool init = false, bool reset = false) {
     std::string modsPath = ModsFolder();
     if (!modsPath.empty()) {
         if (init) {
+            ModStore_ApplyPending(modsPath);
             UserFiles_ApplyPending(modsPath);
         }
         changed = ScanModsFolder(modsPath, ootrsFiles);

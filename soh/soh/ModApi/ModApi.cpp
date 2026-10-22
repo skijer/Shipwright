@@ -1,6 +1,9 @@
 #include "ModApi.h"
 
 #include <algorithm>
+#include <cmath>
+#include <fast/Fast3dWindow.h>
+#include <fast/interpreter.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -19,6 +22,12 @@
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 #include "soh/ModApi/Forms/FormModel.h"
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
+#include "soh/ModApi/ModStore/ModStore.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
+#include "soh/ActorDB.h"
+#include <fstream>
+#include <nlohmann/json.hpp>
 
 extern "C" PlayState* gPlayState;
 
@@ -33,6 +42,70 @@ struct HookBinders {
 std::string sCurrentMod;
 std::unordered_set<std::string> sReportedMissing;
 bool sRegisteringModUsesNetwork = false;
+constexpr const char* AppShortName = "soh";
+constexpr const char* RegistryFileName = "nocturne-registry.json";
+
+std::string TextOrEmpty(const char* text) {
+    return text != nullptr ? text : "";
+}
+
+nlohmann::json DescribeItems() {
+    nlohmann::json items = nlohmann::json::array();
+    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); index++) {
+        const SOHCustomItemDefinition* item = CustomItemRegistry_GetAt(index);
+        if (item == nullptr || item->key == nullptr) {
+            continue;
+        }
+        items.push_back({ { "key", item->key },
+                          { "owner", CustomItemRegistry_GetOwner(item->key) },
+                          { "icon", TextOrEmpty(item->iconPath) },
+                          { "name", TextOrEmpty(item->namePath) },
+                          { "displayName", TextOrEmpty(item->displayName) },
+                          { "pauseText", TextOrEmpty(item->pauseText) },
+                          { "getItemText", TextOrEmpty(item->getItemText) },
+                          { "heldModel", TextOrEmpty(item->heldModelPath) },
+                          { "getItemModel", TextOrEmpty(item->getItemModelPath) },
+                          { "flags", item->flags },
+                          { "page", item->preferredPage },
+                          { "slot", item->preferredSlot },
+                          { "age", item->ageRequirement },
+                          { "replacesItem", item->replacesItem },
+                          { "hasAction", item->update != nullptr || item->use != nullptr } });
+    }
+    return items;
+}
+
+// Actor ids depend on the mounted mod set, so tools address types by key only.
+nlohmann::json DescribeActors() {
+    nlohmann::json actors = nlohmann::json::array();
+    for (const SOHRegisteredActor& actor : ActorRegistry_List()) {
+        const ActorDB::Entry& entry = ActorDB::Instance->RetrieveEntry(actor.actorId);
+        actors.push_back({ { "key", actor.key },
+                           { "owner", actor.owner },
+                           { "description", entry.desc },
+                           { "category", entry.entry.category },
+                           { "objectId", entry.entry.objectId } });
+    }
+    return actors;
+}
+
+int32_t DumpRegistryCommand(std::shared_ptr<Ship::Console>, std::vector<std::string> args, std::string* output) {
+    std::filesystem::path path = args.size() > 1
+                                     ? std::filesystem::path(args[1])
+                                     : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));
+    const bool written = ModApi_WriteRegistry(path);
+    if (output != nullptr) {
+        *output = written ? "Wrote " + path.string() : "Cannot write " + path.string();
+    }
+    return written ? 0 : 1;
+}
+
+void RegisterRegistryDumpCommand() {
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
+        "registry_dump", { DumpRegistryCommand,
+                           "Writes the items and actor types mods registered as JSON (default: nocturne-registry.json)",
+                           { { "path", Ship::ArgumentType::TEXT, true } } });
+}
 
 uint8_t HasResource(const char* path) {
     if (path == nullptr || path[0] == '\0') {
@@ -249,9 +322,25 @@ bool HasHook(const char* name) {
     return name != nullptr && HookEntries().contains(name);
 }
 
+void SetCelShadingRamp(float center, float softness, float highlight, float shadow, bool debugBands) {
+    if (!std::isfinite(center) || !std::isfinite(softness) || !std::isfinite(highlight) || !std::isfinite(shadow)) return;
+    auto* context = Ship::Context::GetRawInstance();
+    if (!context) return;
+    auto window = std::dynamic_pointer_cast<Fast::Fast3dWindow>(context->GetWindow());
+    if (!window) return;
+    auto interpreter = window->GetInterpreterWeak().lock();
+    if (!interpreter) return;
+    auto* renderer = interpreter->GetCurrentRenderingAPI();
+    if (renderer) renderer->SetToonRamp(std::clamp(center, 0.0f, 1.0f), std::clamp(softness, 0.001f, 0.5f),
+                                      std::clamp(highlight, 0.0f, 2.0f), std::clamp(shadow, 0.0f, 1.0f), debugBands ? 1.0f : 0.0f);
+}
+
 SOHModApi BuildTable() {
     SOHModApi api = {};
     api.tableSize = sizeof(SOHModApi);
+    api.RegisterProgressiveChain = ProgressiveItems_Register;
+    api.GetProgressiveLevel = ProgressiveItems_GetLevel;
+    api.GetNextProgressiveItem = ProgressiveItems_GetNextItem;
     api.RegisterHookByName = RegisterHookByName;
     api.RegisterVB = RegisterVB;
     api.HasHook = HasHook;
@@ -311,6 +400,7 @@ SOHModApi BuildTable() {
     api.BlockVanillaItem = VanillaItems_Block;
     api.GetVanillaItemCustomKey = VanillaItems_GetCustomKey;
     api.GrantLogicCapability = RandoLogic_GrantCapability;
+    api.GrantLogic = RandoLogic_Grant;
     api.RegisterLogicRule = RandoLogic_RegisterRule;
     api.RemoveLogicOwner = RandoLogic_RemoveOwner;
     api.LogicCanUseItem = RandoLogic_CanUseItem;
@@ -406,12 +496,14 @@ SOHModApi BuildTable() {
     api.StopNetRoomCountdown = ModNetwork_StopRoomCountdown;
     api.SetCustomItemWorn = CustomItemRegistry_SetWorn;
     api.IsCustomItemWorn = CustomItemRegistry_IsWorn;
+    api.SetCelShadingRamp = SetCelShadingRamp;
     return api;
 }
 
 } // namespace
 
 void ModApi_Init() {
+    ProgressiveItems_Init();
     ModStorage_Init();
     RandoInfCustom_Init();
     CustomItemRegistry_Init();
@@ -431,7 +523,28 @@ void ModApi_Init() {
     DungeonRegistry_Init();
     ModNetwork_Init();
     ModLoader_LoadMods();
+    ModStore_Init();
     DungeonRegistry_Load();
+    RegisterRegistryDumpCommand();
+    ModApi_WriteRegistry(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));
+}
+
+// SOH [Unbound] Items and actor types exist only inside mod binaries; tools read them from this file.
+bool ModApi_WriteRegistry(const std::filesystem::path& path) {
+    std::ofstream file(path);
+    if (!file) {
+        SPDLOG_ERROR("[ModApi] Cannot write the mod registry to {}", path.string());
+        return false;
+    }
+    // Item messages contain native game glyph bytes, which are not necessarily UTF-8.
+    // Replacement is limited to this diagnostic JSON; registered game text stays byte-exact.
+    file << nlohmann::json{ { "items", DescribeItems() }, { "actors", DescribeActors() } }
+                .dump(1, ' ', false, nlohmann::json::error_handler_t::replace);
+    return true;
+}
+
+std::string ModApi_GetCurrentMod() {
+    return sCurrentMod;
 }
 
 const SOHModApi* ModApi_Get() {

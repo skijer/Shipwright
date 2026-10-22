@@ -1,6 +1,7 @@
 #include "ModTrust.h"
 #include "RevokedMods.h"
 #include "TrustedModKey.h"
+#include "TrustedReleaseKey.h"
 
 #include <algorithm>
 #include <cctype>
@@ -44,11 +45,19 @@ constexpr std::string_view DangerousRuntimeImports[] = {
     "_wsopen",  "_wsopen_s", "_creat",  "remove",    "_wremove", "rename",       "_wrename",     "_unlink",
     "_wunlink", "_rmdir",    "_wrmdir", "_mkdir",    "_wmkdir",  "_Thrd_create", "_beginthread", "_beginthreadex",
 };
-constexpr std::string_view HostTrustInternals[] = { "ModPermissions_",     "ModLoader_",
-                                                    "ModTrust_",           "UserFiles_ApplyPending",
-                                                    "crypto_",             "kTrustedModSigningKey",
-                                                    "kRevokedMod",         "ModNetwork_Deliver",
-                                                    "ModNetwork_OnPeerOnlineChange" };
+constexpr std::string_view HostTrustInternals[] = {
+    "ModPermissions_",
+    "ModLoader_",
+    "ModTrust_",
+    "ModStore_",
+    "UserFiles_ApplyPending",
+    "crypto_",
+    "kTrustedModSigningKey",
+    "kTrustedReleaseSigningKey",
+    "kRevokedMod",
+    "ModNetwork_Deliver",
+    "ModNetwork_OnPeerOnlineChange",
+};
 constexpr std::string_view DangerousRuntimeImportPrefixes[] = { "_execl", "_execv",  "_wexecl",   "_wexecv",
                                                                 "_spawn", "_wspawn", "__std_fs_", "?_Fiopen" };
 
@@ -139,9 +148,12 @@ bool IsStatementField(const std::string& value) {
     return !value.empty() && value.find('\n') == std::string::npos;
 }
 
+bool IsKeySet(const uint8_t (&key)[32]) {
+    return std::any_of(std::begin(key), std::end(key), [](uint8_t byte) { return byte != 0; });
+}
+
 bool HasTrustedKey() {
-    return std::any_of(std::begin(kTrustedModSigningKey), std::end(kTrustedModSigningKey),
-                       [](uint8_t byte) { return byte != 0; });
+    return IsKeySet(kTrustedModSigningKey);
 }
 
 std::string BuildSignedMessage(const ModProvenance& provenance) {
@@ -339,6 +351,38 @@ ModProvenance ModTrust_Verify(Ship::Archive& archive) {
     }
     provenance.state = ModTrustState::Verified;
     return provenance;
+}
+
+std::optional<std::string> ModTrust_OpenSignedDocument(const std::string& document, SignedDocumentKind kind) {
+    const bool isCatalog = kind == SignedDocumentKind::Catalog;
+    const uint8_t(&key)[32] = isCatalog ? kTrustedModSigningKey : kTrustedReleaseSigningKey;
+    const char* domain = isCatalog ? "unbound-catalog-v1" : "unbound-release-v1";
+    if (!IsKeySet(key)) {
+        return std::nullopt;
+    }
+
+    const Json envelope = Json::parse(document, nullptr, false);
+    if (!envelope.is_object()) {
+        return std::nullopt;
+    }
+    const std::string payload = ReadStatementField(envelope, "payload");
+    auto signature = FromHex(ReadStatementField(envelope, "signature"), SignatureSize);
+    if (payload.empty() || !signature) {
+        return std::nullopt;
+    }
+
+    const std::string message = std::string(domain) + "\n" + payload;
+    if (crypto_ed25519_check(signature->data(), key, reinterpret_cast<const uint8_t*>(message.data()),
+                             message.size()) != 0) {
+        return std::nullopt;
+    }
+    return payload;
+}
+
+std::string ModTrust_HashBytes(const void* data, size_t size) {
+    uint8_t digest[ContentHashSize];
+    crypto_blake2b(digest, ContentHashSize, static_cast<const uint8_t*>(data), size);
+    return ToHex(digest, ContentHashSize);
 }
 
 std::vector<std::string> ModTrust_ListUnusualImports(const std::vector<char>& binary) {

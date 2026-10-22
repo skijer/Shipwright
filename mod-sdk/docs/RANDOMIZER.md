@@ -74,6 +74,43 @@ sApi->GrantLogicCapability("yourname.shovel", "CanCutShrubs", HasShovel, NULL);
 The full list is `RANDO_LOGIC_CAPABILITIES` in `soh/soh/ModApi/RandoLogic/RandoLogic.h`. Grants only ever add
 access; to take access away, use a rule.
 
+`z64items.h` builds the pool entry for you: `Z64Items_Progression(key, SOH_CUSTOM_ITEM_TYPE_ITEM)` is one copy as
+progression (an equip passes it as its definition's `randomizer`).
+
+### Grants: "my item counts as that item", "my item kills that boss"
+
+`GrantLogic` is the general grant. Besides a capability it can stand in for a **vanilla item** — every
+`HasItem(RG_X)` and `CanUse(RG_X)` of the logic answers true while your condition holds, skipping the age and magic
+the vanilla item would need (put your item's own in the condition) — or for the **kill of an enemy**
+(`CanKillEnemy(RE_X)`). Only that call is granted: a boss check that also needs a tunic still needs it.
+
+An optional scope picks where the grant counts, with the same selectors as a rule (`include`, none meaning
+everywhere, and `exclude`). Inside a check the scope knows the check's scene, type and condition, not its region;
+inside an event, the event and its condition.
+
+```c
+static bool HasKegs(void* userData) {
+    return Z64Items_LogicHas(sApi, "yourname.keg") && sApi->LogicCanUseItem(RG_SILVER_GAUNTLETS);
+}
+
+static const SOHLogicSelector sBoulders[] = { Z64ITEMS_SELECT_CHECK_TYPE(RCTYPE_BOULDER) };
+
+static const SOHLogicGrant sKegLogic[] = {
+    // Heavy blocks, everywhere.
+    Z64ITEMS_GRANT_ITEM("yourname.keg", RG_GOLDEN_GAUNTLETS, HasKegs),
+    // Bronze boulders: the hammer, but only for boulder checks.
+    { sizeof(SOHLogicGrant), "yourname.keg", SOH_LOGIC_GRANT_ITEM, NULL, RG_MEGATON_HAMMER, HasKegs, NULL,
+      sBoulders, ARRAY_COUNT(sBoulders), NULL, 0 },
+    Z64ITEMS_GRANT_ENEMY_KILL("yourname.keg", RE_KING_DODONGO, HasKegs),
+};
+
+Z64Items_GrantLogic(sApi, sKegLogic, ARRAY_COUNT(sKegLogic));
+```
+
+The host copies the grant and its selectors, so the table can live on the stack. A grant whose condition asks for
+what it grants answers false to itself instead of recursing. `RemoveLogicOwner(owner)` drops every grant of that
+owner.
+
 ### Rules: a set of checks, and what to do with them
 
 A rule selects checks, entrances and events from the world graph and changes their answer. The fields of one

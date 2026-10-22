@@ -1,6 +1,8 @@
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 
 #include <algorithm>
+#include "soh/Enhancements/randomizer/rng.h"
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -67,6 +69,8 @@ void BuildRow(const ModItem& item) {
         itemTable.resize(static_cast<size_t>(item.randoGet) + 1);
     }
     itemTable[item.randoGet] = BuildItem(item, *definition);
+    // Mods register after InitItemTable filled the name map, and a spoiler names their items by key.
+    Rando::StaticData::itemNameToEnum[item.key] = static_cast<RandomizerGet>(item.randoGet);
 }
 
 bool IsItemTableBuilt() {
@@ -169,6 +173,7 @@ void RandoItems_BuildItemTable() {
 }
 
 void RandoItems_AddToPool() {
+    ProgressiveItems_ConfigurePool();
     for (const ModItem& item : sItems) {
         const SOHCustomItemRandomizer* block = GetRandomizerBlock(item);
         if (block == nullptr) {
@@ -186,6 +191,13 @@ void RandoItems_AddToPool() {
         if (count == 0) {
             continue;
         }
-        itemPool.insert(itemPool.end(), count, static_cast<RandomizerGet>(item.randoGet));
+        if (block->poolSourceCount != 0) {
+            const std::vector<int32_t> sources(block->poolSources, block->poolSources + block->poolSourceCount);
+            for (uint32_t i = 0; i < count; ++i) {
+                itemPool.push_back(static_cast<RandomizerGet>(RandomElement(sources)));
+            }
+        } else {
+            itemPool.insert(itemPool.end(), count, static_cast<RandomizerGet>(item.randoGet));
+        }
     }
 }

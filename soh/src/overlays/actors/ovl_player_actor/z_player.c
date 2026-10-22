@@ -12436,6 +12436,9 @@ void Player_Update(Actor* thisx, PlayState* play) {
         // Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
     }
 
+    if (this->stateFlags1 & PLAYER_STATE1_TALKING) {
+        play->state.input[0].press.button &= ~BTN_CUP;
+    }
     GameInteractor_ExecuteOnPlayerUpdate();
 }
 
@@ -16657,6 +16660,13 @@ s32 Player_InflictDamageModified(PlayState* play, s32 damage, u8 modified) {
 void Player_StartTalking(PlayState* play, Actor* actor) {
     Player* this = GET_PLAYER(play);
     s32 pad;
+
+    // The accepted conversation owns this press. Item hooks run later in the
+    // same update and must not start first-person aiming over the talk action.
+    play->state.input[0].press.button &= ~BTN_CUP;
+    if (sControlInput != NULL) {
+        sControlInput->press.button &= ~BTN_CUP;
+    }
 
     if ((this->talkActor != NULL) || (actor == this->naviActor) ||
         CHECK_FLAG_ALL(actor->flags, ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_TALK_WITH_C_UP)) {

@@ -1,11 +1,13 @@
 #include "item.h"
 #include "SeedContext.h"
 #include "logic.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "../../OTRGlobals.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 
 extern "C" {
 #include "z64item.h"
+#include "variables.h"
 }
 
 namespace Rando {
@@ -103,6 +105,11 @@ uint16_t Item::GetPrice() const {
 }
 
 std::shared_ptr<GetItemEntry> Item::GetGIEntry() const { // NOLINT(*-no-recursion)
+    if (ProgressiveItems_IsSource(randomizerGet)) {
+        auto progressiveLogic = Rando::Context::GetInstance()->GetLogic();
+        if (auto entry = ProgressiveItems_ResolveEntry(randomizerGet,
+                progressiveLogic && progressiveLogic->GetSaveContext() == &gSaveContext ? SOH_RANDO_INF_SAVE : SOH_RANDO_INF_LOGIC)) return entry;
+    }
     if (giEntry != nullptr && giEntry->itemId != RG_PROGRESSIVE_BOMBCHU_BAG) {
         return giEntry;
     }

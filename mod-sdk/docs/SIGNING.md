@@ -26,11 +26,47 @@ remembered by that hash in `mods/.unbound-mod-approvals.json`; changing a single
    tag, branch or commit) to build against; without it the newest Unbound release is used, or the current
    Unbound commit while there is none.
 2. Open a **Sign a mod** issue in the Unbound repository with the repository, the full commit hash and the
-   mods folder.
-3. The workflow answers the issue: either a release with your signed `.o2r` files, or the step that failed.
+   mods folder. Keep it open: it is your mods' page in the in-game **NEI-Store** (Network > NEI-Store).
+3. The workflow answers on the issue: the signed mods, now in the store with their download links, or the step
+   that failed.
 
 Requests are signed one at a time, oldest first. Your first request waits until a maintainer approves it
 (label `approved`); once you are on the trusted list, later ones go straight to the queue.
+
+### Updates
+
+After the first approval, a new version needs no new issue:
+
+- publish a GitHub release in your repository (the workflow checks every two hours), or
+- comment `/sign <tag, branch or commit>` on your issue.
+
+Only mods whose sources changed are signed again; the rest keep their published build. A new version that asks
+for a permission its mod did not have before waits for a maintainer to add `approved` again. Changing the
+repository or folder in the issue after approval also waits for a new approval.
+
+`/unlist <mod>` takes one of your mods out of the store and `/relist <mod>` brings it back. A mod's name is its
+folder name, and the first issue that publishes a name keeps it.
+
+### Packs and dependencies
+
+A `packs.json` next to your mod folders groups them; players install a whole pack or only the parts they tick:
+
+```json
+{ "packs": [ { "id": "my-items", "name": "My Items", "mods": ["whip", "lantern"] } ] }
+```
+
+A mod that needs another one names it in its manifest, and the store installs both:
+
+```json
+"dependencies": ["mm_assets"]
+```
+
+### Unbound versions
+
+`SOH_MOD_API_MAJOR` in `soh/soh/ModApi/ModApi.h` goes up only when a change breaks mods built before it; adding
+entries to `SOHModApi` does not. The SDK stamps it into every package, and the game refuses packages built for
+another major. When a release bumps it, `publish-release.yml` rebuilds every listed mod at its last signed commit
+before the release goes public, and reports each result on its issue.
 
 The signature names your GitHub account, the repository and the commit, and links to the workflow run with
 every scan and build log. The game shows it in the Mod Menu next to the file name.
@@ -63,8 +99,8 @@ uses Unbound's own `mod-sdk/ci/signing/CMakeLists.txt`, which compiles each mod 
 
 | Step | Refuses |
 | --- | --- |
-| Layout | Build scripts, executables, symbolic links, files other than sources, docs and `manifest.json` outside `assets/` |
-| Manifest | Unknown permissions; `build` include folders outside the mod, and definitions other than `NAME` or `NAME=number` |
+| Layout | Build scripts, executables, symbolic links, files other than sources, docs, `manifest.json` and a top-level `packs.json` outside `assets/` |
+| Manifest | Unknown permissions; `dependencies` that are not mod folder names; `build` include folders outside the mod, and definitions other than `NAME` or `NAME=number` |
 | Directives | Includes that leave the mod's folder or reach the operating system (`windows.h`, `unistd.h`, `<filesystem>`, `<fstream>`, `<thread>`, sockets…), any `#pragma` but `once`, `pack`, `warning`, `region` and diagnostics |
 | Preprocessed code | Inline assembly, process-environment intrinsics, and calls that open files, start processes or threads, load libraries or use the network, even when built by macros |
 | [Cppcheck](https://cppcheck.sourceforge.io/) | Any error |
@@ -95,6 +131,15 @@ in the package.
 
 A build whose header is all zeros verifies nothing, so a `signed` build without a key refuses every native mod.
 
+The in-game updater has a key of its own, so a leaked mod key cannot ship an Unbound exe:
+
+5. `python mod-sdk/tools/mod_signature.py generate-key --kind release --private-key-output release.key`
+   writes `soh/soh/ModApi/ModTrust/TrustedReleaseKey.h`. Store `release.key` as the secret
+   `UNBOUND_RELEASE_SIGNING_KEY` of **mod-signing**, delete the file and commit the header.
+6. To release, run **publish-release** from the branch the environment allows, with the id of a successful
+   generate-builds run less than a day old (artifacts expire after that). It drafts the release with a signed
+   `unbound-release.json`, rebuilds the mods if the mod API major changed, and then publishes it as latest.
+
 ## Running the queue (maintainers)
 
 - **Approve a new author:** add the label `approved` to their issue. To skip approval for them from then on,
@@ -104,3 +149,5 @@ A build whose header is all zeros verifies nothing, so a `signed` build without 
   stop loading in the next release.
 - **Revoke one package:** add its `content_hash` (from its `unbound-signature.json`) to `kRevokedModPackages`.
 - A request whose run was cancelled stays queued; the workflow also runs every two hours and picks it up.
+- **Store links:** `.github/mod-signing/store-links.json` lists the links the store's Links tab shows; they
+  reach the catalog on the next signature.

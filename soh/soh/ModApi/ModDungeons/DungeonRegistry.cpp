@@ -9,11 +9,14 @@
 
 #include <spdlog/spdlog.h>
 
+#include "soh/ActorDB.h"
 #include "soh/SaveManager.h"
 #include "soh/unbound/SceneDB.h"
 #include "soh/unbound/UnboundJson.h"
 #include "soh/ModApi/ModDungeons/LogicExpr.h"
+#include "soh/ModApi/RandoInfCustom/RandoInfCustom.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/RandoOptions/RandoOptions.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/custom-message/CustomMessageTypes.h"
 #include "soh/Enhancements/randomizer/location_access.h"
@@ -33,6 +36,10 @@ namespace {
 using SOH::Unbound::Json;
 
 constexpr const char* RegistryPath = "unbound/dungeons.json";
+// SOH [Unbound] Checks placed in vanilla regions (a new grass patch, pot or sign); see mod-sdk/docs/CHECKS.md.
+constexpr const char* ChecksRegistryPath = "unbound/checks.json";
+constexpr const char* CheckFlagPrefix = "check.";
+constexpr int32_t NoDungeon = -1;
 constexpr const char* SaveSection = "unboundDungeons";
 constexpr const char* OutsideExit = "@outside";
 // No vanilla scene sets this mapIndex (boss scenes subtract SCENE_DEKU_TREE_BOSS), so the dungeon the
@@ -46,6 +53,58 @@ constexpr uint8_t BossKeyBit = 1 << 0;
 constexpr uint8_t CompassBit = 1 << 1;
 constexpr uint8_t MapBit = 1 << 2;
 
+// Check types a vanilla region can gain. Each is recognised in game the way its vanilla checks are: by the actor,
+// the scene and TWO_ACTOR_PARAMS of the actor's X and Z position (the Shuffle* identities).
+struct OverworldCheckType {
+    const char* name;
+    RandomizerCheckType type;
+    ActorID actor;
+};
+
+constexpr OverworldCheckType kOverworldCheckTypes[] = {
+    { "grass", RCTYPE_GRASS, ACTOR_EN_KUSA },
+    { "bush", RCTYPE_BUSH, ACTOR_EN_WOOD02 },
+    { "tree", RCTYPE_TREE, ACTOR_EN_WOOD02 },
+    { "pot", RCTYPE_POT, ACTOR_OBJ_TSUBO },
+    { "crate", RCTYPE_CRATE, ACTOR_OBJ_KIBAKO2 },
+    { "small_crate", RCTYPE_SMALL_CRATE, ACTOR_OBJ_KIBAKO },
+    { "rock", RCTYPE_ROCK, ACTOR_EN_ISHI },
+    { "boulder", RCTYPE_BOULDER, ACTOR_EN_ISHI },
+    { "icicle", RCTYPE_ICICLE, ACTOR_BG_ICE_TURARA },
+    { "red_ice", RCTYPE_RED_ICE, ACTOR_BG_ICE_SHELTER },
+    { "sign", RCTYPE_SIGN, ACTOR_EN_KANBAN },
+    { "wonder_item", RCTYPE_WONDER_ITEM, ACTOR_EN_WONDER_ITEM },
+    { "freestanding", RCTYPE_FREESTANDING, ACTOR_EN_ITEM00 },
+};
+
+// The setting that shuffles each type, as SeedContext reads it; NoAreaVariant marks an on/off setting.
+constexpr int32_t NoAreaVariant = -1;
+
+struct TypeShuffleRule {
+    RandomizerCheckType type;
+    RandomizerSettingKey setting;
+    int32_t dungeonsOnly;
+    int32_t overworldOnly;
+};
+
+constexpr TypeShuffleRule kTypeShuffleRules[] = {
+    { RCTYPE_GRASS, RSK_SHUFFLE_GRASS, RO_SHUFFLE_GRASS_DUNGEONS, RO_SHUFFLE_GRASS_OVERWORLD },
+    { RCTYPE_POT, RSK_SHUFFLE_POTS, RO_SHUFFLE_POTS_DUNGEONS, RO_SHUFFLE_POTS_OVERWORLD },
+    { RCTYPE_CRATE, RSK_SHUFFLE_CRATES, RO_SHUFFLE_CRATES_DUNGEONS, RO_SHUFFLE_CRATES_OVERWORLD },
+    { RCTYPE_SMALL_CRATE, RSK_SHUFFLE_CRATES, RO_SHUFFLE_CRATES_DUNGEONS, RO_SHUFFLE_CRATES_OVERWORLD },
+    { RCTYPE_BOULDER, RSK_SHUFFLE_BOULDERS, RO_SHUFFLE_BOULDERS_DUNGEONS, RO_SHUFFLE_BOULDERS_OVERWORLD },
+    { RCTYPE_SIGN, RSK_SHUFFLE_SIGNS, RO_SHUFFLE_SIGNS_DUNGEONS, RO_SHUFFLE_SIGNS_OVERWORLD },
+    { RCTYPE_WONDER_ITEM, RSK_SHUFFLE_WONDER_ITEMS, RO_SHUFFLE_WONDER_ITEMS_DUNGEONS,
+      RO_SHUFFLE_WONDER_ITEMS_OVERWORLD },
+    { RCTYPE_FREESTANDING, RSK_SHUFFLE_FREESTANDING, RO_SHUFFLE_FREESTANDING_DUNGEONS,
+      RO_SHUFFLE_FREESTANDING_OVERWORLD },
+    { RCTYPE_ROCK, RSK_SHUFFLE_ROCKS, NoAreaVariant, NoAreaVariant },
+    { RCTYPE_TREE, RSK_SHUFFLE_TREES, NoAreaVariant, NoAreaVariant },
+    { RCTYPE_BUSH, RSK_SHUFFLE_BUSHES, NoAreaVariant, NoAreaVariant },
+    { RCTYPE_ICICLE, RSK_SHUFFLE_ICICLES, NoAreaVariant, NoAreaVariant },
+    { RCTYPE_RED_ICE, RSK_SHUFFLE_RED_ICE, NoAreaVariant, NoAreaVariant },
+};
+
 struct ModCheck {
     int32_t dungeon;
     std::string vanillaText;
@@ -56,6 +115,9 @@ struct ModCheck {
     int16_t scene;
     int16_t flagType;
     int16_t flag;
+    int32_t vanillaRegion = RR_NONE;
+    uint16_t randoInf = RANDO_INF_CUSTOM_NONE;
+    std::string shuffleOption;
 };
 
 struct ModEvent {
@@ -231,28 +293,29 @@ void RegisterDungeonItems(int32_t dungeonIndex, const Json& def) {
     }
 }
 
-RandomizerGet ParseVanillaItem(const ModDungeon& dungeon, const std::string& text) {
+// `dungeon` is null for a check in a vanilla region, which has no keys, map or compass of its own.
+RandomizerGet ParseVanillaItem(const ModDungeon* dungeon, const std::string& text, const std::string& owner) {
     if (text.empty()) {
         return RG_GREEN_RUPEE;
     }
-    if (text == "@smallkey") {
-        return dungeon.smallKey;
+    if (dungeon != nullptr && text == "@smallkey") {
+        return dungeon->smallKey;
     }
-    if (text == "@bosskey") {
-        return dungeon.bossKey;
+    if (dungeon != nullptr && text == "@bosskey") {
+        return dungeon->bossKey;
     }
-    if (text == "@map") {
-        return dungeon.map;
+    if (dungeon != nullptr && text == "@map") {
+        return dungeon->map;
     }
-    if (text == "@compass") {
-        return dungeon.compass;
+    if (dungeon != nullptr && text == "@compass") {
+        return dungeon->compass;
     }
     if (std::optional<RandomizerGet> vanilla = RandoEnumFromName<RandomizerGet>(text)) {
         return *vanilla;
     }
     int32_t modItem = RandoItems_GetRandoGet(text.c_str());
     if (modItem == 0) {
-        SPDLOG_ERROR("[DungeonRegistry] '{}': unknown vanilla item '{}'", dungeon.key, text);
+        SPDLOG_ERROR("[DungeonRegistry] '{}': unknown vanilla item '{}'", owner, text);
         return RG_GREEN_RUPEE;
     }
     return static_cast<RandomizerGet>(modItem);
@@ -295,12 +358,114 @@ void AddCheck(int32_t regionIndex, const std::string& checkName, const Json& def
                                                          : Rando::SpoilerCollectionCheck::Collectable(spoilerScene, flag);
     check.location = Rando::Location(rc, RCQUEST_BOTH, RCTYPE_STANDARD, RCAREA_INVALID, actor,
                                      static_cast<SceneID>(scene), params, checkName, spoilerName, RHT_NONE,
-                                     ParseVanillaItem(dungeon, check.vanillaText), false, collection);
+                                     ParseVanillaItem(&dungeon, check.vanillaText, dungeon.key), false, collection);
     check.itemLocation = Rando::ItemLocation(rc);
     Rando::StaticData::locationNameToEnum[spoilerName] = rc;
     Rando::StaticData::CheckFromActorMultimap.emplace(std::make_tuple((int16_t)actor, scene, params), rc);
     region.checks.push_back(static_cast<int32_t>(sChecks.size()));
     sChecks.push_back(std::move(check));
+}
+
+const OverworldCheckType* FindOverworldCheckType(const std::string& name) {
+    for (const OverworldCheckType& candidate : kOverworldCheckTypes) {
+        if (name == candidate.name) {
+            return &candidate;
+        }
+    }
+    return nullptr;
+}
+
+// A vanilla scene's checks name the hint area of everything in it; a scene without any gives none.
+RandomizerCheckArea FindSceneArea(int16_t scene) {
+    for (Rando::Location& location : Rando::StaticData::GetLocationTable()) {
+        if (location.GetScene() == scene && location.GetArea() != RCAREA_INVALID) {
+            return location.GetArea();
+        }
+    }
+    return RCAREA_INVALID;
+}
+
+ActorID ResolveCheckActor(const Json& def, const OverworldCheckType& checkType, const std::string& owner) {
+    const std::string actorName = StringField(def, "actor");
+    if (actorName.empty()) {
+        return checkType.actor;
+    }
+    const int32_t actor = ActorDB::Instance->RetrieveId(actorName);
+    if (actor < 0) {
+        SPDLOG_ERROR("[DungeonRegistry] check '{}': unknown actor '{}'", owner, actorName);
+        return checkType.actor;
+    }
+    return static_cast<ActorID>(actor);
+}
+
+bool RegisterOverworldCheck(const std::string& key, const Json& def) {
+    const std::string name = StringField(def, "name", key);
+    if (Rando::StaticData::locationNameToEnum.contains(name)) {
+        SPDLOG_ERROR("[DungeonRegistry] check '{}' is already registered", name);
+        return false;
+    }
+    const OverworldCheckType* checkType = FindOverworldCheckType(StringField(def, "type"));
+    std::optional<RandomizerRegion> region = RandoEnumFromName<RandomizerRegion>(StringField(def, "region"));
+    const Json& position = SOH::Unbound::SubArray(def, "position");
+    const bool hasPosition = position.size() >= 3 && position[0].is_number() && position[2].is_number();
+    if (checkType == nullptr || !region.has_value() || !hasPosition) {
+        SPDLOG_ERROR("[DungeonRegistry] check '{}' needs a known \"type\", a vanilla \"region\" (RR_*) and a \"position\"",
+                     name);
+        return false;
+    }
+    const int16_t scene = ResolveScene(StringField(def, "scene"), name);
+    const uint16_t randoInf = RandoInfCustom_Register((CheckFlagPrefix + key).c_str());
+    if (scene < 0 || randoInf == RANDO_INF_CUSTOM_NONE) {
+        return false;
+    }
+    const ActorID actor = ResolveCheckActor(def, *checkType, name);
+    const int32_t params = TWO_ACTOR_PARAMS(static_cast<int16_t>(position[0].get<double>()),
+                                            static_cast<int16_t>(position[2].get<double>()));
+    const RandomizerCheck rc = static_cast<RandomizerCheck>(CheckBase + static_cast<int32_t>(sChecks.size()));
+
+    ModCheck check;
+    check.dungeon = NoDungeon;
+    check.vanillaText = StringField(def, "vanilla");
+    check.logicText = StringField(def, "logic");
+    check.scene = scene;
+    check.flagType = -1;
+    check.flag = -1;
+    check.vanillaRegion = *region;
+    check.randoInf = randoInf;
+    check.shuffleOption = StringField(def, "shuffleOption");
+    const auto collection = Rando::SpoilerCollectionCheck::RandomizerInf(static_cast<uint16_t>(RAND_INF_MAX + randoInf));
+    check.location = Rando::Location(rc, RCQUEST_BOTH, checkType->type, FindSceneArea(scene), actor,
+                                     static_cast<SceneID>(scene), params, name, name, RHT_NONE,
+                                     ParseVanillaItem(nullptr, check.vanillaText, name), false, collection);
+    check.itemLocation = Rando::ItemLocation(rc);
+    Compile(check.logic, check.logicText, NoDungeon, name);
+    Rando::StaticData::locationNameToEnum[name] = rc;
+    Rando::StaticData::CheckFromActorMultimap.emplace(std::make_tuple((int16_t)actor, scene, params), rc);
+    sChecks.push_back(std::move(check));
+    return true;
+}
+
+// Mirrors SeedContext: the type's setting decides, by overworld or dungeon when it has those variants, and a mod
+// option the check names must be on as well.
+bool IsOverworldCheckShuffled(const ModCheck& check) {
+    const RandomizerCheckType type = check.location.GetRCType();
+    const TypeShuffleRule* rule = nullptr;
+    for (const TypeShuffleRule& candidate : kTypeShuffleRules) {
+        if (candidate.type == type) {
+            rule = &candidate;
+        }
+    }
+    if (rule == nullptr) {
+        return false;
+    }
+    const uint8_t value = Rando::Context::GetInstance()->GetOption(rule->setting).Get();
+    const bool isDungeon = check.location.IsDungeon();
+    const bool isOff = value == RO_GENERIC_OFF;
+    const bool isWrongArea = (value == rule->dungeonsOnly && !isDungeon) || (value == rule->overworldOnly && isDungeon);
+    if (isOff || isWrongArea) {
+        return false;
+    }
+    return check.shuffleOption.empty() || RandoOptions_GetForSeed(check.shuffleOption.c_str()) != 0;
 }
 
 int32_t ResolveRegion(int32_t dungeon, const std::string& name) {
@@ -658,6 +823,10 @@ void DungeonRegistry_Load() {
         SPDLOG_INFO("[DungeonRegistry] {}: {} dungeon(s), {} region(s), {} check(s)", RegistryPath, loaded,
                     sRegions.size(), sChecks.size());
     }
+    size_t overworldChecks = SOH::Unbound::ForEachRegistryEntry(ChecksRegistryPath, "check", RegisterOverworldCheck);
+    if (overworldChecks > 0) {
+        SPDLOG_INFO("[DungeonRegistry] {}: {} check(s) in vanilla regions", ChecksRegistryPath, overworldChecks);
+    }
 }
 
 size_t DungeonRegistry_GetRegionCount() {
@@ -692,6 +861,13 @@ void DungeonRegistry_AddRegions() {
         }
         areaTable[dungeon.overworldRegion].exits.push_back(Rando::Entrance(
             static_cast<RandomizerRegion>(dungeon.entryRegion), [] { return true; }, dungeon.entranceLogicText));
+    }
+    for (size_t index = 0; index < sChecks.size(); index++) {
+        const ModCheck& check = sChecks[index];
+        if (check.vanillaRegion != RR_NONE) {
+            areaTable[check.vanillaRegion].locations.push_back(
+                LocationAccess(static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
+        }
     }
 }
 
@@ -858,6 +1034,9 @@ std::vector<ModDungeonFillInfo> DungeonRegistry_GetFillInfo() {
         fill[index].compass = sDungeons[index].compass;
     }
     for (size_t index = 0; index < sChecks.size(); index++) {
+        if (sChecks[index].dungeon == NoDungeon) {
+            continue;
+        }
         ModDungeonFillInfo& dungeon = fill[sChecks[index].dungeon];
         const RandomizerCheck rc = static_cast<RandomizerCheck>(CheckBase + index);
         const RandomizerGet vanilla = sChecks[index].location.GetVanillaItem();
@@ -891,8 +1070,22 @@ Rando::ItemLocation* DungeonRegistry_GetItemLocation(int32_t check) {
 
 void DungeonRegistry_AddLocations(std::vector<RandomizerCheck>& allLocations) {
     for (size_t index = 0; index < sChecks.size(); index++) {
+        ModCheck& check = sChecks[index];
+        if (check.dungeon == NoDungeon && !IsOverworldCheckShuffled(check)) {
+            // Its actor still finds it in game, so it hands out its vanilla item.
+            check.itemLocation.PlaceVanillaItem();
+            continue;
+        }
         allLocations.push_back(static_cast<RandomizerCheck>(CheckBase + index));
     }
+}
+
+int32_t DungeonRegistry_GetCheckRandomizerInf(int32_t check) {
+    const ModCheck* modCheck = FindCheck(check);
+    if (modCheck == nullptr || modCheck->randoInf == RANDO_INF_CUSTOM_NONE) {
+        return RAND_INF_MAX;
+    }
+    return RAND_INF_MAX + modCheck->randoInf;
 }
 
 void DungeonRegistry_ForEachItemLocation(const std::function<void(Rando::ItemLocation&)>& visit) {

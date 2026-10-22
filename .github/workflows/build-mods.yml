@@ -94,6 +94,7 @@ jobs:
         name: mods-${{ matrix.platform }}
         if-no-files-found: error
         path: build/mod-sdk/packages/Release/*.o2r
+        retention-days: 1
 
   universal:
     needs: build
@@ -124,6 +125,7 @@ jobs:
       with:
         name: unbound-mods
         path: universal/
+        retention-days: 1
 
   # A public prerelease per pull request, so the table links work without a GitHub login.
   preview:

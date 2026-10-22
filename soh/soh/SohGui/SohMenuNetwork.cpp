@@ -7,6 +7,7 @@
 #include "soh/util.h"
 #include <soh/Network/Sail/Sail.h>
 #include <soh/Network/CrowdControl/CrowdControl.h>
+#include "soh/ModApi/ModStore/ModStore.h"
 #include "soh/SohGui/UIWidgets.hpp"
 
 namespace SohGui {
@@ -173,6 +174,10 @@ void SohMenu::AddMenuNetwork() {
                                            "rooms\", so they don't need to be killed to complete these rooms."));
     path.sidebarName = "Anchor";
     AddSidebarEntry("Network", path.sidebarName, 2);
+
+    path = { "Network", "NEI-Store", SECTION_COLUMN_1 };
+    AddSidebarEntry("Network", path.sidebarName, 1);
+    AddWidget(path, "NEI-Store", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) { ModStore_DrawMenu(); });
 }
 
 } // namespace SohGui

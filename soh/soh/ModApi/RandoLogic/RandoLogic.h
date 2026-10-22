@@ -92,11 +92,35 @@ typedef struct {
     uint32_t excludeCount;
 } SOHLogicRule;
 
+typedef enum {
+    SOH_LOGIC_GRANT_CAPABILITY,
+    SOH_LOGIC_GRANT_ITEM,
+    SOH_LOGIC_GRANT_ENEMY_KILL,
+} SOHLogicGrantKind;
+
+// While condition holds, a capability, a vanilla item (value = RandomizerGet, for HasItem and CanUse) or the kill
+// of an enemy (value = RandomizerEnemy) counts as had. include/exclude scope it like a rule's selectors; no
+// include means everywhere. A check's scope knows its scene and type, not its region.
+typedef struct {
+    uint32_t structSize;
+    const char* owner;
+    SOHLogicGrantKind kind;
+    const char* capability;
+    int32_t value;
+    SOHLogicCondition condition;
+    void* userData;
+    const SOHLogicSelector* include;
+    uint32_t includeCount;
+    const SOHLogicSelector* exclude;
+    uint32_t excludeCount;
+} SOHLogicGrant;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 bool RandoLogic_GrantCapability(const char* owner, const char* capability, SOHLogicCondition condition, void* userData);
+bool RandoLogic_Grant(const SOHLogicGrant* grant);
 bool RandoLogic_RegisterRule(const SOHLogicRule* rule);
 void RandoLogic_RemoveOwner(const char* name);
 
@@ -109,20 +133,41 @@ bool RandoLogic_IsAtNight(void);
 bool RandoLogic_HasCapability(const char* capability);
 
 extern bool gRandoLogicHasCapabilityGrants;
+extern bool gRandoLogicHasItemGrants;
+extern bool gRandoLogicHasEnemyGrants;
 bool RandoLogic_IsCapabilityGranted(RandoLogicCapability capability);
-bool RandoLogic_ResolveLocation(int32_t check, bool vanillaResult);
-bool RandoLogic_ResolveEntrance(int32_t fromRegion, int32_t toRegion, bool vanillaResult);
-bool RandoLogic_ResolveEvent(int32_t logicEvent, bool vanillaResult);
+bool RandoLogic_IsItemGranted(int32_t randoGet);
+bool RandoLogic_IsEnemyKillGranted(int32_t enemy);
 
 #ifdef __cplusplus
 }
 
+#include <functional>
+#include <string>
+
 void RandoLogic_IndexWorld();
+// Each evaluates the vanilla condition with that check, entrance or event as the scope of the grants, then
+// applies the rules registered for it.
+bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate);
+bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
+                                 const std::function<bool()>& evaluate);
+bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition,
+                              const std::function<bool()>& evaluate);
 #endif
 
 #define LOGIC_MOD_GRANTS(name)                                                          \
     if (gRandoLogicHasCapabilityGrants && RandoLogic_IsCapabilityGranted(RLC_##name)) { \
         return true;                                                                    \
+    }
+
+#define LOGIC_MOD_ITEM_GRANTS(item)                                                   \
+    if (gRandoLogicHasItemGrants && RandoLogic_IsItemGranted(static_cast<int32_t>(item))) { \
+        return true;                                                                  \
+    }
+
+#define LOGIC_MOD_ENEMY_GRANTS(enemy)                                                        \
+    if (gRandoLogicHasEnemyGrants && RandoLogic_IsEnemyKillGranted(static_cast<int32_t>(enemy))) { \
+        return true;                                                                         \
     }
 
 #endif

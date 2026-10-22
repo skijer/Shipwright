@@ -6,6 +6,7 @@
 #include "soh/Enhancements/randomizer/randomizerEnums.h"
 #include "soh/ModApi/RandoLogic/RandoLogic.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 #include <string>
@@ -33,6 +34,9 @@ static SOHRandoInfBank ModItemBank(const SaveContext* saveContext) {
 }
 
 bool Logic::HasItem(RandomizerGet itemName) {
+    LOGIC_MOD_ITEM_GRANTS(itemName);
+    bool progressiveOwned=false;
+    if(ProgressiveItems_HasLogicItem(itemName,this,&progressiveOwned))return progressiveOwned;
     if (DungeonRegistry_IsDungeonItem(itemName)) {
         return DungeonRegistry_HasItem(itemName, ModItemBank(mSaveContext) == SOH_RANDO_INF_SAVE);
     }
@@ -554,6 +558,7 @@ bool Logic::BAllowed() {
 // Can the passed in item be used?
 // RANDOTODO catch magic items explicitly and add an assert on miss.
 bool Logic::CanUse(RandomizerGet itemName) {
+    LOGIC_MOD_ITEM_GRANTS(itemName);
     if (!HasItem(itemName))
         return false;
 
@@ -779,6 +784,7 @@ bool Logic::CanDoGlitch(GlitchType glitch) {
 // ammo capacity
 bool Logic::CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wallOrFloor, uint8_t quantity, bool timer,
                          bool inWater) {
+    LOGIC_MOD_ENEMY_GRANTS(enemy);
     bool killed = false;
     switch (enemy) {
         case RE_GERUDO_GUARD:
@@ -1530,6 +1536,9 @@ uint8_t Logic::BottleCount() {
                 break;
         }
     }
+    for (uint8_t item : extraBottleContents) {
+        if (item != ITEM_NONE && (item != ITEM_BIG_POE || Get(LOGIC_CAN_EMPTY_BIG_POES))) ++count;
+    }
     return count;
 }
 
@@ -2260,6 +2269,7 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
+    if(ProgressiveItems_ApplyLogic(randoGet,this,state))return;
     if (DungeonRegistry_IsDungeonItem(randoGet)) {
         DungeonRegistry_ApplyLogicItem(randoGet, state);
         return;
@@ -2515,21 +2525,32 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                 case RG_BOTTLE_WITH_BUGS:
                 case RG_BOTTLE_WITH_POE:
                 case RG_BOTTLE_WITH_BIG_POE: {
-                    uint8_t slot = SLOT_BOTTLE_1;
-                    while (slot != SLOT_BOTTLE_4) {
-                        if (mSaveContext->inventory.items[slot] == ITEM_NONE) {
-                            break;
-                        }
-                        slot++;
-                    }
-                    uint16_t itemId = item.GetGIEntry()->itemId;
+                    uint8_t itemId = static_cast<uint8_t>(item.GetGIEntry()->itemId);
                     if (BottleRandomizerGetToItemID.contains(randoGet)) {
                         itemId = BottleRandomizerGetToItemID[randoGet];
                     }
-                    if (randoGet == RG_BOTTLE_WITH_BIG_POE) {
-                        BigPoes++;
+                    if (state) {
+                        uint8_t slot = SLOT_BOTTLE_1;
+                        while (slot <= SLOT_BOTTLE_4 && mSaveContext->inventory.items[slot] != ITEM_NONE) ++slot;
+                        if (slot <= SLOT_BOTTLE_4) mSaveContext->inventory.items[slot] = itemId;
+                        else extraBottleContents.push_back(itemId);
+                    } else {
+                        auto extra = std::find(extraBottleContents.begin(), extraBottleContents.end(), itemId);
+                        if (extra != extraBottleContents.end()) extraBottleContents.erase(extra);
+                        else for (uint8_t slot = SLOT_BOTTLE_1; slot <= SLOT_BOTTLE_4; ++slot) {
+                            if (mSaveContext->inventory.items[slot] != itemId) continue;
+                            mSaveContext->inventory.items[slot] = ITEM_NONE;
+                            if (!extraBottleContents.empty()) {
+                                mSaveContext->inventory.items[slot] = extraBottleContents.back();
+                                extraBottleContents.pop_back();
+                            }
+                            break;
+                        }
                     }
-                    mSaveContext->inventory.items[slot] = static_cast<uint8_t>(itemId);
+                    if (randoGet == RG_BOTTLE_WITH_BIG_POE) {
+                        if (state) ++BigPoes;
+                        else if (BigPoes) --BigPoes;
+                    }
                 } break;
                 case RG_RUTOS_LETTER:
                     SetRandoInf(RAND_INF_OBTAINED_RUTOS_LETTER, state);
@@ -3183,6 +3204,7 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
     if (resetSaveContext) {
         NewSaveContext();
         RandoInfCustom_ClearBank(SOH_RANDO_INF_LOGIC);
+        ProgressiveItems_ResetLogic();
     }
     StartPerformanceTimer(PT_LOGIC_RESET);
     memset(inLogic, false, sizeof(inLogic));
@@ -3259,6 +3281,7 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
     IsChild = false;
     IsAdult = false;
     BigPoes = 0;
+    extraBottleContents.clear();
 
     BaseHearts = ctx->GetOption(RSK_STARTING_HEARTS).Get() + 1;
 

@@ -17,16 +17,29 @@ FIELD_PATTERNS = {
     "workflow_run": re.compile(r"^https://github\.com/[A-Za-z0-9._/-]+/actions/runs/[0-9]+(/attempts/[0-9]+)?$"),
 }
 KEY_ENVIRONMENT_VARIABLE = "UNBOUND_MOD_SIGNING_KEY"
-KEY_HEADER = Path(__file__).resolve().parents[2] / "soh" / "soh" / "ModApi" / "ModTrust" / "TrustedModKey.h"
+TRUST_DIRECTORY = Path(__file__).resolve().parents[2] / "soh" / "soh" / "ModApi" / "ModTrust"
+KEY_HEADER = TRUST_DIRECTORY / "TrustedModKey.h"
 KEY_HEADER_TEMPLATE = """#pragma once
 
 #include <cstdint>
 
-// Written by `mod-sdk/tools/mod_signature.py generate-key`. All zeros means no key: nothing verifies.
-inline constexpr uint8_t kTrustedModSigningKey[32] = {{
+// Written by `mod-sdk/tools/mod_signature.py generate-key{option}`. All zeros means no key: nothing verifies.
+inline constexpr uint8_t {variable}[32] = {{
 {rows}
 }};
 """
+# Mods and the store catalog share the mod key; Unbound's own releases have a key of their own. The domain
+# keeps a signature made for one kind of document from verifying as another.
+KEYS = {
+    "mod": {"environment": KEY_ENVIRONMENT_VARIABLE, "header": KEY_HEADER, "variable": "kTrustedModSigningKey",
+            "option": ""},
+    "release": {"environment": "UNBOUND_RELEASE_SIGNING_KEY", "header": TRUST_DIRECTORY / "TrustedReleaseKey.h",
+                "variable": "kTrustedReleaseSigningKey", "option": " --kind release"},
+}
+DOCUMENTS = {
+    "catalog": {"key": "mod", "domain": "unbound-catalog-v1"},
+    "release": {"key": "release", "domain": "unbound-release-v1"},
+}
 
 
 def read_package_files(package):
@@ -69,12 +82,12 @@ def validate_fields(fields):
             raise ValueError(f"'{field}' is missing or malformed: {fields.get(field)!r}")
 
 
-def load_private_key():
+def load_private_key(variable=KEY_ENVIRONMENT_VARIABLE):
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    seed = os.environ.get(KEY_ENVIRONMENT_VARIABLE, "").strip()
+    seed = os.environ.get(variable, "").strip()
     if len(seed) != 64:
-        raise SystemExit(f"{KEY_ENVIRONMENT_VARIABLE} must hold the 32-byte private key as 64 hex digits")
+        raise SystemExit(f"{variable} must hold the 32-byte private key as 64 hex digits")
     return Ed25519PrivateKey.from_private_bytes(bytes.fromhex(seed))
 
 
@@ -127,7 +140,28 @@ def verify_package(package, public_key_bytes):
     return statement
 
 
-def generate_key(private_key_output, header):
+def sign_document(payload, kind, private_key):
+    """Wraps a UTF-8 payload in the envelope ModTrust_OpenSignedDocument reads."""
+    message = f"{DOCUMENTS[kind]['domain']}\n{payload}".encode("utf-8")
+    return json.dumps({"payload": payload, "signature": private_key.sign(message).hex()})
+
+
+def open_document(envelope, kind, public_key_bytes):
+    from cryptography.exceptions import InvalidSignature
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    document = json.loads(envelope)
+    payload = document.get("payload", "")
+    message = f"{DOCUMENTS[kind]['domain']}\n{payload}".encode("utf-8")
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key_bytes).verify(bytes.fromhex(document.get("signature", "")),
+                                                                    message)
+    except (InvalidSignature, ValueError) as error:
+        raise ValueError(f"the {kind} signature does not match the trusted key") from error
+    return payload
+
+
+def generate_key(private_key_output, header=None, kind="mod"):
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -141,7 +175,9 @@ def generate_key(private_key_output, header):
     with os.fdopen(descriptor, "w", encoding="ascii") as output:
         output.write(seed.hex() + "\n")
     rows = "\n".join("    " + " ".join(f"0x{byte:02x}," for byte in public[row:row + 16]) for row in (0, 16))
-    header.write_text(KEY_HEADER_TEMPLATE.format(rows=rows), encoding="utf-8", newline="\n")
+    settings = KEYS[kind]
+    header_text = KEY_HEADER_TEMPLATE.format(rows=rows, variable=settings["variable"], option=settings["option"])
+    (header or settings["header"]).write_text(header_text, encoding="utf-8", newline="\n")
     return public
 
 
@@ -159,9 +195,19 @@ def main():
     verify.add_argument("packages", type=Path, nargs="+")
     verify.add_argument("--key-header", type=Path, default=KEY_HEADER)
 
-    generate = commands.add_parser("generate-key", help="Create the signing key and write its public half")
+    generate = commands.add_parser("generate-key", help="Create a signing key and write its public half")
     generate.add_argument("--private-key-output", type=Path, required=True)
-    generate.add_argument("--key-header", type=Path, default=KEY_HEADER)
+    generate.add_argument("--kind", choices=sorted(KEYS), default="mod")
+
+    sign_doc = commands.add_parser("sign-document", help="Sign a store catalog or a release manifest")
+    sign_doc.add_argument("payload", type=Path)
+    sign_doc.add_argument("--kind", choices=sorted(DOCUMENTS), required=True)
+    sign_doc.add_argument("--output", type=Path, required=True)
+
+    open_doc = commands.add_parser("open-document", help="Verify a signed document and print its payload")
+    open_doc.add_argument("document", type=Path)
+    open_doc.add_argument("--kind", choices=sorted(DOCUMENTS), required=True)
+    open_doc.add_argument("--key-header", type=Path)
 
     args = parser.parse_args()
     if args.command == "sign":
@@ -173,10 +219,20 @@ def main():
         for package in args.packages:
             statement = verify_package(package, public_key)
             print(f"{package}: {statement['repository']}@{statement['commit'][:7]} by {statement['author']}")
+    elif args.command == "sign-document":
+        key = KEYS[DOCUMENTS[args.kind]["key"]]
+        payload = args.payload.read_text(encoding="utf-8")
+        args.output.write_text(sign_document(payload, args.kind, load_private_key(key["environment"])),
+                               encoding="utf-8")
+        print(f"{args.output}: signed {args.kind}")
+    elif args.command == "open-document":
+        key_header = args.key_header or KEYS[DOCUMENTS[args.kind]["key"]]["header"]
+        print(open_document(args.document.read_text(encoding="utf-8"), args.kind, read_trusted_key(key_header)))
     else:
-        public = generate_key(args.private_key_output, args.key_header)
-        print(f"Public key {public.hex()} written to {args.key_header}")
-        print(f"Private key written to {args.private_key_output}: store it as the {KEY_ENVIRONMENT_VARIABLE} "
+        settings = KEYS[args.kind]
+        public = generate_key(args.private_key_output, kind=args.kind)
+        print(f"Public key {public.hex()} written to {settings['header']}")
+        print(f"Private key written to {args.private_key_output}: store it as the {settings['environment']} "
               "secret of the mod-signing environment, then delete the file")
 
 

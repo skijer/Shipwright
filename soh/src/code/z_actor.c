@@ -15,6 +15,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/RandoInfCustom/RandoInfCustom.h"
 #include "soh/ModApi/Player/PlayerHookTypes.h"
 #include "soh/Enhancements/nametag.h"
 
@@ -5160,7 +5161,21 @@ s32 Flags_GetRandomizerInf(RandomizerInf flag) {
     }
     */
 
+    // SOH [Unbound] Flags above RAND_INF_MAX belong to mod checks and are saved by key (RandoInfCustom).
+    if (flag > RAND_INF_MAX) {
+        return RandoInfCustom_Get(SOH_RANDO_INF_SAVE, (u16)(flag - RAND_INF_MAX));
+    }
     return gSaveContext.ship.randomizerInf[flag >> 4] & (1 << (flag & 0xF));
+}
+
+static void Flags_WriteRandomizerInf(RandomizerInf flag, s32 state) {
+    if (flag > RAND_INF_MAX) {
+        RandoInfCustom_Set(SOH_RANDO_INF_SAVE, (u16)(flag - RAND_INF_MAX), state);
+    } else if (state) {
+        gSaveContext.ship.randomizerInf[flag >> 4] |= (1 << (flag & 0xF));
+    } else {
+        gSaveContext.ship.randomizerInf[flag >> 4] &= ~(1 << (flag & 0xF));
+    }
 }
 
 /**
@@ -5178,7 +5193,7 @@ void Flags_SetRandomizerInf(RandomizerInf flag) {
 
     s32 previouslyOff = !Flags_GetRandomizerInf(flag);
     if (previouslyOff) {
-        gSaveContext.ship.randomizerInf[flag >> 4] |= (1 << (flag & 0xF));
+        Flags_WriteRandomizerInf(flag, true);
         LUSLOG_INFO("RandomizerInf Flag Set - %#x", flag);
         GameInteractor_ExecuteOnFlagSet(FLAG_RANDOMIZER_INF, flag);
     }
@@ -5199,7 +5214,7 @@ void Flags_UnsetRandomizerInf(RandomizerInf flag) {
 
     s32 previouslyOn = Flags_GetRandomizerInf(flag);
     if (previouslyOn) {
-        gSaveContext.ship.randomizerInf[flag >> 4] &= ~(1 << (flag & 0xF));
+        Flags_WriteRandomizerInf(flag, false);
         LUSLOG_INFO("RandomizerInf Flag Unset - %#x", flag);
         GameInteractor_ExecuteOnFlagUnset(FLAG_RANDOMIZER_INF, flag);
     }

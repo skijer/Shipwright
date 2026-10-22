@@ -1,6 +1,8 @@
 #include "CustomItemRegistry.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 
 #include <array>
+#include <cmath>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -18,6 +20,8 @@
 
 #include "soh/SaveManager.h"
 #include "soh/cvar_prefixes.h"
+#include "soh/Notification/Notification.h"
+#include "soh/Enhancements/enhancementTypes.h"
 #include "soh/ModApi/ConsoleArguments.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/ModApi/Forms/FormModel.h"
@@ -55,6 +59,7 @@ struct RegisteredCustomItem {
     std::string key;
     std::string iconPath;
     std::string namePath;
+    std::string displayName;
     std::string pauseText;
     std::string getItemText;
     std::string heldModelPath;
@@ -66,6 +71,7 @@ struct RegisteredCustomItem {
     std::string progressionGroup;
     std::string poolCountOption;
     std::string poolModeOption;
+    std::vector<int32_t> poolSources;
     SOHCustomItemRandomizer randomizer = {};
     SOHCustomItemDefinition definition = {};
     uint16_t runtimeId = 0;
@@ -95,6 +101,8 @@ constexpr uint32_t HeldUpdateGraceFrames = 4;
 std::string sPauseItem;
 std::string sPendingGetItem;
 std::string sMessageItem;
+// Notifications borrow icon pointers; keep received paths stable when a mod changes its live icon.
+std::set<std::string> sFastPickupIconPaths;
 uint16_t sNextRuntimeId = RuntimeIdBase;
 
 const SOHCustomItemDefinition* FindDefinition(const std::string& key) {
@@ -680,6 +688,7 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     item->definition.getItemEntry.tableId = item->runtimeId;
     SetString(item->definition.iconPath, item->iconPath, definition->iconPath);
     SetString(item->definition.namePath, item->namePath, definition->namePath);
+    SetString(item->definition.displayName, item->displayName, item->definition.displayName);
     SetString(item->definition.pauseText, item->pauseText, definition->pauseText);
     SetString(item->definition.getItemText, item->getItemText, item->definition.getItemText);
     SetString(item->definition.heldModelPath, item->heldModelPath, item->definition.heldModelPath);
@@ -695,8 +704,22 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
             return false;
         }
 
+        item->randomizer = {};
         std::memcpy(&item->randomizer, definition->randomizer,
                     std::min<size_t>(definition->randomizer->structSize, sizeof(item->randomizer)));
+        item->poolSources.clear();
+        if (item->randomizer.poolSources && item->randomizer.poolSourceCount) {
+            for (uint16_t i = 0; i < item->randomizer.poolSourceCount; ++i) {
+                int32_t source = item->randomizer.poolSources[i];
+                if (source <= RG_NONE || source >= RG_MAX) {
+                    SPDLOG_ERROR("[CustomItemRegistry] Invalid native pool source for '{}'", item->key);
+                    return false;
+                }
+                item->poolSources.push_back(source);
+            }
+        }
+        item->randomizer.poolSources = item->poolSources.empty() ? nullptr : item->poolSources.data();
+        item->randomizer.poolSourceCount = static_cast<uint16_t>(item->poolSources.size());
         item->randomizer.structSize = sizeof(item->randomizer);
         SetString(item->randomizer.logicKey, item->logicKey, item->randomizer.logicKey);
         SetString(item->randomizer.hintKey, item->hintKey, item->randomizer.hintKey);
@@ -871,6 +894,7 @@ std::vector<std::string> CustomItemRegistry_ListOwned() {
 }
 
 void CustomItemRegistry_ReceiveGetItem(const char* key) {
+    ProgressiveItems_ReceiveCustom(key);
     CustomItemRegistry_SetOwned(key, true);
 
     const auto* definition = CustomItemRegistry_Find(key);
@@ -1245,18 +1269,41 @@ bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool auto
     return true;
 }
 
+static bool SkipCustomGetItem(int mode, GetItemCategory category) {
+    return mode == SGIA_ALL || (mode == SGIA_JUNK &&
+           (category == ITEM_CATEGORY_JUNK || category == ITEM_CATEGORY_SKULLTULA_TOKEN ||
+            category == ITEM_CATEGORY_HEALTH || category == ITEM_CATEGORY_LESSER));
+}
+
+static bool CanReceiveFastCustomItem(PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    return player != nullptr && !Player_InBlockingCsMode(play, player) &&
+           !(player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_CARRYING_ACTOR |
+             PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+             PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+             PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_DEAD)) &&
+           Player_GetExplosiveHeld(player) < 0;
+}
+
 bool CustomItemRegistry_Give(PlayState* play, const char* key) {
 
     const auto* definition = CustomItemRegistry_Find(key);
     if (play == nullptr || definition == nullptr) {
         return false;
     }
+    if (IS_RANDO && SkipCustomGetItem(
+            CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
+            definition->getItemEntry.getItemCategory)) {
+        if (!CanReceiveFastCustomItem(play)) return false;
+        GetItemEntry entry = definition->getItemEntry;
+        return CustomItemRegistry_ReceiveFastGetItem(nullptr, play, &entry);
+    }
     sPendingGetItem = definition->key;
     if (!GiveItemEntryWithoutActor(play, definition->getItemEntry)) {
         sPendingGetItem.clear();
         return false;
     }
-    sMessageItem = definition->key;
+    // PrepareGetItem already selected the resolved stage and its message.
     return true;
 }
 
@@ -1285,9 +1332,30 @@ bool CustomItemRegistry_HasMessageItemIcon(void) {
            CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX) != nullptr;
 }
 
+static const SOHCustomItemDefinition* ResolveCustomGetItemDefinition(Actor* actor, PlayState* play,
+                                                                      GetItemEntry* entry, bool allowPending = true) {
+    const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
+    if (key == nullptr) {
+        const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+        if (named != nullptr) key = named->key;
+        else if (allowPending && !sPendingGetItem.empty()) key = sPendingGetItem.c_str();
+    }
+    if (const char* progressive = ProgressiveItems_ResolvePickup(key, UINT16_MAX)) {
+        key = progressive;
+    }
+    GameInteractor_ExecuteOnResolveCustomGetItem(actor, play, entry, &key);
+    return CustomItemRegistry_Find(key);
+}
+
 bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
     if (entry == nullptr) {
         return true;
+    }
+    if (!CustomItemRegistry_IsCustomGetItem(entry) && entry->modIndex == MOD_NONE) {
+        const char* progressive = ProgressiveItems_ResolvePickup(nullptr, entry->itemId);
+        if (const auto* next = CustomItemRegistry_Find(progressive)) {
+            *entry = next->getItemEntry;
+        }
     }
     if (!CustomItemRegistry_IsCustomGetItem(entry)) {
         sMessageItem.clear();
@@ -1298,21 +1366,33 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
         }
         return true;
     }
-    const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
-    if (key == nullptr) {
-        const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
-        key = named != nullptr ? named->key : sPendingGetItem.empty() ? nullptr : sPendingGetItem.c_str();
-    }
-    GameInteractor_ExecuteOnResolveCustomGetItem(actor, play, entry, &key);
-    const auto* definition = CustomItemRegistry_Find(key);
-    if (definition == nullptr) {
-        return false;
-    }
+    const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry);
+    if (definition == nullptr) return false;
     sPendingGetItem = definition->key;
     sMessageItem = definition->key;
     *entry = definition->getItemEntry;
     return true;
 }
+
+bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
+    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry)) return false;
+    const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry, false);
+    if (definition == nullptr) return false;
+    // Freeze the received stage before its callback advances progression. Never call
+    // Item_Give(ITEM_CUSTOM), whose native ID cannot identify a custom pickup.
+    *entry = definition->getItemEntry;
+    CustomItemRegistry_ReceiveGetItem(definition->key);
+    GameInteractor_ExecuteOnItemReceiveHooks(*entry);
+    const char* label = definition->displayName;
+    if (label == nullptr || label[0] == '\0') label = definition->key;
+    std::string prefix = gSaveContext.language == LANGUAGE_FRA ? "Vous obtenez: " :
+                         gSaveContext.language == LANGUAGE_GER ? "Du erhältst: " : "You found ";
+    const char* icon = definition->iconPath == nullptr ? nullptr :
+                       sFastPickupIconPaths.emplace(definition->iconPath).first->c_str();
+    Notification::Emit({.itemIcon = icon, .message = prefix, .suffix = label});
+    return true;
+}
+
 
 const SOHCustomItemDefinition* CustomItemRegistry_GetPendingGetItem(void) {
     return FindDefinition(sPendingGetItem);
@@ -1334,6 +1414,19 @@ bool CustomItemRegistry_UpdateDrop(Actor* actor, PlayState* play) {
     }
     if (Actor_HasParent(actor, play)) {
         Actor_Kill(actor);
+    } else if (IS_RANDO && SkipCustomGetItem(
+                   CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
+                   definition->getItemEntry.getItemCategory)) {
+        // Same range and eligibility as the normal actor-driven get-item offer.
+        if (actor->xzDistToPlayer < 50.0f && std::fabs(actor->yDistToPlayer) < 10.0f &&
+            CanReceiveFastCustomItem(play)) {
+            GetItemEntry entry = definition->getItemEntry;
+            if (CustomItemRegistry_ReceiveFastGetItem(actor, play, &entry)) {
+                Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                     &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                Actor_Kill(actor);
+            }
+        }
     } else {
         GiveItemEntryFromActorWithFixedRange(actor, play, definition->getItemEntry);
     }

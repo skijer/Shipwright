@@ -19,6 +19,7 @@ extern "C" {
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/ModApi/VanillaItems/VanillaItems.h"
 #include "soh/ModApi/ModStorage/ModStorage.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/ModMenu/ModMenu.h"
 #include "soh/ModApi/Forms/FormRegistry.h"
 #include "soh/ModApi/Player/PlayerHookTypes.h"
@@ -46,6 +47,10 @@ extern "C" {
 #else
 #define SOH_MOD_EXPORT __attribute__((visibility("default")))
 #endif
+
+// Bump only when a change breaks mods built before it (a moved struct field, a removed export). Appending to
+// SOHModApi does not: mods test tableSize. pack_mod.py stamps it into each manifest; other majors are refused.
+#define SOH_MOD_API_MAJOR 1
 
 #define DEFINE_HOOK(name, args) typedef void(*SOHCb_##name) args;
 #include "soh/Enhancements/game-interactor/GameInteractor_HookTable.h"
@@ -216,6 +221,12 @@ typedef struct {
     void (*StopNetRoomCountdown)(const char* owner);
     bool (*SetCustomItemWorn)(const char* key, bool worn);
     bool (*IsCustomItemWorn)(const char* key);
+    // Frame-global renderer parameters; actor scoping and key selection are mod policy.
+    void (*SetCelShadingRamp)(float center, float softness, float highlight, float shadow, bool debugBands);
+    bool (*RegisterProgressiveChain)(const SOHProgressiveChain* chain);
+    uint16_t (*GetProgressiveLevel)(const char* key, SOHRandoInfBank bank);
+    const char* (*GetNextProgressiveItem)(const char* key, SOHRandoInfBank bank);
+    bool (*GrantLogic)(const SOHLogicGrant* grant);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \
@@ -252,7 +263,10 @@ std::string ModLoader_DescribeTrust(const std::string& archivePath);
 std::filesystem::path ModLoader_GetModsDirectory();
 void ModApi_SetCurrentMod(const std::string& name);
 void ModApi_ClearCurrentMod();
+std::string ModApi_GetCurrentMod();
 std::string ModApi_GetCatalogFingerprint();
+// SOH [Unbound] Writes what mods registered in C (items, actor types) as JSON for tools such as Nocturne.
+bool ModApi_WriteRegistry(const std::filesystem::path& path);
 
 #endif
 

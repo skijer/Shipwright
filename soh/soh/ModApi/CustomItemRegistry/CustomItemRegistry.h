@@ -84,6 +84,10 @@ typedef struct {
     const char* poolModeOption;
     int32_t poolModeValue;
     bool poolModeInvert;
+    // Optional native pool contributions. Each copy chooses one source with the seed RNG.
+    // An empty list preserves the custom item's own randomizer identity.
+    const int32_t* poolSources;
+    uint16_t poolSourceCount;
 } SOHCustomItemRandomizer;
 
 // How other players see this item on you, drawn by the game while you hold it or wear it (SetCustomItemWorn).
@@ -130,6 +134,8 @@ typedef struct {
     uint8_t meleeWeapon;
     SOHCustomItemAmmoFunc getAmmo;
     SOHCustomItemAppearance appearance;
+    // Optional UTF-8 label for notifications; omitted labels fall back to the registered key.
+    const char* displayName;
 } SOHCustomItemDefinition;
 
 typedef void (*SOHPickupVariantReceiveFunc)(const char* itemKey, const char* variantKey);
@@ -257,6 +263,8 @@ bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool auto
 bool CustomItemRegistry_IsCustomGetItem(const GetItemEntry* entry);
 bool CustomItemRegistry_HasMessageItemIcon(void);
 bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEntry* entry);
+// Immediate pickup: resolve its own identity, grant once, report receipt and show its notification.
+bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry);
 const SOHCustomItemDefinition* CustomItemRegistry_GetPendingGetItem(void);
 void CustomItemRegistry_ClearPendingGetItem(void);
 bool CustomItemRegistry_UpdateDrop(Actor* actor, PlayState* play);

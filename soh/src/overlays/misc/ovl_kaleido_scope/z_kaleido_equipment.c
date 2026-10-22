@@ -7,6 +7,13 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
+// Equipment uses the same icon resolver as inventory and C buttons.
+static void* KaleidoScope_ResolveEquipmentIcon(PlayState* play, u16 item, const char* fallback) {
+    const char* icon = fallback;
+    GameInteractor_ExecuteOnKaleidoResolveItemIcon(play, item, &icon);
+    return (void*)icon;
+}
+
 static u8 sChildUpgrades[] = { UPG_BULLET_BAG, UPG_BOMB_BAG, UPG_STRENGTH, UPG_SCALE };
 static u8 sAdultUpgrades[] = { UPG_QUIVER, UPG_BOMB_BAG, UPG_STRENGTH, UPG_SCALE };
 
@@ -859,11 +866,11 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 gSPGrayscale(POLY_OPA_DISP++, false);
                 continue;
             } else if (((u32)i == 0) && (k == 2) && (gSaveContext.bgsFlag != 0)) {
-                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIconSwordBiggoronTex, 32, 32, point);
+                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, KaleidoScope_ResolveEquipmentIcon(play, ITEM_SWORD_BGS, gItemIconSwordBiggoronTex), 32, 32, point);
             } else if ((i == 0) && (k == 2) && (gBitFlags[bit + 1] & gSaveContext.inventory.equipment)) {
                 KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIconBrokenGiantsKnifeTex, 32, 32, point);
             } else if (gBitFlags[bit] & gSaveContext.inventory.equipment) {
-                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIcons[itemId], 32, 32, point);
+                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, KaleidoScope_ResolveEquipmentIcon(play, itemId, gItemIcons[itemId]), 32, 32, point);
             }
             gSPGrayscale(POLY_OPA_DISP++, false);
         }

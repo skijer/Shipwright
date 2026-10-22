@@ -16,8 +16,10 @@
 #include "soh/OTRGlobals.h"
 #include "static_data.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
 #include "soh/ModApi/VanillaItems/VanillaItems.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "settings.h"
 #include "soh/util.h"
@@ -252,6 +254,13 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerCheck(Randomizer
 }
 
 ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGet randoGet) {
+    // A registered progressive chain may still upgrade an already-owned native item.
+    // Check before native ownership flags turn its next copy into a blue rupee.
+    bool progressiveObtainable;
+    if (ProgressiveItems_CheckObtainability(randoGet, &progressiveObtainable)) {
+        return progressiveObtainable ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
+    }
+
     // progressive open chest has a second copy that unlocks large chests
     if (randoGet == RG_OPEN_CHEST && GetRandoSettingValue(RSK_SHUFFLE_OPEN_CHEST) == RO_OPEN_CHEST_PROGRESSIVE) {
         return Flags_GetRandomizerInf(RAND_INF_CAN_OPEN_LARGE_CHEST) ? CANT_OBTAIN_ALREADY_HAVE : CAN_OBTAIN;
@@ -1190,6 +1199,7 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     }
 
     RandomizerGet item = (RandomizerGet)giEntry.getItemId;
+    if(ProgressiveItems_GiveRando(item))return Return_Item_Entry(giEntry,ITEM_NONE);
 
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);
@@ -1247,44 +1257,48 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         return Return_Item_Entry(giEntry, RG_NONE);
     }
 
-    // bottle items
+    // Bottle-with-content rewards also pass through the normal item-give extension,
+    // so mods can store a fifth (or later) bottle without losing its seeded content.
     if (item >= RG_BOTTLE_WITH_RED_POTION && item <= RG_BOTTLE_WITH_BIG_POE) {
+        ItemID bottleItem = ITEM_NONE;
+        switch (item) {
+            case RG_BOTTLE_WITH_RED_POTION:
+                bottleItem = ITEM_POTION_RED;
+                break;
+            case RG_BOTTLE_WITH_GREEN_POTION:
+                bottleItem = ITEM_POTION_GREEN;
+                break;
+            case RG_BOTTLE_WITH_BLUE_POTION:
+                bottleItem = ITEM_POTION_BLUE;
+                break;
+            case RG_BOTTLE_WITH_FAIRY:
+                bottleItem = ITEM_FAIRY;
+                break;
+            case RG_BOTTLE_WITH_FISH:
+                bottleItem = ITEM_FISH;
+                break;
+            case RG_BOTTLE_WITH_BLUE_FIRE:
+                bottleItem = ITEM_BLUE_FIRE;
+                break;
+            case RG_BOTTLE_WITH_BUGS:
+                bottleItem = ITEM_BUG;
+                break;
+            case RG_BOTTLE_WITH_POE:
+                bottleItem = ITEM_POE;
+                break;
+            case RG_BOTTLE_WITH_BIG_POE:
+                bottleItem = ITEM_BIG_POE;
+                break;
+            default:
+                break;
+        }
+        uint8_t resolvedItem = bottleItem;
+        if (GameInteractor_ExecuteOnResolveItemGive(play, &resolvedItem)) {
+            return Return_Item_Entry(giEntry, RG_NONE);
+        }
         for (u16 i = 0; i < 4; i++) {
             if (gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] == ITEM_NONE) {
-                ItemID bottleItem = ITEM_NONE;
-                switch (item) {
-                    case RG_BOTTLE_WITH_RED_POTION:
-                        bottleItem = ITEM_POTION_RED;
-                        break;
-                    case RG_BOTTLE_WITH_GREEN_POTION:
-                        bottleItem = ITEM_POTION_GREEN;
-                        break;
-                    case RG_BOTTLE_WITH_BLUE_POTION:
-                        bottleItem = ITEM_POTION_BLUE;
-                        break;
-                    case RG_BOTTLE_WITH_FAIRY:
-                        bottleItem = ITEM_FAIRY;
-                        break;
-                    case RG_BOTTLE_WITH_FISH:
-                        bottleItem = ITEM_FISH;
-                        break;
-                    case RG_BOTTLE_WITH_BLUE_FIRE:
-                        bottleItem = ITEM_BLUE_FIRE;
-                        break;
-                    case RG_BOTTLE_WITH_BUGS:
-                        bottleItem = ITEM_BUG;
-                        break;
-                    case RG_BOTTLE_WITH_POE:
-                        bottleItem = ITEM_POE;
-                        break;
-                    case RG_BOTTLE_WITH_BIG_POE:
-                        bottleItem = ITEM_BIG_POE;
-                        break;
-                    default:
-                        break;
-                }
-
-                gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = bottleItem;
+                gSaveContext.inventory.items[SLOT_BOTTLE_1 + i] = resolvedItem;
                 return Return_Item_Entry(giEntry, RG_NONE);
             }
         }

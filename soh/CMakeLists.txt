@@ -787,6 +787,15 @@ endif()
 find_package(libzip REQUIRED)
 list(APPEND ADDITIONAL_LIBRARY_DEPENDENCIES libzip::zip)
 
+# SOH [Unbound] NEI-Store downloads over libcurl on Linux and macOS; Windows uses WinHTTP. Without it the store is off.
+if(CMAKE_SYSTEM_NAME MATCHES "Linux|Darwin")
+    find_package(CURL)
+    if(CURL_FOUND)
+        list(APPEND ADDITIONAL_LIBRARY_DEPENDENCIES CURL::libcurl)
+        set_property(SOURCE soh/ModApi/ModStore/StoreHttp.cpp APPEND PROPERTY COMPILE_DEFINITIONS UNBOUND_STORE_CURL)
+    endif()
+endif()
+
 if(USE_ASAN)
     target_compile_options(libultraship PRIVATE -fsanitize=address)
     target_link_options(libultraship PRIVATE -fsanitize=address)
