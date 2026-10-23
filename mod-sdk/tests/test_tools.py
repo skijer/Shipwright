@@ -366,6 +366,10 @@ class SignQueueTests(unittest.TestCase):
         self.assertIn("skijer", sign_queue.read_trusted_authors())
         self.assertEqual(sign_queue.read_revoked_authors(), set())
 
+    def test_mods_inside_the_unbound_repository_ignore_its_game_releases(self):
+        self.assertFalse(sign_queue.follows_releases({"repository": "Skijer/Shipwright"}, "skijer/Shipwright"))
+        self.assertTrue(sign_queue.follows_releases({"repository": "someone/mods"}, "skijer/Shipwright"))
+
     def test_a_signed_issue_stays_open_without_requeueing_itself(self):
         self.assertIsNone(sign_queue.triage(self.issue("Skijer", ["signed"]), {"skijer"}, set()))
         self.assertIsNone(sign_queue.triage(self.issue(labels=["approved", "sign-failed"]), set(), set()))

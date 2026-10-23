@@ -108,7 +108,7 @@ def close_as(repository, issue, label, message):
 
 
 def fail(repository, issue, message):
-    edit_labels(repository, issue, add=[LABEL_FAILED], remove=[LABEL_QUEUED])
+    edit_labels(repository, issue, add=[LABEL_FAILED], remove=[LABEL_QUEUED, LABEL_SIGNED])
     comment(repository, issue, f"Not signed: {message}")
 
 
@@ -253,10 +253,17 @@ def latest_release_commit(repository):
     return tag, resolve_reference(repository, tag)
 
 
+def follows_releases(source, repository):
+    """Mods kept inside the Unbound repository share its releases, which are the game's, not theirs."""
+    return source["repository"].lower() != repository.lower()
+
+
 def queue_new_releases(repository, issues, catalog, trusted):
     for issue in issues:
         source = catalog.get("sources", {}).get(str(issue["number"]))
         if source is None or LABEL_QUEUED in issue["labels"] or not can_sign(issue, trusted):
+            continue
+        if not follows_releases(source, repository):
             continue
         try:
             tag, commit = latest_release_commit(source["repository"])
@@ -346,7 +353,7 @@ def finish_request(repository, number, outcome, summary, held, run_url):
         edit_labels(repository, issue, add=[LABEL_SIGNED], remove=[LABEL_QUEUED, LABEL_FAILED])
         comment(repository, issue, f"{summary}\n\n[Scan and build logs]({run_url})")
     else:
-        edit_labels(repository, issue, add=[LABEL_FAILED], remove=[LABEL_QUEUED])
+        edit_labels(repository, issue, add=[LABEL_FAILED], remove=[LABEL_QUEUED, LABEL_SIGNED])
         comment(repository, issue, f"Not signed: a check failed. The log of each step says why: {run_url}")
     if any(LABEL_QUEUED in issue["labels"] for issue in list_open_requests(repository)):
         gh("workflow", "run", WORKFLOW_FILE, "--repo", repository)
