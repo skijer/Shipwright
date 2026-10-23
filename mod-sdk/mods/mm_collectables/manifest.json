@@ -1,14 +1,22 @@
 {
     "name": "mm_collectables",
     "author": "Skijer",
-    "version": "2.0",
-    "description": "Majora's Mask Collectables: the four boss remains, worn on Link's face for their owner's powers and allies, and the ten songs the ocarina learns to answer.",
+    "version": "2.8",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "description": "Majora's Mask collectables: boss remains, songs and Twinmold's friendly Shadow Link with combat and cooperative orders.",
     "requires": [
         "icon_item_static_yar/gItemIconOdolwasRemainsTex",
         "item_name_static/gItemNameOdolwasRemainsENGTex",
         "objects/object_bsmask/gRemainsOdolwaDL",
         "objects/object_ob/gMoonChildOdolwasMaskDL",
-        "objects/object_boss01/gOdolwaBugSkel"
+        "objects/object_boss01/gOdolwaBugSkel",
+        "objects/object_ob/gMoonChildTwinmoldsMaskDL",
+        "objects/object_torch2/object_torch2Tex_0041C0",
+        "objects/object_torch2/object_torch2Tex_0043C0"
     ],
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ]
 }

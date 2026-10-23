@@ -1006,7 +1006,8 @@ static void DrawBallAndChain(Actor* actor, PlayState* play) {
 
 
     if (sPhase == BALL_AIMING) {
-        Z64Aiming_DrawReticle(play, player, BALL_CHAIN_LENGTH);
+        Z64Aiming_DrawReticle(play, player, BALL_CHAIN_LENGTH,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_LAUNCH });
     }
     if (sPhase == BALL_IDLE || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;

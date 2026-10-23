@@ -64,7 +64,6 @@ typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
 #define BEAM_FADE_RATE 0.05f
 #define BEAM_TARGET_SCALE 12.0f
 #define BEAM_DRAW_SCALE 0.02f
-#define BEAM_HOMING_STEP 0x1000
 #define BEAM_DAMAGE 4
 // NEI's beam flag: OoT names that bit the Kokiri jump slash.
 #define BEAM_DMG_FLAGS DMG_JUMP_KOKIRI
@@ -195,7 +194,6 @@ typedef struct {
     ColliderCylinder collider;
     LightNode* light;
     LightInfo lightInfo;
-    Actor* target;
     f32 life;
     f32 scroll;
 } SwordBeam;
@@ -268,6 +266,20 @@ static bool IsFierceDeity(void) {
     return sApi != NULL && sApi->IsFormActive(FD_FORM_KEY);
 }
 
+// Optional appearance provider. Resolve lazily so mod load order does not matter;
+// the combat, equipment policy, actor scale and abilities remain this mod's.
+typedef bool (*FdAppearanceActiveFunc)(void);
+typedef bool (*FdAppearanceBodyFunc)(Player*, int32_t, Gfx**, Gfx*, Vec3f*);
+typedef bool (*FdAppearanceFaceFunc)(const char**, const char**);
+static void* FindAppearanceService(const char* name) {
+    return SOH_MOD_API_HAS(sApi, FindService) ? sApi->FindService(name) : NULL;
+}
+
+static bool HasReplacementAppearance(void) {
+    FdAppearanceActiveFunc active = (FdAppearanceActiveFunc)FindAppearanceService("nei.pak_loader.fd_active.v1");
+    return active != NULL && active();
+}
+
 static bool IsGrounded(Player* player) {
     return (player->actor.bgCheckFlags & BG_ON_GROUND) != 0;
 }
@@ -326,6 +338,32 @@ static bool IsActorAlive(PlayState* play, Actor* actor) {
     return false;
 }
 
+// Aim assistance is applied once at launch, within the forward cone.
+#define BEAM_AIM_CONE 0x1555
+#define BEAM_AIM_BIAS 0x05B0
+static bool BeamCandidate(Player* player,Actor* target,Vec3f* origin){
+    if(!target||!target->update||(target->category!=ACTORCAT_ENEMY&&target->category!=ACTORCAT_BOSS))return false;
+    s16 delta=Math_Vec3f_Yaw(origin,&target->focus.pos)-player->actor.shape.rot.y;
+    return ABS(delta)<=BEAM_AIM_CONE&&Math_Vec3f_DistXYZ(origin,&target->focus.pos)<=800.0f;
+}
+static void BeamLaunchDirection(PlayState* play,Player* player,Vec3f* origin,s16* yaw,s16* pitch){
+    *yaw=player->actor.shape.rot.y;*pitch=0;
+    Actor* target=player->focusActor?player->focusActor:play->actorCtx.targetCtx.arrowPointedActor;
+    if(!BeamCandidate(player,target,origin))target=NULL;
+    float best=800.0f;
+    const int categories[]={ACTORCAT_ENEMY,ACTORCAT_BOSS};
+    if(!target)for(int i=0;i<2;i++)for(Actor* a=play->actorCtx.actorLists[categories[i]].head;a;a=a->next){
+        if(!BeamCandidate(player,a,origin))continue;
+        float distance=Math_Vec3f_DistXYZ(origin,&a->focus.pos);
+        if(distance<best){best=distance;target=a;}
+    }
+    if(target){
+        s16 delta=Math_Vec3f_Yaw(origin,&target->focus.pos)-*yaw;
+        *yaw+=CLAMP(delta,-BEAM_AIM_BIAS,BEAM_AIM_BIAS);
+        *pitch=CLAMP(Math_Vec3f_Pitch(origin,&target->focus.pos),-BEAM_AIM_BIAS,BEAM_AIM_BIAS);
+    }
+}
+
 static void PlaceBeamLight(SwordBeam* beam) {
     u8 glow = (u8)(255.0f * beam->life);
 
@@ -340,7 +378,6 @@ static void InitBeam(Actor* actor, PlayState* play) {
 
     beam->life = 1.0f;
     beam->scroll = 0.0f;
-    beam->target = NULL;
     Actor_SetScale(actor, 0.0f);
     actor->room = -1;
     actor->shape.rot.y = actor->world.rot.y + 0x8000;
@@ -363,23 +400,8 @@ static void DestroyBeam(Actor* actor, PlayState* play) {
     }
 }
 
-// NEI steers the beam toward what it was fired at, so a moving enemy is still hit; MM's flies straight.
-static void SteerBeam(PlayState* play, SwordBeam* beam) {
-    if (beam->target == NULL) {
-        return;
-    }
-    if (!IsActorAlive(play, beam->target)) {
-        beam->target = NULL;
-        return;
-    }
-    Vec3f* aim = &beam->target->focus.pos;
-    s16 yaw = Math_Vec3f_Yaw(&beam->actor.world.pos, aim) + 0x8000;
-    s16 pitch = Math_Vec3f_Pitch(&beam->actor.world.pos, aim);
+// The beam flies straight after its small initial aim adjustment.
 
-    Math_ScaledStepToS(&beam->actor.shape.rot.y, yaw, BEAM_HOMING_STEP);
-    Math_ScaledStepToS(&beam->actor.world.rot.x, pitch, BEAM_HOMING_STEP);
-    beam->actor.shape.rot.x = -beam->actor.world.rot.x;
-}
 
 // AT_HIT is read before this frame's SetAT, which clears it.
 static bool HasBeamStruck(PlayState* play, SwordBeam* beam) {
@@ -401,7 +423,6 @@ static void UpdateBeam(Actor* actor, PlayState* play) {
         Actor_Kill(actor);
         return;
     }
-    SteerBeam(play, beam);
     f32 flat = -BEAM_SPEED * Math_CosS(actor->world.rot.x);
     actor->world.pos.x += flat * Math_SinS(actor->shape.rot.y);
     actor->world.pos.z += flat * Math_CosS(actor->shape.rot.y);
@@ -436,21 +457,19 @@ static void DrawBeam(Actor* actor, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Every swing at something aimed at throws a beam for one unit of magic (MAGIC_CONSUME_DEITY_BEAM), as in MM.
+// Each beam goes forward with slight launch assistance and costs one unit of magic.
 static void FireBeam(PlayState* play, Player* player) {
-    Actor* target = player->focusActor != NULL ? player->focusActor : play->actorCtx.targetCtx.arrowPointedActor;
-
-    if (target == NULL || gSaveContext.magic <= 0 || sBeamActorId < 0) {
+    if (gSaveContext.magic <= 0 || sBeamActorId < 0) {
         return;
     }
     Vec3f* origin = &player->bodyPartsPos[PLAYER_BODYPART_WAIST];
-    s16 pitch = Math_Vec3f_Pitch(origin, &target->focus.pos);
+    s16 yaw,pitch;
+    BeamLaunchDirection(play,player,origin,&yaw,&pitch);
     Actor* beam = Actor_Spawn(&play->actorCtx, play, sBeamActorId, origin->x, origin->y, origin->z, pitch,
-                              player->actor.shape.rot.y, 0, 0);
+                              yaw, 0, 0);
     if (beam == NULL) {
         return;
     }
-    ((SwordBeam*)beam)->target = target;
     gSaveContext.magic--;
 }
 
@@ -878,6 +897,9 @@ static void DrawBlade(PlayState* play, Player* player, int32_t limbIndex) {
     if (!IsFierceDeity()) {
         return;
     }
+    if (HasReplacementAppearance()) {
+        return;
+    }
     if (limbIndex == PLAYER_LIMB_SHEATH && !HoldsDeitySword(player)) {
         DrawSwordOnBack(play);
     } else if (limbIndex == PLAYER_LIMB_L_HAND && player->meleeWeaponState != 0 && Player_HoldsBrokenKnife(player)) {
@@ -917,6 +939,10 @@ static void ResolveFdBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* l
     if (!IsFierceDeity() || limbIndex <= PLAYER_LIMB_NONE || limbIndex >= PLAYER_LIMB_MAX) {
         return;
     }
+    FdAppearanceBodyFunc replacement = (FdAppearanceBodyFunc)FindAppearanceService("nei.pak_loader.fd_body.v1");
+    if (replacement != NULL && replacement(player, limbIndex, dList, limbDList, pos)) {
+        return;
+    }
     if (limbIndex != PLAYER_LIMB_ROOT && pos != NULL) {
         *pos = sFdJointPos[limbIndex];
     }
@@ -937,6 +963,10 @@ static void ResolveFdBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* l
 
 static void ResolveFdFace(const char** eyes, const char** mouth) {
     if (!IsFierceDeity()) {
+        return;
+    }
+    FdAppearanceFaceFunc replacement = (FdAppearanceFaceFunc)FindAppearanceService("nei.pak_loader.fd_face.v1");
+    if (replacement != NULL && replacement(eyes, mouth)) {
         return;
     }
     *eyes = sEyesTex;

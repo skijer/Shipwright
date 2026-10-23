@@ -869,7 +869,8 @@ static void DrawRodEffects(void) {
         return;
     }
     if (sPhase == DOMROD_AIMING) {
-        Z64Aiming_DrawReticle(play, GET_PLAYER(play), DOMROD_MAX_RANGE);
+        Z64Aiming_DrawReticle(play, GET_PLAYER(play), DOMROD_MAX_RANGE,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_CONTROL });
     } else if (sPhase == DOMROD_FLYING || sPhase == DOMROD_RETURNING || sPhase == DOMROD_CONTROLLING) {
         DrawOrb(play);
     }

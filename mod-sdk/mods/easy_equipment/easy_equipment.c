@@ -314,7 +314,8 @@ static void Tick(void) {
     if (sHold.open && isAllowed) {
         SelectUnderStick(input);
     }
-    switch (EasyHold_Update(&sHold, isDown, isCancelled, isAllowed)) {
+    switch (EasyHold_UpdateMode(&sHold, isDown, isCancelled, isAllowed,
+                               CVarGetInteger("gMods.EasyEquipment.WheelMode",0)==1)) {
         case EASY_OPEN:
             OpenWheel();
             break;
@@ -400,6 +401,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     memcpy(sPieces, sVanilla, sizeof(sVanilla));
     sPieceCount = EASY_VANILLA_COUNT;
+    if (SOH_MOD_API_HAS(sApi,RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi,RegisterMenuWidget)) {
+        static const char* modes[]={"Hold","Instant"};
+        sApi->RegisterMenuSidebar("Enhancements","Easy Equipment","gMods.Menu",1);
+        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Easy Equipment";
+        w.type=SOH_MOD_MENU_COMBOBOX;w.label="Open equipment wheel";w.cvar="gMods.EasyEquipment.WheelMode";
+        w.values=modes;w.valueCount=ARRAY_COUNT(modes);w.defaultInt=0;
+        w.tooltip="Hold: tap toggles equipment, hold opens the wheel. Instant: press opens the wheel immediately. Release C to equip the highlighted piece; B cancels.";
+        sApi->RegisterMenuWidget(&w);
+    }
     SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, Tick);
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, FilterInput);
     SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, DrawWheel);

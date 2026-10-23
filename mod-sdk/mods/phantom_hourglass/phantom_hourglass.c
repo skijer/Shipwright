@@ -1199,7 +1199,8 @@ static void DrawHourglass(Actor* actor, PlayState* play) {
         DrawRibbon(play, path);
     }
     if (sState == HOURGLASS_AIMING && !sIsSelfRewinding) {
-        Z64Aiming_DrawReticle(play, player, HOURGLASS_TRACK_RANGE);
+        Z64Aiming_DrawReticle(play, player, HOURGLASS_TRACK_RANGE,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_CONTROL });
     }
 }
 

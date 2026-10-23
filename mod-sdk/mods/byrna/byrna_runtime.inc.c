@@ -250,9 +250,9 @@ static void ReadAirButtons(PlayState* play,Player* player) {
     if (press&BTN_R) {
         BeginMove(play,player,BYRNA_POUND,CLIP_POUND,false);player->linearVelocity=0;
         Airborne(player,BYRNA_NORMAL_GRAVITY);player->actor.velocity.y=MIN(player->actor.velocity.y,-3);
-    } else if (press&BTN_B) {
+    } else if ((press&BTN_B) && sByrna.move!=BYRNA_AIR_B) {
         BeginMove(play,player,BYRNA_AIR_B,CLIP_AIR_B,false);Airborne(player,BYRNA_NORMAL_GRAVITY);
-    } else if (press&BTN_A) {
+    } else if ((press&BTN_A) && sByrna.move==BYRNA_AIR_IDLE) {
         BeginMove(play,player,BYRNA_AIR_A,CLIP_AIR_A,false);Airborne(player,BYRNA_AIR_GRAVITY);
         FaceTarget(play,player);player->yaw=player->actor.shape.rot.y;player->linearVelocity=BYRNA_AIR_SPEED;
     }
@@ -260,7 +260,7 @@ static void ReadAirButtons(PlayState* play,Player* player) {
 static void ByrnaAction(Player* player,PlayState* play) {
     if (!IsWielding(player) || IsPlayerBusy(player)) { EndMove(play,player);return; }
     SilenceVanillaBlade(player);
-    if (ProcessHit(play,player)) return;
+    if (ProcessHit(play,player)) {ReadAirButtons(play,player);return;}
     LinkAnimationHeader* clip=LoadClip(sByrna.clip);
     if (clip && player->skelAnime.animation!=(void*)clip) {
         LinkAnimation_Change(play,&player->skelAnime,clip,BYRNA_PLAY_SPEED*BYRNA_SAMPLES,sByrna.frame*BYRNA_SAMPLES,
@@ -298,6 +298,10 @@ static void ByrnaAction(Player* player,PlayState* play) {
             if (done) {if(IsGrounded(player))EndMove(play,player);else StartAirIdle(play,player);}
             break;
         case BYRNA_LAUNCH:
+            if (sByrna.impulse && !IsGrounded(player)) {
+                ReadAirButtons(play,player);
+                if(sByrna.move!=BYRNA_LAUNCH) break;
+            }
             // Raise the real actor with the plant of the cane, rather than letting its tip sink through the floor.
             // These heights use both age skeletons and the same baked hand transform as the displayed cane.
             {
@@ -323,18 +327,24 @@ static void ByrnaAction(Player* player,PlayState* play) {
             ReadAirButtons(play,player);break;
         }
         case BYRNA_AIR_B:
+            ReadAirButtons(play,player);
+            if(sByrna.move!=BYRNA_AIR_B) break;
             Airborne(player,BYRNA_NORMAL_GRAVITY);AirCylinderHit(play,player);
             if (done) StartAirIdle(play,player);
             break;
         case BYRNA_AIR_A:
+            ReadAirButtons(play,player);
+            if(sByrna.move!=BYRNA_AIR_A) break;
             Airborne(player,BYRNA_AIR_GRAVITY);FaceTarget(play,player);player->yaw=player->actor.shape.rot.y;
             player->linearVelocity=ActorIsAlive(play,player->focusActor) && Actor_WorldDistXZToActor(&player->actor,player->focusActor)<40?0:BYRNA_AIR_SPEED;
             ForwardHit(play,player,false,false);
             if (done) StartAirIdle(play,player);
             break;
         case BYRNA_REBOUND:
+            ReadAirButtons(play,player);
+            if(sByrna.move!=BYRNA_REBOUND) break;
             if (!sByrna.impulse && frame>=LastOriginalFrame(CLIP_REBOUND)*0.5f) {
-                sByrna.impulse=true;player->actor.velocity.y=11;player->actor.bgCheckFlags&=~BGCHECKFLAG_GROUND;
+                sByrna.impulse=true;player->actor.velocity.y=BYRNA_REBOUND_IMPULSE;player->actor.bgCheckFlags&=~BGCHECKFLAG_GROUND;
             }
             Airborne(player,sByrna.impulse?BYRNA_AIR_GRAVITY:0);
             if (!sByrna.impulse) player->actor.velocity.y=0;

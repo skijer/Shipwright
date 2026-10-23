@@ -1,5 +1,4 @@
-// The three spiritual stones as C-button items: each gives a passive speed buff while owned, and holding its
-// button plants an owl statue that a tap later warps back to. Split out of useful_medallions unchanged.
+// The spiritual stones retain independent passive buffs and C-button waypoint menus.
 
 #include <string.h>
 
@@ -9,17 +8,18 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "regs.h"
 #include "soh/ModApi/Player/PlayerHookTypes.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #define MOD_NAME "spiritual_stones"
 #define STATUE_ACTOR_KEY "spiritual_stones.statue"
 #define STORAGE_FIELD "warps"
 
 #define BUTTON_COUNT 8
-#define STONE_HOLD_FRAMES 60
 #define STATUE_SCALE 0.005f
-#define STATUE_GLOW_HEIGHT 62.0f
-#define STATUE_GLOW_SCALE 0.006f
+#define STATUE_JEWEL_HEIGHT 62.0f
+#define STATUE_JEWEL_SCALE 0.10f
 #define STONE_WALK_BOOST 1.5f
 #define STONE_SWIM_BOOST 2.0f
 #define STONE_CLIMB_BOOST 2.0f
@@ -64,7 +64,7 @@ static const ALIGN_ASSET(2) char sStoneNames[STONE_MAX][72] = {
     "__OTR__textures/item_name_static/gZorasSapphireItemNameENGTex",
 };
 
-static const ALIGN_ASSET(2) char sFlashDL[] = "__OTR__objects/gameplay_keep/gEffFlash1DL";
+static const s16 sStoneDrawIds[STONE_MAX] = { GID_KOKIRI_EMERALD, GID_GORON_RUBY, GID_ZORA_SAPPHIRE };
 static const ALIGN_ASSET(2) char sOwlStatueDL[] = "__OTR__objects/object_sek/gOwlStatueOpenedDL";
 
 // MM display lists branch into segment 0x0C for a cull list OoT never binds, so it is pointed at a dead end.
@@ -78,29 +78,25 @@ static const Gfx sEmptySegment[4] = {
 static const StoneInfo sStones[STONE_MAX] = {
     { "nei.spiritual_stone.kokiri", sStoneIcons[STONE_KOKIRI], sStoneNames[STONE_KOKIRI], QUEST_KOKIRI_EMERALD,
       "You got the %gKokiri's Emerald%w!&The forest quickens your step&while you carry it.^"
-      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
-      "%gKokiri's Emerald&%wYou walk faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
+      "Press %y\xA1%w to choose a new warp&point or return to your saved&owl statue.",
+      "%gKokiri's Emerald&%wYou walk faster.&Press %y\xA1%w for the warp point menu." },
     { "nei.spiritual_stone.goron", sStoneIcons[STONE_GORON], sStoneNames[STONE_GORON], QUEST_GORON_RUBY,
       "You got the %rGoron's Ruby%w! The&mountain steadies your climb&while you carry it.^"
-      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
-      "%rGoron's Ruby&%wYou climb faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
+      "Press %y\xA1%w to choose a new warp&point or return to your saved&owl statue.",
+      "%rGoron's Ruby&%wYou climb faster.&Press %y\xA1%w for the warp point menu." },
     { "nei.spiritual_stone.zora", sStoneIcons[STONE_ZORA], sStoneNames[STONE_ZORA], QUEST_ZORA_SAPPHIRE,
       "You got the %cZora's Sapphire%w!&The lake carries you while you&carry it.^"
-      "%rHold%w %y\xA1%w to plant an owl statue&here, and press %y\xA1%w to return to&it.",
-      "%cZora's Sapphire&%wYou swim faster. Hold %y\xA1%w to plant a&warp, press %y\xA1%w to return." },
+      "Press %y\xA1%w to choose a new warp&point or return to your saved&owl statue.",
+      "%cZora's Sapphire&%wYou swim faster.&Press %y\xA1%w for the warp point menu." },
 };
 
-static const Color_RGB8 sStoneGlow[STONE_MAX] = {
-    { 0, 255, 100 },
-    { 255, 60, 60 },
-    { 60, 160, 255 },
-};
 
 static const u16 sItemButtons[BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                 BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
 static const char* const sRequiredHooks[] = {
     "OnPlayerUpdate", "OnPlayerResolveMotionScale", "OnKaleidoInput", "OnPlayDrawBegin", "OnPlayDrawEnd",
+    "OnGameFrameUpdate",
     "OnSceneInit",
     "OnLoadFile",
     "OnSceneSpawnActors",
@@ -114,7 +110,6 @@ static int16_t sStatueActorId = -1;
 static bool sHasOwlStatue;
 static uint32_t sOwnedQuestItems = 0xFFFFFFFF;
 static bool sIsVoidDamageWaived;
-static uint8_t sStoneHoldFrames[STONE_MAX];
 static Actor* sStatues[STONE_MAX];
 static int8_t sPendingWarpStone = -1;
 static u8 sPassiveDisabled;
@@ -198,6 +193,26 @@ static void SyncQuestOwnership(void) {
     }
 }
 
+// The vanilla Quest Status page has no custom-item cells for its three stones.
+// Bind its real quest slots explicitly; A remains the independent passive toggle.
+static void EquipStoneWarp(PlayState* play,Input* input,bool* handled) {
+    if(*handled || play->pauseCtx.pageIndex!=PAUSE_QUEST || play->pauseCtx.cursorSpecialPos!=0 ||
+       !KaleidoQuestManager_IsVanillaPageShown()) return;
+    int stone=play->pauseCtx.cursorPoint[PAUSE_QUEST]-QUEST_KOKIRI_EMERALD;
+    if(stone<0 || stone>=STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem)) return;
+    for(uint8_t button=1;button<BUTTON_COUNT;button++) {
+        u16 mask=sItemButtons[button];
+        if(!(input->press.button&mask) || (button>=4 && !CVarGetInteger("gEnhancements.DpadEquips",0))) continue;
+        SyncQuestOwnership();
+        if(sApi->EquipCustomItem(button,sStones[stone].key)) {
+            *handled=true;input->press.button&=~mask;
+            Audio_PlaySfxGeneral(NA_SE_SY_DECIDE,&gSfxDefaultPos,4,&gSfxDefaultFreqAndVolScale,
+                &gSfxDefaultFreqAndVolScale,&gSfxDefaultReverb);
+        }
+        return;
+    }
+}
+
 static bool IsStoneWarpReady(uint8_t stone) {
     return sHasOwlStatue && sSaved.warp[stone].entranceIndex >= 0;
 }
@@ -263,48 +278,95 @@ static void WarpToStatue(PlayState* play, uint8_t stone) {
     sIsVoidDamageWaived = true;
 }
 
-static void ResolveWarpPrompt(Player* player, PlayState* play) {
-    uint8_t stone;
+// The native choice renderer has no disabled color. Draw that single label with
+// its own native font glyphs, without changing the player's global text colors.
+void Message_DrawTextChar(PlayState* play, void* textureImage, Gfx** p);
+void Message_SetView(View* view);
+#ifdef _WIN32
+__declspec(dllimport) extern f32 sFontWidths[144];
+#else
+extern f32 sFontWidths[144];
+#endif
+static Font sDisabledFont;
+static const char sDisabledLabel[] = "Go to Warp Point";
+static bool sDisabledFontLoaded;
+static u16 sWarpPromptTextId;
 
-    if (sPendingWarpStone < 0 || Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE || !Message_ShouldAdvance(play)) {
+static void DrawDisabledWarpChoice(void) {
+    PlayState* play = gPlayState;
+    if (!play || sPendingWarpStone < 0 || IsStoneWarpReady((uint8_t)sPendingWarpStone) ||
+        play->msgCtx.textId != sWarpPromptTextId || Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE) return;
+    if (!sDisabledFontLoaded) {
+        for (int i = 0; sDisabledLabel[i]; ++i)
+            Font_LoadChar(&sDisabledFont, sDisabledLabel[i] - ' ', i * FONT_CHAR_TEX_SIZE);
+        sDisabledFontLoaded = true;
+    }
+    MessageContext* msg = &play->msgCtx;
+    s16 oldX=msg->textPosX, oldY=msg->textPosY;
+    s16 oldR=msg->textColorR, oldG=msg->textColorG, oldB=msg->textColorB, oldA=msg->textColorAlpha;
+    Message_SetView(&msg->view);
+    Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_NONE);
+    gDPSetCombineLERP(OVERLAY_DISP++, 0,0,0,PRIMITIVE, TEXEL0,0,PRIMITIVE,0,
+                     0,0,0,PRIMITIVE, TEXEL0,0,PRIMITIVE,0);
+    msg->textPosX=R_TEXT_INIT_XPOS+32;
+    msg->textPosY=R_TEXT_INIT_YPOS+2*R_TEXT_LINE_SPACING;
+    msg->textColorR=msg->textColorG=msg->textColorB=128;
+    msg->textColorAlpha=255;
+    for (int i=0; sDisabledLabel[i]; ++i) {
+        if (sDisabledLabel[i]==' ') msg->textPosX+=CVarGetInteger("gEnhancements.TextSpacing",6);
+        else {
+            Gfx* gfx=OVERLAY_DISP;
+            Message_DrawTextChar(play,&sDisabledFont.charTexBuf[i*FONT_CHAR_TEX_SIZE],&gfx);
+            OVERLAY_DISP=gfx;
+            msg->textPosX+=(s32)(sFontWidths[sDisabledLabel[i]-' ']*(R_TEXT_CHAR_SCALE/100.0f));
+        }
+    }
+    msg->textPosX=oldX;msg->textPosY=oldY;
+    msg->textColorR=oldR;msg->textColorG=oldG;msg->textColorB=oldB;msg->textColorAlpha=oldA;
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void ResolveWarpPrompt(Player* player, PlayState* play) {
+    if (sPendingWarpStone < 0) return;
+    if (play->msgCtx.textId != sWarpPromptTextId || play->msgCtx.msgMode == MSGMODE_NONE) {
+        sPendingWarpStone=-1;
         return;
     }
-    stone = (uint8_t)sPendingWarpStone;
-    Message_CloseTextbox(play);
-    play->msgCtx.msgMode = MSGMODE_TEXT_DONE;
-    if (play->msgCtx.choiceIndex == 0) {
-        WarpToStatue(play, stone);
+    if (Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE || !Message_ShouldAdvance(play)) return;
+    uint8_t stone=(uint8_t)sPendingWarpStone;
+    uint8_t choice=play->msgCtx.choiceIndex;
+    if (choice==1 && !IsStoneWarpReady(stone)) {
+        PlaySfxAt(NA_SE_SY_ERROR,&player->actor.world.pos);
+        // Prevent Message_Main from accepting the same disabled selection later this frame.
+        play->state.input[0].press.button &= ~(BTN_A|BTN_B|BTN_CUP);
+        play->state.input[0].cur.button &= ~BTN_B;
+        return;
     }
-    sPendingWarpStone = -1;
+    Message_CloseTextbox(play);
+    sPendingWarpStone=-1;
+    if (choice==0 && sHasOwlStatue) PlantStatue(play,player,stone);
+    else if (choice==1) WarpToStatue(play,stone);
 }
 
 static void OpenWarpPrompt(PlayState* play, uint8_t stone) {
-    if (!sApi->ShowTextbox(play, "Return to your waypoint?\x1B%g&&Yes&No%w", false)) {
-        return;
-    }
-    sPendingWarpStone = (int8_t)stone;
+    const char* text=IsStoneWarpReady(stone)
+        ? "What do you want to do?\x1C&%gNew Warp Point&Go to Warp Point&Nothing%w"
+        : "What do you want to do?\x1C&%gNew Warp Point& &Nothing%w";
+    if (!sApi->ShowTextbox(play,text,false)) return;
+    sPendingWarpStone=(int8_t)stone;
+    sWarpPromptTextId=play->msgCtx.textId;
 }
 
 static void TickStoneButtons(Player* player, PlayState* play) {
-    for (uint8_t stone = 0; stone < STONE_MAX; stone++) {
-        uint16_t button = FindEquippedButtonMask(sStones[stone].key);
-
-        if (button == 0 || !CHECK_QUEST_ITEM(sStones[stone].questItem)) {
-            sStoneHoldFrames[stone] = 0;
-            continue;
+    if (sPendingWarpStone>=0) return;
+    for (uint8_t stone=0;stone<STONE_MAX;stone++) {
+        uint16_t button=FindEquippedButtonMask(sStones[stone].key);
+        if (button && CHECK_QUEST_ITEM(sStones[stone].questItem) && (play->state.input[0].press.button&button)) {
+            OpenWarpPrompt(play,stone);
+            return;
         }
-        if (play->state.input[0].cur.button & button) {
-            if (sStoneHoldFrames[stone] < STONE_HOLD_FRAMES && ++sStoneHoldFrames[stone] == STONE_HOLD_FRAMES &&
-                sHasOwlStatue) {
-                PlantStatue(play, player, stone);
-            }
-            continue;
-        }
-        if (sStoneHoldFrames[stone] > 0 && sStoneHoldFrames[stone] < STONE_HOLD_FRAMES && sPendingWarpStone < 0 &&
-            IsStoneWarpReady(stone)) {
-            OpenWarpPrompt(play, stone);
-        }
-        sStoneHoldFrames[stone] = 0;
     }
 }
 
@@ -333,20 +395,17 @@ static void BoostStoneClimb(bool* should,va_list args) {
 }
 
 static void StatueDraw(Actor* thisx, PlayState* play) {
-    Color_RGB8 glow = sStoneGlow[thisx->params % STONE_MAX];
-
     OPEN_DISPS(play->state.gfxCtx);
     gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sEmptySegment);
     Gfx_DrawDListOpa(play, (Gfx*)sOwlStatueDL);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, glow.r, glow.g, glow.b, 200);
-    gDPSetEnvColor(POLY_XLU_DISP++, glow.r / 2, glow.g / 2, glow.b / 2, 255);
-    Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y + STATUE_GLOW_HEIGHT, thisx->world.pos.z, MTXMODE_NEW);
-    Matrix_RotateY(BINANG_TO_RAD((int16_t)(play->gameplayFrames * 0x400)), MTXMODE_APPLY);
-    Matrix_Scale(STATUE_GLOW_SCALE, STATUE_GLOW_SCALE, STATUE_GLOW_SCALE, MTXMODE_APPLY);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sFlashDL);
     CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+    Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y + STATUE_JEWEL_HEIGHT, thisx->world.pos.z, MTXMODE_NEW);
+    Matrix_RotateY(BINANG_TO_RAD((int16_t)(play->gameplayFrames * 0x100)), MTXMODE_APPLY);
+    Matrix_Scale(STATUE_JEWEL_SCALE, STATUE_JEWEL_SCALE, STATUE_JEWEL_SCALE, MTXMODE_APPLY);
+    // The Temple of Time's actual gem and gold setting, with their native material setup.
+    GetItem_Draw(play,sStoneDrawIds[thisx->params % STONE_MAX]);
+    Matrix_Pop();
 }
 
 static void StatueInit(Actor* thisx, PlayState* play) {
@@ -372,7 +431,6 @@ static void PlantStatuesForScene(void) {
 }
 
 static void ForgetSceneState(int16_t sceneNum) {
-    memset(sStoneHoldFrames, 0, sizeof(sStoneHoldFrames));
     memset(sStatues, 0, sizeof(sStatues));
     sPendingWarpStone = -1;
 }
@@ -449,8 +507,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     ReloadState(0);
     SOH_REGISTER_HOOK(sApi,OnPlayerResolveMotionScale,ResolveStoneMotion);
     SOH_REGISTER_HOOK(sApi,OnKaleidoInput,ToggleStonePassive);
+    SOH_REGISTER_HOOK(sApi,OnKaleidoInput,EquipStoneWarp);
     SOH_REGISTER_HOOK(sApi,OnPlayDrawBegin,DrawStoneState);
     SOH_REGISTER_HOOK(sApi,OnPlayDrawEnd,RestoreQuestIcons);
+    // This hook runs after the native overlay is built, so the gray label stays above the textbox.
+    SOH_REGISTER_HOOK(sApi,OnGameFrameUpdate,DrawDisabledWarpChoice);
     sApi->RegisterVB(VB_INFLICT_VOID_DAMAGE, WaiveVoidDamage);
     sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC,BoostStoneClimb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickMod);

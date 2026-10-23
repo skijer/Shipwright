@@ -719,7 +719,8 @@ static void DrawGustJar(Actor* actor, PlayState* play) {
         return;
     }
     if (Z64Aiming_IsAiming()) {
-        Z64Aiming_DrawReticle(play, player, BreathReach(CurrentMode()));
+        Z64Aiming_DrawReticle(play, player, BreathReach(CurrentMode()),
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_ATTRACT });
     } else if (!(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON)) {
         DrawJarInHand(player, play);
     }

@@ -59,6 +59,9 @@ graphs/
 
 !OTRExporter/assets/**/*.png
 
+# Blender pose sidecars; the mod ships the baked matrix asset, and signing refuses loose files
+mod-sdk/mods/*/BASE_POSE.json
+
 # Docs
 !docs/tutorial/
 

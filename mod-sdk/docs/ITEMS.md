@@ -128,7 +128,8 @@ yourself (see [Drawing in Link's hand](#drawing-in-links-hand)). Change what the
 ### Aiming in first person
 
 `include/z64aiming/z64aiming.h`: `Z64Aiming_Request`, `_Update` every frame, `_GetDirection`, `_DrawReticle`,
-`_Release`, and `_Drop` on scene change. A positive pitch means looking down. Vanilla stops reading item buttons
+`_Release`, and `_Drop` on scene change. A positive pitch means looking down. `_DrawReticle` draws the hookshot's
+dot tinted by role (launch red, control green, attract blue) and gated by vanilla's Bow or Boomerang Reticle option. Vanilla stops reading item buttons
 while aiming with a sub-camera active, so read your button from `play->state.input[0]` yourself.
 
 ### Several modes in one slot

@@ -1,4 +1,4 @@
-// Kept local to this mod: persistent Elegy shells, Twin Link, and the two travel songs.
+// Persistent Elegy shells and the two travel songs. Twin Link owns its separate state machine.
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include <stdio.h>
@@ -9,12 +9,9 @@ typedef struct {
     Vec3s pose[PLAYER_LIMB_MAX+1];
     s16 cooldown;
 } CollectActor;
-static s16 sShellActorId=-1,sTwinActorId=-1;
+static s16 sShellActorId=-1;
 static Actor* sShells[4];
-static Actor* sTwin;
-static Player sTwinTemplate;
-static int sTwinOrder; // 0 follow, 1 wait, 2 attack
-static int sCollectPrompt; // 1 Soaring, 2 Fugue, 3 orders
+static int sCollectPrompt; // 1 Soaring, 2 Fugue
 static int sSoaringPage;
 static bool sLandingPending;
 static int sPendingSong=-1,sPendingSongFrames;
@@ -38,27 +35,10 @@ static void CollectActorInit(Actor* actor,PlayState* play) {
 }
 static void CollectActorDestroy(Actor* actor,PlayState* play) {
     Collider_DestroyCylinder(play,&((CollectActor*)actor)->collider);
-    if(actor==sTwin)sTwin=NULL;
     for(int i=0;i<4;++i)if(sShells[i]==actor)sShells[i]=NULL;
 }
 static void CollectActorUpdate(Actor* actor,PlayState* play) {
     CollectActor* self=(CollectActor*)actor;
-    if(actor->id==sTwinActorId) {
-        if(Remains_GetWorn()!=REMAINS_TWINMOLD) {Actor_Kill(actor);return;}
-        Player* player=GET_PLAYER(play);
-        Vec3f goal=player->actor.world.pos;
-        goal.x+=Math_CosS(player->actor.shape.rot.y)*65;
-        goal.z-=Math_SinS(player->actor.shape.rot.y)*65;
-        Actor* enemy=sTwinOrder==2?RemainsAlly_FindNearestEnemy(play,&actor->world.pos,1200):NULL;
-        if(enemy!=NULL)goal=enemy->world.pos;
-        f32 distance=Math_Vec3f_DistXZ(&actor->world.pos,&goal);
-        actor->speedXZ=sTwinOrder==1?0:distance>40?MIN(distance*.08f,7):0;
-        if(actor->speedXZ>0)actor->shape.rot.y=actor->world.rot.y=Math_Vec3f_Yaw(&actor->world.pos,&goal);
-        if(self->cooldown>0)--self->cooldown;
-        if(enemy!=NULL && distance<70 && self->cooldown==0) {
-            CollisionCheck_SetAT(play,&play->colChkCtx,&self->collider.base);self->cooldown=18;
-        }
-    }
     Actor_MoveXZGravity(actor);
     Actor_UpdateBgCheckInfo(play,actor,20,20,60,5);
     Collider_UpdateCylinder(actor,&self->collider);
@@ -72,25 +52,6 @@ static void ShellDraw(Actor* actor,PlayState* play) {
     gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++,(Gfx*)sElegyModels[form]);
     CLOSE_DISPS(play->state.gfxCtx);
-}
-static void TwinDraw(Actor* actor,PlayState* play) {
-    Player* player=GET_PLAYER(play);CollectActor* self=(CollectActor*)actor;
-    if(player->skelAnime.skeleton==NULL)return;
-    sTwinTemplate=*player;
-    memcpy(self->pose,player->skelAnime.jointTable,sizeof(Vec3s)*(player->skelAnime.limbCount+1));
-    if(sTwinOrder==2 && self->cooldown>0) {
-        AnimationContext_SetLoadFrame(play,(LinkAnimationHeader*)gPlayerAnim_link_fighter_Lside_kiru,
-            (18-self->cooldown)%12,player->skelAnime.limbCount,self->pose);
-    }
-    sTwinTemplate.actor.world.pos=actor->world.pos;sTwinTemplate.actor.shape.rot=actor->shape.rot;
-    sTwinTemplate.skelAnime.jointTable=self->pose;sTwinTemplate.heldActor=NULL;sTwinTemplate.meleeWeaponState=0;
-    Matrix_Push();
-    Matrix_SetTranslateRotateYXZ(actor->world.pos.x,actor->world.pos.y,actor->world.pos.z,&actor->shape.rot);
-    Matrix_Scale(player->actor.scale.x,player->actor.scale.y,player->actor.scale.z,MTXMODE_APPLY);
-    Player_DrawImpl(play,sTwinTemplate.skelAnime.skeleton,self->pose,sTwinTemplate.skelAnime.dListCount,
-        0,sTwinTemplate.currentTunic,sTwinTemplate.currentBoots,sTwinTemplate.actor.shape.face,
-        Player_OverrideLimbDrawGameplayDefault,NULL,&sTwinTemplate.actor);
-    Matrix_Pop();
 }
 static void SummonElegy(void) {
     PlayState* play=gPlayState;Player* player=GET_PLAYER(play);int form=0;
@@ -142,14 +103,6 @@ static void QueueRecognizedSong(int index) {
     gPlayState->msgCtx.ocarinaMode=OCARINA_MODE_04;
     AudioOcarina_SetInstrument(0);
 }
-static void CollectKaleidoInput(PlayState* play,Input* input,bool* handled) {
-    if(play->pauseCtx.state!=6 || play->pauseCtx.pageIndex!=PAUSE_QUEST ||
-        !ModLayout_IsActive(SOH_LAYOUT_COLLECTABLES) || play->pauseCtx.cursorPoint[PAUSE_QUEST]!=3 ||
-        !(input->press.button&BTN_A) || !sApi->IsCustomItemOwned("nei.mm_remains_twinmold"))return;
-    *handled=true;play->pauseCtx.unk_1E4=10;
-    sCollectPrompt=sApi->ShowTextbox(play,"Twin Link orders\x1C%gFollow Link&Hold position&Attack nearby enemies%w",false)?3:0;
-    if(!sCollectPrompt)play->pauseCtx.unk_1E4=0;
-}
 static void CollectBehaviorsTick(void) {
     PlayState* play=gPlayState;if(play==NULL)return;
     if(sPendingSong>=0 && --sPendingSongFrames<=0) {
@@ -161,13 +114,8 @@ static void CollectBehaviorsTick(void) {
         if(poly!=NULL && floor>BGCHECK_Y_MIN)player->actor.world.pos.y=floor;
         sLandingPending=false;
     }
-    if(play->pauseCtx.state==0 && Remains_GetWorn()==REMAINS_TWINMOLD && sTwin==NULL) {
-        Player* player=GET_PLAYER(play);Vec3f pos=player->actor.world.pos;pos.x+=60;
-        sTwin=Actor_Spawn(&play->actorCtx,play,sTwinActorId,pos.x,pos.y,pos.z,0,player->actor.shape.rot.y,0,0);
-    }
     if(!sCollectPrompt)return;
     if(Message_GetState(&play->msgCtx)==TEXT_STATE_NONE) {
-        if(sCollectPrompt==3)play->pauseCtx.unk_1E4=0;
         sCollectPrompt=0;return;
     }
     if(Message_GetState(&play->msgCtx)!=TEXT_STATE_CHOICE || !Message_ShouldAdvance(play))return;
@@ -180,10 +128,10 @@ static void CollectBehaviorsTick(void) {
         s16 spawn=choice?ENTR_TEMPLE_OF_TIME_WARP_PAD:ENTR_LINKS_HOUSE_CHILD_SPAWN;
         if(IS_RANDO)spawn=Entrance_PeekNextIndexOverride(spawn);
         WarpTo(spawn,NULL); // Never change linkAge or linkAgeOnLoad.
-    } else if(prompt==3) {sTwinOrder=choice;play->pauseCtx.unk_1E4=0;}
+    }
 }
 static void CollectBehaviorsScene(int16_t scene) {
-    sTwin=NULL;memset(sShells,0,sizeof(sShells));sCollectPrompt=0;sPendingSong=-1;
+    memset(sShells,0,sizeof(sShells));sCollectPrompt=0;sPendingSong=-1;
 }
 static void RegisterCollectBehaviors(void) {
     if(!SOH_MOD_API_HAS(sApi,RegisterActor) || !SOH_MOD_API_HAS(sApi,ShowTextbox) ||
@@ -193,9 +141,6 @@ static void RegisterCollectBehaviors(void) {
     a.objectId=OBJECT_GAMEPLAY_KEEP;a.instanceSize=sizeof(CollectActor);
     a.init=CollectActorInit;a.destroy=CollectActorDestroy;a.update=CollectActorUpdate;a.draw=ShellDraw;
     sShellActorId=sApi->RegisterActor(&a);
-    a.key="nei.twin_link";a.description="Twinmold's Twin Link";a.category=ACTORCAT_NPC;a.draw=TwinDraw;
-    sTwinActorId=sApi->RegisterActor(&a);
     SOH_REGISTER_HOOK(sApi,OnGameFrameUpdate,CollectBehaviorsTick);
     SOH_REGISTER_HOOK(sApi,OnSceneInit,CollectBehaviorsScene);
-    SOH_REGISTER_HOOK(sApi,OnKaleidoInput,CollectKaleidoInput);
 }

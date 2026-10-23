@@ -95,9 +95,6 @@
 #define ROD_BALL_CIRCLE_MAX 0.08f
 #define ROD_BALL_SCALE_MAX 7.0f
 #define ROD_BALL_AHEAD 55.0f
-#define RETICLE_DIST 320.0f
-#define RETICLE_SPREAD 26.0f
-#define RETICLE_DOT_SCALE 0.55f
 
 #define ORB_POOL_MAX 12
 #define ORB_SEEKERS 4
@@ -2013,22 +2010,6 @@ static void HideLinkBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* li
 
 // ---- projectile draws ----
 
-static void DrawBillboardOrb(PlayState* play, Vec3f pos, f32 scale, u8 element) {
-    u8 e = element % ELEMENT_COUNT;
-
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, sOrbPrim[e][0], sOrbPrim[e][1], sOrbPrim[e][2], 255);
-    gDPSetEnvColor(POLY_XLU_DISP++, sOrbEnv[e][0], sOrbEnv[e][1], sOrbEnv[e][2], 0);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sOrbMaterialDL);
-    Matrix_Translate(pos.x, pos.y, pos.z, MTXMODE_NEW);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sOrbModelDL);
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
 // Additive light only brightens, so the dark core is alpha-blended in one cycle over the halo's glow.
 static void DrawShadowBall(PlayState* play, Vec3f pos, f32 scale) {
     OPEN_DISPS(play->state.gfxCtx);
@@ -2158,8 +2139,7 @@ static void DrawOrbStreak(PlayState* play, RodOrb* orb) {
     CLOSE_DISPS(gfxCtx);
 }
 
-// The slingshot-style aim draws no crosshair, and Garo's first-person arms are hidden: four dots and a centre
-// spread out as the shot charges.
+// Garo's first-person arms are hidden, so the charging ball floats ahead of the view instead.
 static void DrawChargeAndReticle(PlayState* play, Player* player) {
     Vec3f head = player->actor.focus.pos;
     s16 yaw;
@@ -2172,21 +2152,8 @@ static void DrawChargeAndReticle(PlayState* play, Player* player) {
                    head.z + forward.z * ROD_BALL_AHEAD };
     f32 pulse = 1.0f + 0.06f * Math_SinS(play->gameplayFrames * 0x1000);
     DrawRodBall(play, ball, sRodBallCircle * pulse, sRodBallScale * pulse, sRodBallRays, sRodElement);
-
-    Vec3f center = { head.x + forward.x * RETICLE_DIST, head.y + forward.y * RETICLE_DIST,
-                     head.z + forward.z * RETICLE_DIST };
-    Vec3f right = { Math_SinS(yaw + 0x4000), 0.0f, Math_CosS(yaw + 0x4000) };
-    Vec3f up = { right.y * forward.z - right.z * forward.y, right.z * forward.x - right.x * forward.z,
-                 right.x * forward.y - right.y * forward.x };
-    f32 spread = RETICLE_SPREAD * (1.0f + MIN((f32)sRodCharge / ROD_CHARGE_MAX, 1.0f) * 0.6f);
-    DrawBillboardOrb(play, center, RETICLE_DOT_SCALE * 0.7f, sRodElement);
-    for (s32 i = 0; i < 4; i++) {
-        f32 offsetX = i == 0 ? spread : (i == 1 ? -spread : 0.0f);
-        f32 offsetY = i == 2 ? spread : (i == 3 ? -spread : 0.0f);
-        Vec3f dot = { center.x + right.x * offsetX + up.x * offsetY, center.y + right.y * offsetX + up.y * offsetY,
-                      center.z + right.z * offsetX + up.z * offsetY };
-        DrawBillboardOrb(play, dot, RETICLE_DOT_SCALE, sRodElement);
-    }
+    Z64Aiming_DrawReticle(play, player, ROD_ORB_SPEED * ROD_ORB_LIFETIME,
+                          (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_LAUNCH });
 }
 
 static void DrawProjectiles(PlayState* play, Player* player) {

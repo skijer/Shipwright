@@ -1038,7 +1038,7 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
-    Matrix_Scale(0.25f, 0.25f, 0.25f, MTXMODE_APPLY);
+    Matrix_Scale(0.15f, 0.15f, 0.15f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sCaneGiveDL);
     CLOSE_DISPS(play->state.gfxCtx);

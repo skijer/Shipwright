@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "soh/Enhancements/randomizer/randomizerEnums.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -1049,6 +1050,12 @@ static bool RegisterBottomless(void) {
 }
 
 // Vanilla's bottle entry, so the pickup looks and sounds like one; only its text is the mod's.
+static const int32_t sBottlePoolSources[] = {
+ RG_EMPTY_BOTTLE, RG_BOTTLE_WITH_MILK, RG_BOTTLE_WITH_RED_POTION,
+ RG_BOTTLE_WITH_GREEN_POTION, RG_BOTTLE_WITH_BLUE_POTION, RG_BOTTLE_WITH_FAIRY,
+ RG_BOTTLE_WITH_FISH, RG_BOTTLE_WITH_BUGS, RG_BOTTLE_WITH_POE,
+ RG_BOTTLE_WITH_BIG_POE, RG_BOTTLE_WITH_BLUE_FIRE
+};
 static bool RegisterExtraBottle(int8_t bottle) {
     SOHCustomItemDefinition extra =
         Z64Items_Define(sBottleKeys[bottle], (const char*)gItemIcons[ITEM_BOTTLE], gEmptyBottleItemNameENGTex);
@@ -1063,6 +1070,7 @@ static bool RegisterExtraBottle(int8_t bottle) {
     Z64Items_SetPauseText(&extra, "%rBottle&%wWhatever it holds, %y\xA1%w uses it like&any other bottle.");
     const SOHCustomItemRandomizer randomizer = {
         sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, sBottleKeys[bottle], sBottleKeys[bottle], "",
+        NULL, NULL, 0, false, sBottlePoolSources, ARRAY_COUNT(sBottlePoolSources),
     };
     Z64Items_SetLogic(&extra, &randomizer);
     return Z64Items_Register(sApi, &extra);

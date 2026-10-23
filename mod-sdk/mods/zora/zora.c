@@ -1997,7 +1997,8 @@ static void DrawZoraLimbExtras(PlayState* play, Player* player, int32_t limbInde
 static void DrawZora(PlayState* play, Player* player) {
     DrawBarrier(play, player);
     if (sMove == ZORA_MOVE_FINS_READY && Z64Aiming_IsAiming()) {
-        Z64Aiming_DrawReticle(play, player, FIN_RETICLE_RANGE);
+        Z64Aiming_DrawReticle(play, player, FIN_RETICLE_RANGE,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_LAUNCH });
     }
 }
 
@@ -2034,6 +2035,11 @@ static void ResolveZoraSfx(Actor* actor, int32_t kind, uint16_t* sfxId, bool* ha
 
 static void HumanGyorgSwim(PlayState* play,Player* player,bool enabled) {
     if(IsZora()){sBorrowedGyorgSwim=false;return;}
+    // Multiple providers share one swim driver; an inactive provider must not stop another.
+    typedef bool (*SwimCapability)(void);
+    SwimCapability tunic=SOH_MOD_API_HAS(sApi,FindService)?
+        (SwimCapability)sApi->FindService("nei.zora_tunic.swim_enabled"):NULL;
+    enabled=enabled || sApi->IsEquipmentWorn("nei.mm_remains_gyorg") || (tunic && tunic());
     const char* form = sApi->GetActiveForm();
     if(!enabled || (form != NULL && form[0] != '\0') || player->currentBoots == PLAYER_BOOTS_IRON ||
        !CanAct(player) || !HasSwimAbility()) {

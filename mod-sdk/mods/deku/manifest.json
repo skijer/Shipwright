@@ -2,6 +2,7 @@
     "name": "deku",
     "author": "Skijer",
     "version": "1.0",
+    "dependencies": ["mm_assets"],
     "description": "The Deku Mask turns Link into Deku Link, with his spin, bubbles, water hops and flower flight.",
     "requires": [
         "icon_item_static_yar/gItemIconDekuMaskTex",

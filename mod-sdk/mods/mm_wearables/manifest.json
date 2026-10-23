@@ -2,6 +2,7 @@
     "name": "mm_wearables",
     "author": "Skijer",
     "version": "1.0",
+    "dependencies": ["mm_assets"],
     "description": "Seventeen wearable Majora's Mask masks; the remaining seven masks have their own mods.",
     "requires": [
         "objects/object_mask_posthat/object_mask_posthat_DL_000290",

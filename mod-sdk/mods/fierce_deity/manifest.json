@@ -2,6 +2,7 @@
     "name": "fierce_deity",
     "author": "Skijer",
     "version": "1.0",
+    "dependencies": ["mm_assets"],
     "description": "The Fierce Deity's Mask turns Link into the Fierce Deity: a towering warrior with a two-handed blade that fires homing sword beams at what he targets.",
     "requires": [
         "objects/object_link_boy/gLinkFierceDeityWaistDL",

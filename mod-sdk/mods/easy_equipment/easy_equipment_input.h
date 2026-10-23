@@ -35,4 +35,10 @@ static inline EasyGesture EasyHold_Update(EasyHold* hold, bool down, bool cancel
     return EASY_NONE;
 }
 
+static inline EasyGesture EasyHold_UpdateMode(EasyHold* hold, bool down, bool cancel, bool allowed, bool instant) {
+    if (instant && down && allowed && !cancel && !hold->open && !hold->waitRelease)
+        hold->frames=EASY_HOLD_FRAMES;
+    return EasyHold_Update(hold,down,cancel,allowed);
+}
+
 #endif

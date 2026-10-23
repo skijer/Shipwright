@@ -2,7 +2,7 @@
 // The four boss remains worn on Link's face, NEI's boss_remains for Ship. Odolwa: a run on A, his sword, shield,
 // stance and trail, moths from the sword and his beetles on R+B, a moth cloud to fly on near soft soil. Goht: a
 // bull charge on A, a quake pound on R+A, charged thunder on B, a bombchu on R+B. Gyorg: endless breath, a faster
-// swim, fish on R (R+B on land), a whirlpool on B underwater. Twinmold: a giant's sword.
+// swim, fish on R (R+B on land), a whirlpool on B underwater. Twinmold: the mask worn during Twin Link's invocation.
 #include "remains.h"
 
 #include <stdint.h>
@@ -76,7 +76,6 @@ typedef void (*MmSfxStopFunc)(uint16_t sfxId);
 #define GYORG_WHIRLPOOL_DRAIN_RATE 10
 #define GYORG_FUNNEL_OFFSET_Y (-5.25f)
 
-#define TWINMOLD_DAMAGE_MULTIPLIER 2
 
 #define MM_ANIM_VALUES_PER_FRAME 67
 #define MM_ANIM_BASE_TRANSL_X (-57)
@@ -1391,12 +1390,6 @@ static void ScaleMotion(Player* player, int32_t kind, f32* scale) {
     }
 }
 
-static void StrengthenSword(PlayState* play, int32_t dmgFlags, u8* damage) {
-    if (IsWorn(REMAINS_TWINMOLD)) {
-        *damage = (u8)(*damage * TWINMOLD_DAMAGE_MULTIPLIER);
-    }
-}
-
 static void SurviveChargeFall(bool* should, va_list args) {
     if (sIsGohtCharging) {
         *should = false;
@@ -1508,7 +1501,6 @@ void Remains_Init(const SOHModApi* api) {
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveMotionScale, ScaleMotion);
     SOH_REGISTER_HOOK(sApi, OnPlayerActionHandler, ResolveAction);
     SOH_REGISTER_HOOK(sApi, OnPlayerShieldBlocked, FireFromShield);
-    SOH_REGISTER_HOOK(sApi, OnResolveSwordDamage, StrengthenSword);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawRemainsEffects);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetSceneFunnel);
     sApi->RegisterVB(VB_RECIEVE_FALL_DAMAGE, SurviveChargeFall);

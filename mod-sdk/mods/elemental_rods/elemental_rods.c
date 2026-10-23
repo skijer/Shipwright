@@ -1683,7 +1683,8 @@ static void DrawRodEffects(void) {
             DrawSpinCylinder(cfg, player, play);
         }
         if (cfg->state->aiming) {
-            Z64Aiming_DrawReticle(play, player, ROD_AIM_RANGE);
+            Z64Aiming_DrawReticle(play, player, ROD_AIM_RANGE,
+                                  (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_LAUNCH });
         }
     }
 }

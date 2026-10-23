@@ -76,9 +76,13 @@ static const RemainsDefinition sRemains[REMAINS_COUNT] = {
         "__OTR__icon_item_static_yar/gItemIconTwinmoldsRemainsTex",
         "__OTR__item_name_static/gItemNameTwinmoldsRemainsENGTex",
         "__OTR__objects/object_bsmask/gRemainsTwinmoldDL",
-        "You got %rTwinmold's Remains%w!&The giants of the desert left&their strength behind.^"
-        "Wear it and every sword of&Link's strikes with a giant's&arm.",
-        "%rTwinmold's Remains&%wPress %y\xA1%w to wear it. Worn: your&sword hits twice as hard.",
+        "You got %rTwinmold's Remains%w!&Equip to %y\xA1%w to summon a shadow&wearing your mask. Costs 24 MP.^"
+        "Wear it to open Orders: attack,&help, follow or wait. Your first&choice is included in summoning.^"
+        "Press %y\xA1%w again for orders.&Changing mode costs 24 MP.&Choosing the same mode is free.^"
+        "Help follows and lends strength.&Slash a cracked wall for a bomb.&Target a cucco to have it fetched.^"
+        "Face him nearby and press %b\x9F%w.&He lifts you so you can aim.&Stand together for extra strength.^"
+        "Aim a lift with the Stick.&%b\x9F%w launches; %g\xA0%w cancels.&Twin Link stays until you die.",
+        "%rTwinmold's Remains&%wEquip to %y\xA1%w to wear it and&open Orders. Summon: 24 MP.&Later mode changes: 24 MP.",
     },
 };
 
@@ -208,8 +212,8 @@ static const SongDefinition sSongs[] = {
 static const char* const sRequiredHooks[] = {
     "OnPlayerUpdate",        "OnPlayerPostLimbDraw",       "OnPlayerResolveLimbDraw",
     "OnPlayerResolveAnim",   "OnPlayerResolveMotionScale", "OnPlayerActionHandler",
-    "OnPlayerShieldBlocked", "OnResolveSwordDamage",       "OnActorDrawEnd",
-    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnKaleidoInput", "OnOcarinaNote",         "OnLoadGame",
+    "OnPlayerShieldBlocked", "OnActorDrawEnd", "OnActorUpdate",
+    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnOcarinaNote",         "OnLoadGame",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -228,6 +232,8 @@ static s32 RemainsIndexForKey(const char* key) {
     return REMAINS_NONE;
 }
 
+#include "twin_link.inc.c"
+
 static void ToggleOdolwa(PlayState* play, Player* player) {
     Remains_Toggle(play, player, REMAINS_ODOLWA);
 }
@@ -241,7 +247,7 @@ static void ToggleGyorg(PlayState* play, Player* player) {
 }
 
 static void ToggleTwinmold(PlayState* play, Player* player) {
-    Remains_Toggle(play, player, REMAINS_TWINMOLD);
+    TwinUse(play, player);
 }
 
 static const SOHCustomItemInitFunc sRemainsToggle[REMAINS_COUNT] = {
@@ -305,6 +311,7 @@ static void RecognizeSong(u8 note, f32 modulator, s8 bend) {
 }
 
 static void StartFile(int32_t fileNum) {
+    TwinLoad();
     Remains_ResetFile();
     ForgetPlayedNotes();
 }
@@ -341,13 +348,14 @@ static void RegisterRemains(void) {
         SOHCustomItemDefinition definition = Z64Items_Define(source->key, source->iconPath, source->namePath);
 
         Z64Items_SetButtons(&definition, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
-        definition.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
+        definition.flags |= SOH_CUSTOM_ITEM_INSTANT;
+        if (i != REMAINS_TWINMOLD) definition.flags |= SOH_CUSTOM_ITEM_WEARABLE;
         Z64Items_SetPlacement(&definition, MM_COLLECTABLES_PAGE, (u8)(REMAINS_FIRST_SLOT + i), 0);
         Z64Items_SetTextbox(&definition, source->getItemText);
         Z64Items_SetPauseText(&definition, source->pauseText);
         definition.getItemEntry.drawFunc=DrawRemainsGetItem;
         Z64Items_SetAction(&definition, sRemainsToggle[i], NULL);
-        definition.onRemove = ForgetWornRemains;
+        definition.onRemove = i == REMAINS_TWINMOLD ? TwinForget : ForgetWornRemains;
         const SOHCustomItemRandomizer randomizer = {
             sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, source->key, source->key, "",
         };
@@ -433,6 +441,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     RemainsAllies_Register(sApi);
     Remains_Init(sApi);
     RegisterCollectBehaviors();
+    TwinRegister();
     SOH_REGISTER_HOOK(sApi,OnInterfaceDrawEnd,DrawMmQuestBackground);
     SOH_REGISTER_HOOK(sApi, OnOcarinaNote, RecognizeSong);
     SOH_REGISTER_HOOK(sApi, OnLoadGame, StartFile);

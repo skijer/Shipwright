@@ -1,5 +1,12 @@
 #include <math.h>
+#include <stdbool.h>
 #include <string.h>
+#include <libultraship/bridge/consolevariablebridge.h>
+
+#ifdef _MSC_VER
+// An undeclared CVarGetFloat is assumed to return int, which breaks live calibration.
+#pragma warning(error: 4013)
+#endif
 
 #include "z64items.h"
 #include "z64aiming.h"
@@ -15,7 +22,6 @@
 #define SWITCH_HOOK_FLIGHT_FRAMES 26
 #define SWITCH_HOOK_RETURN_SPEED 40.0f
 #define SWITCH_HOOK_ARRIVE_DISTANCE 30.0f
-#define SWITCH_HOOK_HAND_HEIGHT 45.0f
 #define SWITCH_HOOK_SELECT_RANGE 520.0f
 #define SWITCH_HOOK_SELECT_CONE 0x1800
 #define SWITCH_HOOK_SELECT_MIN_DISTANCE 30.0f
@@ -34,9 +40,8 @@
 #define SWITCH_HOOK_CHAIN_LINK_SPACING 15.0f
 #define SWITCH_HOOK_CHAIN_LINK_MAX 40
 #define SWITCH_HOOK_CHAIN_SCALE 0.015f
-#define SWITCH_HOOK_TIP_SCALE 0.015f
-#define SWITCH_HOOK_HELD_SCALE 0.01f
-#define SWITCH_HOOK_GIVE_SCALE 0.01f
+#define SWITCH_HOOK_TIP_SCALE 1.0f
+#define SWITCH_HOOK_GIVE_SCALE 1.0f
 
 typedef enum {
     SWITCH_HOOK_STOWED,
@@ -70,7 +75,9 @@ typedef struct {
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/gItemIconSwitchHookTex";
 static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/gSwitchHookNameTex";
 static const ALIGN_ASSET(2) char sGiveDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookGiveDL";
-static const ALIGN_ASSET(2) char sTipDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookGiveDL";
+static const ALIGN_ASSET(2) char sHeldDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookHeldDL";
+static const ALIGN_ASSET(2) char sBodyDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookBodyDL";
+static const ALIGN_ASSET(2) char sTipDL[] = "__OTR__objects/object_nei_switchhook/gSwitchHookHeadDL";
 static const ALIGN_ASSET(2) char sChainLinkDL[] = "__OTR__objects/object_link_boy/gLinkAdultHookshotChainDL";
 static const ALIGN_ASSET(2) char sAimAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_hook_shot_ready";
 
@@ -80,11 +87,36 @@ static const u16 sItemButtons[SWITCH_HOOK_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, 
 static const u8 sSwappableCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_CHEST, ACTORCAT_NPC };
 
 static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnActorDrawEnd", "OnSceneInit",
-                                              "OnPlayerResolveItemActionInit", "OnActorUpdate" };
+                                              "OnPlayerResolveItemActionInit", "OnActorUpdate", "OnInterfaceDrawEnd" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
+
+// Final user calibration: translation (-1.90, 0.95, 4.43), scale 0.52.
+// Static model resources contain the pose. Only the animated hand frame is rebuilt.
+static void HandFrame(Player* player, MtxF* frame) {
+    Vec3f hand=player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+    Vec3f arm=player->bodyPartsPos[PLAYER_BODYPART_L_FOREARM];
+    f32 dx=hand.x-arm.x,dy=hand.y-arm.y,dz=hand.z-arm.z;
+    f32 horizontal=sqrtf(dx*dx+dz*dz),length=sqrtf(dx*dx+dy*dy+dz*dz);
+    f32 sx=0,cx=1,sy=0,cy=1;
+    if (length>0.0001f) { sy=dy/length;cy=horizontal/length; }
+    if (horizontal>0.0001f) { sx=dx/horizontal;cx=dz/horizontal; }
+    frame->xx=cx;frame->yx=0;frame->zx=-sx;frame->wx=0;
+    frame->xy=-sx*sy;frame->yy=cy;frame->zy=-cx*sy;frame->wy=0;
+    frame->xz=sx*cy;frame->yz=sy;frame->zz=cx*cy;frame->wz=0;
+    frame->xw=hand.x;frame->yw=hand.y;frame->zw=hand.z;frame->ww=1;
+}
+
+static Vec3f HandPosition(Player* player) {
+    MtxF frame;HandFrame(player,&frame);
+    const Vec3f socket={ -0.99972534f, 0.13365173f, 3.96459961f };
+    Vec3f pos={frame.xw+frame.xx*socket.x+frame.xy*socket.y+frame.xz*socket.z,
+               frame.yw+frame.yx*socket.x+frame.yy*socket.y+frame.yz*socket.z,
+               frame.zw+frame.zx*socket.x+frame.zy*socket.y+frame.zz*socket.z};
+    return pos;
+}
 
 #define REMOTE_VISUAL_INTERVAL 5u
 
@@ -560,8 +592,7 @@ static void FlyHook(Player* player, PlayState* play) {
 }
 
 static void ReelHookIn(Player* player, PlayState* play) {
-    Vec3f hand = { player->actor.world.pos.x, player->actor.world.pos.y + SWITCH_HOOK_HAND_HEIGHT,
-                   player->actor.world.pos.z };
+    Vec3f hand = HandPosition(player);
     f32 distance = Math_Vec3f_DistXYZ(&sHookPos, &hand);
 
     if (distance < SWITCH_HOOK_ARRIVE_DISTANCE) {
@@ -606,9 +637,7 @@ static void FireHook(Player* player, PlayState* play, s16 yaw, s16 pitch) {
     }
     sShotYaw = yaw;
     sShotPitch = pitch;
-    sHookPos.x = player->actor.world.pos.x;
-    sHookPos.y = player->actor.world.pos.y + SWITCH_HOOK_HAND_HEIGHT;
-    sHookPos.z = player->actor.world.pos.z;
+    sHookPos = HandPosition(player);
     sFlightTimer = SWITCH_HOOK_FLIGHT_FRAMES;
     sPhase = SWITCH_HOOK_FLYING;
     player->itemAction = player->heldItemAction;
@@ -673,9 +702,10 @@ static void AimOrFire(Player* player, PlayState* play) {
         if(Math_Vec3f_DistXYZ(&aim,&sSelection->world.pos)>150.0f) {
             aim=sSelection->world.pos;aim.y+=MIN(MAX(sSelection->colChkInfo.cylHeight*.5f,15.0f),45.0f);
         }
-        f32 dx = aim.x - player->actor.world.pos.x;
-        f32 dy = aim.y - (player->actor.world.pos.y + SWITCH_HOOK_HAND_HEIGHT);
-        f32 dz = aim.z - player->actor.world.pos.z;
+        Vec3f hand=HandPosition(player);
+        f32 dx = aim.x - hand.x;
+        f32 dy = aim.y - hand.y;
+        f32 dz = aim.z - hand.z;
 
         FireHook(player, play, Math_Atan2S(dz, dx), Math_Atan2S(sqrtf(SQ(dx) + SQ(dz)), -dy));
         return;
@@ -709,7 +739,7 @@ static void StowSwitchHook(Player* player, PlayState* play) {
 // The hook keeps Link still while it flies, so the upper body is only busy then.
 static int32_t HoldSwitchHook(Player* player, PlayState* play) {
     if (sPhase == SWITCH_HOOK_IN_HAND) {
-        sHookPos = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+        sHookPos = HandPosition(player);
     }
     return 0;
 }
@@ -735,11 +765,6 @@ static void UpdateSwitchHook(void) {
     Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
 
     TickCharges();
-    static const char* icons[]={
-        "__OTR__textures/icon_item_custom/gSwitchHookCharge0Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge1Tex",
-        "__OTR__textures/icon_item_custom/gSwitchHookCharge2Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge3Tex",
-        "__OTR__textures/icon_item_custom/gSwitchHookCharge4Tex","__OTR__textures/icon_item_custom/gSwitchHookCharge5Tex"};
-    CustomItemRegistry_SetIconPath(SWITCH_HOOK_KEY,icons[sDepletedTimer>0?0:sCharges]);
     if (play == NULL || player == NULL) {
         return;
     }
@@ -776,6 +801,37 @@ static void SyncSwappedActor(void* actorRef) {
     if(tracked)ReanchorColliders(play);
 }
 static int32_t HookAmmo(const char* key){return sDepletedTimer>0?0:sCharges;}
+
+// Use the same native digits as vanilla ammo, including HUD positioning and fades.
+void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha);
+static void DrawHookChargeCount(PlayState* play) {
+    if (play->pauseCtx.state!=0 || play->gameOverCtx.state!=0) return;
+    const s16 alpha[SWITCH_HOOK_BUTTON_COUNT]={
+        play->interfaceCtx.bAlpha,play->interfaceCtx.cLeftAlpha,play->interfaceCtx.cDownAlpha,
+        play->interfaceCtx.cRightAlpha,play->interfaceCtx.dpadUpAlpha,play->interfaceCtx.dpadDownAlpha,
+        play->interfaceCtx.dpadLeftAlpha,play->interfaceCtx.dpadRightAlpha,
+    };
+    for (s16 button=1;button<SWITCH_HOOK_BUTTON_COUNT;++button) {
+        const char* key=sApi->GetEquippedCustomItem(button);
+        if (!key || strcmp(key,SWITCH_HOOK_KEY) || alpha[button]==0 ||
+            (button>=4 && !CVarGetInteger("gEnhancements.DpadEquips",0))) continue;
+        OPEN_DISPS(play->state.gfxCtx);
+        Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+        gDPPipeSync(OVERLAY_DISP++);
+        gDPSetEnvColor(OVERLAY_DISP++,0,0,0,0);
+        gDPSetPrimColor(OVERLAY_DISP++,0,0,255,255,255,alpha[button]);
+        gDPSetCombineLERP(OVERLAY_DISP++,PRIMITIVE,ENVIRONMENT,TEXEL0,ENVIRONMENT,TEXEL0,0,PRIMITIVE,0,
+                          PRIMITIVE,ENVIRONMENT,TEXEL0,ENVIRONMENT,TEXEL0,0,PRIMITIVE,0);
+        CLOSE_DISPS(play->state.gfxCtx);
+        u8 savedItem=gSaveContext.equips.buttonItems[button];
+        s8 savedAmmo=AMMO(ITEM_BEAN);
+        gSaveContext.equips.buttonItems[button]=ITEM_BEAN;
+        AMMO(ITEM_BEAN)=(s8)HookAmmo(SWITCH_HOOK_KEY);
+        Interface_DrawAmmoCount(play,button,alpha[button]);
+        AMMO(ITEM_BEAN)=savedAmmo;
+        gSaveContext.equips.buttonItems[button]=savedItem;
+    }
+}
 
 static void ForgetScene(int16_t sceneNum) {
     ClearColliderAnchors();
@@ -817,6 +873,18 @@ static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
     DrawSegment(play, to, yaw, pitch, SWITCH_HOOK_TIP_SCALE, (Gfx*)sTipDL);
 }
 
+static void DrawHeldHook(Player* player, PlayState* play, bool extended) {
+    MtxF frame;HandFrame(player,&frame);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Push();
+    Matrix_Put(&frame);
+    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)(extended?sBodyDL:sHeldDL));
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void DrawSwitchHook(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     if (player != GET_PLAYER(play)) {
@@ -824,8 +892,8 @@ static void DrawSwitchHook(Actor* actor, PlayState* play) {
         if (!ReadRemoteVisual(player, &visual)) {
             return;
         }
-        Vec3f hand = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
-        DrawSegment(play, &hand, BINANG_TO_RAD(player->actor.shape.rot.y), 0.0f, SWITCH_HOOK_HELD_SCALE, (Gfx*)sGiveDL);
+        Vec3f hand = HandPosition(player);
+        DrawHeldHook(player,play,visual.flags[0]!=0);
         if (visual.flags[0]) {
             Vec3f tip = { visual.values[0], visual.values[1], visual.values[2] };
             DrawChain(play, &hand, &tip);
@@ -834,17 +902,18 @@ static void DrawSwitchHook(Actor* actor, PlayState* play) {
     }
 
 
-    Vec3f hand = player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
+    Vec3f hand = HandPosition(player);
 
     if (sPhase == SWITCH_HOOK_STOWED || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
-    if(sPhase<SWITCH_HOOK_FLYING)DrawSegment(play, &hand, BINANG_TO_RAD(player->actor.shape.rot.y), 0.0f, SWITCH_HOOK_HELD_SCALE, (Gfx*)sGiveDL);
-    if (sPhase == SWITCH_HOOK_FLYING || sPhase == SWITCH_HOOK_RETURNING) {
+    DrawHeldHook(player,play,sPhase>=SWITCH_HOOK_FLYING);
+    if (sPhase >= SWITCH_HOOK_FLYING) {
         DrawChain(play, &hand, &sHookPos);
     }
     if (sPhase == SWITCH_HOOK_AIMING) {
-        Z64Aiming_DrawReticle(play, player, SWITCH_HOOK_SPEED * SWITCH_HOOK_FLIGHT_FRAMES);
+        Z64Aiming_DrawReticle(play, player, SWITCH_HOOK_SPEED * SWITCH_HOOK_FLIGHT_FRAMES,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_ATTRACT });
     }
 }
 
@@ -906,7 +975,7 @@ static void PublishRemoteVisual(void) {
         visual.adult = LINK_IS_ADULT;
         visual.active = (sPhase != SWITCH_HOOK_STOWED);
         if (visual.active) {
-            visual.flags[0] = sPhase == SWITCH_HOOK_FLYING || sPhase == SWITCH_HOOK_RETURNING;
+            visual.flags[0] = sPhase >= SWITCH_HOOK_FLYING;
             visual.values[0] = sHookPos.x;
             visual.values[1] = sHookPos.y;
             visual.values[2] = sHookPos.z;
@@ -980,6 +1049,7 @@ SOH_MOD_EXPORT void ModInit(void) {
         return;
     }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateSwitchHook);
+    SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, DrawHookChargeCount);
     SOH_REGISTER_HOOK(sApi,OnActorUpdate,SyncSwappedActor);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawSwitchHook);

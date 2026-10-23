@@ -1,0 +1,49 @@
+{
+    "packs": [
+        {
+            "id": "skijer-items",
+            "name": "Skijer Items",
+            "mods": [
+                "ball_and_chain", "beetle", "bomb_arrows", "byrna", "cane_pacci", "deku_leaf", "demise_destruction",
+                "dominion_rod", "elemental_rods", "elemental_wand", "four_sword", "gust_jar", "lantern",
+                "mogma_mitts", "not_enough_bottles", "oot_item_upgrades", "pendant", "phantom_hourglass", "rocs",
+                "rod_of_seasons", "sheikah_slate", "shovel", "somaria", "spinner", "spiritual_stones",
+                "switch_hook", "time_gate", "trident", "ultrahand", "useful_medallions", "whip", "zonai_permafrost"
+            ]
+        },
+        {
+            "id": "mm-item-pack",
+            "name": "MM Item Pack",
+            "mods": ["mm_assets", "mm_items", "mm_wearables", "mm_collectables"]
+        },
+        {
+            "id": "skijer-transformations",
+            "name": "Skijer Transformations Pack",
+            "mods": ["deku", "fierce_deity", "garo", "gerudo", "goron", "kafei", "keaton", "rito", "wolf_link", "zora"]
+        },
+        {
+            "id": "skijer-equipment",
+            "name": "Skijer Equipment Pack",
+            "mods": [
+                "champion_tunic", "climb_boots", "divine_shield", "easy_equipment", "elemental_mirror_shield",
+                "goron_tunic", "ikana_shield", "kite_shield", "magic_cape", "magic_tunic", "minish_cap",
+                "pegasus_boots", "roc_boots", "sages_tunic", "zora_tunic"
+            ]
+        },
+        {
+            "id": "skijer-visuals",
+            "name": "Skijer Visuals",
+            "mods": ["cel_shading", "pak_loader"]
+        },
+        {
+            "id": "enemies-bosses",
+            "name": "Enemies & Bosses",
+            "mods": ["cucui-ganon", "lynel_miniboss", "trutefel_miniblin", "trutefel_molmauk", "trutefel_sbeetle"]
+        },
+        {
+            "id": "skijer-devtools",
+            "name": "Skijer DevTools",
+            "mods": ["anim_viewer", "turbo"]
+        }
+    ]
+}

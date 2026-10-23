@@ -1081,7 +1081,8 @@ static void DrawWhip(Actor* actor, PlayState* play) {
     }
     DrawWhipInHand(play, player);
     if (sPhase == WHIP_AIMING) {
-        Z64Aiming_DrawReticle(play, player, WHIP_EXTEND_SPEED * WHIP_LASH_FRAMES);
+        Z64Aiming_DrawReticle(play, player, WHIP_EXTEND_SPEED * WHIP_LASH_FRAMES,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_ATTRACT });
         return;
     }
     if (sPhase != WHIP_COILED) {

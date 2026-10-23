@@ -1,0 +1,6 @@
+<DisplayList Version="0">
+    <Matrix Path="objects/object_nei_switchhook/gSwitchHookHeadPoseMtx" Param="G_MTX_PUSH" />
+    <CallDisplayList Path="objects/object_nei_switchhook/gSwitchHookHeadMeshDL" />
+    <PopMatrix Param="G_MTX_MODELVIEW" />
+    <EndDisplayList />
+</DisplayList>

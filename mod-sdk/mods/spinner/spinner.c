@@ -7,6 +7,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "overlays/actors/ovl_En_Ishi/z_en_ishi.h"
 
 #define SPINNER_KEY "nei.spinner"
 #define SPINNER_BUTTON_COUNT 8
@@ -253,6 +254,42 @@ static bool KnockedOffByCucco(Player* player, PlayState* play) {
     return false;
 }
 
+#ifdef _WIN32
+// Compare the engine's function address, not this DLL's import trampoline.
+__declspec(dllimport) void EnIshi_Wait(EnIshi* rock, PlayState* play);
+#else
+void EnIshi_Wait(EnIshi* rock, PlayState* play);
+#endif
+void EnIshi_DropCollectible(EnIshi* rock, PlayState* play);
+void EnIshi_SpawnFragmentsLarge(EnIshi* rock, PlayState* play);
+void EnIshi_SpawnDustLarge(EnIshi* rock, PlayState* play);
+
+static void ShatterLargeSilverRocks(Player* player, PlayState* play) {
+    for (Actor* actor=play->actorCtx.actorLists[ACTORCAT_PROP].head;actor!=NULL;) {
+        Actor* next=actor->next;
+        if (actor->update!=NULL && actor->id==ACTOR_EN_ISHI && (actor->params&1)==ROCK_LARGE &&
+            actor->parent==NULL) {
+            EnIshi* rock=(EnIshi*)actor;
+            f32 bottom=actor->world.pos.y+rock->collider.dim.yShift;
+            f32 attackBottom=sAttackCollider.dim.pos.y;
+            if (rock->actionFunc==EnIshi_Wait &&
+                IsWithinXZ(actor,player,sAttackCollider.dim.radius+rock->collider.dim.radius) &&
+                attackBottom+sAttackCollider.dim.height>=bottom &&
+                attackBottom<=bottom+rock->collider.dim.height) {
+                // Native hammer damage deliberately excludes ROCK_LARGE. Preserve the
+                // rock's own drop hook, fragments and saved switch when Spinner breaks it.
+                EnIshi_DropCollectible(rock,play);
+                Flags_SetSwitch(play,((actor->params>>0xA)&0x3C)|((actor->params>>6)&3));
+                EnIshi_SpawnFragmentsLarge(rock,play);
+                EnIshi_SpawnDustLarge(rock,play);
+                SoundSource_PlaySfxAtFixedWorldPos(play,&actor->world.pos,40,NA_SE_EV_WALL_BROKEN);
+                Actor_Kill(actor);
+            }
+        }
+        actor=next;
+    }
+}
+
 static void ShatterRollingBoulders(Player* player, PlayState* play) {
     Actor* next;
 
@@ -280,6 +317,7 @@ static bool StrikeAround(Player* player, PlayState* play, u8 damage) {
         PlaySfxAt(NA_SE_IT_HAMMER_HIT, &player->actor.world.pos);
     }
     CollisionCheck_SetAT(play, &play->colChkCtx, &sAttackCollider.base);
+    ShatterLargeSilverRocks(player, play);
     ShatterRollingBoulders(player, play);
     return KnockedOffByCucco(player, play);
 }

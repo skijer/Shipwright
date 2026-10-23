@@ -726,7 +726,8 @@ static void DrawBeetle(Actor* actor, PlayState* play) {
 
 
     if (sPhase == BEETLE_AIMING) {
-        Z64Aiming_DrawReticle(play, player, BEETLE_MAX_DISTANCE);
+        Z64Aiming_DrawReticle(play, player, BEETLE_MAX_DISTANCE,
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOOMERANG, Z64AIMING_TINT_CONTROL });
     }
     if (sPhase == BEETLE_STOWED || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
