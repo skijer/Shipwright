@@ -87,8 +87,9 @@ def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions, 
             result["rejected"][mod_id] = "the folder name must be lowercase letters, digits, '_' or '-'"
         elif existing and existing["issue"] != issue:
             result["rejected"][mod_id] = f"the name '{mod_id}' already belongs to #{existing['issue']}"
-        elif manifest.get("modapi") != major:
-            result["rejected"][mod_id] = f"it was built for mod API {manifest.get('modapi')}, not {major}"
+        # Packages from an SDK older than the field were built for major 1, as the game's loader assumes too.
+        elif manifest.get("modapi", 1) != major:
+            result["rejected"][mod_id] = f"it was built for mod API {manifest.get('modapi', 1)}, not {major}"
         elif existing and build.get("source_hash") == hashes.get(mod_id) and existing.get("listed", True):
             result["unchanged"].append(mod_id)
         elif new_permissions and not trusted and not (approved and set(new_permissions) <= held_permissions):

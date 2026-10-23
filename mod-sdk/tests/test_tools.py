@@ -463,6 +463,12 @@ class BuildCatalogTests(unittest.TestCase):
         self.package("whip")
         self.assertIn("whip", self.plan(catalog, {"whip": "h1"})["rejected"])
 
+    def test_packages_from_an_older_sdk_count_as_mod_api_1(self):
+        path = self.root / "packages" / "legacy.o2r"
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr("manifest.json", json.dumps({"name": "legacy", "version": "1.0"}))
+        self.assertEqual(self.plan(build_catalog.empty_catalog(), {"legacy": "h1"})["publish"], ["legacy"])
+
     def test_packages_for_another_mod_api_are_refused(self):
         self.package("whip", modapi=2)
         self.assertIn("whip", self.plan(build_catalog.empty_catalog(), {"whip": "h1"})["rejected"])
