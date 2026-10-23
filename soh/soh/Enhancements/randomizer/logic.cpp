@@ -35,8 +35,9 @@ static SOHRandoInfBank ModItemBank(const SaveContext* saveContext) {
 
 bool Logic::HasItem(RandomizerGet itemName) {
     LOGIC_MOD_ITEM_GRANTS(itemName);
-    bool progressiveOwned=false;
-    if(ProgressiveItems_HasLogicItem(itemName,this,&progressiveOwned))return progressiveOwned;
+    bool progressiveOwned = false;
+    if (ProgressiveItems_HasLogicItem(itemName, this, &progressiveOwned))
+        return progressiveOwned;
     if (DungeonRegistry_IsDungeonItem(itemName)) {
         return DungeonRegistry_HasItem(itemName, ModItemBank(mSaveContext) == SOH_RANDO_INF_SAVE);
     }
@@ -1537,7 +1538,8 @@ uint8_t Logic::BottleCount() {
         }
     }
     for (uint8_t item : extraBottleContents) {
-        if (item != ITEM_NONE && (item != ITEM_BIG_POE || Get(LOGIC_CAN_EMPTY_BIG_POES))) ++count;
+        if (item != ITEM_NONE && (item != ITEM_BIG_POE || Get(LOGIC_CAN_EMPTY_BIG_POES)))
+            ++count;
     }
     return count;
 }
@@ -2269,7 +2271,8 @@ std::set<RandomizerGet> StaticData::allowBottleMaskTrade = { RG_KEATON_MASK,
 
 void Logic::ApplyItemEffect(Item& item, bool state) {
     auto randoGet = item.GetRandomizerGet();
-    if(ProgressiveItems_ApplyLogic(randoGet,this,state))return;
+    if (ProgressiveItems_ApplyLogic(randoGet, this, state))
+        return;
     if (DungeonRegistry_IsDungeonItem(randoGet)) {
         DungeonRegistry_ApplyLogicItem(randoGet, state);
         return;
@@ -2531,25 +2534,33 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                     }
                     if (state) {
                         uint8_t slot = SLOT_BOTTLE_1;
-                        while (slot <= SLOT_BOTTLE_4 && mSaveContext->inventory.items[slot] != ITEM_NONE) ++slot;
-                        if (slot <= SLOT_BOTTLE_4) mSaveContext->inventory.items[slot] = itemId;
-                        else extraBottleContents.push_back(itemId);
+                        while (slot <= SLOT_BOTTLE_4 && mSaveContext->inventory.items[slot] != ITEM_NONE)
+                            ++slot;
+                        if (slot <= SLOT_BOTTLE_4)
+                            mSaveContext->inventory.items[slot] = itemId;
+                        else
+                            extraBottleContents.push_back(itemId);
                     } else {
                         auto extra = std::find(extraBottleContents.begin(), extraBottleContents.end(), itemId);
-                        if (extra != extraBottleContents.end()) extraBottleContents.erase(extra);
-                        else for (uint8_t slot = SLOT_BOTTLE_1; slot <= SLOT_BOTTLE_4; ++slot) {
-                            if (mSaveContext->inventory.items[slot] != itemId) continue;
-                            mSaveContext->inventory.items[slot] = ITEM_NONE;
-                            if (!extraBottleContents.empty()) {
-                                mSaveContext->inventory.items[slot] = extraBottleContents.back();
-                                extraBottleContents.pop_back();
+                        if (extra != extraBottleContents.end())
+                            extraBottleContents.erase(extra);
+                        else
+                            for (uint8_t slot = SLOT_BOTTLE_1; slot <= SLOT_BOTTLE_4; ++slot) {
+                                if (mSaveContext->inventory.items[slot] != itemId)
+                                    continue;
+                                mSaveContext->inventory.items[slot] = ITEM_NONE;
+                                if (!extraBottleContents.empty()) {
+                                    mSaveContext->inventory.items[slot] = extraBottleContents.back();
+                                    extraBottleContents.pop_back();
+                                }
+                                break;
                             }
-                            break;
-                        }
                     }
                     if (randoGet == RG_BOTTLE_WITH_BIG_POE) {
-                        if (state) ++BigPoes;
-                        else if (BigPoes) --BigPoes;
+                        if (state)
+                            ++BigPoes;
+                        else if (BigPoes)
+                            --BigPoes;
                     }
                 } break;
                 case RG_RUTOS_LETTER:

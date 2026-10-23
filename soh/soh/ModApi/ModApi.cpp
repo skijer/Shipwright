@@ -90,9 +90,10 @@ nlohmann::json DescribeActors() {
 }
 
 int32_t DumpRegistryCommand(std::shared_ptr<Ship::Console>, std::vector<std::string> args, std::string* output) {
-    std::filesystem::path path = args.size() > 1
-                                     ? std::filesystem::path(args[1])
-                                     : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));
+    std::filesystem::path path =
+        args.size() > 1
+            ? std::filesystem::path(args[1])
+            : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));
     const bool written = ModApi_WriteRegistry(path);
     if (output != nullptr) {
         *output = written ? "Wrote " + path.string() : "Cannot write " + path.string();
@@ -323,16 +324,22 @@ bool HasHook(const char* name) {
 }
 
 void SetCelShadingRamp(float center, float softness, float highlight, float shadow, bool debugBands) {
-    if (!std::isfinite(center) || !std::isfinite(softness) || !std::isfinite(highlight) || !std::isfinite(shadow)) return;
+    if (!std::isfinite(center) || !std::isfinite(softness) || !std::isfinite(highlight) || !std::isfinite(shadow))
+        return;
     auto* context = Ship::Context::GetRawInstance();
-    if (!context) return;
+    if (!context)
+        return;
     auto window = std::dynamic_pointer_cast<Fast::Fast3dWindow>(context->GetWindow());
-    if (!window) return;
+    if (!window)
+        return;
     auto interpreter = window->GetInterpreterWeak().lock();
-    if (!interpreter) return;
+    if (!interpreter)
+        return;
     auto* renderer = interpreter->GetCurrentRenderingAPI();
-    if (renderer) renderer->SetToonRamp(std::clamp(center, 0.0f, 1.0f), std::clamp(softness, 0.001f, 0.5f),
-                                      std::clamp(highlight, 0.0f, 2.0f), std::clamp(shadow, 0.0f, 1.0f), debugBands ? 1.0f : 0.0f);
+    if (renderer)
+        renderer->SetToonRamp(std::clamp(center, 0.0f, 1.0f), std::clamp(softness, 0.001f, 0.5f),
+                              std::clamp(highlight, 0.0f, 2.0f), std::clamp(shadow, 0.0f, 1.0f),
+                              debugBands ? 1.0f : 0.0f);
 }
 
 SOHModApi BuildTable() {
@@ -538,8 +545,8 @@ bool ModApi_WriteRegistry(const std::filesystem::path& path) {
     }
     // Item messages contain native game glyph bytes, which are not necessarily UTF-8.
     // Replacement is limited to this diagnostic JSON; registered game text stays byte-exact.
-    file << nlohmann::json{ { "items", DescribeItems() }, { "actors", DescribeActors() } }
-                .dump(1, ' ', false, nlohmann::json::error_handler_t::replace);
+    file << nlohmann::json{ { "items", DescribeItems() }, { "actors", DescribeActors() } }.dump(
+        1, ' ', false, nlohmann::json::error_handler_t::replace);
     return true;
 }
 

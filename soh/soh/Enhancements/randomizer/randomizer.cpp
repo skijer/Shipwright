@@ -1199,7 +1199,8 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
     }
 
     RandomizerGet item = (RandomizerGet)giEntry.getItemId;
-    if(ProgressiveItems_GiveRando(item))return Return_Item_Entry(giEntry,ITEM_NONE);
+    if (ProgressiveItems_GiveRando(item))
+        return Return_Item_Entry(giEntry, ITEM_NONE);
 
     // Gameplay stats: Update the time the item was obtained
     Randomizer_GameplayStats_SetTimestamp(item);

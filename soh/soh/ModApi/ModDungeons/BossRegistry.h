@@ -21,12 +21,12 @@ typedef enum {
 } SOHBossSlot;
 
 #define SOH_BOSS_SLOT_BIT(slot) (1u << (slot))
-#define SOH_BOSS_SLOTS_CHILD                                                       \
+#define SOH_BOSS_SLOTS_CHILD                                                                  \
     (SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_GOHMA) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_KING_DODONGO) | \
      SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_BARINADE))
-#define SOH_BOSS_SLOTS_ADULT                                                                         \
-    (SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_PHANTOM_GANON) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_VOLVAGIA) |     \
-     SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_MORPHA) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_BONGO_BONGO) |         \
+#define SOH_BOSS_SLOTS_ADULT                                                                      \
+    (SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_PHANTOM_GANON) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_VOLVAGIA) | \
+     SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_MORPHA) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_BONGO_BONGO) |     \
      SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_TWINROVA))
 #define SOH_BOSS_SLOTS_DUNGEON (SOH_BOSS_SLOTS_CHILD | SOH_BOSS_SLOTS_ADULT)
 #define SOH_BOSS_SLOTS_FINAL (SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_GANONDORF) | SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_GANON))

@@ -332,8 +332,9 @@ Grant ReadGrant(const SOHLogicGrant& source) {
 }
 
 void RemoveOwnerGrants(std::vector<Grant>& grants, const std::string& owner) {
-    grants.erase(std::remove_if(grants.begin(), grants.end(), [&owner](const Grant& grant) { return grant.owner == owner; }),
-                 grants.end());
+    grants.erase(
+        std::remove_if(grants.begin(), grants.end(), [&owner](const Grant& grant) { return grant.owner == owner; }),
+        grants.end());
 }
 
 class EntryScope {

@@ -1305,9 +1305,8 @@ s32 Player_OverrideLimbDrawGameplayCommon(PlayState* play, s32 limbIndex, Gfx** 
         }
         if (limbIndex == PLAYER_LIMB_SHEATH) {
             if ((this->currentShield == PLAYER_SHIELD_MIRROR ||
-                 (Player_IsChildWithHylianShield(this) &&
-                  (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER ||
-                   gSaveContext.equips.buttonItems[0] == ITEM_SWORD_BGS))) &&
+                 (Player_IsChildWithHylianShield(this) && (gSaveContext.equips.buttonItems[0] == ITEM_SWORD_MASTER ||
+                                                           gSaveContext.equips.buttonItems[0] == ITEM_SWORD_BGS))) &&
                 ((this->sheathType == PLAYER_MODELTYPE_SHEATH_16) || (this->sheathType == PLAYER_MODELTYPE_SHEATH_17) ||
                  (this->sheathType == PLAYER_MODELTYPE_SHEATH_18) ||
                  (this->sheathType == PLAYER_MODELTYPE_SHEATH_19))) {

@@ -16,7 +16,7 @@ typedef struct {
 typedef struct {
     int32_t randoItem;
     uint16_t vanillaItem; // UINT16_MAX when this alias has no Item_Give identity.
-    uint16_t firstLevel; // BGS can start at level 2; Knife at level 1.
+    uint16_t firstLevel;  // BGS can start at level 2; Knife at level 1.
 } SOHProgressiveAlias;
 typedef struct {
     uint32_t structSize;
@@ -43,7 +43,9 @@ void ProgressiveItems_ResetLogic(void);
 #ifdef __cplusplus
 }
 #include <memory>
-namespace Rando { class Logic; }
+namespace Rando {
+class Logic;
+}
 void ProgressiveItems_Init();
 bool ProgressiveItems_ApplyLogic(int32_t item, Rando::Logic* logic, bool state);
 std::shared_ptr<GetItemEntry> ProgressiveItems_ResolveEntry(int32_t item, SOHRandoInfBank bank);

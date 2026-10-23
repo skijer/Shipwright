@@ -120,7 +120,8 @@ std::array<MessageTable, MSG_LANGUAGE_COUNT> sTables;
 bool sInitialized = false;
 
 std::shared_ptr<SOH::Text> LoadTextResource(const std::string& path) {
-    return std::static_pointer_cast<SOH::Text>(Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
+    return std::static_pointer_cast<SOH::Text>(
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 }
 
 bool LoadJsonBase(MessageTable& table, const LanguageSpec& spec);

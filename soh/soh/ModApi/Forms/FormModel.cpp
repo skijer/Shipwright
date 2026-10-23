@@ -299,7 +299,7 @@ Player* FormModel_GetDrawnOtherPlayer(void) {
 
 const char* FormModel_GetDrawnOtherPlayerFormKey(void) {
     return FormModel_IsDrawingOtherPlayer() && sDrawn.otherPlayerForm != nullptr ? sDrawn.otherPlayerForm->key
-                                                                                    : nullptr;
+                                                                                 : nullptr;
 }
 
 void FormModel_SetActive(const SOHFormDefinition* form) {

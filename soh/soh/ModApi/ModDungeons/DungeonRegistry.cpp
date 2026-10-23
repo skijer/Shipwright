@@ -254,23 +254,22 @@ RandomizerGet RegisterDungeonItem(const ModDungeon& dungeon, const ItemStyle& st
     if (itemTable.size() <= static_cast<size_t>(randoGet)) {
         itemTable.resize(static_cast<size_t>(randoGet) + 1);
     }
-    itemTable[randoGet] =
-        Rando::Item(static_cast<RandomizerGet>(randoGet), Text{ name, name, name }, style.type, style.getItemId,
-                    style.advancement, LOGIC_NONE, RHT_NONE, static_cast<uint16_t>(randoGet), style.objectId, style.gid,
-                    TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, style.chestAnimation, style.category, MOD_RANDOMIZER,
-                    Text{ "the ", "the ", "the " }, "%g");
+    itemTable[randoGet] = Rando::Item(
+        static_cast<RandomizerGet>(randoGet), Text{ name, name, name }, style.type, style.getItemId, style.advancement,
+        LOGIC_NONE, RHT_NONE, static_cast<uint16_t>(randoGet), style.objectId, style.gid, TEXT_RANDOMIZER_CUSTOM_ITEM,
+        0x80, style.chestAnimation, style.category, MOD_RANDOMIZER, Text{ "the ", "the ", "the " }, "%g");
     Rando::StaticData::itemNameToEnum[name] = static_cast<RandomizerGet>(randoGet);
     return static_cast<RandomizerGet>(randoGet);
 }
 
 void RegisterDungeonItems(int32_t dungeonIndex, const Json& def) {
-    static const ItemStyle kSmallKey = { "Small Key",          ITEMTYPE_SMALLKEY,       GI_KEY_SMALL, OBJECT_GI_KEY,
-                                         GID_KEY_SMALL,        ITEM_CATEGORY_SMALL_KEY, CHEST_ANIM_SHORT, true };
-    static const ItemStyle kBossKey = { "Boss Key",          ITEMTYPE_BOSSKEY,       GI_KEY_BOSS, OBJECT_GI_BOSSKEY,
-                                        GID_KEY_BOSS,        ITEM_CATEGORY_BOSS_KEY, CHEST_ANIM_LONG, true };
-    static const ItemStyle kMap = { "Map",           ITEMTYPE_MAP,         GI_MAP, OBJECT_GI_MAP,
+    static const ItemStyle kSmallKey = { "Small Key",   ITEMTYPE_SMALLKEY,       GI_KEY_SMALL,     OBJECT_GI_KEY,
+                                         GID_KEY_SMALL, ITEM_CATEGORY_SMALL_KEY, CHEST_ANIM_SHORT, true };
+    static const ItemStyle kBossKey = { "Boss Key",   ITEMTYPE_BOSSKEY,       GI_KEY_BOSS,     OBJECT_GI_BOSSKEY,
+                                        GID_KEY_BOSS, ITEM_CATEGORY_BOSS_KEY, CHEST_ANIM_LONG, true };
+    static const ItemStyle kMap = { "Map",           ITEMTYPE_MAP,         GI_MAP,          OBJECT_GI_MAP,
                                     GID_DUNGEON_MAP, ITEM_CATEGORY_LESSER, CHEST_ANIM_LONG, false };
-    static const ItemStyle kCompass = { "Compass",   ITEMTYPE_COMPASS,     GI_COMPASS, OBJECT_GI_COMPASS,
+    static const ItemStyle kCompass = { "Compass",   ITEMTYPE_COMPASS,     GI_COMPASS,      OBJECT_GI_COMPASS,
                                         GID_COMPASS, ITEM_CATEGORY_LESSER, CHEST_ANIM_LONG, false };
     ModDungeon& dungeon = sDungeons[dungeonIndex];
     dungeon.smallKeyCount = static_cast<uint8_t>(SOH::Unbound::Field(def, "smallKeys", 0));
@@ -353,9 +352,9 @@ void AddCheck(int32_t regionIndex, const std::string& checkName, const Json& def
     check.flag = flag;
     const ActorID actor = isChest ? ACTOR_EN_BOX : ACTOR_EN_ITEM00;
     const uint8_t spoilerScene = static_cast<uint8_t>(scene);
-    const Rando::SpoilerCollectionCheck collection = isChest
-                                                         ? Rando::SpoilerCollectionCheck::Chest(spoilerScene, flag)
-                                                         : Rando::SpoilerCollectionCheck::Collectable(spoilerScene, flag);
+    const Rando::SpoilerCollectionCheck collection =
+        isChest ? Rando::SpoilerCollectionCheck::Chest(spoilerScene, flag)
+                : Rando::SpoilerCollectionCheck::Collectable(spoilerScene, flag);
     check.location = Rando::Location(rc, RCQUEST_BOTH, RCTYPE_STANDARD, RCAREA_INVALID, actor,
                                      static_cast<SceneID>(scene), params, checkName, spoilerName, RHT_NONE,
                                      ParseVanillaItem(&dungeon, check.vanillaText, dungeon.key), false, collection);
@@ -409,8 +408,9 @@ bool RegisterOverworldCheck(const std::string& key, const Json& def) {
     const Json& position = SOH::Unbound::SubArray(def, "position");
     const bool hasPosition = position.size() >= 3 && position[0].is_number() && position[2].is_number();
     if (checkType == nullptr || !region.has_value() || !hasPosition) {
-        SPDLOG_ERROR("[DungeonRegistry] check '{}' needs a known \"type\", a vanilla \"region\" (RR_*) and a \"position\"",
-                     name);
+        SPDLOG_ERROR(
+            "[DungeonRegistry] check '{}' needs a known \"type\", a vanilla \"region\" (RR_*) and a \"position\"",
+            name);
         return false;
     }
     const int16_t scene = ResolveScene(StringField(def, "scene"), name);
@@ -433,7 +433,8 @@ bool RegisterOverworldCheck(const std::string& key, const Json& def) {
     check.vanillaRegion = *region;
     check.randoInf = randoInf;
     check.shuffleOption = StringField(def, "shuffleOption");
-    const auto collection = Rando::SpoilerCollectionCheck::RandomizerInf(static_cast<uint16_t>(RAND_INF_MAX + randoInf));
+    const auto collection =
+        Rando::SpoilerCollectionCheck::RandomizerInf(static_cast<uint16_t>(RAND_INF_MAX + randoInf));
     check.location = Rando::Location(rc, RCQUEST_BOTH, checkType->type, FindSceneArea(scene), actor,
                                      static_cast<SceneID>(scene), params, name, name, RHT_NONE,
                                      ParseVanillaItem(nullptr, check.vanillaText, name), false, collection);
@@ -555,7 +556,8 @@ bool RegisterDungeon(const std::string& key, const Json& def) {
         SPDLOG_ERROR("[DungeonRegistry] dungeon '{}' names no registered scene", key);
         return false;
     }
-    std::optional<RandomizerRegion> overworld = RandoEnumFromName<RandomizerRegion>(StringField(def, "overworldRegion"));
+    std::optional<RandomizerRegion> overworld =
+        RandoEnumFromName<RandomizerRegion>(StringField(def, "overworldRegion"));
     if (!overworld.has_value()) {
         SPDLOG_ERROR("[DungeonRegistry] dungeon '{}' needs a vanilla \"overworldRegion\" (RR_*)", key);
         return false;
@@ -717,8 +719,8 @@ void SaveState(const SaveContext& saveContext, int, bool) {
         const bool isSwapped = static_cast<int32_t>(index) == sSwappedDungeon;
         SaveManager::Instance->SaveStruct("", [&dungeon, isSwapped]() {
             SaveManager::Instance->SaveData("key", dungeon.key);
-            SaveManager::Instance->SaveData(
-                "heldKeys", isSwapped ? gSaveContext.inventory.dungeonKeys[KeySlot] : dungeon.heldKeys);
+            SaveManager::Instance->SaveData("heldKeys",
+                                            isSwapped ? gSaveContext.inventory.dungeonKeys[KeySlot] : dungeon.heldKeys);
             SaveManager::Instance->SaveData("receivedKeys", dungeon.receivedKeys);
             SaveManager::Instance->SaveData("items",
                                             isSwapped ? gSaveContext.inventory.dungeonItems[KeySlot] : dungeon.items);
@@ -838,22 +840,23 @@ void DungeonRegistry_AddRegions() {
         const ModRegion& region = sRegions[index];
         std::vector<EventAccess> events;
         for (int32_t event : region.events) {
-            events.push_back(EventAccess(static_cast<LogicVal>(EventBase + event), sEvents[event].name,
-                                         [] { return true; }, sEvents[event].logicText));
+            events.push_back(EventAccess(
+                static_cast<LogicVal>(EventBase + event), sEvents[event].name, [] { return true; },
+                sEvents[event].logicText));
         }
         std::vector<LocationAccess> locations;
         for (int32_t check : region.checks) {
-            locations.push_back(LocationAccess(static_cast<RandomizerCheck>(CheckBase + check), [] { return true; },
-                                               sChecks[check].logicText));
+            locations.push_back(LocationAccess(
+                static_cast<RandomizerCheck>(CheckBase + check), [] { return true; }, sChecks[check].logicText));
         }
         std::list<Rando::Entrance> exits;
         for (int32_t exit : region.exits) {
-            exits.push_back(Rando::Entrance(static_cast<RandomizerRegion>(sExits[exit].to), [] { return true; },
-                                            sExits[exit].logicText));
+            exits.push_back(Rando::Entrance(
+                static_cast<RandomizerRegion>(sExits[exit].to), [] { return true; }, sExits[exit].logicText));
         }
-        areaTable[RR_MAX + index] = Region(sDungeons[region.dungeon].name + " " + region.name,
-                                           static_cast<SceneID>(region.scene), false, { RA_NONE }, events,
-                                           locations, exits);
+        areaTable[RR_MAX + index] =
+            Region(sDungeons[region.dungeon].name + " " + region.name, static_cast<SceneID>(region.scene), false,
+                   { RA_NONE }, events, locations, exits);
     }
     for (const ModDungeon& dungeon : sDungeons) {
         if (dungeon.entryRegion == RR_NONE) {
@@ -865,8 +868,8 @@ void DungeonRegistry_AddRegions() {
     for (size_t index = 0; index < sChecks.size(); index++) {
         const ModCheck& check = sChecks[index];
         if (check.vanillaRegion != RR_NONE) {
-            areaTable[check.vanillaRegion].locations.push_back(
-                LocationAccess(static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
+            areaTable[check.vanillaRegion].locations.push_back(LocationAccess(
+                static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
         }
     }
 }

@@ -151,8 +151,7 @@ void RandoLogic_IndexWorld();
 bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate);
 bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
                                  const std::function<bool()>& evaluate);
-bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition,
-                              const std::function<bool()>& evaluate);
+bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, const std::function<bool()>& evaluate);
 #endif
 
 #define LOGIC_MOD_GRANTS(name)                                                          \
@@ -160,14 +159,14 @@ bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition,
         return true;                                                                    \
     }
 
-#define LOGIC_MOD_ITEM_GRANTS(item)                                                   \
+#define LOGIC_MOD_ITEM_GRANTS(item)                                                         \
     if (gRandoLogicHasItemGrants && RandoLogic_IsItemGranted(static_cast<int32_t>(item))) { \
-        return true;                                                                  \
+        return true;                                                                        \
     }
 
-#define LOGIC_MOD_ENEMY_GRANTS(enemy)                                                        \
+#define LOGIC_MOD_ENEMY_GRANTS(enemy)                                                              \
     if (gRandoLogicHasEnemyGrants && RandoLogic_IsEnemyKillGranted(static_cast<int32_t>(enemy))) { \
-        return true;                                                                         \
+        return true;                                                                               \
     }
 
 #endif

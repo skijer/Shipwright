@@ -313,8 +313,8 @@ static bool IsTimedRoom(bool mq, s16 sceneNum, s16 roomNum) {
 
 static bool IsEnemyAllowedToSpawn(s16 sceneNum, s16 roomNum, EnemyEntry enemy, s16 posY, bool fromBari) {
     bool mq = ResourceMgr_IsSceneMasterQuest(sceneNum);
-    bool excludedFromClearRooms = IsExcludedFromClearRooms(enemy.id, enemy.params) ||
-                                  (enemy.customFlags & SOH_ACTOR_ENEMY_NOT_IN_CLEAR_ROOMS);
+    bool excludedFromClearRooms =
+        IsExcludedFromClearRooms(enemy.id, enemy.params) || (enemy.customFlags & SOH_ACTOR_ENEMY_NOT_IN_CLEAR_ROOMS);
     bool excludedFromTimedRooms = excludedFromClearRooms || IsExcludedFromTimedRooms(enemy.id, enemy.params) ||
                                   (enemy.customFlags & SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS);
 

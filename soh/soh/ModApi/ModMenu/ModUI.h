@@ -24,7 +24,8 @@ bool ModUI_ListBox(const char* label, int32_t* selected, const char* const* item
 bool ModUI_BeginListBox(const char* label, float width, float height);
 void ModUI_EndListBox(void);
 bool ModUI_InputText(const char* label, char* buffer, uint32_t capacity, uint32_t flags);
-bool ModUI_InputTextMultiline(const char* label, char* buffer, uint32_t capacity, float width, float height, uint32_t flags);
+bool ModUI_InputTextMultiline(const char* label, char* buffer, uint32_t capacity, float width, float height,
+                              uint32_t flags);
 bool ModUI_InputTextWithHint(const char* label, const char* hint, char* buffer, uint32_t capacity, uint32_t flags);
 bool ModUI_InputFloat(const char* label, float* value, float step, float fastStep);
 bool ModUI_InputDouble(const char* label, double* value, double step, double fastStep);
@@ -44,8 +45,10 @@ void ModUI_TextColored(const float* rgba, const char* text);
 void ModUI_TextDisabled(const char* text);
 void ModUI_BulletText(const char* text);
 void ModUI_ProgressBar(float fraction, float width, float height, const char* overlay);
-void ModUI_PlotLines(const char* label, const float* values, int32_t count, float minimum, float maximum, float width, float height);
-void ModUI_PlotHistogram(const char* label, const float* values, int32_t count, float minimum, float maximum, float width, float height);
+void ModUI_PlotLines(const char* label, const float* values, int32_t count, float minimum, float maximum, float width,
+                     float height);
+void ModUI_PlotHistogram(const char* label, const float* values, int32_t count, float minimum, float maximum,
+                         float width, float height);
 void ModUI_Image(uintptr_t texture, float width, float height);
 bool ModUI_ImageButton(const char* id, uintptr_t texture, float width, float height);
 bool ModUI_BeginWindow(const char* name, bool* open, uint32_t flags);

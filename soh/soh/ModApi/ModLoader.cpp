@@ -132,7 +132,8 @@ class ModLibrary {
         const DWORD loadError = mHandle == nullptr ? GetLastError() : ERROR_SUCCESS;
         SetThreadErrorMode(previousErrorMode, nullptr);
         if (loadError == ERROR_PROC_NOT_FOUND) {
-            SPDLOG_ERROR("[ModApi] The mod imports a function this game does not export; rebuild it with this game's SDK");
+            SPDLOG_ERROR(
+                "[ModApi] The mod imports a function this game does not export; rebuild it with this game's SDK");
         }
         mFileToDelete = path;
 #elif defined(__APPLE__) || defined(__linux__)

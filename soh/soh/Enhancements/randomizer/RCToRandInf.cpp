@@ -6,7 +6,8 @@
 bool IdentifyCheck(CheckIdentity* id, Rando::Location* loc, bool allowUnknown) {
     // SOH [Unbound] Mod checks carry their own flag above RAND_INF_MAX instead of an entry in this table.
     if (loc != nullptr && DungeonRegistry_IsModCheck(loc->GetRandomizerCheck())) {
-        id->randomizerInf = static_cast<RandomizerInf>(DungeonRegistry_GetCheckRandomizerInf(loc->GetRandomizerCheck()));
+        id->randomizerInf =
+            static_cast<RandomizerInf>(DungeonRegistry_GetCheckRandomizerInf(loc->GetRandomizerCheck()));
         id->randomizerCheck = loc->GetRandomizerCheck();
         return true;
     }

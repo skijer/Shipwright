@@ -1887,7 +1887,8 @@ u8 Item_Give(PlayState* play, u8 item) {
     if (GameInteractor_ExecuteOnResolveItemGive(play, &item)) {
         return ITEM_NONE;
     }
-    if(ProgressiveItems_GiveVanilla(item))return Return_Item(item, MOD_NONE, ITEM_NONE);
+    if (ProgressiveItems_GiveVanilla(item))
+        return Return_Item(item, MOD_NONE, ITEM_NONE);
 
     // prevents getting sticks without the bag in case something got missed
     if (IS_RANDO && (item == ITEM_STICK || item == ITEM_STICKS_5 || item == ITEM_STICKS_10) &&

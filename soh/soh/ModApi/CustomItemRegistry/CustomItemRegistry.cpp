@@ -303,10 +303,10 @@ int32_t EquipCommand(std::shared_ptr<Ship::Console> console, std::vector<std::st
 
 void RegisterConsole() {
     Ship::Context::GetRawInstance()->GetConsole()->AddCommand("equip", { EquipCommand,
-                                                                      "Equips an owned custom item on a button",
-                                                                      { { "custom_item", Ship::ArgumentType::TEXT },
-                                                                        { "key", Ship::ArgumentType::TEXT },
-                                                                        { "button", Ship::ArgumentType::TEXT } } });
+                                                                         "Equips an owned custom item on a button",
+                                                                         { { "custom_item", Ship::ArgumentType::TEXT },
+                                                                           { "key", Ship::ArgumentType::TEXT },
+                                                                           { "button", Ship::ArgumentType::TEXT } } });
     Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
         "give", { [](std::shared_ptr<Ship::Console>, std::vector<std::string> args, std::string* output) -> int32_t {
                      if (args.size() == 2) {
@@ -567,7 +567,8 @@ SOHCustomItemDefinition BuildPickupDefinition(const SOHCustomPickupVariant& vari
     definition.flags = SOH_CUSTOM_ITEM_INSTANT;
     definition.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO | SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
     definition.iconPath = variant.iconPath != nullptr ? variant.iconPath : parent.iconPath;
-    definition.getItemModelPath = variant.getItemModelPath != nullptr ? variant.getItemModelPath : parent.getItemModelPath;
+    definition.getItemModelPath =
+        variant.getItemModelPath != nullptr ? variant.getItemModelPath : parent.getItemModelPath;
     definition.getItemText = variant.getItemText != nullptr ? variant.getItemText : parent.getItemText;
     definition.getItemEntry = parent.getItemEntry;
     if (variant.getItemModelPath != nullptr) {
@@ -932,7 +933,7 @@ static bool IsWornByOtherPlayer(Player* player, const char* key) {
     const char* const* wornKeys = nullptr;
     uint32_t wornCount = 0;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
-                                                                                            &wornCount);
+                                                                                           &wornCount);
     for (uint32_t index = 0; index < wornCount; index++) {
         if (std::strcmp(wornKeys[index], key) == 0) {
             return true;
@@ -1152,8 +1153,7 @@ static const char* ResolveOtherPlayerHeldKey(Player* player) {
 static void DrawOtherPlayerHeld(Player* player, PlayState* play) {
     const char* key = ResolveOtherPlayerHeldKey(player);
     const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
-    if (definition != nullptr && definition->appearance.modelPath == nullptr &&
-        definition->heldModelPath != nullptr) {
+    if (definition != nullptr && definition->appearance.modelPath == nullptr && definition->heldModelPath != nullptr) {
         DrawModelPath(play, definition->heldModelPath, false);
     }
 }
@@ -1208,7 +1208,7 @@ static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t l
     const char* const* wornKeys = nullptr;
     uint32_t wornCount = 0;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
-                                                                                            &wornCount);
+                                                                                           &wornCount);
     for (uint32_t index = 0; index < wornCount; index++) {
         DrawAppearanceAtLimb(play, player, limbIndex, wornKeys[index], PLAYER_LIMB_HEAD);
     }
@@ -1270,18 +1270,18 @@ bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool auto
 }
 
 static bool SkipCustomGetItem(int mode, GetItemCategory category) {
-    return mode == SGIA_ALL || (mode == SGIA_JUNK &&
-           (category == ITEM_CATEGORY_JUNK || category == ITEM_CATEGORY_SKULLTULA_TOKEN ||
-            category == ITEM_CATEGORY_HEALTH || category == ITEM_CATEGORY_LESSER));
+    return mode == SGIA_ALL ||
+           (mode == SGIA_JUNK && (category == ITEM_CATEGORY_JUNK || category == ITEM_CATEGORY_SKULLTULA_TOKEN ||
+                                  category == ITEM_CATEGORY_HEALTH || category == ITEM_CATEGORY_LESSER));
 }
 
 static bool CanReceiveFastCustomItem(PlayState* play) {
     Player* player = GET_PLAYER(play);
     return player != nullptr && !Player_InBlockingCsMode(play, player) &&
            !(player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_CARRYING_ACTOR |
-             PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
-             PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
-             PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_DEAD)) &&
+                                    PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                                    PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+                                    PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_DEAD)) &&
            Player_GetExplosiveHeld(player) < 0;
 }
 
@@ -1291,10 +1291,11 @@ bool CustomItemRegistry_Give(PlayState* play, const char* key) {
     if (play == nullptr || definition == nullptr) {
         return false;
     }
-    if (IS_RANDO && SkipCustomGetItem(
-            CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
-            definition->getItemEntry.getItemCategory)) {
-        if (!CanReceiveFastCustomItem(play)) return false;
+    if (IS_RANDO &&
+        SkipCustomGetItem(CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
+                          definition->getItemEntry.getItemCategory)) {
+        if (!CanReceiveFastCustomItem(play))
+            return false;
         GetItemEntry entry = definition->getItemEntry;
         return CustomItemRegistry_ReceiveFastGetItem(nullptr, play, &entry);
     }
@@ -1332,13 +1333,15 @@ bool CustomItemRegistry_HasMessageItemIcon(void) {
            CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX) != nullptr;
 }
 
-static const SOHCustomItemDefinition* ResolveCustomGetItemDefinition(Actor* actor, PlayState* play,
-                                                                      GetItemEntry* entry, bool allowPending = true) {
+static const SOHCustomItemDefinition* ResolveCustomGetItemDefinition(Actor* actor, PlayState* play, GetItemEntry* entry,
+                                                                     bool allowPending = true) {
     const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
     if (key == nullptr) {
         const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
-        if (named != nullptr) key = named->key;
-        else if (allowPending && !sPendingGetItem.empty()) key = sPendingGetItem.c_str();
+        if (named != nullptr)
+            key = named->key;
+        else if (allowPending && !sPendingGetItem.empty())
+            key = sPendingGetItem.c_str();
     }
     if (const char* progressive = ProgressiveItems_ResolvePickup(key, UINT16_MAX)) {
         key = progressive;
@@ -1367,7 +1370,8 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
         return true;
     }
     const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry);
-    if (definition == nullptr) return false;
+    if (definition == nullptr)
+        return false;
     sPendingGetItem = definition->key;
     sMessageItem = definition->key;
     *entry = definition->getItemEntry;
@@ -1375,24 +1379,27 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
 }
 
 bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
-    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry)) return false;
+    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry))
+        return false;
     const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry, false);
-    if (definition == nullptr) return false;
+    if (definition == nullptr)
+        return false;
     // Freeze the received stage before its callback advances progression. Never call
     // Item_Give(ITEM_CUSTOM), whose native ID cannot identify a custom pickup.
     *entry = definition->getItemEntry;
     CustomItemRegistry_ReceiveGetItem(definition->key);
     GameInteractor_ExecuteOnItemReceiveHooks(*entry);
     const char* label = definition->displayName;
-    if (label == nullptr || label[0] == '\0') label = definition->key;
-    std::string prefix = gSaveContext.language == LANGUAGE_FRA ? "Vous obtenez: " :
-                         gSaveContext.language == LANGUAGE_GER ? "Du erhältst: " : "You found ";
-    const char* icon = definition->iconPath == nullptr ? nullptr :
-                       sFastPickupIconPaths.emplace(definition->iconPath).first->c_str();
-    Notification::Emit({.itemIcon = icon, .message = prefix, .suffix = label});
+    if (label == nullptr || label[0] == '\0')
+        label = definition->key;
+    std::string prefix = gSaveContext.language == LANGUAGE_FRA   ? "Vous obtenez: "
+                         : gSaveContext.language == LANGUAGE_GER ? "Du erhältst: "
+                                                                 : "You found ";
+    const char* icon =
+        definition->iconPath == nullptr ? nullptr : sFastPickupIconPaths.emplace(definition->iconPath).first->c_str();
+    Notification::Emit({ .itemIcon = icon, .message = prefix, .suffix = label });
     return true;
 }
-
 
 const SOHCustomItemDefinition* CustomItemRegistry_GetPendingGetItem(void) {
     return FindDefinition(sPendingGetItem);
@@ -1414,7 +1421,8 @@ bool CustomItemRegistry_UpdateDrop(Actor* actor, PlayState* play) {
     }
     if (Actor_HasParent(actor, play)) {
         Actor_Kill(actor);
-    } else if (IS_RANDO && SkipCustomGetItem(
+    } else if (IS_RANDO &&
+               SkipCustomGetItem(
                    CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
                    definition->getItemEntry.getItemCategory)) {
         // Same range and eligibility as the normal actor-driven get-item offer.

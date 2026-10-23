@@ -53,7 +53,8 @@ static void StripDirectives(Json& doc) {
 }
 
 Json LoadMergedJson(const std::string& path) {
-    auto layers = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->LoadFileFromAllLayers(path);
+    auto layers =
+        Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->LoadFileFromAllLayers(path);
     Json merged;
     if (layers.size() > 1) {
         SPDLOG_DEBUG("[Unbound] {}: merging {} archive layers", path, layers.size());

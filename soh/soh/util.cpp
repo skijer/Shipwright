@@ -9,7 +9,6 @@
 
 #include <spdlog/spdlog.h>
 
-
 extern "C" {
 #include <variables.h>
 }

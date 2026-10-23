@@ -866,11 +866,15 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 gSPGrayscale(POLY_OPA_DISP++, false);
                 continue;
             } else if (((u32)i == 0) && (k == 2) && (gSaveContext.bgsFlag != 0)) {
-                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, KaleidoScope_ResolveEquipmentIcon(play, ITEM_SWORD_BGS, gItemIconSwordBiggoronTex), 32, 32, point);
+                KaleidoScope_DrawQuadTextureRGBA32(
+                    play->state.gfxCtx,
+                    KaleidoScope_ResolveEquipmentIcon(play, ITEM_SWORD_BGS, gItemIconSwordBiggoronTex), 32, 32, point);
             } else if ((i == 0) && (k == 2) && (gBitFlags[bit + 1] & gSaveContext.inventory.equipment)) {
                 KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, gItemIconBrokenGiantsKnifeTex, 32, 32, point);
             } else if (gBitFlags[bit] & gSaveContext.inventory.equipment) {
-                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, KaleidoScope_ResolveEquipmentIcon(play, itemId, gItemIcons[itemId]), 32, 32, point);
+                KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx,
+                                                   KaleidoScope_ResolveEquipmentIcon(play, itemId, gItemIcons[itemId]),
+                                                   32, 32, point);
             }
             gSPGrayscale(POLY_OPA_DISP++, false);
         }

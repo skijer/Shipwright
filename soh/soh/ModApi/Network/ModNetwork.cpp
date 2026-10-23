@@ -74,8 +74,7 @@ bool IsConnected() {
 }
 
 bool IsHost() {
-    return IsConnected() && Backend()->ownClientId != 0 &&
-           Backend()->roomState.ownerClientId == Backend()->ownClientId;
+    return IsConnected() && Backend()->ownClientId != 0 && Backend()->roomState.ownerClientId == Backend()->ownClientId;
 }
 
 std::string OwnTeamId() {
@@ -369,8 +368,8 @@ extern "C" bool ModNetwork_RegisterChannel(const char* channel, uint16_t version
     }
     const Channel* existing = FindChannel(channel);
     if (existing != nullptr) {
-        SPDLOG_ERROR("[ModNetwork] Mod '{}' tried to register '{}', which mod '{}' already owns", sCurrentMod,
-                     channel, existing->owner);
+        SPDLOG_ERROR("[ModNetwork] Mod '{}' tried to register '{}', which mod '{}' already owns", sCurrentMod, channel,
+                     existing->owner);
         return false;
     }
     sChannels[channel] = { sCurrentMod, version, onMessage };
@@ -495,7 +494,8 @@ extern "C" uint32_t ModNetwork_GetPeerIdForActor(const Actor* actor) {
 }
 
 extern "C" bool ModNetwork_RequestTeleport(uint32_t clientId) {
-    if (!MayUseNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS())) || !IsConnected() || !Backend()->CanTeleportTo(clientId)) {
+    if (!MayUseNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS())) || !IsConnected() ||
+        !Backend()->CanTeleportTo(clientId)) {
         return false;
     }
     Backend()->SendPacket_RequestTeleport(clientId);
@@ -516,7 +516,8 @@ extern "C" bool ModNetwork_SummonPeer(uint32_t clientId) {
 }
 
 extern "C" bool ModNetwork_StartRoomCountdown(const char* owner, uint16_t seconds) {
-    if (!MayUseNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS())) || owner == nullptr || owner[0] == '\0' || std::strlen(owner) >= SOH_NET_MAX_CHANNEL || !IsHost() ||
+    if (!MayUseNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS())) || owner == nullptr || owner[0] == '\0' ||
+        std::strlen(owner) >= SOH_NET_MAX_CHANNEL || !IsHost() ||
         !Timers_StartCountdown(CountdownOwner(owner).c_str(), seconds)) {
         return false;
     }

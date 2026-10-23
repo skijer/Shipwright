@@ -151,8 +151,8 @@ bool IsCUpEquipModifier() {
 }
 
 void OpenPauseTextbox(PlayState* play, uint16_t textId) {
-    Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
     Message_StartTextbox(play, textId, nullptr);
     play->pauseCtx.unk_1E4 = 10;
 }

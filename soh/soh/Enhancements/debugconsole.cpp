@@ -10,7 +10,6 @@
 #include <vector>
 #include <string>
 
-
 #include "soh/OTRGlobals.h"
 #include <soh/Enhancements/item-tables/ItemTableManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"

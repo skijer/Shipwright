@@ -258,8 +258,8 @@ class LogicExprParser {
             return ParseCall(name);
         }
         static const std::pair<const char*, Op> kWords[] = {
-            { "true", Op::True },   { "false", Op::False }, { "child", Op::Child },     { "adult", Op::Adult },
-            { "day", Op::Day },     { "night", Op::Night }, { "bosskey", Op::BossKey },
+            { "true", Op::True }, { "false", Op::False }, { "child", Op::Child },     { "adult", Op::Adult },
+            { "day", Op::Day },   { "night", Op::Night }, { "bosskey", Op::BossKey },
         };
         for (const auto& [word, op] : kWords) {
             if (name == word) {

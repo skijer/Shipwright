@@ -42,8 +42,8 @@ const VanillaScene sVanillaScenes[] = {
 #undef DEFINE_SCENE
 #undef none
 
-// SOH [Unbound] Vanilla's horse scenes, formerly the allow-list inside Horse_CanSpawn (func_8006CFC0) in z_horse.c. Seeding
-// them here makes SceneDB_HorseAllowed the single answer for vanilla and custom scenes alike.
+// SOH [Unbound] Vanilla's horse scenes, formerly the allow-list inside Horse_CanSpawn (func_8006CFC0) in z_horse.c.
+// Seeding them here makes SceneDB_HorseAllowed the single answer for vanilla and custom scenes alike.
 constexpr int16_t sVanillaHorseScenes[] = { SCENE_HYRULE_FIELD, SCENE_LAKE_HYLIA, SCENE_GERUDO_VALLEY,
                                             SCENE_GERUDOS_FORTRESS, SCENE_LON_LON_RANCH };
 
