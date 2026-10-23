@@ -457,6 +457,13 @@ class BuildCatalogTests(unittest.TestCase):
         self.assertEqual(self.plan(catalog, {"whip": "h2"}, approved=True, held={"network"})["publish"], ["whip"])
         self.assertEqual(self.plan(catalog, {"whip": "h2"}, trusted=True)["publish"], ["whip"])
 
+    def test_a_source_with_nothing_published_is_still_a_first_request(self):
+        catalog = build_catalog.empty_catalog()
+        catalog["sources"]["7"] = {"permissions": [], "repository": "someone/mods", "directory": "mods",
+                                   "author": "someone", "commit": "c" * 40}
+        self.package("whip", ["files"])
+        self.assertEqual(self.plan(catalog, {"whip": "h1"})["publish"], ["whip"])
+
     def test_a_name_belongs_to_the_issue_that_published_it(self):
         catalog = build_catalog.empty_catalog()
         catalog["mods"]["whip"] = {"issue": 3, "builds": {}}

@@ -75,7 +75,9 @@ def file_hash(path):
 def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions, major):
     """Which built mods to sign and publish, which are already published, and which wait or are refused."""
     source = catalog["sources"].get(str(issue))
-    allowed = set(source["permissions"]) if source else None
+    # Until an issue has a mod in the store, everything it asks for is part of the approval it got first.
+    published = any(mod["issue"] == issue for mod in catalog["mods"].values())
+    allowed = set(source["permissions"]) if source and published else None
     result = {"modapi": major, "publish": [], "unchanged": [], "held": {}, "rejected": {}}
     for package in sorted(packages):
         mod_id = package.stem
