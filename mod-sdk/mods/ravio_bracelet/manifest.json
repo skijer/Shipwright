@@ -1,0 +1,6 @@
+{
+    "name": "ravio_bracelet",
+    "author": "Skijer",
+    "version": "1.0.4",
+    "description": "Ravio's Bracelet makes the native magic bar purple and regenerates magic over time. Keeps existing magic capacity and spell costs."
+}

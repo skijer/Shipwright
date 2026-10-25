@@ -86,16 +86,16 @@ static const RemainsDefinition sRemains[REMAINS_COUNT] = {
     },
 };
 
-static const ALIGN_ASSET(2) char sSonataIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sLullabyIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sBossaNovaIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sElegyIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sOathIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sHealingIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sSoaringIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sFugueIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sBalladIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
-static const ALIGN_ASSET(2) char sCommandIcon[] = "__OTR__icon_item_static_yar/gItemIconSongNoteTex";
+static const ALIGN_ASSET(2) char sSonataIcon[] = "__OTR__textures/icon_item_custom/gItemIconSonataOfAwakeningTex";
+static const ALIGN_ASSET(2) char sLullabyIcon[] = "__OTR__textures/icon_item_custom/gItemIconGoronLullabyTex";
+static const ALIGN_ASSET(2) char sBossaNovaIcon[] = "__OTR__textures/icon_item_custom/gItemIconNewWaveBossaNovaTex";
+static const ALIGN_ASSET(2) char sElegyIcon[] = "__OTR__textures/icon_item_custom/gItemIconElegyOfEmptinessTex";
+static const ALIGN_ASSET(2) char sOathIcon[] = "__OTR__textures/icon_item_custom/gItemIconOathToOrderTex";
+static const ALIGN_ASSET(2) char sHealingIcon[] = "__OTR__textures/icon_item_custom/gItemIconSongOfHealingTex";
+static const ALIGN_ASSET(2) char sSoaringIcon[] = "__OTR__textures/icon_item_custom/gItemIconSongOfSoaringTex";
+static const ALIGN_ASSET(2) char sFugueIcon[] = "__OTR__textures/icon_item_custom/gItemIconFugueOfHomeTex";
+static const ALIGN_ASSET(2) char sBalladIcon[] = "__OTR__textures/icon_item_custom/gItemIconBalladOfHeroTex";
+static const ALIGN_ASSET(2) char sCommandIcon[] = "__OTR__textures/icon_item_custom/gItemIconCommandMelodyTex";
 
 // Majora's Mask names its own seven songs; the last three are NEI's and keep their names.
 static const ALIGN_ASSET(2) char sSonataName[] = "__OTR__item_name_static/gItemNameSonataOfAwakeningENGTex";
@@ -110,8 +110,7 @@ static const ALIGN_ASSET(2) char sBalladName[] = "__OTR__textures/item_name_cust
 static const ALIGN_ASSET(2) char sCommandName[] = "__OTR__textures/item_name_custom/gCommandMelodyNameTex";
 
 // The seven Majora's Mask melodies are the authoritative button sequences translated to Ocarina of
-// Time's pitches. The last three have no melody of their own yet: theirs are provisional and picked
-// so they collide with nothing vanilla teaches.
+// Time's pitches. The last three use the NEI branch's authoritative fingering.
 static const SongDefinition sSongs[] = {
     {
         "nei.mm_song_sonata",
@@ -183,27 +182,27 @@ static const SongDefinition sSongs[] = {
         sFugueIcon,
         sFugueName,
         6,
-        { NOTE_C_LEFT, NOTE_C_LEFT, NOTE_C_DOWN, NOTE_C_UP, NOTE_C_RIGHT, NOTE_A },
+        { NOTE_A, NOTE_C_DOWN, NOTE_C_RIGHT, NOTE_C_UP, NOTE_C_RIGHT, NOTE_C_LEFT },
         "You learned the %rFugue of Home%w! A song that remembers the way back better than you do.",
-        "%rFugue of Home&%w\xA1\xA1\xA1\xA2\xA1\x9F The ocarina answers it.",
+        "%rFugue of Home&%w\x9F\xA6\xA8\xA5\xA8\xA7 The ocarina answers it.",
     },
     {
         "nei.mm_song_ballad_of_hero",
         sBalladIcon,
         sBalladName,
-        6,
-        { NOTE_C_UP, NOTE_C_UP, NOTE_C_RIGHT, NOTE_C_DOWN, NOTE_C_LEFT, NOTE_A },
-        "You learned the %rBallad of Hero%w! Someone wrote down what you did and set it to six notes.",
-        "%rBallad of Hero&%w\xA2\xA2\xA1\xA1\xA1\x9F The ocarina answers it.",
+        7,
+        { NOTE_A, NOTE_C_DOWN, NOTE_C_UP, NOTE_C_LEFT, NOTE_C_RIGHT, NOTE_C_LEFT, NOTE_C_RIGHT },
+        "You learned the %rBallad of Hero%w! Someone wrote down what you did and set it to seven notes.",
+        "%rBallad of Hero&%w\x9F\xA6\xA5\xA7\xA8\xA7\xA8 The ocarina answers it.",
     },
     {
         "nei.mm_song_command_melody",
         sCommandIcon,
         sCommandName,
-        6,
-        { NOTE_A, NOTE_A, NOTE_C_UP, NOTE_C_RIGHT, NOTE_C_LEFT, NOTE_C_DOWN },
+        8,
+        { NOTE_A, NOTE_C_LEFT, NOTE_A, NOTE_C_RIGHT, NOTE_A, NOTE_C_LEFT, NOTE_A, NOTE_C_RIGHT },
         "You learned the %rCommand Melody%w! Play it and something else takes its orders from you.",
-        "%rCommand Melody&%w\x9F\x9F\xA2\xA1\xA1\xA1 The ocarina answers it.",
+        "%rCommand Melody&%w\x9F\xA7\x9F\xA8\x9F\xA7\x9F\xA8 The ocarina answers it.",
     },
 };
 
@@ -213,7 +212,8 @@ static const char* const sRequiredHooks[] = {
     "OnPlayerUpdate",        "OnPlayerPostLimbDraw",       "OnPlayerResolveLimbDraw",
     "OnPlayerResolveAnim",   "OnPlayerResolveMotionScale", "OnPlayerActionHandler",
     "OnPlayerShieldBlocked", "OnActorDrawEnd", "OnActorUpdate",
-    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnOcarinaNote",         "OnLoadGame",
+    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnOcarinaNote", "OnLoadGame",
+    "OnKaleidoInput", "OnExitGame",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -222,6 +222,7 @@ static const SOHModApi* sApi;
 
 static u8 sPlayedNotes[SONG_MAX_NOTES];
 static s32 sPlayedCount;
+static u8 sLastPlayedPitch = OCARINA_PITCH_NONE;
 
 static s32 RemainsIndexForKey(const char* key) {
     for (s32 i = 0; i < REMAINS_COUNT; i++) {
@@ -280,17 +281,20 @@ static bool MatchesTail(const SongDefinition* song) {
 static void ForgetPlayedNotes(void) {
     memset(sPlayedNotes, OCARINA_PITCH_NONE, sizeof(sPlayedNotes));
     sPlayedCount = 0;
+    sLastPlayedPitch = OCARINA_PITCH_NONE;
 }
 
 #include "collect_behaviors.inc.c"
 #include "collect_background.inc.c"
+#include "collect_pause.inc.c"
 
 static void RecognizeSong(u8 note, f32 modulator, s8 bend) {
     // The hook also fires on release, where the note is invalid: dropping those is what keeps a
     // melody's two identical notes in a row from collapsing into one.
-    if ((gPlayState == NULL) || (note == OCARINA_PITCH_NONE)) {
-        return;
-    }
+    if (gPlayState == NULL) return;
+    if (note == OCARINA_PITCH_NONE) { sLastPlayedPitch = note; return; }
+    if (note == sLastPlayedPitch) return;
+    sLastPlayedPitch = note;
     memmove(sPlayedNotes, sPlayedNotes + 1, SONG_MAX_NOTES - 1);
     sPlayedNotes[SONG_MAX_NOTES - 1] = note;
     if (sPlayedCount < SONG_MAX_NOTES) {
@@ -369,6 +373,7 @@ static void RegisterSongs(void) {
     static const u8 cells[] = { 6, 7, 8, 9, 10, 13, 15, 14, 16, 12 };
     for (s32 i = 0; i < SONG_COUNT; i++) {
         const SongDefinition* source = &sSongs[i];
+        // Layout custom items are RGBA32, unlike MM's shared IA8 song-note texture.
         SOHCustomItemDefinition definition = Z64Items_Define(source->key, source->iconPath, source->namePath);
 
         Z64Items_SetPlacement(&definition, MM_COLLECTABLES_PAGE, cells[i], 0);
@@ -412,8 +417,6 @@ static void RegisterCollectablesLayout(void) {
         sApi->PlaceLayoutItem(sSongs[i].key, MM_LAYOUT_KEY, songCells[i]);
     }
     static const SOHLayoutVanilla shared[] = {
-        { "nei.mm_collectables.saria", MM_LAYOUT_KEY, SOH_LAYOUT_COLLECTABLES, QUEST_SONG_SARIA, 11 },
-        { "nei.mm_collectables.sun", MM_LAYOUT_KEY, SOH_LAYOUT_COLLECTABLES, QUEST_SONG_SUN, 17 },
         { "nei.mm_collectables.hearts", MM_LAYOUT_KEY, SOH_LAYOUT_COLLECTABLES, 24, 22 },
         { "nei.mm_collectables.strength", MM_LAYOUT_KEY, SOH_LAYOUT_EQUIPMENT, 8, 5 },
         { "nei.mm_collectables.scale", MM_LAYOUT_KEY, SOH_LAYOUT_EQUIPMENT, 12, 4 },
@@ -443,6 +446,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     RegisterCollectBehaviors();
     TwinRegister();
     SOH_REGISTER_HOOK(sApi,OnInterfaceDrawEnd,DrawMmQuestBackground);
+    RegisterCollectPause();
     SOH_REGISTER_HOOK(sApi, OnOcarinaNote, RecognizeSong);
     SOH_REGISTER_HOOK(sApi, OnLoadGame, StartFile);
 }

@@ -545,11 +545,11 @@ void Sw97_ArrowWind_Draw(Actor* thisx, PlayState* play) {
         Matrix_Translate(0.0f, -700.0f, 0.0f, MTXMODE_APPLY);
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, "../z_arrow_wind.c", 660),
                   G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, sSw97WindMatDL);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sSw97WindMatDL);
         gSPDisplayList(POLY_XLU_DISP++,
                        Gfx_TwoTexScroll(play->state.gfxCtx, 0, 511 - (stateFrames * 3) % 512, 0, 64, 32, 1,
                                         511 - (stateFrames * 15) % 512, 511 - (stateFrames * 5) % 512, 8, 16));
-        gSPDisplayList(POLY_XLU_DISP++, sSw97WindMdlDL);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sSw97WindMdlDL);
 
         CLOSE_DISPS(play->state.gfxCtx);
     }

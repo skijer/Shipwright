@@ -1,0 +1,24 @@
+{
+  "source_fps": {
+    "draw": 30,
+    "shoot": 30
+  },
+  "clips": {
+    "adult_draw": {
+      "frames": 61,
+      "values_per_frame": 67
+    },
+    "adult_shoot": {
+      "frames": 36,
+      "values_per_frame": 67
+    },
+    "child_draw": {
+      "frames": 61,
+      "values_per_frame": 67
+    },
+    "child_shoot": {
+      "frames": 36,
+      "values_per_frame": 67
+    }
+  }
+}

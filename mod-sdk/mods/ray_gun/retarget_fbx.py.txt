@@ -1,0 +1,106 @@
+"""Run in Blender background. Bake the supplied Mixamo FBX clips onto native Link rigs."""
+import bpy
+import struct
+import json
+import math
+import zipfile
+from pathlib import Path
+from mathutils import Matrix, Euler
+
+HERE=Path(__file__).resolve().parent
+ROOT=HERE.parents[3]
+ARCHIVE=ROOT/'Shipwright-unbound/x64/Release/oot.o2r'
+class Reader:
+    def __init__(self,data):self.data=data;self.pos=64
+    def read(self,fmt):
+        values=struct.unpack_from('<'+fmt,self.data,self.pos);self.pos+=struct.calcsize('<'+fmt);return values
+    def string(self):
+        n,=self.read('I');s=self.data[self.pos:self.pos+n].decode();self.pos+=n;return s
+def skeleton(archive,path):
+    r=Reader(archive.read(path));r.read('BBII');r.read('B');n,=r.read('I');names=[r.string() for _ in range(n)]
+    limbs=[]
+    for name in names:
+        r=Reader(archive.read(name));r.read('BB');r.string();r.read('HI');r.string();r.read('fffHHH')
+        for _ in range(4):r.string()
+        x,y,z,child,sibling=r.read('hhhBB');limbs.append(dict(name=name,pos=(x,y,z),child=child,sibling=sibling))
+    parents=[-1]*len(limbs)
+    def visit(i,p):
+        parents[i]=p
+        if limbs[i]['child']!=255:visit(limbs[i]['child'],i)
+        if limbs[i]['sibling']!=255:visit(limbs[i]['sibling'],p)
+    visit(0,-1)
+    return limbs,parents
+def world(pose,parents):
+    result=[None]*len(parents)
+    def get(i):
+        if result[i] is None:
+            m=Euler(tuple(v*math.pi/32768 for v in pose[(i+1)*3:(i+2)*3]),'XYZ').to_matrix()
+            result[i]=m if parents[i]<0 else get(parents[i])@m
+        return result[i]
+    return [get(i) for i in range(len(parents))]
+def resource_header():
+    h=bytearray(64);h[4:8]=b'APNO';struct.pack_into('<Q',h,12,0xDEADBEEFDEADBEEF);return h
+def write_clip(path,frames,template):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    # Native Link animation data resource (not an AnimationHeader resource).
+    path.write_bytes(template[:64]+struct.pack('<I',len(frames)*67)+b''.join(struct.pack('<67h',*f) for f in frames))
+
+archive=zipfile.ZipFile(ARCHIVE)
+native_header=archive.read('objects/gameplay_keep/gPlayerAnim_link_normal_wait_free')
+data_length,=struct.unpack_from('<I',native_header,70)
+data_path=native_header[74:74+data_length].decode().removeprefix('__OTR__')
+base=archive.read(data_path)
+idle=list(struct.unpack_from('<67h',base,68))
+mapping=['Hips','Hips','Hips','RightUpLeg','RightLeg','RightFoot','LeftUpLeg','LeftLeg','LeftFoot',
+         'Spine2','Head','Head','Neck','LeftArm','LeftForeArm','LeftHand','RightArm','RightForeArm','RightHand','Spine2','Spine2']
+# FBX import produces Blender Z-up. OoT uses Y-up and +Z forward.
+convert=Matrix(((1,0,0),(0,0,1),(0,-1,0)))
+source={};reference=None;fps={}
+for label,file in [('draw','Drawing Gun'),('shoot','Shooting')]:
+    bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
+    bpy.ops.import_scene.fbx(filepath=f'C:/Users/LENOVO/Downloads/{file}.fbx')
+    rig=next(o for o in bpy.context.scene.objects if o.type=='ARMATURE')
+    action=rig.animation_data.action;start,end=map(int,action.frame_range)
+    fps[label]=bpy.context.scene.render.fps
+    frames=[]
+    for f in range(start,end+1):
+        bpy.context.scene.frame_set(f)
+        pose=[]
+        for name in mapping:
+            bone=rig.pose.bones['mixamorig:'+name]
+            matrix=(rig.matrix_world@bone.matrix).to_3x3().normalized()
+            pose.append(convert@matrix@convert.inverted())
+        frames.append(pose)
+    source[label]=frames
+    if label=='draw':reference=frames[0]
+
+report=dict(source_fps=fps,clips={})
+socket=[]
+for age,obj,name in [('adult','boy','Adult'),('child','child','Child')]:
+    limbs,parents=skeleton(archive,f'objects/object_link_{obj}/gLink{name}Skel')
+    native=world(idle,parents)
+    baked={}
+    for label,frames in source.items():
+        result=[]
+        previous=[Euler(tuple(v*math.pi/32768 for v in idle[(i+1)*3:(i+2)*3]),'XYZ') for i in range(len(limbs))]
+        for frame in frames:
+            desired=[frame[i]@reference[i].transposed()@native[i] for i in range(len(limbs))]
+            values=idle.copy()
+            # Holding/drawing preserve locomotion. Shooting uses the complete source stance.
+            for i,parent in enumerate(parents):
+                if label!='shoot' and i<9:continue
+                matrix=desired[i] if parent<0 else desired[parent].transposed()@desired[i]
+                euler=matrix.to_euler('XYZ',previous[i]);previous[i]=euler
+                values[(i+1)*3:(i+2)*3]=[((round(v*32768/math.pi)+32768)%65536)-32768 for v in euler]
+            result.append(values)
+        baked[label]=result
+        write_clip(HERE/f'assets/misc/link_animetion/nei_ray_gun_{age}_{label}',result,base)
+        report['clips'][age+'_'+label]=dict(frames=len(result),values_per_frame=67)
+    draw_end=world(baked['draw'][-1],parents)
+    rotation=draw_end[18].transposed().to_euler('XYZ')
+    socket.append([((round(v*32768/math.pi)+32768)%65536)-32768 for v in rotation])
+    write_clip(HERE/f'assets/misc/link_animetion/nei_ray_gun_{age}_hold',[baked['draw'][-1]],base)
+(HERE/'gun_socket.inc.c').write_text('// Baked wrist -> forward barrel orientation.\nstatic const s16 sGunSocket[2][3] = {\n'+
+    ''.join('    { '+', '.join(map(str,v))+' },\n' for v in socket)+'};\n')
+(HERE/'retarget-report.json.txt').write_text(json.dumps(report,indent=2))
+print('RAY_GUN_RETARGET',report)

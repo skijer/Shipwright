@@ -1,7 +1,7 @@
 {
     "name": "mm_items",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "dependencies": ["mm_assets"],
     "description": "Majora's Mask items: the Gorons' Powder Keg, which flattens boulders and heavy blocks, and the Pictograph Box, which keeps one picture behind glass."
 }

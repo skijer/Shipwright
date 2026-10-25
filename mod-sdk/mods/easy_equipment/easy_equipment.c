@@ -403,8 +403,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     sPieceCount = EASY_VANILLA_COUNT;
     if (SOH_MOD_API_HAS(sApi,RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi,RegisterMenuWidget)) {
         static const char* modes[]={"Hold","Instant"};
-        sApi->RegisterMenuSidebar("Enhancements","Easy Equipment","gMods.Menu",1);
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Easy Equipment";
+        sApi->RegisterMenuSidebar("Mods","Equipment","gMods.Menu.Page",1);
+        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Equipment";
         w.type=SOH_MOD_MENU_COMBOBOX;w.label="Open equipment wheel";w.cvar="gMods.EasyEquipment.WheelMode";
         w.values=modes;w.valueCount=ARRAY_COUNT(modes);w.defaultInt=0;
         w.tooltip="Hold: tap toggles equipment, hold opens the wheel. Instant: press opens the wheel immediately. Release C to equip the highlighted piece; B cancels.";

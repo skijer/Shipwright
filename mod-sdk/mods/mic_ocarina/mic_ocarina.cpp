@@ -6,6 +6,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <libultraship/log/luslog.h>
 
 #include <atomic>
@@ -170,6 +171,24 @@ constexpr int kRecognisedSongs[] = {
     OCARINA_SONG_LULLABY, OCARINA_SONG_SUNS,   OCARINA_SONG_TIME,     OCARINA_SONG_STORMS,
 };
 
+constexpr int kCustomSongBase = 32;
+struct CustomSong { const char* key; int length; uint8_t buttons[8]; };
+constexpr CustomSong kCustomSongs[] = {
+#include "mm_song_catalog.inc.h"
+};
+constexpr int kCustomSongCount = sizeof(kCustomSongs) / sizeof(kCustomSongs[0]);
+std::atomic<uint32_t> sCustomOwned{0};
+std::atomic<bool> sFreePlay{false};
+std::atomic<int> sPendingCustomMatch{-1};
+thread_local bool sDispatchingCustomNotes = false;
+
+int SongLength(int song) {
+    return song >= kCustomSongBase ? kCustomSongs[song - kCustomSongBase].length : gOcarinaSongButtons[song].numButtons;
+}
+int SongButton(int song, int note) {
+    return song >= kCustomSongBase ? kCustomSongs[song - kCustomSongBase].buttons[note] : gOcarinaSongButtons[song].buttonsIndex[note];
+}
+
 float ComputeRms(const float* window, int count) {
     float sum = 0.0f;
     for (int i = 0; i < count; i++) {
@@ -313,6 +332,11 @@ void ResetTracker() {
 }
 
 bool IsSongAccepted(int songIndex) {
+    if (songIndex >= kCustomSongBase) {
+        const int custom = songIndex - kCustomSongBase;
+        return custom < kCustomSongCount && sFreePlay.load(std::memory_order_relaxed) &&
+               (sCustomOwned.load(std::memory_order_relaxed) & (1u << custom));
+    }
     if ((songIndex < sFirstSongIndex.load(std::memory_order_relaxed)) ||
         (songIndex >= sLastSongIndex.load(std::memory_order_relaxed))) {
         return false;
@@ -324,15 +348,14 @@ bool IsSongAccepted(int songIndex) {
 // transposition that best fits. Subtracting the mean residual IS that best fit,
 // and it is what makes the score independent of the key the player hums in.
 float PhraseError(const float* cents, int count, int songIndex) {
-    const OcarinaSongButtons& song = gOcarinaSongButtons[songIndex];
-    if ((count < 2) || (song.numButtons != count)) {
+    if ((count < 2) || (SongLength(songIndex) != count)) {
         return kNoMatchError;
     }
 
     float residual[kMaxPhraseNotes];
     float mean = 0.0f;
     for (int i = 0; i < count; i++) {
-        int degree = song.buttonsIndex[i];
+        int degree = SongButton(songIndex, i);
         if ((degree < OCARINA_BTN_A) || (degree > OCARINA_BTN_C_UP)) {
             return kNoMatchError;
         }
@@ -390,11 +413,13 @@ struct MatchCandidates {
 
 MatchCandidates RankSongs() {
     MatchCandidates ranked = { -1, kNoMatchError, kNoMatchError };
-    for (int songIndex : kRecognisedSongs) {
+    constexpr int nativeCount = sizeof(kRecognisedSongs) / sizeof(kRecognisedSongs[0]);
+    for (int candidate = 0; candidate < nativeCount + kCustomSongCount; ++candidate) {
+        const int songIndex = candidate < nativeCount ? kRecognisedSongs[candidate] : kCustomSongBase + candidate - nativeCount;
         if (!IsSongAccepted(songIndex)) {
             continue;
         }
-        float error = SuffixError(songIndex, gOcarinaSongButtons[songIndex].numButtons);
+        float error = SuffixError(songIndex, SongLength(songIndex));
         if (error < ranked.bestError) {
             ranked.runnerUpError = ranked.bestError;
             ranked.bestError = error;
@@ -650,6 +675,23 @@ uint32_t sLastSeenMatch = 0;
 // Main thread owns the device and the CVar; the audio-thread hook only trades atomics.
 // A stale request means the ocarina was put away, so the mic is freed.
 void TickMicOcarina() {
+    uint32_t owned = 0;
+    if (gPlayState != nullptr) for (int i = 0; i < kCustomSongCount; ++i) {
+        if (sApi->IsCustomItemOwned(kCustomSongs[i].key)) owned |= 1u << i;
+    }
+    sCustomOwned.store(owned, std::memory_order_relaxed);
+    const int custom = sPendingCustomMatch.exchange(-1, std::memory_order_acquire);
+    if (custom >= 0 && custom < kCustomSongCount && (owned & (1u << custom)) &&
+        CVarGetInteger(kEnabledCvar, 1) && gPlayState != nullptr && gPlayState->pauseCtx.state == 0 &&
+        gPlayState->transitionTrigger == TRANS_TRIGGER_OFF) {
+        static const uint8_t pitches[] = {2, 5, 9, 11, 14};
+        sDispatchingCustomNotes = true;
+        for (int n = 0; n < kCustomSongs[custom].length; ++n) {
+            GameInteractor_ExecuteOnOcarinaNote(pitches[kCustomSongs[custom].buttons[n]], 1.0f, 0);
+            GameInteractor_ExecuteOnOcarinaNote(OCARINA_PITCH_NONE, 1.0f, 0);
+        }
+        sDispatchingCustomNotes = false;
+    }
     if (sRequested.exchange(false, std::memory_order_relaxed)) {
         sIdleFrames = 0;
     } else if (sIdleFrames < kMicGraceFrames) {
@@ -681,6 +723,8 @@ void TickMicOcarina() {
 
 // Fires on the audio thread every tick the ocarina takes input: the thread that owns the globals below.
 void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
+    if (sDispatchingCustomNotes) return;
+    sFreePlay.store(sIsOcarinaInputEnabled && (sOcarinaFlags & 0xC000) == 0xC000, std::memory_order_relaxed);
     sRequested.store(true, std::memory_order_relaxed);
     sAvailableSongFlags.store(sAvailOcarinaSongFlags, std::memory_order_relaxed);
     sFirstSongIndex.store(sFirstOcarinaSongIndex, std::memory_order_relaxed);
@@ -693,6 +737,13 @@ void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
     sLastSeenMatch = sequence;
 
     int song = sMatchedSong.load(std::memory_order_relaxed);
+    if (song >= kCustomSongBase) {
+        if (IsSongAccepted(song)) {
+            sIsOcarinaInputEnabled = 0;
+            sPendingCustomMatch.store(song - kCustomSongBase, std::memory_order_release);
+        }
+        return;
+    }
     if ((song < sFirstOcarinaSongIndex) || (song >= sLastOcarinaSongIndex) ||
         !(sAvailOcarinaSongFlags & (1u << song))) {
         return;

@@ -1,0 +1,6 @@
+{
+    "name": "ray_gun",
+    "author": "Skijer",
+    "version": "1.0.2",
+    "description": "Ray Gun with retargeted Drawing Gun and Shooting animations. Its ray launches and kills actors on impact."
+}

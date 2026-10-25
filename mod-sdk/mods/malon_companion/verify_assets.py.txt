@@ -1,0 +1,86 @@
+"""Validate baked poses against the source motion and export a skeletal preview."""
+from pathlib import Path
+import argparse
+import json
+import math
+import xml.etree.ElementTree as ET
+import zipfile
+import numpy as np
+import runpy
+
+retarget = runpy.run_path(str(Path(__file__).with_name("retarget.py.txt")))
+HERE = retarget["HERE"]
+source_data = retarget["source_data"]
+hierarchy = retarget["hierarchy"]
+load_skeleton = retarget["load_skeleton"]
+load_animation = retarget["load_animation"]
+world_rotations = retarget["world_rotations"]
+
+def positions(limbs, pose):
+    parents = hierarchy(limbs)
+    rotations = world_rotations(pose,parents)
+    points = [None]*len(limbs)
+    def get(i):
+        if points[i] is None:
+            parent=parents[i]
+            points[i] = pose[0]*.01 if parent<0 else get(parent)+rotations[parent]@np.array(limbs[i]['pos'])*.01
+        return points[i]
+    return np.array([get(i) for i in range(len(limbs))])
+
+def main():
+    parser=argparse.ArgumentParser();parser.add_argument('--archive',type=Path,required=True)
+    args=parser.parse_args()
+    source,clips=source_data();sp=hierarchy(source)
+    source_ref=world_rotations(clips['idle'][0],sp)
+    report=json.loads((HERE/'retarget-report.json.txt').read_text())
+    archive=zipfile.ZipFile(args.archive)
+    preview=[];maximum=0
+    for age,obj,prefix in [('child','ma1','Child'),('adult','ma2','Adult')]:
+        limbs=load_skeleton(archive,f'objects/object_{obj}/gMalon{prefix}Skel')
+        parents=hierarchy(limbs)
+        rest=load_animation(archive.read(f'objects/object_{obj}/gMalon{prefix}IdleAnim'))[0]
+        tr=world_rotations(rest,parents)
+        mapping=report['targets'][age]['mapping']
+        for label,original in clips.items():
+            baked=load_animation((HERE/f'assets/animations/nei_malon/{age}/{label}').read_bytes())
+            assert baked.shape==(len(original),19,3)
+            assert np.all(baked[:,0,[0,2]]==0), 'Travelling root motion must be actor-driven'
+            for f in range(len(original)):
+                sr=world_rotations(original[f],sp)
+                actual=world_rotations(baked[f],parents)
+                for i,s in enumerate(mapping[1:]):
+                    desired=sr[s-1]@source_ref[s-1].T@tr[i]
+                    error=float(np.max(np.abs(desired-actual[i])))
+                    maximum=max(maximum,error)
+                    assert error<.0005,(age,label,f,i,error)
+        for label,frame in [('idle',0),('run',3),('shootbow',23),('sitting',12),('eponaride',0)]:
+            baked=load_animation((HERE/f'assets/animations/nei_malon/{age}/{label}').read_bytes())
+            preview.append((age,label,limbs,positions(limbs,baked[frame])))
+    xml=ET.parse(HERE/'assets/objects/object_nei_malon/bow_dl').getroot()
+    assert len(xml.findall('Triangle1'))==54
+    for node in xml.findall('LoadVertices'):
+        vertices=ET.parse(HERE/'assets'/node.attrib['Path']).getroot()
+        assert int(node.attrib['VertexOffset'])+int(node.attrib['Count'])<=len(vertices)
+    from PIL import Image, ImageDraw
+    image=Image.new('RGB',(1500,660),'#f9fafb');draw=ImageDraw.Draw(image)
+    draw.text((20,12),'Native Malon rigs - Romani motion retarget (orange: bow hand)',fill='#152b3b')
+    for n,(age,label,limbs,points) in enumerate(preview):
+        col,row=n%5,n//5
+        ox,oy=col*300+150,row*310+310
+        yaw=math.radians(55)
+        def project(p):
+            horizontal=p[0]*math.cos(yaw)-p[2]*math.sin(yaw)
+            depth=p[0]*math.sin(yaw)+p[2]*math.cos(yaw)
+            return (int(ox+horizontal*3),int(oy-p[1]*3+depth*.4))
+        draw.line((col*300+15,oy,col*300+285,oy),fill='#bdc8ce')
+        draw.text((col*300+20,row*310+40),f'{age}: {label}',fill='#152b3b')
+        parents=hierarchy(limbs)
+        for i,parent in enumerate(parents):
+            if parent<0:continue
+            draw.line((project(points[parent]),project(points[i])),fill='#176b96',width=3)
+        hand=10 if age=='child' else 13
+        x,y=project(points[hand]);draw.ellipse((x-4,y-4,x+4,y+4),fill='#d97b16')
+    image.save(HERE/'assets/retarget-preview.png')
+    print(f'PASS: 20 clips, both 19-joint rigs, original durations, all frames; max matrix error {maximum:.6f}; bow topology valid')
+
+if __name__=='__main__':main()

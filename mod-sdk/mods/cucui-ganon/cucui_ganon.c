@@ -2225,11 +2225,11 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnCollisionResolveDamage, OnBossDamage);
     RegisterMusic();
     if (SOH_MOD_API_HAS(sApi, RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
-        sApi->RegisterMenuSidebar("Enhancements", "Mods", "gMods.Menu", 1);
+        sApi->RegisterMenuSidebar("Mods", "Gameplay", "gMods.Menu.Page", 2);
         toggle = (SOHModMenuWidget){ 0 };
         toggle.structSize = sizeof(toggle);
-        toggle.section = "Enhancements";
-        toggle.sidebar = "Mods";
+        toggle.section = "Mods";
+        toggle.sidebar = "Gameplay";
         toggle.type = SOH_MOD_MENU_CHECKBOX;
         toggle.label = "Cucui Ganon battle";
         toggle.cvar = DANCE_CVAR;

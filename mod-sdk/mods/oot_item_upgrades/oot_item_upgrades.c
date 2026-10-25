@@ -444,8 +444,8 @@ static void EasyGive(SaveContext* save){
 static void Menu(void){
  static const char* const shapes[]={"Razor Sword","Gilded Sword"};
  if(!SOH_MOD_API_HAS(sApi,RegisterMenuSidebar)||!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
- sApi->RegisterMenuSidebar("Enhancements","Mods","gMods.Menu",1);
- SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Mods";
+ sApi->RegisterMenuSidebar("Mods","Equipment","gMods.Menu.Page",1);
+ SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Equipment";
  w.type=SOH_MOD_MENU_COMBOBOX;w.label="Final Kokiri Sword shape";w.cvar=LOOK_CVAR;w.values=shapes;w.valueCount=2;w.defaultInt=1;
  w.tooltip="Appearance only. The final upgrade retains Gilded Sword damage with either shape.";sApi->RegisterMenuWidget(&w);
 }

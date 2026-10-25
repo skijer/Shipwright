@@ -228,12 +228,12 @@ void Sw97_MagicSoul_OrbDraw(Actor* thisx, PlayState* play) {
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, "../z_magic_soul.c", 632),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     Matrix_RotateZ(sp6C * (M_PI / 32), MTXMODE_APPLY);
-    gSPDisplayList(POLY_XLU_DISP++, gEffFlash1DL);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gEffFlash1DL);
     Matrix_Pop();
     Matrix_RotateZ(-sp6C * (M_PI / 32), MTXMODE_APPLY);
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, "../z_magic_soul.c", 639),
               G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++, gEffFlash1DL);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gEffFlash1DL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

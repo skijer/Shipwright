@@ -42,6 +42,11 @@
 #define MAX_CHANNELS_PER_BANK 3
 #define NA_SE_NONE 0
 #define SFX_FLAG_MASK MM_SFX_FLAG_MASK
+#undef SFX_FLAG
+#undef SFX_BANK_SHIFT
+#undef SFX_BANK_MASK
+#undef SFX_INDEX
+#undef SFX_BANK
 #define SFX_FLAG MM_SFX_FLAG
 #define SFX_BANK_SHIFT(sfxId) MM_SFX_BANK_SHIFT_OP(sfxId)
 #define SFX_BANK_MASK(sfxId) MM_SFX_BANK_MASK_OP(sfxId)

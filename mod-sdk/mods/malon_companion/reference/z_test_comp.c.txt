@@ -1,0 +1,1002 @@
+
+/*
+ * File: z_test_comp.c
+ * Description: romani companion
+ */
+
+#include "z_test_comp.h"
+#include "proxymm_custom_actor.h"
+#include "recomp_api.h"
+#include "z64extern.h"
+#include "z_test_comp.h"
+#include "gRomaniSkel.h"
+#include "romani_model.h"
+#include "romanibow_model.h"
+
+#define FLAGS (ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED)
+
+void Com_Init(Actor* thisx, PlayState* play);
+void Com_Destroy(Actor* thisx, PlayState* play);
+void Com_Update(Actor* thisx, PlayState* play);
+void Com_Draw(Actor* thisx, PlayState* play);
+
+void Com_GetFloorRot(Com* this, Vec3f* floorRot);
+
+void Com_Idle(Com* this, PlayState* play);
+void Com_Fall(Com* this, PlayState* play);
+void Com_ApproachPlayer(Com* this, PlayState* play);
+void Com_TryPickUp(Com* this, PlayState* play);
+void Com_Held(Com* this, PlayState* play);
+void Com_Thrown(Com* this, PlayState* play);
+void Com_JumpOrFallCheck(Com* this, PlayState* play);
+void Com_AutoJump(Com* this, PlayState* play);
+
+Actor* Com_FindNearestEnemy(Com* this, PlayState* play);
+void Com_PursueEnemy(Com* this, PlayState* play);
+void Com_Shoot(Com* this, PlayState* play);
+void Com_RideEpona(Com* this, PlayState* play);
+void Com_AimOnEpona(Com* this, PlayState* play);
+
+ActorProfile Companion_Profile = {
+    /**/ ACTOR_ID_MAX,
+    /**/ ACTORCAT_NPC,
+    /**/ FLAGS,
+    /**/ /*OBJECT_HAKA*/ GAMEPLAY_KEEP,
+    /**/ sizeof(Com),
+    /**/ Com_Init,
+    /**/ Com_Destroy,
+    /**/ Com_Update,
+    /**/ Com_Draw,
+};
+
+s16 CUSTOM_ACTOR_COMPANION = ACTOR_ID_MAX;
+
+static Actor* instance = NULL;
+
+RECOMP_CALLBACK("*", recomp_on_init)
+void Com_OnRecompInit() {
+    CUSTOM_ACTOR_COMPANION = CustomActor_Register(&Companion_Profile);
+}
+
+RECOMP_HOOK("Actor_SpawnTransitionActors")
+void Com_OnRoomLoad(PlayState* play, ActorContext* actorCtx) {
+    Player* player = GET_PLAYER(play);
+
+    if (instance != NULL) {
+        Actor_Kill(instance);
+        instance = NULL;
+    }
+
+    instance = Actor_SpawnAsChildAndCutscene(
+        &play->actorCtx,
+        play,
+        CUSTOM_ACTOR_COMPANION,
+        player->actor.world.pos.x, player->actor.world.pos.y, player->actor.world.pos.z,
+        0, player->actor.world.rot.y, 0,
+        0, 0, 0, 0);
+}
+
+#define COM_FLAG_NONE 0
+#define COM_FLAG_HELD (1 << 0)
+#define DOG_FLAG_JUMP_ATTACKING (1 << 1)
+#define DOG_FLAG_SWIMMING (1 << 2)
+#define DOG_FLAG_BOUNCED (1 << 3)
+#define COM_FLAG_THROWN (1 << 4)
+#define DOG_FLAG_FOLLOWING_BREMEN_MASK (1 << 5)
+
+static u8 sIsAnyComHeld = false;
+
+static ColliderCylinderInit sCylinderInit = {
+    {
+        COL_MATERIAL_NONE,
+        AT_ON | AT_TYPE_ENEMY,
+        AC_ON | AC_TYPE_PLAYER,
+        OC1_ON | OC1_TYPE_ALL,
+        OC2_TYPE_1,
+        COLSHAPE_CYLINDER,
+    },
+    {
+        ELEM_MATERIAL_UNK1,
+        { 0xF7CFFFFF, 0x04, 0x00 },
+        { 0xF7CFFFFF, 0x00, 0x00 },
+        ATELEM_ON | ATELEM_SFX_NORMAL,
+        ACELEM_ON,
+        OCELEM_ON,
+    },
+    { 13, 19, 0, { 0, 0, 0 } },
+};
+
+static CollisionCheckInfoInit2 sColChkInfoInit = { 0, 0, 0, 0, 1 };
+
+static DamageTable sDamageTable = {
+    /* Deku Nut       */ DMG_ENTRY(0, 0x0),
+    /* Deku Stick     */ DMG_ENTRY(0, 0x0),
+    /* Horse trample  */ DMG_ENTRY(0, 0x0),
+    /* Explosives     */ DMG_ENTRY(0, 0x0),
+    /* Zora boomerang */ DMG_ENTRY(0, 0x0),
+    /* Normal arrow   */ DMG_ENTRY(0, 0x0),
+    /* UNK_DMG_0x06   */ DMG_ENTRY(0, 0x0),
+    /* Hookshot       */ DMG_ENTRY(0, 0x0),
+    /* Goron punch    */ DMG_ENTRY(0, 0x0),
+    /* Sword          */ DMG_ENTRY(0, 0x0),
+    /* Goron pound    */ DMG_ENTRY(0, 0x0),
+    /* Fire arrow     */ DMG_ENTRY(0, 0x0),
+    /* Ice arrow      */ DMG_ENTRY(0, 0x0),
+    /* Light arrow    */ DMG_ENTRY(0, 0x0),
+    /* Goron spikes   */ DMG_ENTRY(0, 0x0),
+    /* Deku spin      */ DMG_ENTRY(0, 0x0),
+    /* Deku bubble    */ DMG_ENTRY(0, 0x0),
+    /* Deku launch    */ DMG_ENTRY(0, 0x0),
+    /* UNK_DMG_0x12   */ DMG_ENTRY(0, 0x0),
+    /* Zora barrier   */ DMG_ENTRY(0, 0x0),
+    /* Normal shield  */ DMG_ENTRY(0, 0x0),
+    /* Light ray      */ DMG_ENTRY(0, 0x0),
+    /* Thrown object  */ DMG_ENTRY(0, 0x0),
+    /* Zora punch     */ DMG_ENTRY(0, 0x0),
+    /* Spin attack    */ DMG_ENTRY(0, 0x0),
+    /* Sword beam     */ DMG_ENTRY(0, 0x0),
+    /* Normal Roll    */ DMG_ENTRY(0, 0x0),
+    /* UNK_DMG_0x1B   */ DMG_ENTRY(0, 0x0),
+    /* UNK_DMG_0x1C   */ DMG_ENTRY(0, 0x0),
+    /* Unblockable    */ DMG_ENTRY(0, 0x0),
+    /* UNK_DMG_0x1E   */ DMG_ENTRY(0, 0x0),
+    /* Powder Keg     */ DMG_ENTRY(0, 0x0),
+};
+
+typedef enum {
+    /* 0 */ COM_GRAB_STATE_NONE,
+    /* 1 */ COM_GRAB_STATE_HELD,
+    /* 2 */ COM_GRAB_STATE_THROWN
+} ComGrabState;
+
+/*
+static TexturePtr sEyeTextures[] = {
+    gRomaniEyeOpenTex, gRomaniEyeHalfTex, gRomaniEyeClosedTex, gRomaniEyeHappyTex, gRomaniEyeSadTex,
+};
+
+static TexturePtr sMouthTextures[] = {
+    gRomaniMouthHappyTex,
+    gRomaniMouthFrownTex,
+    gRomaniMouthHangingOpenTex,
+    gRomaniMouthSmileTex,
+};
+
+void EnMa4_UpdateEyes(EnMa4* this) {
+    if (this->overrideEyeTexIndex != 0) {
+        this->eyeTexIndex = this->overrideEyeTexIndex;
+    }
+    else if (DECR(this->blinkTimer) == 0) {
+        this->eyeTexIndex++;
+        if (this->eyeTexIndex >= 3) {
+            this->blinkTimer = Rand_S16Offset(30, 30);
+            this->eyeTexIndex = 0;
+        }
+    }
+}
+*/
+
+typedef enum ComAnimation {
+    /* -1 */ COM_NONE = -1,
+    /*  0 */ COM_IDLE,
+    /*  1 */ COM_LOOKAROUND,
+    /*  2 */ COM_RUN,
+    /*  3 */ COM_SIT,
+    /*  4 */ COM_SHOOTBOW,
+    /*  5 */ COM_FALL,
+    /*  6 */ COM_JUMP,
+    /*  7 */ COM_EPONA_MOUNT,
+    /*  8 */ COM_EPONA_RIDE,
+    /*  9 */ COM_AIMBOW_RUN,
+    /* 10 */ COM_AIMBOW_IDLE,
+    /* 11 */ ENMA4_ANIM_11,
+    /* 12 */ ENMA4_ANIM_12,
+    /* 13 */ ENMA4_ANIM_13,
+    /* 14 */ ENMA4_ANIM_14,
+    /* 15 */ ENMA4_ANIM_15,
+    /* 16 */ ENMA4_ANIM_16,
+    /* 17 */ ENMA4_ANIM_17,
+    /* 18 */ ENMA4_ANIM_18,
+    /* 19 */ ENMA4_ANIM_19,
+    /* 20 */ ENMA4_ANIM_MAX
+} ComAnimation;
+
+// changing the numbers is useless ?
+static AnimationSpeedInfo sAnimationSpeedInfo[ENMA4_ANIM_MAX] = {
+    { &gRomaniSkelGromaniidleanimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+    { &gRomaniSkelGromanilookaroundanimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+    { &gRomaniSkelGromanirunanimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+    { &gRomaniSkelGromanisittinganimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+    { &gRomaniSkelGromanishootbowanimAnim, 1.0f, ANIMMODE_ONCE, 0.0f },
+   { &gRomaniSkelGromanifallanimAnim, 1.0f, ANIMMODE_ONCE, 0.0f },
+   { &gRomaniSkelGromanijumpanimAnim, 1.0f, ANIMMODE_ONCE, 0.0f },
+   { &gRomaniSkelGromanieponamountanimAnim, 1.0f, ANIMMODE_ONCE, 0.0f },
+   { &gRomaniSkelGromanieponarideanimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+   { &gRomaniSkelGromaniaimbowrunanimAnim, 1.0f, ANIMMODE_LOOP, 0.0f },
+};
+
+void Com_ChangeAnim(Com* this, s32 animIndex) {
+    Animation_Change(&this->skelAnime, sAnimationSpeedInfo[animIndex].animation, 1.0f, 0.0f,
+        Animation_GetLastFrame(sAnimationSpeedInfo[animIndex].animation),
+        sAnimationSpeedInfo[animIndex].mode, sAnimationSpeedInfo[animIndex].morphFrames);
+}
+
+void Com_UpdateCollision(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    this->collider.dim.pos.x = this->actor.world.pos.x;
+    this->collider.dim.pos.y = this->actor.world.pos.y;
+    this->collider.dim.pos.z = this->actor.world.pos.z;
+    Collider_UpdateCylinder(&this->actor, &this->collider);
+
+    /*
+    if ((player->transformation == PLAYER_FORM_DEKU) && (this->actionFunc == EnDg_JumpAttack)) {
+        CollisionCheck_SetAT(play, &play->colChkCtx, &this->collider.base);
+    }
+    else {
+        Collider_ResetCylinderAT(play, &this->collider.base);
+    }
+
+    // The check for DOG_FLAG_JUMP_ATTACKING here makes it so the dog passes through the
+    // player if it hits them with their jump attack.
+    if ((this->grabState != DOG_GRAB_STATE_HELD) && !(this->dogFlags & DOG_FLAG_JUMP_ATTACKING)) {
+        CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
+    }
+    else {
+        Collider_ResetCylinderOC(play, &this->collider.base);
+    }
+    */
+
+    Actor_UpdateBgCheckInfo(play, &this->actor, 26.0f, 10.0f, 0.0f, UPDBGCHECKINFO_FLAG_1 | UPDBGCHECKINFO_FLAG_4);
+}
+
+/*
+* this may be useless but its from the dog
+*/
+void Com_GetFloorRot(Com* this, Vec3f* floorRot) {
+    f32 nx;
+    f32 ny;
+    f32 nz;
+
+    if (this->actor.floorPoly != NULL) {
+        nx = COLPOLY_GET_NORMAL(this->actor.floorPoly->normal.x);
+        ny = COLPOLY_GET_NORMAL(this->actor.floorPoly->normal.y);
+        nz = COLPOLY_GET_NORMAL(this->actor.floorPoly->normal.z);
+
+        //sinf(0.0f);
+        //cosf(0.0f);
+        floorRot->x = -Math_Atan2F_XY(1.0f, -nz * ny);
+        floorRot->z = Math_Atan2F_XY(1.0f, -nx * ny);
+    }
+}
+
+static InitChainEntry sInitChain[] = {
+    ICHAIN_F32(terminalVelocity, -20, ICHAIN_CONTINUE),
+};
+
+void Com_Init(Actor* thisx, PlayState* play) {
+    Com* this = (Com*)thisx;
+    s32 pad;
+    CollisionHeader* colHeader = NULL;
+
+    ActorShape_Init(&this->actor.shape, 0.0f, ActorShadow_DrawCircle, 15.0f);
+
+    SkelAnime_InitFlex(play, &this->skelAnime, &gRomaniSkel, &gRomaniSkelGromanilookaroundanimAnim,
+        this->jointTable, this->morphTable, GROMANISKEL_NUM_LIMBS);
+
+    Collider_InitCylinder(play, &this->collider);
+    Collider_SetCylinder(play, &this->collider, &this->actor, &sCylinderInit);
+    CollisionCheck_SetInfo2(&this->actor.colChkInfo, &sDamageTable, &sColChkInfoInit);
+
+    Actor_UpdateBgCheckInfo(play, &this->actor, 0.0f, 0.0f, 0.0f, UPDBGCHECKINFO_FLAG_4);
+    Actor_SetScale(&this->actor, 0.0095f);
+
+    Actor_ProcessInitChain(&this->actor, sInitChain);
+
+    this->fallspeed = -1.0f;
+    this->actor.gravity = this->fallspeed;
+    this->walkspeed = 5.5f;
+    this->hasBow = false;
+    this->justShotTimer = 0;
+
+    // enter the starting state
+    Com_ChangeAnim(this, COM_IDLE);
+    this->actionFunc = Com_Idle;
+}
+
+void Com_Destroy(Actor* thisx, PlayState* play) {
+    Com* this = (Com*)thisx;
+
+    Collider_DestroyCylinder(play, &this->collider);
+}
+
+// ______________________________________________________________________________________________________________________
+
+void Com_Idle(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    Math_ApproachF(&this->actor.speed, 0.0f, 1.0f, 1.6f);
+    this->actor.velocity.y = 0.0f;
+    this->actor.gravity = this->fallspeed;
+    Actor_MoveWithGravity(&this->actor);
+
+    //if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+    //    Com_ChangeAnim(this, COM_FALL);
+    //    this->actionFunc = Com_Fall;
+    //}
+
+    if (this->actor.xzDistToPlayer < 50.0f) {
+        this->actor.world.rot.y = this->actor.shape.rot.y;
+    }
+    else {
+        Com_ChangeAnim(this, COM_RUN);
+        this->actionFunc = Com_ApproachPlayer;
+    }
+
+    Com_TryPickUp(this, play);
+}
+
+void Com_Fall(Com* this, PlayState* play) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
+        Actor_PlaySfx(&this->actor, NA_SE_PL_LAND_GROUND);
+        Com_ChangeAnim(this, COM_IDLE);
+        this->actionFunc = Com_Idle;
+    }
+    this->actor.velocity.x = 0.0f;
+    this->actor.velocity.z = 0.0f;
+    this->actor.gravity = this->fallspeed;
+    Actor_MoveWithGravity(&this->actor);
+}
+
+void Com_ApproachPlayer(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    this->actor.velocity.y = 0.0f;
+    this->actor.gravity = this->fallspeed;
+
+    //if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+    //    Com_ChangeAnim(this, COM_FALL);
+    //    this->actionFunc = Com_Fall;
+    //}
+    
+    Math_ApproachS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 4, 0xC00);
+
+    this->actor.world.rot.y = this->actor.shape.rot.y;
+    if (this->actor.xzDistToPlayer < 50.0f) {
+        Com_ChangeAnim(this, COM_IDLE);
+        this->actionFunc = Com_Idle;
+    }
+    else if (/*player->stateFlags3 & PLAYER_STATE3_20000000*/true) {
+        if (/*(this->actor.xzDistToPlayer > 40.0f)*/ player->speedXZ > 0.0f && this->actor.xzDistToPlayer < 80.0f) {
+            Math_ApproachF(&this->actor.speed, player->actor.speed, 0.2f, 1.0f);
+        }
+        else {
+            Math_ApproachF(&this->actor.speed, this->walkspeed * 1.4f, 0.2f, 1.0f);
+        }
+    }
+    //else {
+    //    Math_ApproachF(&this->actor.speed, this->walkspeed * 2.0f, 0.2f, 1.0f);
+    //}
+
+    Actor_MoveWithGravity(&this->actor);
+}
+
+/*
+* pick up held and throw are all from the dog
+*/
+void Com_TryPickUp(Com* this, PlayState* play) {
+    if (sIsAnyComHeld && !(this->comFlags & COM_FLAG_HELD)) {
+        this->actor.flags |= ACTOR_FLAG_LOCK_ON_DISABLED;
+        this->comFlags |= COM_FLAG_HELD;
+    }
+    else if (!sIsAnyComHeld && (this->comFlags & COM_FLAG_HELD)) {
+        this->actor.flags &= ~ACTOR_FLAG_LOCK_ON_DISABLED;
+        this->comFlags &= ~COM_FLAG_HELD;
+    }
+
+    if (Actor_HasParent(&this->actor, play)) {
+        this->grabState = COM_GRAB_STATE_HELD;
+        if (!sIsAnyComHeld) {
+            this->actor.flags |= ACTOR_FLAG_LOCK_ON_DISABLED;
+            sIsAnyComHeld = true;
+            this->comFlags |= COM_FLAG_HELD;
+        }
+
+        this->actor.speed = 0.0f;
+        Com_ChangeAnim(this, COM_SIT);
+
+        s16 random = Rand_S16Offset(0, 3);
+        if (random == 0) {
+            Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO01); // eheheh
+        }
+
+        this->actionFunc = Com_Held;
+    }
+    else {
+        Actor_OfferCarry(&this->actor, play);
+    }
+}
+
+void Com_Held(Com* this, PlayState* play) {
+    if (Actor_HasNoParent(&this->actor, play)) {
+        this->grabState = COM_GRAB_STATE_THROWN;
+        if (sIsAnyComHeld) {
+            sIsAnyComHeld = false;
+            this->comFlags &= ~COM_FLAG_HELD;
+        }
+
+        this->sitAfterThrowTimer = 35;
+        Actor_MoveWithoutGravity(&this->actor);
+        this->comFlags |= COM_FLAG_THROWN;
+        this->actionFunc = Com_Thrown;
+    }
+}
+
+void Com_Thrown(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    /*if (this->cucco == NULL) {
+        this->cucco = Actor_Spawn(
+            &play->actorCtx, play, ACTOR_EN_NIW,
+            this->actor.world.pos.x, this->actor.world.pos.y + 32, this->actor.world.pos.z,
+            0, 0, 0, 0);
+    }
+
+    else {
+        this->cucco->world.pos.x = this->actor.world.pos.x;
+        this->cucco->world.pos.y = this->actor.world.pos.y + 32;
+        this->cucco->world.pos.z = this->actor.world.pos.z;
+
+        this->cucco->shape.rot.y = this->actor.shape.rot.y;
+    }
+
+    this->actor.gravity = this->fallspeed / 6.5f;*/
+
+    if (!(this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
+        Actor_MoveWithGravity(&this->actor);
+        Com_ChangeAnim(this, COM_SIT);
+        return;
+    }
+
+    if (this->sitAfterThrowTimer == 35)
+        Com_ChangeAnim(this, COM_LOOKAROUND);
+
+    if (this->cucco != NULL) {
+        Actor_Kill(this->cucco);
+        this->cucco = NULL;
+    }
+
+    if (this->comFlags & COM_FLAG_THROWN) {
+        this->comFlags &= ~COM_FLAG_THROWN;
+    }
+
+    this->actor.speed = 0.0f;
+    this->actor.gravity = this->fallspeed;
+
+    if (DECR(this->sitAfterThrowTimer) == 0) {
+        this->grabState = COM_GRAB_STATE_NONE;
+        Com_ChangeAnim(this, COM_IDLE);
+        this->actionFunc = Com_Idle;
+    }
+
+    Actor_MoveWithGravity(&this->actor);
+}
+
+/*
+* nearest actor labeled as category enemy or category boss
+*/
+Actor* Com_FindNearestEnemy(Com* this, PlayState* play) {
+    Actor* currentActor = play->actorCtx.actorLists[ACTORCAT_ENEMY].first;
+    Actor* nearestEnemy = NULL;
+    f32 shortestDistance = 99999.0f;
+
+    // enemy check
+    currentActor = play->actorCtx.actorLists[ACTORCAT_ENEMY].first;
+    while (currentActor != NULL) {
+        f32 dist = Actor_WorldDistXZToActor(&this->actor, currentActor);
+
+        if (dist < shortestDistance && fabsf(this->actor.world.pos.y - currentActor->world.pos.y) < 200.0f && currentActor->draw != NULL) {
+            shortestDistance = dist;
+            nearestEnemy = currentActor;
+            this->nearestEnemyIsBoss = false;
+        }
+        currentActor = currentActor->next;
+    }
+
+    // boss check
+    currentActor = play->actorCtx.actorLists[ACTORCAT_BOSS].first;
+    while (currentActor != NULL) {
+        f32 dist = Actor_WorldDistXZToActor(&this->actor, currentActor);
+
+        if (dist < shortestDistance && fabsf(this->actor.world.pos.y - currentActor->world.pos.y) < 200.0f) {
+            shortestDistance = dist;
+            nearestEnemy = currentActor;
+            this->nearestEnemyIsBoss = true;
+        }
+        currentActor = currentActor->next;
+    }
+
+    // detect range
+    if (!this->nearestEnemyIsBoss) {
+        if (shortestDistance < SQ(30.0f)) {
+            return nearestEnemy;
+        }
+    }
+    else {
+        if (shortestDistance < SQ(500.0f)) {
+            return nearestEnemy;
+        }
+    }
+    return NULL;
+}
+
+/*
+* pursue the nearest enemy with a bow and prepare to shoot
+*/
+void Com_PursueEnemy(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    Actor_MoveWithGravity(&this->actor);
+    this->hasBow = true;
+
+    if (this->nearestEnemy == NULL || play->csCtx.state != CS_STATE_IDLE || (Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy) >= 300.0f && !this->nearestEnemyIsBoss) ||
+        fabsf(this->actor.world.pos.y - this->nearestEnemy->world.pos.y) >= 180.0f) /*|| (!this->nearestEnemyIsBoss && play->actorCtx.attention.bgmEnemy == NULL)*/ {
+        Com_ChangeAnim(this, COM_IDLE);
+        this->hasBow = false;
+        this->actionFunc = Com_Idle;
+    }
+
+    if (this->shootTimer > 0) {
+        this->shootTimer--;
+    }
+
+    if (this->nearestEnemy != NULL) {
+        s16 targetYaw = Actor_WorldYawTowardActor(&this->actor, this->nearestEnemy);
+        
+        Math_SmoothStepToS(&this->actor.world.rot.y, targetYaw, 1, 0xBB8, 0);
+        this->actor.shape.rot.y = this->actor.world.rot.y;
+
+        f32 distToEnemy = Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy);
+
+        if (this->shootTimer > 28) {
+            // move in to enemy
+            if (distToEnemy > 140.0f) {
+                this->actor.speed = this->walkspeed / 1.5f;
+            }
+            // move away from enemy
+            else if (distToEnemy < 120.0f) {
+                this->actor.speed = -this->walkspeed / 1.5f;
+            }
+            else {
+                this->actor.speed = 0.0f;
+            }
+        }
+        else
+        {
+            this->actor.speed = 0.0f;
+        }
+
+        if (this->shootTimer == 22) {
+            s16 random = Rand_S16Offset(0, 8);
+            if (random == 0) {
+                Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO02); // aaauah
+            }
+
+            Com_ChangeAnim(this, COM_SHOOTBOW);
+        }
+
+        if (this->shootTimer == 1) {
+            this->justShotTimer = 11;
+            this->actionFunc = Com_Shoot;
+        }
+    } else {
+        this->actor.speed = 0.0f;
+    }
+}
+
+void Com_Shoot(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    if (player->rideActor != NULL) {
+        f32 sp28 = Math_CosS(player->actor.shape.rot.y);
+        f32 sp24 = Math_SinS(player->actor.shape.rot.y);
+
+        this->actor.world.pos.x = player->actor.world.pos.x + (-10 * sp24);
+        this->actor.world.pos.y = player->actor.world.pos.y + 9;
+        this->actor.world.pos.z = player->actor.world.pos.z + (-10 * sp28);
+
+        this->actor.shape.rot.y = player->actor.shape.rot.y;
+    }
+
+    if (this->justShotTimer > 0) {
+        this->justShotTimer--;
+    }
+
+    if (/*player->rideActor == NULL ||*/
+        this->nearestEnemy == NULL || play->csCtx.state != CS_STATE_IDLE || (Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy) >= 999.0f && !this->nearestEnemyIsBoss) ||
+        (fabsf(this->actor.world.pos.y - this->nearestEnemy->world.pos.y) >= 250.0f && player->rideActor != NULL) || 
+        (fabsf(this->actor.world.pos.y - this->nearestEnemy->world.pos.y) >= 180.0f && player->rideActor == NULL)) /*|| (!this->nearestEnemyIsBoss && play->actorCtx.attention.bgmEnemy == NULL)*/ {
+
+        this->hasBow = false;
+
+        if (player->rideActor == NULL) {
+            Com_ChangeAnim(this, COM_IDLE);
+            this->actionFunc = Com_Idle;
+        }
+        else {
+            Com_ChangeAnim(this, COM_EPONA_RIDE);
+            this->actionFunc = Com_RideEpona;
+        }
+    }
+
+    s16 shootYaw = this->actor.shape.rot.y;
+    s16 shootPitch = 0;
+
+    if (this->nearestEnemy != NULL) {
+        shootYaw = Actor_WorldYawTowardActor(&this->actor, this->nearestEnemy);
+        shootPitch = Actor_WorldPitchTowardActor(&this->actor, this->nearestEnemy);
+
+        s16 targetYaw = Actor_WorldYawTowardActor(&this->actor, this->nearestEnemy);
+
+        Math_SmoothStepToS(&this->actor.world.rot.y, targetYaw, 1, 0xBB8, 0);
+        this->actor.shape.rot.y = this->actor.world.rot.y;
+    }
+
+    if (this->justShotTimer == 10) {
+        player->unk_D57 = 10;
+
+        this->arrow = Actor_Spawn(
+            &play->actorCtx, play, ACTOR_EN_ARROW,
+            this->actor.world.pos.x, this->actor.world.pos.y + 16, this->actor.world.pos.z,
+            shootPitch, shootYaw, 0, 1);
+    }
+
+    if (this->justShotTimer == 0)
+    {
+        this->hasBow = false;
+
+        if (player->rideActor == NULL) {
+            Com_ChangeAnim(this, COM_IDLE);
+            this->actionFunc = Com_Idle;
+        }
+        else {
+            Com_ChangeAnim(this, COM_EPONA_RIDE);
+            this->actionFunc = Com_RideEpona;
+        }
+    }
+}
+
+void Com_JumpOrFallCheck(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND_LEAVE /*&& this->actionFunc != Com_Held*/) {
+        if (this->actor.speed > 4.5f && this->actor.world.pos.y <= player->actor.world.pos.y) {
+            Com_ChangeAnim(this, COM_JUMP);
+            this->actionFunc = Com_AutoJump;
+        }
+        else {
+            Com_ChangeAnim(this, COM_FALL);
+            this->actionFunc = Com_Fall;
+        }
+    }
+}
+
+void Com_AutoJump(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    Actor_MoveWithGravity(&this->actor);
+
+    f32 speed;
+
+    if ((IREG(66) / 100.0f) < this->actor.speed) {
+        speed = IREG(67) / 100.0f;
+    }
+    else {
+        speed = (IREG(68) / 100.0f + (IREG(69) * this->actor.speed) / 1000.0f);
+    }
+
+    this->actor.velocity.y = speed;
+    this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
+
+    Actor_PlaySfx(&this->actor, NA_SE_PL_JUMP_GROUND);
+
+    s16 random = Rand_S16Offset(0, 3);
+    if (random == 0) {
+        s16 random2 = Rand_S16Offset(0, 2);
+        if (random2 == 0) {
+            Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO01); // eheheh
+        }
+        else if (random2 == 1) {
+            Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO02); // aaauah
+        }
+    }
+
+    //Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO00); // AAAAAAAAAHH
+
+    this->actionFunc = Com_Fall;
+}
+
+void Com_MountEpona(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    this->eponaMountTime++;
+
+    f32 sp28 = Math_CosS(player->actor.shape.rot.y);
+    f32 sp24 = Math_SinS(player->actor.shape.rot.y);
+
+    this->actor.world.pos.x = player->actor.world.pos.x + (-10 * sp24);
+    this->actor.world.pos.y = player->actor.world.pos.y + 9;
+    this->actor.world.pos.z = player->actor.world.pos.z + (-10 * sp28);
+
+    this->actor.shape.rot.y = player->actor.shape.rot.y;
+
+
+    if (this->eponaMountTime == 22) {
+
+        Com_ChangeAnim(this, COM_EPONA_RIDE);
+        this->actionFunc = Com_RideEpona;
+    }
+}
+
+void Com_RideEpona(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    f32 sp28 = Math_CosS(player->actor.shape.rot.y);
+    f32 sp24 = Math_SinS(player->actor.shape.rot.y);
+
+    this->actor.world.pos.x = player->actor.world.pos.x + (-10 * sp24);
+    this->actor.world.pos.y = player->actor.world.pos.y + 9;
+    this->actor.world.pos.z = player->actor.world.pos.z + (-10 * sp28);
+
+    this->actor.shape.rot.y = player->actor.shape.rot.y;
+
+    if (player->rideActor == NULL) {
+        Com_ChangeAnim(this, COM_IDLE);
+        this->actionFunc = Com_Idle;
+    }
+}
+
+void Com_AimOnEpona(Com* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    f32 sp28 = Math_CosS(player->actor.shape.rot.y);
+    f32 sp24 = Math_SinS(player->actor.shape.rot.y);
+
+    this->actor.world.pos.x = player->actor.world.pos.x + (-10 * sp24);
+    this->actor.world.pos.y = player->actor.world.pos.y + 9;
+    this->actor.world.pos.z = player->actor.world.pos.z + (-10 * sp28);
+
+    this->actor.shape.rot.y = player->actor.shape.rot.y;
+
+    this->hasBow = true;
+
+    if (player->rideActor == NULL || 
+        this->nearestEnemy == NULL || play->csCtx.state != CS_STATE_IDLE || (Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy) >= 999.0f && !this->nearestEnemyIsBoss) ||
+        fabsf(this->actor.world.pos.y - this->nearestEnemy->world.pos.y) >= 250.0f) /*|| (!this->nearestEnemyIsBoss && play->actorCtx.attention.bgmEnemy == NULL)*/ {
+
+        this->hasBow = false;
+
+        if (player->rideActor == NULL) {
+            Com_ChangeAnim(this, COM_IDLE);
+            this->actionFunc = Com_Idle;
+        }
+        else {
+            Com_ChangeAnim(this, COM_EPONA_RIDE);
+            this->actionFunc = Com_RideEpona;
+        }
+    }
+
+    if (this->shootTimer > 0) {
+        this->shootTimer--;
+    }
+
+    if (this->nearestEnemy != NULL) {
+        s16 targetYaw = Actor_WorldYawTowardActor(&this->actor, this->nearestEnemy);
+
+        Math_SmoothStepToS(&this->actor.world.rot.y, targetYaw, 1, 0xBB8, 0);
+        this->actor.shape.rot.y = this->actor.world.rot.y;
+
+        f32 distToEnemy = Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy);
+
+        if (this->shootTimer == 22) {
+            s16 random = Rand_S16Offset(0, 8);
+            if (random == 0) {
+                Actor_PlaySfx(&this->actor, NA_SE_VO_RMVO02); // aaauah
+            }
+
+            Com_ChangeAnim(this, COM_SHOOTBOW);
+        }
+
+        if (this->shootTimer == 1) {
+            this->justShotTimer = 11;
+            this->actionFunc = Com_Shoot;
+        }
+    }
+    else {
+        this->actor.speed = 0.0f;
+    }
+}
+
+// ______________________________________________________________________________________________________________________
+
+void Com_Update(Actor* thisx, PlayState* play) {
+    Com* this = (Com*)thisx;
+    Vec3f floorRot = { 0.0f, 0.0f, 0.0f };
+
+    this->actionFunc(this, play);
+    Com_UpdateCollision(this, play);
+    SkelAnime_Update(&this->skelAnime);
+    Com_GetFloorRot(this, &floorRot);
+    Math_ApproachF(&this->curRot.x, floorRot.x, 0.2f, 0.1f);
+    Math_ApproachF(&this->curRot.z, floorRot.z, 0.2f, 0.1f);
+
+    if (this->actionFunc == Com_Idle || this->actionFunc == Com_ApproachPlayer) {
+        Com_JumpOrFallCheck(this, play);
+    }
+
+    // teleport back
+    if (GET_PLAYER(play)->actor.bgCheckFlags & BGCHECKFLAG_GROUND && (
+        ((this->actor.xzDistToPlayer > 650.0f || (fabsf(this->actor.world.pos.y - GET_PLAYER(play)->actor.world.pos.y) > 300.0f)) && play->roomCtx.curRoom.type == ROOM_TYPE_NORMAL) ||
+        ((this->actor.xzDistToPlayer > 480.0f || (fabsf(this->actor.world.pos.y - GET_PLAYER(play)->actor.world.pos.y) > 200.0f)) && play->roomCtx.curRoom.type == ROOM_TYPE_INDOORS) ||
+        ((this->actor.xzDistToPlayer > 550.0f || (fabsf(this->actor.world.pos.y - GET_PLAYER(play)->actor.world.pos.y) > 260.0f)) && play->roomCtx.curRoom.type == ROOM_TYPE_DUNGEON) || 
+        ((this->actor.xzDistToPlayer > 99999.0f || (fabsf(this->actor.world.pos.y - GET_PLAYER(play)->actor.world.pos.y) > 99999.0f)) && play->roomCtx.curRoom.type == ROOM_TYPE_BOSS))) {
+
+        this->actor.speed = 0.0f;
+        this->actor.velocity.y = 0.0f;
+        this->actor.world.pos = GET_PLAYER(play)->actor.world.pos;
+    }
+    
+    this->nearestEnemy = Com_FindNearestEnemy(this, play);
+
+    // head movement stuff
+    s16 targetYaw;
+    s16 targetPitch;
+
+    if (this->nearestEnemy != NULL && play->csCtx.state == CS_STATE_IDLE) {
+        if (/*(play->actorCtx.attention.bgmEnemy != NULL || this->nearestEnemyIsBoss) && */ (this->actionFunc == Com_Idle || this->actionFunc == Com_ApproachPlayer || this->actionFunc == Com_RideEpona) &&
+            ((Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy) < 288.0f && this->actionFunc != Com_RideEpona) 
+                || (Actor_WorldDistXZToActor(&this->actor, this->nearestEnemy) < 500.0f && this->actionFunc == Com_RideEpona) 
+                || this->nearestEnemyIsBoss) && fabsf(this->actor.world.pos.y - this->nearestEnemy->world.pos.y) < 180.0f &&
+            (this->nearestEnemy->id != ACTOR_EN_DG && this->nearestEnemy->id != ACTOR_EN_WALLMAS && this->nearestEnemy->id != ACTOR_EN_WATER_EFFECT) &&
+            (this->nearestEnemy->id != ACTOR_EN_DEKUNUTS && this-> nearestEnemy->id != ACTOR_EN_FZ && this->nearestEnemy->id != ACTOR_EN_DODONGO && this->nearestEnemy->id != ACTOR_EN_DEKUBABA &&
+                this->nearestEnemy->id != ACTOR_EN_BIGOKUTA && this->nearestEnemy->id != ACTOR_EN_KAME && this->nearestEnemy->id != ACTOR_EN_BIGPAMET && this->nearestEnemy->id != ACTOR_EN_RD &&
+                this->nearestEnemy->id != ACTOR_EN_TALK_GIBUD && this->nearestEnemy->id != ACTOR_EN_RAILGIBUD && this->nearestEnemy->id != ACTOR_EN_RUPPECROW)) {
+
+            if (this->actionFunc != Com_RideEpona) {
+                this->shootTimer = Rand_S16Offset(39, 85);
+                this->actionFunc = Com_PursueEnemy;
+                Com_ChangeAnim(this, COM_AIMBOW_RUN);
+            }
+            else {
+                this->shootTimer = Rand_S16Offset(29, 30);
+                this->actionFunc = Com_AimOnEpona;
+                //Com_ChangeAnim(this, COM_EPONA_AIMBOW);
+            }
+        }
+
+        targetYaw = Actor_WorldYawTowardActor(&this->actor, this->nearestEnemy);
+        targetPitch = Actor_WorldPitchTowardActor(&this->actor, this->nearestEnemy);
+    }
+    else {
+        targetYaw = this->actor.yawTowardsPlayer;
+        targetPitch = Actor_WorldPitchTowardActor(&this->actor, &GET_PLAYER(play)->actor);
+    }
+
+    s16 yawDiff = targetYaw - this->actor.shape.rot.y;
+
+    if (yawDiff > 0x2800 || yawDiff < -0x2800) {
+        Math_ApproachS(&this->headYaw, this->actor.shape.rot.y, 6, 0x0A00);
+        Math_ApproachS(&this->headPitch, 0, 6, 0x0A00);
+    }
+    else {
+        Math_ApproachS(&this->headYaw, targetYaw, 6, 0x0A00);
+        Math_ApproachS(&this->headPitch, targetPitch, 6, 0x0A00);
+    }
+
+    if (GET_PLAYER(play)->rideActor != NULL && this->actionFunc != Com_MountEpona && this->actionFunc != Com_RideEpona && this->actionFunc != Com_AimOnEpona && this->actionFunc != Com_Shoot)
+    {
+        this->eponaMountTime = 0;
+        Com_ChangeAnim(this, COM_EPONA_MOUNT);
+        this->actionFunc = Com_MountEpona;
+    }
+
+    if (this->skelAnime.animation == &gRomaniSkelGromanirunanimAnim) {
+        if (Animation_OnFrame(&this->skelAnime, 0.0f) || Animation_OnFrame(&this->skelAnime, 4.0f)) {
+            Actor_PlaySfx(&this->actor, NA_SE_EN_ROMANI_WALK);
+        }
+    }
+
+    if (this->skelAnime.animation == &gRomaniSkelGromanishootbowanimAnim) {
+        if (Animation_OnFrame(&this->skelAnime, 8.0f)) {
+            Actor_PlaySfx(&this->actor, NA_SE_PL_BOW_DRAW);
+        }
+    }
+}
+
+s32 Com_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, Actor* thisx) {
+    Com* this = (Com*)thisx;
+    Vec3s limbRot;
+
+    // dont know what this is but its from romani
+    if (limbIndex == GROMANISKEL_BONE013_GROMANIHEADLIMB_LIMB) {
+        limbRot = this->interactInfo.headRot;
+        rot->x += limbRot.y;
+        rot->z += limbRot.x;
+    }
+    if (limbIndex == GROMANISKEL_BONE012_GROMANITORSOLIMB_LIMB) {
+        limbRot = this->interactInfo.torsoRot;
+        rot->x -= limbRot.y;
+        rot->z -= limbRot.x;
+    }
+
+    // head movement
+    if (limbIndex == GROMANISKEL_BONE013_GROMANIHEADLIMB_LIMB) {
+        s16 clampedYaw = this->headYaw - this->actor.shape.rot.y;
+        if (clampedYaw > 0x2800) clampedYaw = 0x2800;
+        if (clampedYaw < -0x2800) clampedYaw = -0x2800;
+        rot->x += clampedYaw;
+
+        s16 clampedPitch = this->headPitch;
+        if (clampedPitch > 0x0A00) clampedPitch = 0x0A00;
+        if (clampedPitch < -0x0A00) clampedPitch = -0x0A00;
+        rot->z += clampedPitch;
+    }
+
+    return false;
+}
+
+void Com_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, Actor* thisx) {
+    Com* this = (Com*)thisx;
+    Vec3f sp28 = { 800.0f, 0.0f, 0.0f };
+
+    if (limbIndex == GROMANISKEL_BONE013_GROMANIHEADLIMB_LIMB) {
+        Matrix_MultVec3f(&sp28, &this->actor.focus.pos);
+    }
+    else if (limbIndex == GROMANISKEL_BONE018_GROMANILEFTHANDLIMB_LIMB) {
+        if (this->hasBow == true /* || play->roomCtx.curRoom.type == ROOM_TYPE_DUNGEON*/) {
+            OPEN_DISPS(play->state.gfxCtx);
+
+            gSPDisplayList(POLY_OPA_DISP++, gRomaniBowDL_mesh);
+
+            CLOSE_DISPS(play->state.gfxCtx);
+        }
+    }
+    else if (limbIndex == GROMANISKEL_BONE012_GROMANITORSOLIMB_LIMB) {
+        if (this->hasBow == false) {
+            OPEN_DISPS(play->state.gfxCtx);
+
+            Matrix_Push();
+
+            // up down, front back, left right
+            Matrix_Translate(0x015E, -0x0280, 0x0050, MTXMODE_APPLY);
+            Matrix_RotateXS(0x4000, MTXMODE_APPLY);
+            // tilt up down
+            Matrix_RotateYS(0x1388, MTXMODE_APPLY);
+            // tilt left right
+            Matrix_RotateZS(0x1700, MTXMODE_APPLY);
+            gSPMatrix(POLY_OPA_DISP++, Matrix_ToMtx(GRAPH_ALLOC(play->state.gfxCtx, sizeof(Mtx))),
+                G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+
+            gSPDisplayList(POLY_OPA_DISP++, gRomaniBowDL_mesh);
+
+            Matrix_Pop();
+
+            CLOSE_DISPS(play->state.gfxCtx);
+        }
+    }
+}
+
+void Com_Draw(Actor* thisx, PlayState* play) {
+    Com* this = (Com*)thisx;
+
+    OPEN_DISPS(play->state.gfxCtx);
+
+    Gfx_SetupDL25_Opa(play->state.gfxCtx);
+    MATRIX_FINALIZE_AND_LOAD(POLY_OPA_DISP++, play->state.gfxCtx);
+
+    SkelAnime_DrawFlexOpa(play, this->skelAnime.skeleton, this->skelAnime.jointTable, this->skelAnime.dListCount,
+        Com_OverrideLimbDraw, Com_PostLimbDraw, &this->actor);
+
+    gSPPopMatrix(POLY_OPA_DISP++, G_MTX_MODELVIEW);
+
+    CLOSE_DISPS(play->state.gfxCtx);
+}

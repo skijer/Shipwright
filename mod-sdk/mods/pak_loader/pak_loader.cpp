@@ -327,7 +327,7 @@ static void RegisterMenu() {
     }
     std::vector<const char*> values;
     for(const auto& label:sMenuLabels) values.push_back(label.c_str());
-    sApi->RegisterMenuSidebar("Mods","PAK Loader","gMods.PakLoader.Page",2);
+    sApi->RegisterMenuSidebar("Mods","PAK Loader","gMods.Menu.Page",2);
     auto w=Widget(SOH_MOD_MENU_TEXT,"Custom Player Models");sApi->RegisterMenuWidget(&w);
     w=Widget(SOH_MOD_MENU_SEPARATOR,"Player Models Separator");sApi->RegisterMenuWidget(&w);
     w=Widget(SOH_MOD_MENU_CHECKBOX,"Enable Custom Player Model");

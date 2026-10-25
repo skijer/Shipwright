@@ -1,0 +1,26 @@
+{
+  "rotation_degrees_xyz": [
+    -60.38,
+    -43.86,
+    -3.99
+  ],
+  "scale": 0.01,
+  "order": "Rx * Ry * Rz * S",
+  "asset": "gSwitchHookBasePoseMtx",
+  "translation_baked": false,
+  "hand_translation": [
+    -1.9,
+    0.95,
+    4.43
+  ],
+  "hand_scale_multiplier": 0.52,
+  "hand_asset": "gSwitchHookHeldPoseMtx",
+  "socket_offset": [
+    -0.999725341796875,
+    0.1336517333984375,
+    3.964599609375
+  ],
+  "head_triangles": 280,
+  "body_triangles": 160,
+  "sliders_removed": true
+}

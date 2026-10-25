@@ -298,6 +298,4 @@ static void DrawWeaponCell(PlayState* play, int32_t cell, int32_t item, Vtx* ver
 
 void Sw97_RegisterArrowUi(void) {
     SOH_REGISTER_HOOK(gSw97Api, OnInterfaceResolveButtonIcon, ResolveElementButtonIcon);
-    SOH_REGISTER_HOOK(gSw97Api, OnKaleidoItemCursor, HandleWeaponCell);
-    SOH_REGISTER_HOOK(gSw97Api, OnKaleidoItemDraw, DrawWeaponCell);
 }

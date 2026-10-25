@@ -285,7 +285,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 					} else {
 						word0 = 0;
 						word1 = 0;
-						printf("dListDecl == nullptr! Addr = %08X\n", GETSEGOFFSET(data));
+                        printf("dListDecl == nullptr! Addr = %08X\n", static_cast<unsigned int>(GETSEGOFFSET(data)));
 					}
 				}
 			}
@@ -410,7 +410,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 				} else {
 					word0 = 0;
 					word1 = 0;
-					printf("dListDecl == nullptr! Addr = %08X\n", GETSEGOFFSET(data2));
+                    printf("dListDecl == nullptr! Addr = %08X\n", static_cast<unsigned int>(GETSEGOFFSET(data2)));
 				}
 			}
 
@@ -434,7 +434,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 				}
 				else
 				{
-					printf("dListDecl2 == nullptr! Addr = %08X\n", GETSEGOFFSET(data));
+                    printf("dListDecl2 == nullptr! Addr = %08X\n", static_cast<unsigned int>(GETSEGOFFSET(data)));
 				}
 			}
 
@@ -527,7 +527,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 					} else {
 						word0 = 0;
 						word1 = 0;
-						printf("dListDecl == nullptr! Addr = %08X\n", GETSEGOFFSET(data));
+                        printf("dListDecl == nullptr! Addr = %08X\n", static_cast<unsigned int>(GETSEGOFFSET(data)));
 					}
 				}
 
@@ -552,7 +552,7 @@ void OTRExporter_DisplayList::Save(ZResource* res, const fs::path& outPath, Bina
 					}
 					else
 					{
-						printf("dListDecl2 == nullptr! Addr = %08X\n", GETSEGOFFSET(data));
+                        printf("dListDecl2 == nullptr! Addr = %08X\n", static_cast<unsigned int>(GETSEGOFFSET(data)));
 					}
 				}
 			}

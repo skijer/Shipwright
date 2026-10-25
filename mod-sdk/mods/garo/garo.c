@@ -2207,7 +2207,13 @@ static void ResetState(PlayState* play, Player* player) {
     sReflectTimer = 0;
 }
 
+// Preserve equipment-specific damage while the form borrows Link's melee quads.
+static u8 sHumanMeleeDamage[2] = { 1, 1 };
+
 static void EnterGaro(PlayState* play, Player* player) {
+    for (s32 quad = 0; quad < 2; quad++) {
+        sHumanMeleeDamage[quad] = player->meleeWeaponQuads[quad].info.toucher.damage;
+    }
     ResetState(play, player);
     PrepareHybrid(play);
 }
@@ -2221,6 +2227,16 @@ static void ExitGaro(PlayState* play, Player* player) {
     sIsOcarinaOut = false;
     if (wasBusy) {
         func_80839FFC(player, play);
+    }
+    // OoT keeps AT_ON enabled and gates sword attacks with meleeWeaponState.
+    // Leaving it cleared makes every subsequent human sword swing miss.
+    player->meleeWeaponState = 0;
+    player->meleeWeaponInfo[0].active = 0;
+    for (s32 quad = 0; quad < 2; quad++) {
+        ColliderQuad* collider = &player->meleeWeaponQuads[quad];
+        collider->base.atFlags = (collider->base.atFlags & ~(AT_HIT | AT_BOUNCED)) | AT_ON;
+        collider->info.toucher.damage = sHumanMeleeDamage[quad];
+        player->meleeWeaponInfo[quad + 1].active = 0;
     }
 }
 

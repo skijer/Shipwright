@@ -30,8 +30,8 @@ static void DrawTridentThunder(Actor* thisx, PlayState* play2) {
             } else {
                 gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 255, 255, 170, (u8)(this->spinAttackAlpha * 255));
             }
-            gSPDisplayList(POLY_XLU_DISP++, gSpinAttack3DL);
-            gSPDisplayList(POLY_XLU_DISP++, gSpinAttack4DL);
+            gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttack3DL);
+            gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttack4DL);
             break;
         case 1:
             if (CVarGetInteger("gCosmetics.SpinAttack.Level1Primary.Changed", 0)) {
@@ -41,8 +41,8 @@ static void DrawTridentThunder(Actor* thisx, PlayState* play2) {
             } else {
                 gDPSetPrimColor(POLY_XLU_DISP++, 0, 0x80, 170, 255, 255, (u8)(this->spinAttackAlpha * 255));
             }
-            gSPDisplayList(POLY_XLU_DISP++, gSpinAttack1DL);
-            gSPDisplayList(POLY_XLU_DISP++, gSpinAttack2DL);
+            gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttack1DL);
+            gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttack2DL);
             break;
     }
 
@@ -97,7 +97,7 @@ static void DrawTridentThunder(Actor* thisx, PlayState* play2) {
                                   (play->gameplayFrames * 20) & 0xFF, (play->gameplayFrames * phi_t1) & 0xFF, 8, 8, 5,
                                   0, 20, phi_t1));
 
-    gSPDisplayList(POLY_XLU_DISP++, gSpinAttackChargingDL);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttackChargingDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }

@@ -1,0 +1,11 @@
+// MM/NEI fingering; matches mm_collectables acquisition keys.
+    { "nei.mm_song_sonata", 7, { 4, 3, 4, 3, 0, 2, 0 } },
+    { "nei.mm_song_goron_lullaby", 8, { 0, 2, 3, 0, 2, 3, 2, 0 } },
+    { "nei.mm_song_new_wave", 7, { 3, 4, 3, 2, 1, 3, 2 } },
+    { "nei.mm_song_elegy", 7, { 2, 3, 2, 1, 2, 4, 3 } },
+    { "nei.mm_song_oath", 6, { 2, 1, 0, 1, 2, 4 } },
+    { "nei.mm_song_healing", 6, { 3, 2, 1, 3, 2, 1 } },
+    { "nei.mm_song_soaring", 6, { 1, 3, 4, 1, 3, 4 } },
+    { "nei.mm_song_fugue_of_home", 6, { 0, 1, 2, 4, 2, 3 } },
+    { "nei.mm_song_ballad_of_hero", 7, { 0, 1, 4, 3, 2, 3, 2 } },
+    { "nei.mm_song_command_melody", 8, { 0, 3, 0, 2, 0, 3, 0, 2 } },

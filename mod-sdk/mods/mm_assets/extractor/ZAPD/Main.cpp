@@ -680,7 +680,7 @@ int HandleExtract(ZFileMode fileMode, ExporterSet* exporterSet, std::atomic<size
 				auto end = std::chrono::steady_clock::now();
 				auto diff = std::chrono::duration_cast<std::chrono::seconds>(end - start).count();
 
-				printf("Generated OTR File Data in %i seconds\n", diff);
+                printf("Generated OTR File Data in %lld seconds\n", static_cast<long long>(diff));
 			}
 			else
 			{

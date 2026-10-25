@@ -191,11 +191,11 @@ static void BeginFrame() {
 }
 
 static void Checkbox(const char* label,const char* cvar,int value) {
-    SOHModMenuWidget w = {}; w.structSize=sizeof(w); w.section="Enhancements";w.sidebar="Cel Shading";
+    SOHModMenuWidget w = {}; w.structSize=sizeof(w); w.section="Mods";w.sidebar="Cel Shading";
     w.type=SOH_MOD_MENU_CHECKBOX;w.label=label;w.cvar=cvar;w.defaultInt=value;sApi->RegisterMenuWidget(&w);
 }
 static void Slider(const char* label,const char* cvar,float value,float min,float max) {
-    SOHModMenuWidget w = {};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Cel Shading";
+    SOHModMenuWidget w = {};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Cel Shading";w.column=1;
     w.type=SOH_MOD_MENU_FLOAT_SLIDER;w.label=label;w.cvar=cvar;w.defaultFloat=value;w.minFloat=min;w.maxFloat=max;
     sApi->RegisterMenuWidget(&w);
 }
@@ -203,7 +203,7 @@ extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) { sApi=api; }
 extern "C" SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements() { return &sRequirements; }
 extern "C" SOH_MOD_EXPORT void ModInit() {
     if (!SOH_MOD_API_HAS(sApi,SetCelShadingRamp) || !sApi->SetCelShadingRamp) return;
-    sApi->RegisterMenuSidebar("Enhancements","Cel Shading",CVAR("Menu"),1);
+    sApi->RegisterMenuSidebar("Mods","Cel Shading","gMods.Menu.Page",2);
     Checkbox("Enable Cel Shading",CVAR("Enabled"),1);
     Checkbox("Use Point Lights",CVAR("PointLights"),1);
     Checkbox("Use Navi's Light",CVAR("UseNaviLight"),1);

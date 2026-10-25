@@ -1,0 +1,60 @@
+{
+  "textures": {
+    "gCuccoBaseFeathersTex": [
+      8,
+      8
+    ],
+    "gCuccoHeadFeathersTex": [
+      8,
+      16
+    ],
+    "gCuccoTailFeathersTex": [
+      32,
+      32
+    ],
+    "gCuccoEyeTex": [
+      16,
+      16
+    ]
+  },
+  "display_lists": {
+    "gCuccoTailAndUndersideDL": 3,
+    "gCuccoLeftFootDL": 0,
+    "gCuccoLeftWingDL": 1,
+    "gCuccoRightFootDL": 0,
+    "gCuccoRightWingDL": 1,
+    "gCuccoNeckDL": 1,
+    "gCuccoHeadDL": 5
+  },
+  "eye_background_pixels": 180,
+  "limbs": [
+    [
+      4,
+      "gCuccoTailAndUndersideDL"
+    ],
+    [
+      6,
+      "gCuccoLeftFootDL"
+    ],
+    [
+      8,
+      "gCuccoLeftWingDL"
+    ],
+    [
+      10,
+      "gCuccoRightFootDL"
+    ],
+    [
+      12,
+      "gCuccoRightWingDL"
+    ],
+    [
+      14,
+      "gCuccoNeckDL"
+    ],
+    [
+      15,
+      "gCuccoHeadDL"
+    ]
+  ]
+}

@@ -10,7 +10,7 @@
 #define TURBO_BUTTONS_CVAR "gMods.Turbo.Buttons"
 #define TURBO_SPEED_CVAR "gMods.Turbo.Speed"
 #define TURBO_TOGGLE_CVAR "gMods.Turbo.Toggle"
-#define TURBO_SIDEBAR "Mods"
+#define TURBO_SIDEBAR "Gameplay"
 
 // Mirrors BTN_CUSTOM_MODIFIER1/2 in soh/OTRGlobals.h, a C++ header a C mod cannot include.
 #define TURBO_BTN_MODIFIER1 0x0040
@@ -130,11 +130,12 @@ static void RegisterMenu(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterMenuSidebar) || !SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
         return;
     }
-    sApi->RegisterMenuSidebar("Enhancements", TURBO_SIDEBAR, "gMods.Menu", 1);
+    sApi->RegisterMenuSidebar("Mods", TURBO_SIDEBAR, "gMods.Menu.Page", 2);
 
     SOHModMenuWidget speed = { sizeof(SOHModMenuWidget) };
-    speed.section = "Enhancements";
+    speed.section = "Mods";
     speed.sidebar = TURBO_SIDEBAR;
+    speed.column = 1;
     speed.type = SOH_MOD_MENU_INT_SLIDER;
     speed.label = "Turbo Speed";
     speed.cvar = TURBO_SPEED_CVAR;
@@ -145,8 +146,9 @@ static void RegisterMenu(void) {
     sApi->RegisterMenuWidget(&speed);
 
     SOHModMenuWidget toggle = { sizeof(SOHModMenuWidget) };
-    toggle.section = "Enhancements";
+    toggle.section = "Mods";
     toggle.sidebar = TURBO_SIDEBAR;
+    toggle.column = 1;
     toggle.type = SOH_MOD_MENU_CHECKBOX;
     toggle.label = "Toggle Turbo Instead of Holding";
     toggle.cvar = TURBO_TOGGLE_CVAR;
@@ -154,8 +156,9 @@ static void RegisterMenu(void) {
     sApi->RegisterMenuWidget(&toggle);
 
     SOHModMenuWidget buttons = { sizeof(SOHModMenuWidget) };
-    buttons.section = "Enhancements";
+    buttons.section = "Mods";
     buttons.sidebar = TURBO_SIDEBAR;
+    buttons.column = 1;
     buttons.type = SOH_MOD_MENU_CUSTOM;
     buttons.label = "Turbo Buttons";
     buttons.onChange = DrawButtonPicker;

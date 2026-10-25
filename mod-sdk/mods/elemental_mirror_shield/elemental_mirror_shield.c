@@ -1,19 +1,16 @@
 #include <stdbool.h>
 #include <math.h>
 #include <string.h>
-#include <libultraship/bridge/consolevariablebridge.h>
 #include "z64items.h"
 #include "functions.h"
 #include "variables.h"
 #include "macros.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
-#include "soh/ModApi/ModMenu/ModUI.h"
 #include "overlays/actors/ovl_En_Firefly/z_en_firefly.h"
 #ifdef _MSC_VER
 #pragma warning(error: 4013)
 #endif
 
-#define ENABLED "gMods.ElementalMirror.Enabled"
 #define BOLT_KEY "nei.elemental_mirror.bolt"
 typedef enum { COUNTER_NONE,COUNTER_BLUE_FIRE,COUNTER_ICE,COUNTER_THUNDER,COUNTER_LIGHT } Counter;
 typedef struct {Actor actor;ColliderCylinder hit;Actor* target;int life;Counter kind;} MirrorBolt;
@@ -32,8 +29,9 @@ static bool OutsideTwinrova(PlayState* play) {
 }
 static bool Ready(PlayState* play,Player* p) {
     const char* custom=sApi->GetWornEquipment(SOH_EQUIP_SLOT_SHIELD);
-    return CVarGetInteger(ENABLED,1) && CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD)==EQUIP_VALUE_SHIELD_MIRROR &&
-        (!custom || !custom[0]) && OutsideTwinrova(play) && play->pauseCtx.state==0 &&
+    const char* form=SOH_MOD_API_HAS(sApi,GetActiveForm)?sApi->GetActiveForm():NULL;
+    return CUR_EQUIP_VALUE(EQUIP_TYPE_SHIELD)==EQUIP_VALUE_SHIELD_MIRROR &&
+        (!custom || !custom[0]) && (!form || !form[0]) && OutsideTwinrova(play) && play->pauseCtx.state==0 &&
         (p->stateFlags1&PLAYER_STATE1_SHIELDING) &&
         !(p->stateFlags1&(PLAYER_STATE1_DEAD|PLAYER_STATE1_IN_CUTSCENE|PLAYER_STATE1_LOADING));
 }
@@ -144,26 +142,14 @@ static void ForgetActor(void* ref) {
         if(a->id==sBoltId && ((MirrorBolt*)a)->target==dead)((MirrorBolt*)a)->target=NULL;
 }
 static void Reset(int16_t scene){sNextReflect=0;sLastSource=NULL;}
-static void DrawList(void) {
-    ModUI_Text("Freezard / ice -> blue fire");ModUI_Text("Fire Keese -> thunder magic");
-    ModUI_Text("Other fire -> ice; electricity -> light");ModUI_Text("Light magic / mirror ray -> light");
-    ModUI_Text("Physical attacks: vanilla shield. Disabled during Twinrova.");
-}
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api){sApi=api;}
 SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void){return &sRequirements;}
 SOH_MOD_EXPORT void ModInit(void) {
-    if(!SOH_MOD_API_HAS(sApi,RegisterActor))return;
+    if(!SOH_MOD_API_HAS(sApi,RegisterActor) || !SOH_MOD_API_HAS(sApi,GetWornEquipment))return;
     SOHActorDefinition d={0};d.structSize=sizeof(d);d.key=BOLT_KEY;d.description="Elemental Mirror counter bolt";
     d.category=ACTORCAT_MISC;d.actorFlags=ACTOR_FLAG_UPDATE_CULLING_DISABLED;d.objectId=OBJECT_GAMEPLAY_KEEP;
     d.instanceSize=sizeof(MirrorBolt);d.init=BoltInit;d.destroy=BoltDestroy;d.update=BoltUpdate;d.draw=BoltDraw;
     sBoltId=sApi->RegisterActor(&d);if(sBoltId<0)return;
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi,RegisterMenuWidget)) {
-        sApi->RegisterMenuSidebar("Enhancements","Elemental Mirror Shield","gMods.Menu",1);
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Elemental Mirror Shield";
-        w.type=SOH_MOD_MENU_CHECKBOX;w.label="Reflect counter-element magic";w.cvar=ENABLED;w.defaultInt=1;
-        w.tooltip="The vanilla Mirror Shield sends blocked magic back at its source. Uses real enemy collision/damage reactions. Custom shields keep their own behavior. Never runs during Twinrova.";sApi->RegisterMenuWidget(&w);
-        w.type=SOH_MOD_MENU_CUSTOM;w.label="Counter-element list";w.cvar=NULL;w.onChange=DrawList;sApi->RegisterMenuWidget(&w);
-    }
     SOH_REGISTER_HOOK(sApi,OnPlayerShieldBlocked,OnGuard);SOH_REGISTER_HOOK(sApi,OnCollisionResolveDamage,OnDamage);
     SOH_REGISTER_HOOK(sApi,OnActorDestroy,ForgetActor);SOH_REGISTER_HOOK(sApi,OnSceneInit,Reset);
 }

@@ -1960,7 +1960,7 @@ static void MasterCycle_DrawChargeFlames(PlayState* play, Actor* actor) {
         Matrix_Scale(sc, sc, sc, MTXMODE_APPLY);
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, __FILE__, __LINE__),
                   G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, gEffFire1DL);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gEffFire1DL);
         Matrix_Pop();
     }
 

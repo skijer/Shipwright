@@ -440,11 +440,11 @@ void Sw97_ArrowFire_Draw(Actor* thisx, PlayState* play) {
         Matrix_Translate(0.0f, -700.0f, 0.0f, MTXMODE_APPLY);
         gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, "../z_arrow_fire.c", 666),
                   G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++, sSw97FireMatDL);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sSw97FireMatDL);
         gSPDisplayList(POLY_XLU_DISP++,
                        Gfx_TwoTexScroll(play->state.gfxCtx, 0, 255 - (stateFrames * 2) % 256, 0, 64, 32, 1,
                                         255 - stateFrames % 256, 511 - (stateFrames * 10) % 512, 64, 64));
-        gSPDisplayList(POLY_XLU_DISP++, sSw97FireMdlDL);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sSw97FireMdlDL);
 
         CLOSE_DISPS(play->state.gfxCtx);
     }

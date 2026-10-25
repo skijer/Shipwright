@@ -7,6 +7,8 @@
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <stdlib.h>
 
 s32 Player_SetupAction(PlayState*, Player*, PlayerActionFunc, s32);
@@ -16,9 +18,43 @@ void Player_AnimPlayLoop(PlayState*, Player*, LinkAnimationHeader*);
 s8 Player_ItemToItemAction(s32 item);
 #ifdef _WIN32
 __declspec(dllimport) void EnArrow_Fly(EnArrow*, PlayState*);
+__declspec(dllimport) void Player_Action_8084411C(Player*, PlayState*);
 #else
 void EnArrow_Fly(EnArrow*, PlayState*);
+void Player_Action_8084411C(Player*, PlayState*);
 #endif
+
+#define TWIN_THROW_GRAVITY (-1.2f)
+#define TWIN_THROW_TERMINAL (-20.0f)
+static f32 sTwinThrowSpeed;
+static s16 sTwinThrowYaw;
+
+static Vec3f TwinThrowVelocity(s16 yaw, s16 pitch) {
+    f32 speed = Math_CosS(pitch) * 18;
+    return (Vec3f){ Math_SinS(yaw) * speed, Math_SinS(pitch) * 22 + 5, Math_CosS(yaw) * speed };
+}
+
+// Actor_UpdateVelocityXZGravity applies gravity before Actor_UpdatePos advances 1.5 units of time.
+static void TwinThrowStep(Vec3f* pos, Vec3f* velocity, f32 step) {
+    velocity->y = MAX(velocity->y + TWIN_THROW_GRAVITY, TWIN_THROW_TERMINAL);
+    pos->x += velocity->x * step;
+    pos->y += velocity->y * step;
+    pos->z += velocity->z * step;
+}
+
+// Retain the throw's momentum instead of the normal jump's run-speed clamp/deceleration.
+// Native jumping still handles collisions, landings, water, attacks and ledge grabs.
+static void TwinThrownAction(Player* player, PlayState* play) {
+    player->actionFunc = Player_Action_8084411C;
+    Player_Action_8084411C(player, play);
+    if (player->actionFunc == Player_Action_8084411C &&
+        !(player->actor.bgCheckFlags & (BGCHECKFLAG_GROUND | BGCHECKFLAG_WALL))) {
+        player->actionFunc = TwinThrownAction;
+        player->linearVelocity = sTwinThrowSpeed;
+        player->yaw = sTwinThrowYaw;
+        player->actor.gravity = TWIN_THROW_GRAVITY;
+    }
+}
 
 #define TWIN_KEY "nei.mm_remains_twinmold"
 #define TWIN_COST 24
@@ -615,7 +651,8 @@ static bool TwinCombat(TwinLink* self, PlayState* play) {
 
 static bool TwinBombable(Actor* actor) {
     switch (actor->id) {
-        case ACTOR_BG_BREAKWALL: return (actor->params & 0xF) < 3;
+        // Low bits are a switch flag, not the wall type. Type 3 is the post-boss lava cover.
+        case ACTOR_BG_BREAKWALL: return ((actor->params >> 13) & 3) < 3;
         case ACTOR_BG_BOMBWALL: case ACTOR_OBJ_BOMBIWA: case ACTOR_BG_JYA_BOMBIWA:
         case ACTOR_BG_MIZU_BWALL: case ACTOR_BG_SPOT16_BOMBSTONE: case ACTOR_BG_SPOT00_BREAK:
             return true;
@@ -674,6 +711,26 @@ static void TwinGiveHelpCommand(PlayState* play, Player* player) {
     TwinLink* self = sTwinLink;
     if (self == NULL || sTwinMode != TWIN_HELP || self->cooldown > 0 || self->action != TWIN_IDLE) return;
     Actor* nearest = NULL; f32 best = 200;
+    Vec3f approach;
+    // Large walls can have their actor origin far outside the visible wall. Use the actual
+    // collision surface in front of Link before falling back to nearby actor origins.
+    Vec3f from = player->actor.world.pos, to = from, hit;
+    from.y += 30; to.y += 30;
+    to.x += Math_SinS(player->actor.shape.rot.y) * best;
+    to.z += Math_CosS(player->actor.shape.rot.y) * best;
+    CollisionPoly* poly = NULL; s32 bg = BGCHECK_SCENE;
+    if (BgCheck_EntityLineTest1(&play->colCtx, &from, &to, &hit, &poly, true, false, false, true, &bg) &&
+        bg != BGCHECK_SCENE) {
+        DynaPolyActor* wall = DynaPoly_GetActor(&play->colCtx, bg);
+        if (wall != NULL && wall->actor.update != NULL && TwinBombable(&wall->actor)) {
+            nearest = &wall->actor;
+            approach = hit;
+            approach.x -= Math_SinS(player->actor.shape.rot.y) * 45;
+            approach.z -= Math_CosS(player->actor.shape.rot.y) * 45;
+            approach.y = player->actor.world.pos.y;
+            best = 0;
+        }
+    }
     for (int c = 0; c < ACTORCAT_MAX; ++c) {
         for (Actor* a = play->actorCtx.actorLists[c].head; a != NULL; a = a->next) {
             if (a->update == NULL || !TwinBombable(a)) continue;
@@ -687,10 +744,13 @@ static void TwinGiveHelpCommand(PlayState* play, Player* player) {
     self->taskActor = NULL; self->launchTask = false;
     if (nearest != NULL) {
         self->taskActor = nearest;
-        self->taskPoint = nearest->world.pos;
-        s16 yaw = Actor_WorldYawTowardActor(nearest, &player->actor);
-        self->taskPoint.x += Math_SinS(yaw) * 45;
-        self->taskPoint.z += Math_CosS(yaw) * 45;
+        if (best == 0) self->taskPoint = approach;
+        else {
+            self->taskPoint = nearest->world.pos;
+            s16 yaw = Actor_WorldYawTowardActor(nearest, &player->actor);
+            self->taskPoint.x += Math_SinS(yaw) * 45;
+            self->taskPoint.z += Math_CosS(yaw) * 45;
+        }
         return;
     }
     // Launching is now an explicit A offer, not a slash-triggered wall task.
@@ -934,7 +994,7 @@ static void TwinHelp(TwinLink* self, PlayState* play) {
         return;
     }
     if (self->taskActor != NULL && self->taskActor->id == ACTOR_EN_NIW) self->taskActor = NULL;
-    if (self->taskActor != NULL && Actor_WorldDistXZToActor(&player->actor, self->taskActor) > 240)
+    if (self->taskActor != NULL && Math_Vec3f_DistXZ(&player->actor.world.pos, &self->taskPoint) > 240)
         self->taskActor = NULL;
     if (self->taskActor != NULL) {
         TwinWalk(self, play, &self->taskPoint, 30);
@@ -942,6 +1002,10 @@ static void TwinHelp(TwinLink* self, PlayState* play) {
             TwinStartAction(self, play, TWIN_BOMB);
         }
         return;
+    }
+    if (interact == NULL && self->cooldown == 0) {
+        TwinGiveHelpCommand(play, player);
+        if (self->taskActor != NULL) return;
     }
     if (TwinActorIsLive(play, interact) && TwinStrengthObject(interact) &&
         Actor_WorldDistXZToActor(&player->actor, interact) < 220) {
@@ -1324,15 +1388,22 @@ static void TwinPlayerActionHandler(Player* player, PlayState* play) {
         player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
         sTwinLaunchYaw -= sTwinInput.cur.stick_x * 12;
         sTwinLaunchPitch = CLAMP(sTwinLaunchPitch + sTwinInput.cur.stick_y * 6, 0x0800, 0x3000);
-        player->actor.shape.rot.y = player->actor.world.rot.y = sTwinLaunchYaw;
+        player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
+        player->yaw = player->actor.shape.rot.y = player->actor.world.rot.y = sTwinLaunchYaw;
+        carrier->shape.rot.y = carrier->world.rot.y = sTwinLaunchYaw;
         if ((sTwinInput.press.button & BTN_A) && sTwinPlayerTicks > 18) {
             s16 yaw = sTwinLaunchYaw, pitch = sTwinLaunchPitch;
+            Vec3f velocity = TwinThrowVelocity(yaw, pitch);
             TwinFinishPlayer(play, player);
             func_80838940(player, (LinkAnimationHeader*)gPlayerAnim_link_normal_run_jump,
-                Math_SinS(pitch) * 22 + 5, play, NA_SE_VO_LI_AUTO_JUMP);
+                velocity.y, play, NA_SE_VO_LI_AUTO_JUMP);
             player->actor.world.rot.y = player->actor.shape.rot.y = player->yaw = yaw;
-            player->actor.velocity.y = Math_SinS(pitch) * 22 + 5;
-            player->linearVelocity = player->actor.speedXZ = Math_CosS(pitch) * 18;
+            player->actor.velocity = velocity;
+            player->actor.gravity = TWIN_THROW_GRAVITY;
+            player->actor.minVelocityY = TWIN_THROW_TERMINAL;
+            sTwinThrowSpeed = player->linearVelocity = player->actor.speedXZ = Math_CosS(pitch) * 18;
+            sTwinThrowYaw = yaw;
+            player->actionFunc = TwinThrownAction;
             player->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
             player->stateFlags1 |= PLAYER_STATE1_JUMPING;
             player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
@@ -1427,10 +1498,14 @@ static Vtx sTwinAimDot[] = {
 
 static void TwinDrawTrajectory(PlayState* play) {
     Player* player = GET_PLAYER(play);
-    Vec3f origin = player->actor.world.pos, previous = origin;
-    f32 speed = Math_CosS(sTwinLaunchPitch) * 18;
-    f32 vy = Math_SinS(sTwinLaunchPitch) * 22 + 5;
-    f32 gravity = player->actor.gravity < -.1f ? player->actor.gravity : -1.0f;
+    Vec3f point = player->actor.world.pos, previous = point;
+    Vec3f velocity = TwinThrowVelocity(sTwinLaunchYaw, sTwinLaunchPitch);
+    f32 step = R_UPDATE_RATE * .5f;
+    f32 motionScale = 1.0f;
+    GameInteractor_ExecuteOnActorResolveMotionScale(&player->actor, &motionScale);
+    step *= motionScale;
+    f32 speedModifier = GameInteractor_MovementSpeedMultiplier();
+    velocity.x *= speedModifier; velocity.z *= speedModifier;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPClearGeometryMode(POLY_XLU_DISP++, G_LIGHTING | G_CULL_BOTH);
@@ -1439,15 +1514,12 @@ static void TwinDrawTrajectory(PlayState* play) {
     gDPSetRenderMode(POLY_XLU_DISP++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
     gDPSetCombineMode(POLY_XLU_DISP++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 80, 210, 255, 200);
-    for (int t = 3; t <= 48; t += 3) {
-        Vec3f point = {
-            origin.x + Math_SinS(sTwinLaunchYaw) * speed * t,
-            origin.y + vy * t + .5f * gravity * t * t,
-            origin.z + Math_CosS(sTwinLaunchYaw) * speed * t,
-        };
+    for (int t = 1; t <= 64; ++t) {
+        TwinThrowStep(&point, &velocity, step);
         Vec3f hit; CollisionPoly* poly; s32 bg;
         bool blocked = BgCheck_EntityLineTest1(&play->colCtx, &previous, &point, &hit, &poly, true, true, true, true, &bg);
         if (blocked) point = hit;
+        if (!blocked && t % 2 != 0) { previous = point; continue; }
         Matrix_Push();
         Matrix_Translate(point.x, point.y, point.z, MTXMODE_NEW);
         Matrix_ReplaceRotation(&play->billboardMtxF);

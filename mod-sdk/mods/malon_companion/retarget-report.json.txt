@@ -1,0 +1,137 @@
+{
+  "source_commit": "cced2388ea8c8a9082346ce70e227d805162a8ee",
+  "targets": {
+    "child": {
+      "mapping": [
+        0,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        13,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        14,
+        9,
+        10,
+        11
+      ],
+      "root_scale": 1.0054406964091405,
+      "clips": {
+        "idle": {
+          "frames": 32,
+          "joints": 19
+        },
+        "lookaround": {
+          "frames": 34,
+          "joints": 19
+        },
+        "run": {
+          "frames": 8,
+          "joints": 19
+        },
+        "sitting": {
+          "frames": 24,
+          "joints": 19
+        },
+        "shootbow": {
+          "frames": 38,
+          "joints": 19
+        },
+        "fall": {
+          "frames": 1,
+          "joints": 19
+        },
+        "jump": {
+          "frames": 21,
+          "joints": 19
+        },
+        "eponamount": {
+          "frames": 27,
+          "joints": 19
+        },
+        "eponaride": {
+          "frames": 1,
+          "joints": 19
+        },
+        "aimbowrun": {
+          "frames": 8,
+          "joints": 19
+        }
+      }
+    },
+    "adult": {
+      "mapping": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        13,
+        9,
+        13,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        14
+      ],
+      "root_scale": 1.8770402611534276,
+      "clips": {
+        "idle": {
+          "frames": 32,
+          "joints": 19
+        },
+        "lookaround": {
+          "frames": 34,
+          "joints": 19
+        },
+        "run": {
+          "frames": 8,
+          "joints": 19
+        },
+        "sitting": {
+          "frames": 24,
+          "joints": 19
+        },
+        "shootbow": {
+          "frames": 38,
+          "joints": 19
+        },
+        "fall": {
+          "frames": 1,
+          "joints": 19
+        },
+        "jump": {
+          "frames": 21,
+          "joints": 19
+        },
+        "eponamount": {
+          "frames": 27,
+          "joints": 19
+        },
+        "eponaride": {
+          "frames": 1,
+          "joints": 19
+        },
+        "aimbowrun": {
+          "frames": 8,
+          "joints": 19
+        }
+      }
+    }
+  }
+}

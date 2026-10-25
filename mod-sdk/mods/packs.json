@@ -8,7 +8,8 @@
                 "dominion_rod", "elemental_rods", "elemental_wand", "four_sword", "gust_jar", "lantern",
                 "mogma_mitts", "not_enough_bottles", "oot_item_upgrades", "pendant", "phantom_hourglass", "rocs",
                 "rod_of_seasons", "sheikah_slate", "shovel", "somaria", "spinner", "spiritual_stones",
-                "switch_hook", "time_gate", "trident", "ultrahand", "useful_medallions", "whip", "zonai_permafrost"
+                "switch_hook", "time_gate", "trident", "ultrahand", "useful_medallions", "whip", "zonai_permafrost",
+                "ravio_bracelet", "ray_gun"
             ]
         },
         {
@@ -43,7 +44,12 @@
         {
             "id": "skijer-devtools",
             "name": "Skijer DevTools",
-            "mods": ["anim_viewer", "turbo"]
+            "mods": ["anim_viewer", "turbo", "item_drop_tester"]
+        },
+        {
+            "id": "skijer-partners",
+            "name": "Skijer Partners",
+            "mods": ["command_melody", "cojiro_companion", "malon_companion", "enemy_possession"]
         }
     ]
 }

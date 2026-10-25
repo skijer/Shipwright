@@ -995,7 +995,7 @@ static void UpdateMinishCap(void) {
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.5f, 0.5f, 0.5f, MTXMODE_APPLY);
+    Matrix_Scale(0.5f * 0.8f, 0.5f * 0.8f, 0.5f * 0.8f, MTXMODE_APPLY);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sCapDL);

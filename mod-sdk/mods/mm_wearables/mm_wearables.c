@@ -1360,11 +1360,11 @@ static void HideNativeWearables(bool* draw,va_list args) {
 }
 static void RegisterMaskOptions(void) {
     if(!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Enhancements","Mods","gMods.Menu",1);
+    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Mods","Majora's Mask","gMods.Menu.Page",1);
     const char* labels[]={"Hide MM masks","Instant transformation masks","Instant Blast Mask"};
     const char* cvars[]={"gMods.MMMasks.Hide","gMods.MMMasks.InstantForms","gMods.MMMasks.InstantBlast"};
     for(int i=0;i<3;++i) {
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Mods";
+        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Majora's Mask";
         w.type=SOH_MOD_MENU_CHECKBOX;w.label=labels[i];w.cvar=cvars[i];sApi->RegisterMenuWidget(&w);
     }
 }

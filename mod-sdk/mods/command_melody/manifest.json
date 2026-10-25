@@ -1,0 +1,7 @@
+{
+    "name": "command_melody",
+    "author": "Skijer",
+    "version": "1.1.0",
+    "dependencies": ["mm_collectables"],
+    "description": "Command Melody controls registered companions using their own movement, actions and a dedicated camera. Uses the existing NEI song."
+}

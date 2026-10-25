@@ -1,7 +1,7 @@
 {
     "name": "zora",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.0.1",
     "dependencies": ["mm_assets"],
     "description": "The Zora Mask takes the place of OoT's: wearing it turns Link into a Zora that fights with fins, throws them, shields itself in lightning and swims like a fish, as in Majora's Mask.",
     "requires": [

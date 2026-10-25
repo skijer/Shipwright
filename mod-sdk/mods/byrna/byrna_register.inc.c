@@ -28,6 +28,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.slot=SOH_EQUIP_SLOT_SWORD;definition.page=0;definition.row=SOH_EQUIP_SLOT_SWORD;definition.column=1;
     definition.ageRequirement=SOH_CUSTOM_ITEM_AGE_ANY;definition.vanillaBase=EQUIP_VALUE_SWORD_KOKIRI;
     definition.toggles=1;definition.onUnequip=PutCaneAway;definition.getItemEntry.drawFunc=DrawGetItem;
+    // The equipment registry creates the pickup; this block also puts it into new seeds.
+    static const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
+        BYRNA_KEY, BYRNA_KEY, "",
+    };
+    definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) return;
     SOH_REGISTER_HOOK(sApi,OnPlayerUpdate,TickByrna);
     SOH_REGISTER_HOOK_FOR_ID(sApi,OnPlayerActionHandler,SOH_PLAYER_ACTION_MELEE,TakeMeleeButton);

@@ -143,7 +143,7 @@ static bool IsSomariaWeight(Actor* actor) {
 #define PACCI_UH_CUT_HEIGHT 80.0f
 #define PACCI_UH_CUT_FRAMES 6
 #define PACCI_UH_HEIGHT_STEP 40.0f
-#define PACCI_UH_HEIGHT_MAX 600.0f
+#define PACCI_SPOUT_HEIGHT_MAX 600.0f
 #define PACCI_UH_THROW_HOLD 4
 #define PACCI_UH_PULL_RATE 1.6f
 #define PACCI_UH_THROW_REACH 18.0f
@@ -3361,7 +3361,7 @@ static void Pacci_UhHeightInput(Actor* actor, u8 edge) {
     }
     // Clamped to something the spout can actually be. It smooth-steps currentHeight toward this,
     // so the growing and shrinking is its own animation and not a jump.
-    spout->targetHeight = CLAMP(spout->targetHeight, 0.0f, PACCI_UH_HEIGHT_MAX);
+    spout->targetHeight = CLAMP(spout->targetHeight, 0.0f, PACCI_SPOUT_HEIGHT_MAX);
     Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                            &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }

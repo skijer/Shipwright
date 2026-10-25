@@ -980,8 +980,8 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 static int32_t PictoPhotoCount(const char* key){return sIsPhotoStored?1:0;}
 static void RegisterPictoOptions(void) {
     if(!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Enhancements","Mods","gMods.Menu",1);
-    SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Enhancements";w.sidebar="Mods";
+    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Mods","Majora's Mask","gMods.Menu.Page",1);
+    SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Majora's Mask";
     w.type=SOH_MOD_MENU_CHECKBOX;w.label="Save pictographs in color";w.cvar="gMods.Pictobox.Color";
     w.tooltip="Keep a color photograph in the save file. Existing monochrome photographs remain readable.";
     sApi->RegisterMenuWidget(&w);

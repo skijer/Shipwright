@@ -2359,6 +2359,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.onEquip = TakeUpMirrorShield;
     definition.onUnequip = PutLanceAway;
     definition.getItemEntry.drawFunc = DrawGetItem;
+    // The equipment registry creates the pickup; this block also puts it into new seeds.
+    static const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
+        PROJECTILE_KEY, PROJECTILE_KEY, "",
+    };
+    definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {
         return;
     }

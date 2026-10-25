@@ -1,0 +1,18 @@
+#ifndef GROMANISKEL_H
+#define GROMANISKEL_H
+
+#include "ultra64.h"
+#include "global.h"
+
+extern AnimationHeader gRomaniSkelGromaniidleanimAnim;
+extern AnimationHeader gRomaniSkelGromanilookaroundanimAnim;
+extern AnimationHeader gRomaniSkelGromanirunanimAnim;
+extern AnimationHeader gRomaniSkelGromanisittinganimAnim;
+extern AnimationHeader gRomaniSkelGromanishootbowanimAnim;
+extern AnimationHeader gRomaniSkelGromanifallanimAnim;
+extern AnimationHeader gRomaniSkelGromanijumpanimAnim;
+extern AnimationHeader gRomaniSkelGromanieponamountanimAnim;
+extern AnimationHeader gRomaniSkelGromanieponarideanimAnim;
+extern AnimationHeader gRomaniSkelGromaniaimbowrunanimAnim;
+
+#endif

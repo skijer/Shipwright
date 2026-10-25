@@ -11,6 +11,8 @@ Cambiar escudo, túnica o botas desde un botón C, con una rueda.
 
 La rueda detiene el mundo y el reloj. Las piezas de otra edad salen atenuadas y no se equipan, salvo con Timeless Equipment. Con más de 12 piezas en una categoría hay anillos concéntricos: más recorrido del stick elige los exteriores.
 
+En **Mods → Equipment**, «Open equipment wheel» permite elegir **Hold** o **Instant**.
+
 ## Pendiente de smoke test en juego
 
 - Túnica vanilla ↔ Champion's Tunic, y Climb Boots ↔ Iron/Kokiri Boots, desde el toque y desde la rueda.

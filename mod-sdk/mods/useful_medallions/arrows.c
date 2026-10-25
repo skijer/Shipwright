@@ -391,8 +391,10 @@ static void AddTrailVertex(Actor* actor, PlayState* play) {
     if (tracked == NULL || !tracked->hasBlure || tracked->arrow->actionFunc != EnArrow_Fly) {
         return;
     }
-    Matrix_MultVec3f(&sArrowTip, &tip);
-    Matrix_MultVec3f(&sArrowBase, &base);
+    Vec3f localTip = sArrowTip;
+    Vec3f localBase = sArrowBase;
+    Matrix_MultVec3f(&localTip, &tip);
+    Matrix_MultVec3f(&localBase, &base);
     if (IsSamePoint(&tip, &tracked->lastTip) && IsSamePoint(&base, &tracked->lastBase)) {
         return;
     }

@@ -1,7 +1,7 @@
 # Wind Waker Style: Cel Shading for OoT Unbound
 
 Enable **Wind Waker Style - Cel Shading** in the mod manager, restart, then open
-**Enhancements → Cel Shading**. The effect starts enabled. Band defaults match
+**Mods → Cel Shading**. The effect starts enabled. Band defaults match
 the reference: boundary 0.5, softness 0.02, highlight 0.6 and shadow 0.6.
 
 Each actor receives one dominant light: the nearest point light within its radius,

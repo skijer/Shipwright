@@ -366,6 +366,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.vanillaBase = EQUIP_VALUE_BOOTS_KOKIRI;
     definition.toggles = 1;
     definition.getItemEntry.drawFunc = DrawGetItem;
+    // The equipment registry creates the pickup; this block also puts it into new seeds.
+    static const SOHCustomItemRandomizer randomizer = {
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
+        CLIMB_BOOTS_KEY, CLIMB_BOOTS_KEY, "",
+    };
+    definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {
         return;
     }
