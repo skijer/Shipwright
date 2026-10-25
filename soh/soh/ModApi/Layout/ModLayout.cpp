@@ -422,6 +422,11 @@ const Page& FindPage(const std::vector<Page>& pages, const std::string& key) {
     return found == pages.end() ? pages.front() : *found;
 }
 
+bool HasOwnedEntry(const std::vector<Entry>& entries, const std::string& pageKey) {
+    return std::any_of(entries.begin(), entries.end(),
+                       [&](const Entry& entry) { return entry.owned && entry.placement.page == pageKey; });
+}
+
 std::vector<const Entry*> CellEntries(const std::vector<Entry>& entries, const Page& page, int cell, bool ownedOnly) {
     std::vector<const Entry*> result;
     for (const auto& entry : entries) {
@@ -1079,7 +1084,7 @@ bool ModLayout_CyclePage(PlayState* play, uint8_t kind) {
     const auto pages = Pages(kind, entries);
     std::vector<std::string> visible{ NativePage };
     for (const auto& page : pages) {
-        if (page.key == NativePage) {
+        if (page.key == NativePage || !HasOwnedEntry(entries, page.key)) {
             continue;
         }
         visible.push_back(page.key);
@@ -1116,7 +1121,9 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
     }
     const auto entries = Entries(kind);
     const auto pages = Pages(kind, entries);
-    const auto& page = FindPage(pages, sShown[kind]);
+    const auto& requestedPage = FindPage(pages, sShown[kind]);
+    const bool emptyPage = requestedPage.key != NativePage && !HasOwnedEntry(entries, requestedPage.key);
+    const auto& page = emptyPage ? FindPage(pages, NativePage) : requestedPage;
     sShown[kind] = page.key;
     const bool movedVanilla = std::any_of(entries.begin(), entries.end(), [](const Entry& entry) {
         return entry.key.rfind("vanilla.", 0) == 0 &&
