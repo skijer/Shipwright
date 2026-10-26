@@ -47,6 +47,11 @@ jobs:
           .conclusion == "success" and .status == "completed" and
           .head_branch == "unbound-modapi" and .head_repository.full_name == $repository and
           .path == $workflow and (.event == "workflow_dispatch" or .event == "push")' run.json
+        COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "unbound-download-source" and .expired == false)] | length')
+        if [ "$COUNT" != 1 ]; then
+          echo "This run has no rolling-download provenance; leaving releases unchanged."
+          exit 0
+        fi
         gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name unbound-download-source --dir metadata
         python - <<'PY'
         import json, os
@@ -58,8 +63,10 @@ jobs:
         assert metadata['repository'] == os.environ['GITHUB_REPOSITORY']
         assert metadata['project'] == os.environ['PROJECT']
         PY
+        echo "eligible=true" >> "$GITHUB_OUTPUT"
     - name: Ignore older builds
       id: order
+      if: steps.source.outputs.eligible == 'true'
       run: |
         mkdir -p current
         if gh release download nei-unbound-release --repo "$GITHUB_REPOSITORY" --pattern build-info.json --dir current; then
@@ -70,7 +77,7 @@ jobs:
           fi
         fi
     - name: Download all six builds
-      if: steps.order.outputs.skip != 'true'
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
       run: |
         for edition in "$PROJECT" "$PROJECT-unbound-unsafe"; do
           for platform in windows mac linux; do
@@ -79,10 +86,10 @@ jobs:
           done
         done
     - name: Prepare ZIPs and download pages
-      if: steps.order.outputs.skip != 'true'
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
       run: python .github/scripts/package_downloads.py --artifacts rel --output dist --metadata metadata/download-source.json
     - name: Update the fixed public and modder releases
-      if: steps.order.outputs.skip != 'true'
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
       run: |
         SHA=$(jq -r .commit metadata/download-source.json)
         for edition in public modders; do
@@ -94,9 +101,11 @@ jobs:
             title="Shipwright: Unbound — Modder resources"
             prerelease=true
           fi
+          latest_args=()
           if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "$title" --draft --latest=false
+            latest_args=(--latest=false)
           fi
           gh release upload "$tag" dist/"$edition"/*.zip dist/"$edition"/build-info.json --repo "$GITHUB_REPOSITORY" --clobber
-          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file dist/"$edition"/notes.md --draft=false --prerelease="$prerelease"
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file dist/"$edition"/notes.md --draft=false --prerelease="$prerelease" "${latest_args[@]}"
         done
