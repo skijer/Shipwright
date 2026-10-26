@@ -25,8 +25,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to build and publish (already pushed, on this branch)
-        required: true
+        description: Optional release tag; leave empty to update the fixed public and modder downloads
+        required: false
+        default: ''
         type: string
 concurrency:
   # A release run shares its branch's ref, so the event keeps a branch push and a release from
@@ -139,7 +140,7 @@ jobs:
         path: build-cmake/soh
     - name: Build SoH
       run: |
-        cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DBUILD_REMOTE_CONTROL=1
+        cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DBUILD_REMOTE_CONTROL=1 -DUNBOUND_MOD_POLICY=signed
         cmake --build build-cmake --parallel 3
         # Spotlight indexing the disk image CPack just made keeps hdiutil from
         # unmounting it, failing the build with "Resource busy"
@@ -248,7 +249,7 @@ jobs:
         path: build-cmake/soh
     - name: Build SoH
       run: |
-        cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DBUILD_REMOTE_CONTROL=1
+        cmake --no-warn-unused-cli -H. -Bbuild-cmake -GNinja -DCMAKE_BUILD_TYPE:STRING=Release -DBUILD_REMOTE_CONTROL=1 -DUNBOUND_MOD_POLICY=signed
         cmake --build build-cmake --config Release -j4
         (cd build-cmake && cpack -G External)
 
@@ -330,7 +331,7 @@ jobs:
         VCPKG_ROOT: ${{github.workspace}}/vcpkg
       run: |
         set $env:PATH="$env:USERPROFILE/.cargo/bin;$env:PATH"
-        cmake -S . -B build-windows -G Ninja -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_REMOTE_CONTROL=1
+        cmake -S . -B build-windows -G Ninja -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_REMOTE_CONTROL=1 -DUNBOUND_MOD_POLICY=signed
         cmake --build build-windows --config Release --parallel 10
 
         (cd build-windows && cpack)
@@ -450,3 +451,21 @@ jobs:
         [ -f "$NOTES_FILE" ] && ARGS+=(--notes-file "$NOTES_FILE")
         [ "$DRAFT" = true ] && ARGS+=(--draft)
         gh release create "$TAG" dist/* "${ARGS[@]}"
+
+  record-download-source:
+    needs: [build-macos, build-linux, build-windows]
+    if: github.ref_name == 'unbound-modapi' && !inputs.tag && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')
+    runs-on: ubuntu-22.04
+    permissions: {}
+    steps:
+    - name: Record the built commit for rolling downloads
+      env:
+        PROJECT: soh
+      run: |
+        jq -n --arg project "$PROJECT" --arg repository "$GITHUB_REPOSITORY" --arg commit "$GITHUB_SHA" \
+          --argjson run_id "$GITHUB_RUN_ID" '{project: $project, repository: $repository, commit: $commit, run_id: $run_id}' > download-source.json
+    - uses: actions/upload-artifact@v7
+      with:
+        name: unbound-download-source
+        path: download-source.json
+        retention-days: 7
