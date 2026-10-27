@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 PLATFORMS = ("windows", "mac", "linux")
+PLATFORM_LABELS = {"windows": "Windows", "mac": "macOS", "linux": "Linux"}
 TAGS = {"public": "nei-unbound-release", "modders": "nei-unbound-modders"}
 
 
@@ -45,26 +46,32 @@ def PackageDownloads(artifacts, output, metadata):
         WriteZip(source, target / filename)
     with zipfile.ZipFile(output / "modders" / "unbound-mod-sdk-windows.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         archive.write(library, library.name)
-    for edition, tag in TAGS.items():
-        name = prefix if edition == "public" else f"{prefix}-unbound-unsafe"
-        other = TAGS["modders" if edition == "public" else "public"]
-        title = "Shipwright: Unbound" if prefix == "soh" else "2Ship: Unbound"
-        policy = "Signed mods only." if edition == "public" else "Signed mods load normally; unsigned mods ask for permission."
-        lines = [f"# {title} — {'Players' if edition == 'public' else 'Modder resources'}", "", policy, "",
-                 "Download the ZIP for your system and extract it. On Windows launch the EXE; on macOS open the DMG; on Linux make the AppImage executable and launch it.", "",
-                 "| System | Download |", "| --- | --- |"]
-        base = f"https://github.com/{metadata['repository']}/releases"
-        for platform in PLATFORMS:
-            lines.append(f"| {platform.title()} | [Download ZIP]({base}/download/{tag}/{name}-{platform}.zip) |")
-        lines += ["", "Complete first-run setup with your own supported ROM. Install signed mods from **Network > NEI-Store**.", "",
-                  f"[{'Modder resources / unsafe builds' if edition == 'public' else 'Regular builds for players'}]({base}/tag/{other})", "",
-                  f"Built from [`{metadata['commit'][:12]}`](https://github.com/{metadata['repository']}/commit/{metadata['commit']}) · [Build run](https://github.com/{metadata['repository']}/actions/runs/{metadata['run_id']})", "",
-                  "This page and its ZIP download links stay the same when builds are updated."]
-        if edition == "modders":
-            lines += ["", f"[Windows mod SDK import library]({base}/download/{tag}/unbound-mod-sdk-windows.zip)", "",
-                      f"[Mod SDK documentation](https://github.com/{metadata['repository']}/tree/unbound-modapi/mod-sdk)"]
-        (output / edition / "notes.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-        (output / edition / "build-info.json").write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    for edition in TAGS:
+        (output / edition / "notes.md").write_text(DescribeEdition(edition, metadata), encoding="utf-8")
+
+
+def DescribeEdition(edition, metadata):
+    prefix = metadata["project"]
+    repository = f"https://github.com/{metadata['repository']}"
+    tag = TAGS[edition]
+    name = prefix if edition == "public" else f"{prefix}-unbound-unsafe"
+    title = "Shipwright: Unbound" if prefix == "soh" else "2Ship: Unbound"
+    rom = "Ocarina of Time" if prefix == "soh" else "Majora's Mask"
+    links = " · ".join(f"[{label}]({repository}/releases/download/{tag}/{name}-{platform}.zip)"
+                       for platform, label in PLATFORM_LABELS.items())
+    if edition == "public":
+        lines = [f"# {title}", "", f"Extract the ZIP and launch the game. You need your own {rom} ROM.", "",
+                 f"**Download:** {links}", "",
+                 f"Mod developers: [unsafe builds and SDK]({repository}/releases/tag/{TAGS['modders']})"]
+    else:
+        lines = [f"# {title} — Modders", "",
+                 f"**For mod developers only.** Players: use the [regular builds]({repository}/releases/tag/{TAGS['public']}).", "",
+                 "These builds ask before loading unsigned mods.", "", f"**Download:** {links}", "",
+                 f"[Windows mod SDK]({repository}/releases/download/{tag}/unbound-mod-sdk-windows.zip) · "
+                 f"[Documentation]({repository}/tree/unbound-modapi/mod-sdk)"]
+    # update-downloads reads the run id back to never replace a newer build with an older one.
+    lines += ["", f"<!-- run_id: {metadata['run_id']} commit: {metadata['commit']} -->"]
+    return "\n".join(lines) + "\n"
 
 
 if __name__ == "__main__":

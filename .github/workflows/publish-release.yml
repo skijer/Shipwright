@@ -88,14 +88,13 @@ jobs:
       run: |
         mkdir -p dist
         (cd rel/soh-windows && zip -qr "../../dist/SoH-${TAG}-Win64.zip" .)
-        cp rel/soh-mac/SoH.dmg "dist/SoH-${TAG}-Mac.dmg"
-        cp rel/soh-linux/soh.appimage "dist/SoH-${TAG}-Linux.appimage"
-        cp rel/soh-windows/soh.lib dist/soh.lib
+        (cd rel/soh-mac && zip -qr "../../dist/SoH-${TAG}-Mac.zip" .)
+        (cd rel/soh-linux && zip -qr "../../dist/SoH-${TAG}-Linux.zip" .)
         BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG"
         python mod-sdk/tools/release_manifest.py build --version "$VERSION" \
                --page "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" --release-base "$BASE" \
-               --asset "windows_x64=dist/SoH-${TAG}-Win64.zip" --asset "darwin=dist/SoH-${TAG}-Mac.dmg" \
-               --asset "linux_x64=dist/SoH-${TAG}-Linux.appimage" --output release-payload.json
+               --asset "windows_x64=dist/SoH-${TAG}-Win64.zip" --asset "darwin=dist/SoH-${TAG}-Mac.zip" \
+               --asset "linux_x64=dist/SoH-${TAG}-Linux.zip" --output release-payload.json
         python mod-sdk/tools/mod_signature.py sign-document release-payload.json --kind release \
                --output dist/unbound-release.json
     - name: Create the draft release
@@ -104,8 +103,9 @@ jobs:
         TAG: ${{ steps.facts.outputs.tag }}
         SHA: ${{ steps.run.outputs.sha }}
       run: |
+        sed "s|{{TAG}}|$TAG|g" .github/release-notes/unbound-modapi.md > release-notes.md
         gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$SHA" --draft \
-           --title "SoH: Unbound $TAG" --generate-notes
+           --title "SoH: Unbound $TAG" --notes-file release-notes.md
 
   rebuild-mods:
     needs: draft

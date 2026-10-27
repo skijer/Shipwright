@@ -211,7 +211,8 @@ jobs:
           gh run download "$SDK_RUN" --repo "$GITHUB_REPOSITORY" --name unbound-mod-sdk-windows --dir external/soh-lib
           exit 0
         fi
-        if gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern soh.lib --dir external/soh-lib; then
+        if gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern '*-Win64.zip' --dir release-zip; then
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract('soh.lib', sys.argv[2])" release-zip/*-Win64.zip external/soh-lib
           exit 0
         fi
         RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=20" \

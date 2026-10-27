@@ -400,11 +400,6 @@ jobs:
       run: |
         FACTS=$(.github/workflows/release-product.sh "$TAG")
         echo "$FACTS" >> "$GITHUB_OUTPUT"
-        PRODUCT=$(sed -n 's/^product=//p' <<< "$FACTS")
-        # Release notes are generated against the previous tag of the same product, not the other one,
-        # and never against a pipeline test tag.
-        PREV=$(git tag --sort=-creatordate | grep -- "$PRODUCT" | grep -v -- '-test$' | grep -vx -- "$TAG" | head -n 1 || true)
-        echo "prev=$PREV" >> "$GITHUB_OUTPUT"
     - name: Download macOS build
       uses: actions/download-artifact@v7
       with:
@@ -420,35 +415,27 @@ jobs:
       with:
         name: soh-windows
         path: rel/windows
-    - name: Download the unsafe mods editions
-      uses: actions/download-artifact@v7
-      with:
-        pattern: soh-unbound-unsafe-*
-        path: rel
     - name: Package release assets
       run: |
         mkdir -p dist
-        cp "rel/mac/SoH.dmg" "dist/SoH-${TAG}-Mac.dmg"
-        cp "rel/linux/soh.appimage" "dist/SoH-${TAG}-Linux.appimage"
-        (cd rel/windows && zip -r "../../dist/SoH-${TAG}-Win64.zip" .)
-        cp "rel/windows/soh.lib" "dist/soh.lib"
-        if [ -d rel/soh-unbound-unsafe-windows ]; then
-          cp "rel/soh-unbound-unsafe-mac/SoH-unbound-unsafe.dmg" "dist/SoH-${TAG}-Mac-unsafe-mods.dmg"
-          cp "rel/soh-unbound-unsafe-linux/soh-unbound-unsafe.appimage" "dist/SoH-${TAG}-Linux-unsafe-mods.appimage"
-          (cd rel/soh-unbound-unsafe-windows && zip -r "../../dist/SoH-${TAG}-Win64-unsafe-mods.zip" .)
-        fi
+        (cd rel/windows && zip -qr "../../dist/SoH-${TAG}-Win64.zip" .)
+        (cd rel/mac && zip -qr "../../dist/SoH-${TAG}-Mac.zip" .)
+        (cd rel/linux && zip -qr "../../dist/SoH-${TAG}-Linux.zip" .)
     - name: Publish GitHub Release
       env:
         GH_TOKEN: ${{ github.token }}
         PRODUCT: ${{ steps.product.outputs.product }}
         TITLE: ${{ steps.product.outputs.title }}
-        PREV: ${{ steps.product.outputs.prev }}
         DRAFT: ${{ steps.product.outputs.draft }}
       run: |
         NOTES_FILE=".github/release-notes/${PRODUCT}.md"
-        ARGS=(--title "$TITLE" --generate-notes)
-        [ -n "$PREV" ] && ARGS+=(--notes-start-tag "$PREV")
-        [ -f "$NOTES_FILE" ] && ARGS+=(--notes-file "$NOTES_FILE")
+        ARGS=(--title "$TITLE")
+        if [ -f "$NOTES_FILE" ]; then
+          sed "s|{{TAG}}|$TAG|g" "$NOTES_FILE" > release-notes.md
+          ARGS+=(--notes-file release-notes.md)
+        else
+          ARGS+=(--notes "")
+        fi
         [ "$DRAFT" = true ] && ARGS+=(--draft)
         gh release create "$TAG" dist/* "${ARGS[@]}"
 

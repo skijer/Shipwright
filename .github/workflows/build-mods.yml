@@ -66,9 +66,10 @@ jobs:
         TAG="$RELEASE_TAG"
         if [ -z "$TAG" ]; then
           TAG=$(gh release list --repo "$RELEASE_REPOSITORY" --limit 50 --json tagName \
-                --jq '[.[] | select(.tagName | test("unbound"))][0].tagName // empty')
+                --jq '[.[] | select(.tagName | test("^[0-9].*unbound"))][0].tagName // empty')
         fi
-        if [ -n "$TAG" ] && gh release download "$TAG" --repo "$RELEASE_REPOSITORY" --pattern soh.lib --dir soh-lib; then
+        if [ -n "$TAG" ] && gh release download "$TAG" --repo "$RELEASE_REPOSITORY" --pattern '*-Win64.zip' --dir release-zip; then
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract('soh.lib', sys.argv[2])" release-zip/*-Win64.zip soh-lib
           echo "Using soh.lib from release $RELEASE_REPOSITORY $TAG"
           exit 0
         fi
