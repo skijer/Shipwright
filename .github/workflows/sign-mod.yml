@@ -1,0 +1,474 @@
+name: sign-mod
+
+# Each modder keeps one "Sign a mod" issue open; requests queue in labels and are signed one at a time. The
+# submitted code is scanned, built by this repository's own CMake and checked with no secret in reach; only the
+# sign and catalog jobs hold the key, and they never run submitted code: they hash finished packages and sign them.
+# Signed packages and the NEI-Store catalog live in the "mods" release, which the game reads.
+on:
+  issues:
+    types: [opened, labeled, edited]
+  issue_comment:
+    types: [created]
+  schedule:
+    - cron: '23 */2 * * *'
+  workflow_dispatch:
+    inputs:
+      resign_all:
+        description: Rebuild every listed mod against another Unbound (publish-release.yml sets this)
+        type: boolean
+        default: false
+      unbound_ref:
+        description: Unbound commit or tag to rebuild against
+        default: ''
+      sdk_run:
+        description: Run id whose unbound-mod-sdk-windows artifact holds that commit's soh.lib
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: sign-mod
+  cancel-in-progress: false
+
+env:
+  STORE_RELEASE: mods
+
+jobs:
+
+  request:
+    if: >-
+      (github.event_name != 'issues' && github.event_name != 'issue_comment') ||
+      (contains(github.event.issue.labels.*.name, 'sign-mod') && !github.event.issue.pull_request)
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+    outputs:
+      mode: ${{ steps.next.outputs.mode }}
+      issue: ${{ steps.next.outputs.issue }}
+      repository: ${{ steps.next.outputs.repository }}
+      commit: ${{ steps.next.outputs.commit }}
+      directory: ${{ steps.next.outputs.directory }}
+      author: ${{ steps.next.outputs.author }}
+      unbound_ref: ${{ steps.next.outputs.unbound_ref }}
+      sdk_run: ${{ steps.next.outputs.sdk_run }}
+      trusted: ${{ steps.next.outputs.trusted }}
+      approved: ${{ steps.next.outputs.approved }}
+      held_permissions: ${{ steps.next.outputs.held_permissions }}
+      command: ${{ steps.next.outputs.command }}
+    steps:
+    - name: Checkout the signing tools and the author lists
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: |
+          mod-sdk/tools
+          .github/mod-signing
+          soh/soh/ModApi/ModTrust/RevokedMods.h
+    - name: Triage requests and take the oldest queued one
+      id: next
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RESIGN_ALL: ${{ inputs.resign_all }}
+        RESIGN_UNBOUND_REF: ${{ inputs.unbound_ref }}
+        RESIGN_SDK_RUN: ${{ inputs.sdk_run }}
+      run: python3 trusted/mod-sdk/tools/sign_queue.py next
+
+  scan:
+    needs: request
+    if: needs.request.outputs.mode == 'build'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    outputs:
+      modapi_major: ${{ steps.modapi.outputs.major }}
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk
+    - name: Checkout Unbound at the release
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.request.outputs.unbound_ref }}
+        path: external/Unbound
+        submodules: true
+    - name: Checkout the submitted mods
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ needs.request.outputs.repository }}
+        ref: ${{ needs.request.outputs.commit }}
+        path: submitted
+        persist-credentials: false
+    - name: Read the mod API major
+      id: modapi
+      run: |
+        MAJOR=$(sed -n 's/^#define SOH_MOD_API_MAJOR \([0-9]*\)$/\1/p' external/Unbound/soh/soh/ModApi/ModApi.h)
+        echo "major=${MAJOR:-1}" >> "$GITHUB_OUTPUT"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install the analyzers
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cppcheck
+        python -m pip install semgrep
+    - name: Check layout, includes and pragmas
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: python trusted/mod-sdk/tools/scan_mod_sources.py --mods-directory "submitted/$DIRECTORY" --submitted-root submitted
+    - name: Hash the sources and read the packs
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        mkdir -p store-inputs
+        python trusted/mod-sdk/tools/build_catalog.py source-hashes --mods-directory "submitted/$DIRECTORY" > store-inputs/hashes.json
+        python trusted/mod-sdk/tools/build_catalog.py packs --mods-directory "submitted/$DIRECTORY" > store-inputs/packs.json
+    - name: Upload the store inputs
+      uses: actions/upload-artifact@v7
+      with:
+        name: store-inputs
+        path: store-inputs
+        retention-days: 1
+    - name: Configure the signing build
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        cmake -S trusted/mod-sdk/ci/signing -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DUNBOUND_ROOT="$GITHUB_WORKSPACE/external/Unbound" \
+              -DUNBOUND_SIGNED_MODS_DIR="$GITHUB_WORKSPACE/submitted/$DIRECTORY"
+    - name: Check the preprocessed sources
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        python trusted/mod-sdk/tools/scan_mod_sources.py --mods-directory "submitted/$DIRECTORY" \
+               --submitted-root submitted --compile-commands build/compile_commands.json
+    - name: Cppcheck
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: cppcheck --error-exitcode=1 --quiet "submitted/$DIRECTORY"
+    - name: Semgrep
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: semgrep scan --config p/c --severity ERROR --error --metrics off "submitted/$DIRECTORY"
+
+  build:
+    needs: [request, scan]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows_x64
+          - os: ubuntu-22.04
+            platform: linux_x64
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk
+    - name: Checkout Unbound at the release
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.request.outputs.unbound_ref }}
+        path: external/Unbound
+        submodules: true
+    - name: Checkout the submitted mods
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ needs.request.outputs.repository }}
+        ref: ${{ needs.request.outputs.commit }}
+        path: submitted
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install pillow
+    - name: Get soh.lib
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UNBOUND_REF: ${{ needs.request.outputs.unbound_ref }}
+        SDK_RUN: ${{ needs.request.outputs.sdk_run }}
+      run: |
+        # A rebuild for an unpublished release names the build run that made its soh.lib.
+        if [ -n "$SDK_RUN" ]; then
+          gh run download "$SDK_RUN" --repo "$GITHUB_REPOSITORY" --name unbound-mod-sdk-windows --dir external/soh-lib
+          exit 0
+        fi
+        if gh release download "$UNBOUND_REF" --repo "$GITHUB_REPOSITORY" --pattern '*-Win64.zip' --dir release-zip; then
+          python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract('soh.lib', sys.argv[2])" release-zip/*-Win64.zip external/soh-lib
+          exit 0
+        fi
+        RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=20" \
+              --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+        if [ -z "$RUN" ]; then
+          echo "::error::$GITHUB_REPOSITORY has neither a release with soh.lib nor a Windows build artifact"
+          exit 1
+        fi
+        echo "No release with soh.lib: using the unbound-mod-sdk-windows artifact of run $RUN"
+        gh run download "$RUN" --repo "$GITHUB_REPOSITORY" --name unbound-mod-sdk-windows --dir external/soh-lib
+    - name: Build
+      shell: bash
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: |
+        IMPORT_LIBRARY=""
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          IMPORT_LIBRARY="-DUNBOUND_IMPORT_LIBRARY=$GITHUB_WORKSPACE/external/soh-lib/soh.lib"
+        fi
+        cmake -S trusted/mod-sdk/ci/signing -B build -DCMAKE_BUILD_TYPE=Release \
+              -DUNBOUND_ROOT="$GITHUB_WORKSPACE/external/Unbound" \
+              -DUNBOUND_SIGNED_MODS_DIR="$GITHUB_WORKSPACE/submitted/$DIRECTORY" $IMPORT_LIBRARY
+        cmake --build build --config Release --parallel
+    - name: Upload packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: mods-${{ matrix.platform }}
+        if-no-files-found: error
+        path: build/packages/Release/*.o2r
+        retention-days: 1
+
+  package:
+    needs: [request, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk/tools
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install lief
+    - name: Download platform packages
+      uses: actions/download-artifact@v7
+      with:
+        pattern: mods-*
+        path: platform-packages
+    - name: Merge into one package per mod
+      run: |
+        mkdir -p universal
+        for mod in $(find platform-packages -name '*.o2r' -exec basename {} \; | sort -u); do
+          python trusted/mod-sdk/tools/merge_mod_packages.py platform-packages/*/"$mod" --output "universal/$mod"
+        done
+    - name: Check what the binaries import
+      run: python trusted/mod-sdk/tools/check_mod_binary.py universal/*.o2r
+    - name: Upload unsigned packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: unsigned-mods
+        path: universal/*.o2r
+        retention-days: 1
+
+  sign:
+    needs: [request, scan, package]
+    runs-on: ubuntu-22.04
+    environment: mod-signing
+    permissions:
+      contents: write
+    outputs:
+      held: ${{ steps.plan.outputs.held }}
+    steps:
+    - name: Checkout the signing tools and the game's public key
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: |
+          mod-sdk/tools
+          .github/mod-signing
+          soh/soh/ModApi/ModTrust/TrustedModKey.h
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install cryptography
+    - name: Download unsigned packages
+      uses: actions/download-artifact@v7
+      with:
+        name: unsigned-mods
+        path: unsigned
+    - name: Download the store inputs
+      uses: actions/download-artifact@v7
+      with:
+        name: store-inputs
+        path: store-inputs
+    - name: Read the current catalog
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        mkdir -p current
+        if gh release download "$STORE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern catalog.json --dir current; then
+          python trusted/mod-sdk/tools/mod_signature.py open-document current/catalog.json --kind catalog \
+                 --key-header trusted/soh/soh/ModApi/ModTrust/TrustedModKey.h > current/payload.json
+        fi
+    - name: Decide what to publish
+      id: plan
+      env:
+        ISSUE: ${{ needs.request.outputs.issue }}
+        MAJOR: ${{ needs.scan.outputs.modapi_major }}
+        TRUSTED: ${{ needs.request.outputs.trusted }}
+        APPROVED: ${{ needs.request.outputs.approved }}
+        HELD: ${{ needs.request.outputs.held_permissions }}
+      run: |
+        FLAGS=""
+        [ "$TRUSTED" = true ] && FLAGS="$FLAGS --trusted"
+        [ "$APPROVED" = true ] && FLAGS="$FLAGS --approved"
+        python trusted/mod-sdk/tools/build_catalog.py plan --catalog current/payload.json --packages unsigned \
+               --source-hashes store-inputs/hashes.json --issue "$ISSUE" --modapi-major "$MAJOR" \
+               --held-permissions "$HELD" --output plan.json $FLAGS
+        echo "held=$(python3 -c 'import json; p=json.load(open("plan.json")); print(",".join(sorted({x for v in p["held"].values() for x in v})))')" >> "$GITHUB_OUTPUT"
+    - name: Sign and verify against the key compiled into the game
+      env:
+        UNBOUND_MOD_SIGNING_KEY: ${{ secrets.UNBOUND_MOD_SIGNING_KEY }}
+        REPOSITORY: ${{ needs.request.outputs.repository }}
+        COMMIT: ${{ needs.request.outputs.commit }}
+        AUTHOR: ${{ needs.request.outputs.author }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        mkdir -p signed
+        for mod in $(python3 -c 'import json; print(" ".join(json.load(open("plan.json"))["publish"]))'); do
+          python trusted/mod-sdk/tools/mod_signature.py sign "unsigned/$mod.o2r" --output "signed/$mod.o2r" \
+                 --repository "$REPOSITORY" --commit "$COMMIT" --author "$AUTHOR" --workflow-run "$RUN_URL"
+        done
+        if ls signed/*.o2r > /dev/null 2>&1; then
+          python trusted/mod-sdk/tools/mod_signature.py verify signed/*.o2r \
+                 --key-header trusted/soh/soh/ModApi/ModTrust/TrustedModKey.h
+        fi
+    - name: Publish the packages and the catalog
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UNBOUND_MOD_SIGNING_KEY: ${{ secrets.UNBOUND_MOD_SIGNING_KEY }}
+        ISSUE: ${{ needs.request.outputs.issue }}
+        REPOSITORY: ${{ needs.request.outputs.repository }}
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+        COMMIT: ${{ needs.request.outputs.commit }}
+        AUTHOR: ${{ needs.request.outputs.author }}
+        MAJOR: ${{ needs.scan.outputs.modapi_major }}
+      run: |
+        if ! gh release view "$STORE_RELEASE" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          gh release create "$STORE_RELEASE" --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
+             --title "NEI-Store mods" \
+             --notes "Signed mods and the catalog the in-game NEI-Store reads. sign-mod.yml rewrites this release; do not edit it by hand."
+        fi
+        mkdir -p upload
+        for package in signed/*.o2r; do
+          [ -e "$package" ] || continue
+          cp "$package" "upload/$(basename "$package" .o2r)-api$MAJOR.o2r"
+        done
+        if ls upload/*.o2r > /dev/null 2>&1; then
+          gh release upload "$STORE_RELEASE" upload/*.o2r --repo "$GITHUB_REPOSITORY" --clobber
+        fi
+        python trusted/mod-sdk/tools/build_catalog.py apply --catalog current/payload.json --plan plan.json \
+               --signed signed --source-hashes store-inputs/hashes.json --packs store-inputs/packs.json \
+               --links trusted/.github/mod-signing/store-links.json --issue "$ISSUE" --repository "$REPOSITORY" \
+               --directory "$DIRECTORY" --commit "$COMMIT" --author "$AUTHOR" \
+               --release-base "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$STORE_RELEASE" \
+               --output payload.json --summary summary.md
+        python trusted/mod-sdk/tools/mod_signature.py sign-document payload.json --kind catalog --output catalog.json
+        gh release upload "$STORE_RELEASE" catalog.json --repo "$GITHUB_REPOSITORY" --clobber
+    - name: Upload the summary
+      uses: actions/upload-artifact@v7
+      with:
+        name: summary
+        path: summary.md
+        retention-days: 1
+
+  catalog:
+    needs: request
+    if: needs.request.outputs.mode == 'catalog'
+    runs-on: ubuntu-22.04
+    environment: mod-signing
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout the signing tools and the game's public key
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: |
+          mod-sdk/tools
+          soh/soh/ModApi/ModTrust/TrustedModKey.h
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install cryptography
+    - name: Change the listing
+      env:
+        GH_TOKEN: ${{ github.token }}
+        UNBOUND_MOD_SIGNING_KEY: ${{ secrets.UNBOUND_MOD_SIGNING_KEY }}
+        ISSUE: ${{ needs.request.outputs.issue }}
+        COMMAND: ${{ needs.request.outputs.command }}
+      run: |
+        mkdir -p current
+        gh release download "$STORE_RELEASE" --repo "$GITHUB_REPOSITORY" --pattern catalog.json --dir current
+        python trusted/mod-sdk/tools/mod_signature.py open-document current/catalog.json --kind catalog \
+               --key-header trusted/soh/soh/ModApi/ModTrust/TrustedModKey.h > current/payload.json
+        python trusted/mod-sdk/tools/build_catalog.py listing --catalog current/payload.json --issue "$ISSUE" \
+               --command "$COMMAND" --output payload.json --summary summary.md
+        python trusted/mod-sdk/tools/mod_signature.py sign-document payload.json --kind catalog --output catalog.json
+        gh release upload "$STORE_RELEASE" catalog.json --repo "$GITHUB_REPOSITORY" --clobber
+    - name: Upload the summary
+      uses: actions/upload-artifact@v7
+      with:
+        name: summary
+        path: summary.md
+        retention-days: 1
+
+  finish:
+    needs: [request, scan, build, package, sign, catalog]
+    if: always() && needs.request.outputs.issue != ''
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      issues: write
+      actions: write
+    steps:
+    - name: Checkout the signing tools
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ github.sha }}
+        path: trusted
+        sparse-checkout: mod-sdk/tools
+    - name: Download the summary
+      if: needs.sign.result == 'success' || needs.catalog.result == 'success'
+      uses: actions/download-artifact@v7
+      with:
+        name: summary
+        path: summary
+    - name: Answer the issue and start the next request
+      env:
+        GH_TOKEN: ${{ github.token }}
+        ISSUE_NUMBER: ${{ needs.request.outputs.issue }}
+        OUTCOME: ${{ (needs.sign.result == 'success' || needs.catalog.result == 'success') && 'signed' || 'failed' }}
+        HELD: ${{ needs.sign.outputs.held }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        python3 trusted/mod-sdk/tools/sign_queue.py finish --issue "$ISSUE_NUMBER" --outcome "$OUTCOME" \
+                --summary-file summary/summary.md --held "$HELD" --run-url "$RUN_URL"

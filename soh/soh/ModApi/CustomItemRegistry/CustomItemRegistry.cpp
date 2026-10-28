@@ -1,0 +1,1476 @@
+#include "CustomItemRegistry.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
+
+#include <array>
+#include <cmath>
+#include <algorithm>
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <set>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <spdlog/spdlog.h>
+#include <libultraship/bridge.h>
+#include <ship/Context.h>
+#include <ship/debug/Console.h>
+
+#include "soh/SaveManager.h"
+#include "soh/cvar_prefixes.h"
+#include "soh/Notification/Notification.h"
+#include "soh/Enhancements/enhancementTypes.h"
+#include "soh/ModApi/ConsoleArguments.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/Forms/FormModel.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/randomizerTypes.h"
+#include "soh/Enhancements/custom-message/CustomMessageManager.h"
+#include "soh/Enhancements/custom-message/CustomMessageTypes.h"
+#include "objects/object_gi_fire/object_gi_fire.h"
+
+extern "C" {
+#include "macros.h"
+#include "z64.h"
+#include "functions.h"
+#include "variables.h"
+extern PlayState* gPlayState;
+void Player_InitItemAction(PlayState* play, Player* player, s8 itemAction);
+void Player_InitItemActionWithAnim(PlayState* play, Player* player, s8 itemAction);
+void FrameInterpolation_RecordOpenChild(const void* a, int b);
+void FrameInterpolation_RecordCloseChild(void);
+}
+
+namespace {
+
+constexpr uint16_t RuntimeIdBase = 0x400;
+constexpr size_t ButtonCount = 8;
+constexpr size_t AgeCount = 2;
+constexpr size_t SaveItemLimit = 4096;
+constexpr const char* SaveSection = "customItems";
+
+using ButtonKeys = std::array<std::string, ButtonCount>;
+
+struct RegisteredCustomItem {
+    std::string owner;
+    std::string key;
+    std::string iconPath;
+    std::string namePath;
+    std::string displayName;
+    std::string pauseText;
+    std::string getItemText;
+    std::string heldModelPath;
+    std::string getItemModelPath;
+    std::string firstPersonModelPath;
+    std::string appearanceModelPath;
+    std::string logicKey;
+    std::string hintKey;
+    std::string progressionGroup;
+    std::string poolCountOption;
+    std::string poolModeOption;
+    std::vector<int32_t> poolSources;
+    SOHCustomItemRandomizer randomizer = {};
+    SOHCustomItemDefinition definition = {};
+    uint16_t runtimeId = 0;
+};
+
+struct RegisteredPickupVariant {
+    std::string key;
+    std::string itemKey;
+    std::string variantKey;
+    SOHCustomPickupVariant definition = {};
+};
+
+std::unordered_map<std::string, std::unique_ptr<RegisteredPickupVariant>> sPickupVariants;
+std::string sCurrentMod;
+std::unordered_map<std::string, std::unique_ptr<RegisteredCustomItem>> sCustomItems;
+std::unordered_map<uint16_t, RegisteredCustomItem*> sRuntimeItems;
+std::unordered_map<uint16_t, RegisteredCustomItem*> sReplacements;
+std::unordered_set<std::string> sOwnedItems;
+std::set<std::string> sWornItems;
+std::unordered_map<Actor*, std::string> sActorItems;
+std::unordered_set<Actor*> sDroppedItems;
+std::array<ButtonKeys, AgeCount> sEquippedItems;
+std::string sActiveItem;
+std::string sHeldItem;
+uint32_t sHeldUpdateFrame = 0;
+constexpr uint32_t HeldUpdateGraceFrames = 4;
+std::string sPauseItem;
+std::string sPendingGetItem;
+std::string sMessageItem;
+// Notifications borrow icon pointers; keep received paths stable when a mod changes its live icon.
+std::set<std::string> sFastPickupIconPaths;
+uint16_t sNextRuntimeId = RuntimeIdBase;
+
+const SOHCustomItemDefinition* FindDefinition(const std::string& key) {
+    auto item = sCustomItems.find(key);
+    return item == sCustomItems.end() ? nullptr : &item->second->definition;
+}
+
+void SetString(const char*& target, std::string& storage, const char* value) {
+    storage = value == nullptr ? "" : value;
+    target = storage.empty() ? nullptr : storage.c_str();
+}
+
+bool IsReplacement(const SOHCustomItemDefinition* definition) {
+    return (definition->flags & SOH_CUSTOM_ITEM_REPLACES_VANILLA) != 0;
+}
+
+ButtonKeys& CurrentAgeButtons() {
+    return sEquippedItems[LINK_IS_CHILD ? LINK_AGE_CHILD : LINK_AGE_ADULT];
+}
+
+ItemEquips& EquipsForAge(size_t age) {
+    if (age == (size_t)gSaveContext.linkAge) {
+        return gSaveContext.equips;
+    }
+    return age == LINK_AGE_CHILD ? gSaveContext.childEquips : gSaveContext.adultEquips;
+}
+
+void SwapOutOfOtherButtons(uint8_t targetButton, const char* key) {
+    ButtonKeys& keys = CurrentAgeButtons();
+    ItemEquips& equips = gSaveContext.equips;
+    for (uint8_t other = 1; other < ButtonCount; ++other) {
+        if (other == targetButton || equips.buttonItems[other] != ITEM_CUSTOM || keys[other] != key) {
+            continue;
+        }
+        equips.buttonItems[other] = equips.buttonItems[targetButton];
+        equips.cButtonSlots[other - 1] = equips.cButtonSlots[targetButton - 1];
+        keys[other] = equips.buttonItems[other] == ITEM_CUSTOM ? keys[targetButton] : std::string();
+        if (equips.buttonItems[other] == ITEM_NONE) {
+            equips.cButtonSlots[other - 1] = SLOT_NONE;
+        } else if (gPlayState != nullptr) {
+            Interface_LoadItemIcon2(gPlayState, other);
+        }
+    }
+}
+
+void SyncButton(size_t age, size_t button) {
+    const std::string& key = sEquippedItems[age][button];
+    ItemEquips& equips = EquipsForAge(age);
+    if (key.empty() || FindDefinition(key) == nullptr) {
+        if (equips.buttonItems[button] == ITEM_CUSTOM) {
+            equips.buttonItems[button] = ITEM_NONE;
+        }
+        return;
+    }
+    equips.buttonItems[button] = ITEM_CUSTOM;
+}
+
+void ResetSaveState(bool isDebug) {
+    sOwnedItems.clear();
+    sWornItems.clear();
+    sActiveItem.clear();
+    sHeldItem.clear();
+    sPauseItem.clear();
+    sPendingGetItem.clear();
+    sMessageItem.clear();
+    for (auto& buttons : sEquippedItems) {
+        for (auto& key : buttons) {
+            key.clear();
+        }
+    }
+}
+
+const char* EquippedSaveKey(size_t age) {
+    return age == LINK_AGE_CHILD ? "equippedChild" : "equippedAdult";
+}
+
+void SaveState(const SaveContext& saveContext, int sectionId, bool fullSave) {
+    std::vector<std::string> owned(sOwnedItems.begin(), sOwnedItems.end());
+    SaveManager::Instance->SaveArray("owned", owned.size(),
+                                     [&owned](size_t index) { SaveManager::Instance->SaveData("", owned[index]); });
+    for (size_t age = 0; age < AgeCount; ++age) {
+        SaveManager::Instance->SaveArray(EquippedSaveKey(age), ButtonCount, [age](size_t index) {
+            bool holdsCustomItem = EquipsForAge(age).buttonItems[index] == ITEM_CUSTOM;
+            SaveManager::Instance->SaveData("", holdsCustomItem ? sEquippedItems[age][index] : std::string());
+        });
+    }
+}
+
+void LoadState() {
+    sOwnedItems.clear();
+    SaveManager::Instance->LoadArray("owned", SaveItemLimit, [](size_t index) {
+        std::string key;
+        SaveManager::Instance->LoadData("", key, std::string());
+        if (!key.empty()) {
+            sOwnedItems.insert(std::move(key));
+        }
+    });
+    for (size_t age = 0; age < AgeCount; ++age) {
+        SaveManager::Instance->LoadArray(EquippedSaveKey(age), ButtonCount, [age](size_t index) {
+            SaveManager::Instance->LoadData("", sEquippedItems[age][index], std::string());
+            SyncButton(age, index);
+        });
+    }
+}
+
+void RegisterSaveState() {
+    SaveManager::Instance->AddInitFunction(ResetSaveState);
+    SaveManager::Instance->AddSaveFunction(SaveSection, 1, SaveState, true, SECTION_PARENT_NONE);
+    SaveManager::Instance->AddLoadFunction(SaveSection, 1, LoadState);
+}
+
+uint16_t ParseVanillaItem(const std::string& argument) {
+    char* end = nullptr;
+    const long item = std::strtol(argument.c_str(), &end, 0);
+    if (end == argument.c_str() || *end != '\0' || item <= 0 || item > UINT16_MAX) {
+        return 0;
+    }
+    return (uint16_t)item;
+}
+
+// `"<key>"` or `"<key>" <variant>`: the variant names one of that item's pickups.
+std::string ResolveConsoleKey(const std::vector<std::string>& args) {
+    const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    if (args.size() < 4) {
+        return key;
+    }
+    const std::string variant = ModApi_UnquoteConsoleArgument(args[3]);
+    const char* pickup = CustomItemRegistry_FindPickupKey(key.c_str(), variant.c_str());
+    return pickup != nullptr ? pickup : std::string();
+}
+
+bool IsCustomItemCommand(const std::vector<std::string>& args) {
+    return (args.size() == 3 || args.size() == 4) && args[1] == "custom_item";
+}
+
+int32_t DropCommand(std::shared_ptr<Ship::Console> console, std::vector<std::string> args, std::string* output) {
+    if (args.size() == 2) {
+        const uint16_t item = ParseVanillaItem(args[1]);
+        const bool dropped = item != 0 && VanillaItems_Drop(gPlayState, item);
+        if (output != nullptr) {
+            *output = dropped ? "Dropped item " + args[1] : "No custom item takes that item's place, or no game";
+        }
+        return dropped ? 0 : 1;
+    }
+    if (!IsCustomItemCommand(args)) {
+        if (output != nullptr) {
+            *output = "Usage: drop custom_item \"<key>\" [variant] | drop <vanilla item id>";
+        }
+        return 1;
+    }
+    const std::string key = ResolveConsoleKey(args);
+    const auto* definition = CustomItemRegistry_Find(key.c_str());
+    if (definition == nullptr || gPlayState == nullptr) {
+        if (output != nullptr) {
+            *output = definition == nullptr ? "Unknown custom item" : "No active game";
+        }
+        return 1;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    Vec3f position = player->actor.world.pos;
+    position.x += Math_SinS(player->actor.shape.rot.y) * 60.0f;
+    position.y += 20.0f;
+    position.z += Math_CosS(player->actor.shape.rot.y) * 60.0f;
+    EnItem00* drop = Item_DropCollectible2(gPlayState, &position, ITEM00_SOH_CUSTOM);
+    if (drop == nullptr || !CustomItemRegistry_AttachDrop(&drop->actor, definition->key)) {
+        if (output != nullptr) {
+            *output = "Could not spawn custom item";
+        }
+        return 1;
+    }
+    if (output != nullptr) {
+        *output = "Dropped " + key;
+    }
+    return 0;
+}
+
+const std::array<const char*, ButtonCount> ButtonNames = { "b",   "cleft", "cdown", "cright",
+                                                           "dup", "ddown", "dleft", "dright" };
+
+int32_t EquipCommand(std::shared_ptr<Ship::Console> console, std::vector<std::string> args, std::string* output) {
+    const auto name = args.size() == 4 && args[1] == "custom_item"
+                          ? std::find(ButtonNames.begin(), ButtonNames.end(), args[3])
+                          : ButtonNames.end();
+    if (name == ButtonNames.end()) {
+        if (output != nullptr) {
+            *output = "Usage: equip custom_item \"<key>\" <b|cleft|cdown|cright|dup|ddown|dleft|dright>";
+        }
+        return 1;
+    }
+    const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
+    bool equipped = gPlayState != nullptr &&
+                    CustomItemRegistry_Equip(static_cast<uint8_t>(name - ButtonNames.begin()), key.c_str());
+    if (output != nullptr) {
+        *output = equipped ? "Equipped " + key : "Not owned, wrong age, button not allowed, or no active game";
+    }
+    return equipped ? 0 : 1;
+}
+
+void RegisterConsole() {
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand("equip", { EquipCommand,
+                                                                         "Equips an owned custom item on a button",
+                                                                         { { "custom_item", Ship::ArgumentType::TEXT },
+                                                                           { "key", Ship::ArgumentType::TEXT },
+                                                                           { "button", Ship::ArgumentType::TEXT } } });
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
+        "give", { [](std::shared_ptr<Ship::Console>, std::vector<std::string> args, std::string* output) -> int32_t {
+                     if (args.size() == 2) {
+                         const uint16_t item = ParseVanillaItem(args[1]);
+                         const bool given = item != 0 && VanillaItems_Give(gPlayState, item);
+                         if (output != nullptr) {
+                             *output = given ? "Given item " + args[1] : "Unknown item id or no active game";
+                         }
+                         return given ? 0 : 1;
+                     }
+                     if (args.size() != 3 && !IsCustomItemCommand(args)) {
+                         if (output != nullptr) {
+                             *output = "Usage: give custom_item \"<key>\" [variant] | give <vanilla item id>";
+                         }
+                         return 1;
+                     }
+                     const std::string key = ResolveConsoleKey(args);
+                     bool handled = false;
+                     bool given = false;
+                     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnConsoleGive>(
+                         gPlayState, args[1].c_str(), key.c_str(), &handled, &given);
+                     if (!handled && args[1] == "custom_item") {
+                         given = CustomItemRegistry_Give(gPlayState, key.c_str());
+                     }
+                     if (output != nullptr) {
+                         *output = given ? "Given " + key : "Unknown custom item or no active game";
+                     }
+                     return given ? 0 : 1;
+                 },
+                  "Gives a registered custom item, or a vanilla item by id",
+                  { { "custom_item|item id", Ship::ArgumentType::TEXT },
+                    { "key", Ship::ArgumentType::TEXT, true },
+                    { "variant", Ship::ArgumentType::TEXT, true } } });
+    Ship::Context::GetRawInstance()->GetConsole()->AddCommand(
+        "drop", { DropCommand,
+                  "Drops an item in front of Link, by custom key or vanilla item id",
+                  { { "custom_item|item id", Ship::ArgumentType::TEXT },
+                    { "key", Ship::ArgumentType::TEXT, true },
+                    { "variant", Ship::ArgumentType::TEXT, true } } });
+}
+
+SOHItemIconSurface ButtonIconSurface(uint8_t button) {
+    if (button == 0) {
+        return SOH_ITEM_ICON_B_BUTTON;
+    }
+    return button < 4 ? SOH_ITEM_ICON_C_BUTTON : SOH_ITEM_ICON_DPAD;
+}
+
+void ResolveReplacementTexture(uint16_t item, SOHItemIconSurface surface, const char** path) {
+    const auto* replacement = CustomItemRegistry_FindReplacement(item);
+    if (replacement == nullptr) {
+        return;
+    }
+    const char* resolved = CustomItemRegistry_ResolveTexture(replacement->key, surface);
+    if (resolved != nullptr) {
+        *path = resolved;
+    }
+}
+
+void DrawReplacementGetItem(PlayState* play, GetItemEntry* entry, bool* handled) {
+    if (*handled || entry->modIndex != MOD_NONE) {
+        return;
+    }
+    const auto* replacement = CustomItemRegistry_FindReplacement(entry->itemId);
+    if (replacement == nullptr || replacement->getItemEntry.drawFunc == nullptr) {
+        return;
+    }
+    GetItemEntry drawEntry = replacement->getItemEntry;
+    drawEntry.drawFunc(play, &drawEntry);
+    *handled = true;
+}
+
+void ResolveReplacementItemAction(int32_t item, int8_t* itemAction) {
+    if (item < 0 || item > ITEM_CLAIM_CHECK) {
+        return;
+    }
+    const auto* replacement = CustomItemRegistry_FindReplacement((uint16_t)item);
+    if (replacement != nullptr && (replacement->init != nullptr || replacement->update != nullptr)) {
+        *itemAction = PLAYER_IA_CUSTOM;
+    }
+}
+
+void RegisterReplacementHooks() {
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnInterfaceResolveButtonIcon>(
+        [](PlayState*, uint8_t button, uint16_t item, const char** iconPath) {
+            ResolveReplacementTexture(item, ButtonIconSurface(button), iconPath);
+        });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnMessageResolveItemIcon>(
+        [](uint16_t item, const char** iconPath) { ResolveReplacementTexture(item, SOH_ITEM_ICON_TEXTBOX, iconPath); });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnKaleidoResolveItemIcon>(
+        [](PlayState*, uint16_t item, const char** iconPath) {
+            ResolveReplacementTexture(item, SOH_ITEM_ICON_INVENTORY, iconPath);
+        });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnKaleidoResolveName>(
+        [](PlayState*, uint16_t item, const char** namePath) {
+            ResolveReplacementTexture(item, SOH_ITEM_NAME_TEXTURE, namePath);
+        });
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGetItemDraw>(DrawReplacementGetItem);
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveItemAction>(ResolveReplacementItemAction);
+}
+
+} // namespace
+
+static void DrawModelPath(PlayState* play, const char* path, bool setupOpa) {
+    OPEN_DISPS(play->state.gfxCtx);
+    if (setupOpa) {
+        Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    }
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+namespace {
+
+const SOHCustomItemDefinition* GetShownItem() {
+    return FindDefinition(sPendingGetItem.empty() ? sMessageItem : sPendingGetItem);
+}
+
+void DrawShownGetItemModel(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    if (definition == nullptr) {
+        definition = GetShownItem();
+    }
+    if (definition != nullptr && definition->getItemModelPath != nullptr) {
+        DrawModelPath(play, definition->getItemModelPath, true);
+    }
+}
+
+void BuildGetItemText(uint16_t* textId, bool* loadFromMessageTable) {
+    const SOHCustomItemDefinition* definition = FindDefinition(sMessageItem);
+    if (definition == nullptr || definition->getItemText == nullptr) {
+        return;
+    }
+    CustomMessage message(definition->getItemText, TEXTBOX_TYPE_BLUE);
+    message.AutoFormat(ITEM_CUSTOM);
+    message.LoadIntoFont();
+    *loadFromMessageTable = false;
+}
+
+std::string sModMessageText;
+bool sIsModMessageAutoFormatted = false;
+
+void BuildModMessage(uint16_t* textId, bool* loadFromMessageTable) {
+    CustomMessage message(sModMessageText);
+    if (sIsModMessageAutoFormatted) {
+        message.AutoFormat();
+    } else {
+        message.Format();
+    }
+    message.LoadIntoFont();
+    *loadFromMessageTable = false;
+}
+
+void PutAwayHeldItem(PlayState* play, Player* player) {
+    if (sHeldItem.empty()) {
+        return;
+    }
+    const SOHCustomItemDefinition* definition = FindDefinition(sHeldItem);
+    sHeldItem.clear();
+    if (definition != nullptr && definition->putAway != nullptr && player != nullptr) {
+        definition->putAway(player, play);
+    }
+    if (play == nullptr || player == nullptr || player->heldItemAction != PLAYER_IA_CUSTOM) {
+        return;
+    }
+    player->heldItemId = ITEM_NONE;
+    player->nextModelGroup = Player_ActionToModelGroup(player, PLAYER_IA_NONE);
+    Player_InitItemActionWithAnim(play, player, PLAYER_IA_NONE);
+}
+
+void PutAwayStalledHeldItem() {
+    if (sHeldItem.empty() || gPlayState == nullptr) {
+        return;
+    }
+    const SOHCustomItemDefinition* definition = FindDefinition(sHeldItem);
+    if (definition == nullptr || definition->update == nullptr) {
+        return;
+    }
+    Player* player = GET_PLAYER(gPlayState);
+    if (player->heldItemAction != PLAYER_IA_CUSTOM ||
+        (gPlayState->state.frames - sHeldUpdateFrame) > HeldUpdateGraceFrames) {
+        PutAwayHeldItem(gPlayState, player);
+    }
+}
+
+void PutAwayOnItemActionChange(int8_t itemAction, PlayerItemActionInitFunc* init) {
+    if (itemAction != PLAYER_IA_CUSTOM && gPlayState != nullptr) {
+        PutAwayHeldItem(gPlayState, GET_PLAYER(gPlayState));
+    }
+}
+
+void DrawNoGetItemModel(PlayState* play, GetItemEntry* entry) {
+}
+
+} // namespace
+
+// The randomizer's boss-soul flame (Randomizer_DrawBossSoul), tinted per variant. Outside the namespace, like
+// DrawModelPath: OPEN_DISPS declares the frame interpolation functions, which must keep C linkage.
+static void DrawPickupSoulFlame(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const SOHCustomPickupVariant* pickup =
+        definition != nullptr ? CustomItemRegistry_GetPickupVariant(definition->key) : nullptr;
+    if (pickup == nullptr) {
+        return;
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 8,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
+                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
+    Matrix_Push();
+    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, pickup->flameRed, pickup->flameGreen, pickup->flameBlue, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gGiBlueFireFlameDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+namespace {
+
+void ReceivePickupVariant(const char* key) {
+    const SOHCustomPickupVariant* pickup = CustomItemRegistry_GetPickupVariant(key);
+    if (pickup == nullptr) {
+        return;
+    }
+    CustomItemRegistry_SetOwned(pickup->itemKey, true);
+    if (pickup->onReceive != nullptr) {
+        pickup->onReceive(pickup->itemKey, pickup->variantKey);
+    }
+}
+
+bool IsValidPickupVariant(const SOHCustomPickupVariant* variant) {
+    if (variant == nullptr || variant->structSize < SOH_CUSTOM_PICKUP_VARIANT_MIN_SIZE || variant->key == nullptr ||
+        variant->itemKey == nullptr || variant->variantKey == nullptr || variant->variantKey[0] == '\0') {
+        SPDLOG_ERROR("[CustomItemRegistry] Mod '{}' supplied an invalid pickup variant", sCurrentMod);
+        return false;
+    }
+    if (FindDefinition(variant->itemKey) == nullptr || sPickupVariants.contains(variant->itemKey)) {
+        SPDLOG_ERROR("[CustomItemRegistry] Pickup variant '{}' needs '{}' registered as an inventory item first",
+                     variant->key, variant->itemKey);
+        return false;
+    }
+    return true;
+}
+
+// The acquisition borrows what the variant leaves out from its item, and its get-item draws like the item's.
+SOHCustomItemDefinition BuildPickupDefinition(const SOHCustomPickupVariant& variant,
+                                              const SOHCustomItemDefinition& parent) {
+    SOHCustomItemDefinition definition = {};
+    definition.structSize = sizeof(definition);
+    definition.key = variant.key;
+    definition.flags = SOH_CUSTOM_ITEM_INSTANT;
+    definition.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO | SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
+    definition.iconPath = variant.iconPath != nullptr ? variant.iconPath : parent.iconPath;
+    definition.getItemModelPath =
+        variant.getItemModelPath != nullptr ? variant.getItemModelPath : parent.getItemModelPath;
+    definition.getItemText = variant.getItemText != nullptr ? variant.getItemText : parent.getItemText;
+    definition.getItemEntry = parent.getItemEntry;
+    if (variant.getItemModelPath != nullptr) {
+        definition.getItemEntry.drawFunc = nullptr;
+    }
+    if (variant.structSize > SOH_CUSTOM_PICKUP_VARIANT_MIN_SIZE && variant.drawSoulFlame) {
+        definition.getItemEntry.drawFunc = DrawPickupSoulFlame;
+    }
+    definition.randomizer = variant.randomizer;
+    definition.onReceive = ReceivePickupVariant;
+    return definition;
+}
+
+void CompleteGetItemEntry(GetItemEntry& entry) {
+    if (entry.objectId == OBJECT_INVALID) {
+        entry.objectId = OBJECT_GI_BOMB_2;
+    }
+    if (entry.gi == 0) {
+        entry.gi = 1;
+    }
+    if (entry.field == 0) {
+        entry.field = 0x80;
+    }
+    if (entry.getItemCategory == ITEM_CATEGORY_JUNK) {
+        entry.getItemCategory = ITEM_CATEGORY_MAJOR;
+    }
+    if (entry.drawFunc == nullptr) {
+        entry.drawFunc = DrawNoGetItemModel;
+    }
+    entry.collectable = true;
+    entry.drawItemId = ITEM_CUSTOM;
+}
+
+void ApplyDataDrivenDefaults(SOHCustomItemDefinition& definition) {
+    if (definition.getItemText != nullptr && definition.getItemEntry.textId == 0) {
+        definition.getItemEntry.textId = TEXT_MOD_ITEM_GET_ITEM;
+    }
+    if (definition.getItemModelPath != nullptr && definition.getItemEntry.drawFunc == nullptr) {
+        definition.getItemEntry.drawFunc = DrawShownGetItemModel;
+    }
+    CompleteGetItemEntry(definition.getItemEntry);
+}
+
+bool IsValidDefinition(const SOHCustomItemDefinition* definition) {
+    if (definition == nullptr || definition->structSize < SOH_CUSTOM_ITEM_DEFINITION_MIN_SIZE ||
+        definition->key == nullptr || definition->key[0] == '\0') {
+        SPDLOG_ERROR("[CustomItemRegistry] Mod '{}' supplied an invalid custom item", sCurrentMod);
+        return false;
+    }
+    if ((definition->flags & SOH_CUSTOM_ITEM_EQUIPPABLE) != 0 &&
+        (definition->iconPath == nullptr || definition->iconPath[0] == '\0')) {
+        SPDLOG_ERROR("[CustomItemRegistry] Equippable custom item '{}' requires an icon path", definition->key);
+        return false;
+    }
+    if (definition->ageRequirement > SOH_CUSTOM_ITEM_AGE_ADULT) {
+        SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' has unknown age requirement {}", definition->key,
+                     definition->ageRequirement);
+        return false;
+    }
+    if (sCustomItems.contains(definition->key)) {
+        SPDLOG_ERROR("[CustomItemRegistry] Mod '{}' tried to register duplicate custom item '{}'", sCurrentMod,
+                     definition->key);
+        return false;
+    }
+    if (!IsReplacement(definition)) {
+        return true;
+    }
+    if (definition->structSize < SOH_CUSTOM_ITEM_REPLACEMENT_MIN_SIZE || definition->replacesItem > ITEM_CLAIM_CHECK) {
+        SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' must replace an inventory item", definition->key);
+        return false;
+    }
+    auto replaced = sReplacements.find(definition->replacesItem);
+    if (replaced != sReplacements.end()) {
+        SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' cannot replace item {}: '{}' already does", definition->key,
+                     definition->replacesItem, replaced->second->key);
+        return false;
+    }
+    return true;
+}
+
+} // namespace
+
+static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t limbIndex);
+
+void CustomItemRegistry_Init() {
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerPostLimbDraw>(DrawOtherPlayerAppearance);
+    RegisterSaveState();
+    RegisterConsole();
+    RegisterReplacementHooks();
+    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnOpenText>(TEXT_MOD_ITEM_GET_ITEM,
+                                                                                BuildGetItemText);
+    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnOpenText>(TEXT_MOD_MESSAGE, BuildModMessage);
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveItemActionInit>(
+        PutAwayOnItemActionChange);
+    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerUpdate>(PutAwayStalledHeldItem);
+}
+
+bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
+    if (!IsValidDefinition(definition)) {
+        return false;
+    }
+    if (sNextRuntimeId == UINT16_MAX) {
+        SPDLOG_ERROR("[CustomItemRegistry] Runtime item id space is exhausted");
+        return false;
+    }
+
+    auto item = std::make_unique<RegisteredCustomItem>();
+    item->owner = sCurrentMod;
+    item->key = definition->key;
+    item->runtimeId = sNextRuntimeId;
+    std::memcpy(&item->definition, definition, std::min<size_t>(definition->structSize, sizeof(item->definition)));
+    item->definition.structSize = sizeof(item->definition);
+    item->definition.key = item->key.c_str();
+    item->definition.getItemEntry.itemId = ITEM_CUSTOM;
+    item->definition.getItemEntry.getItemId = GI_CUSTOM;
+    // Every copy of the entry (randomizer checks, drops, shops) names its item: no custom entry is ever looked up
+    // in a table, so tableId is free to carry the runtime id.
+    item->definition.getItemEntry.tableId = item->runtimeId;
+    SetString(item->definition.iconPath, item->iconPath, definition->iconPath);
+    SetString(item->definition.namePath, item->namePath, definition->namePath);
+    SetString(item->definition.displayName, item->displayName, item->definition.displayName);
+    SetString(item->definition.pauseText, item->pauseText, definition->pauseText);
+    SetString(item->definition.getItemText, item->getItemText, item->definition.getItemText);
+    SetString(item->definition.heldModelPath, item->heldModelPath, item->definition.heldModelPath);
+    SetString(item->definition.getItemModelPath, item->getItemModelPath, item->definition.getItemModelPath);
+    SetString(item->definition.firstPersonModelPath, item->firstPersonModelPath, item->definition.firstPersonModelPath);
+    SetString(item->definition.appearance.modelPath, item->appearanceModelPath, item->definition.appearance.modelPath);
+    ApplyDataDrivenDefaults(item->definition);
+    item->definition.randomizer = nullptr;
+
+    if (definition->randomizer != nullptr) {
+        if (definition->randomizer->structSize < SOH_CUSTOM_ITEM_RANDOMIZER_MIN_SIZE) {
+            SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' supplied invalid randomizer data", item->key);
+            return false;
+        }
+
+        item->randomizer = {};
+        std::memcpy(&item->randomizer, definition->randomizer,
+                    std::min<size_t>(definition->randomizer->structSize, sizeof(item->randomizer)));
+        item->poolSources.clear();
+        if (item->randomizer.poolSources && item->randomizer.poolSourceCount) {
+            for (uint16_t i = 0; i < item->randomizer.poolSourceCount; ++i) {
+                int32_t source = item->randomizer.poolSources[i];
+                if (source <= RG_NONE || source >= RG_MAX) {
+                    SPDLOG_ERROR("[CustomItemRegistry] Invalid native pool source for '{}'", item->key);
+                    return false;
+                }
+                item->poolSources.push_back(source);
+            }
+        }
+        item->randomizer.poolSources = item->poolSources.empty() ? nullptr : item->poolSources.data();
+        item->randomizer.poolSourceCount = static_cast<uint16_t>(item->poolSources.size());
+        item->randomizer.structSize = sizeof(item->randomizer);
+        SetString(item->randomizer.logicKey, item->logicKey, item->randomizer.logicKey);
+        SetString(item->randomizer.hintKey, item->hintKey, item->randomizer.hintKey);
+        SetString(item->randomizer.progressionGroup, item->progressionGroup, item->randomizer.progressionGroup);
+        SetString(item->randomizer.poolCountOption, item->poolCountOption, item->randomizer.poolCountOption);
+        SetString(item->randomizer.poolModeOption, item->poolModeOption, item->randomizer.poolModeOption);
+        item->definition.randomizer = &item->randomizer;
+    }
+
+    auto* registered = item.get();
+    sRuntimeItems.emplace(registered->runtimeId, registered);
+    sCustomItems.emplace(registered->key, std::move(item));
+    ++sNextRuntimeId;
+    if (registered->definition.randomizer != nullptr) {
+        RandoItems_Register(registered->key.c_str());
+    }
+    if (IsReplacement(&registered->definition)) {
+        sReplacements.emplace(registered->definition.replacesItem, registered);
+    }
+    for (size_t age = 0; age < AgeCount; ++age) {
+        for (size_t button = 0; button < ButtonCount; ++button) {
+            if (sEquippedItems[age][button] == registered->key) {
+                SyncButton(age, button);
+            }
+        }
+    }
+    SPDLOG_INFO("[CustomItemRegistry] Mod '{}' registered custom item '{}' as {}", registered->owner, registered->key,
+                registered->runtimeId);
+    return true;
+}
+
+bool CustomItemRegistry_RegisterPickupVariant(const SOHCustomPickupVariant* variant) {
+    if (!IsValidPickupVariant(variant)) {
+        return false;
+    }
+    const SOHCustomItemDefinition acquisition = BuildPickupDefinition(*variant, *FindDefinition(variant->itemKey));
+    if (!CustomItemRegistry_Register(&acquisition)) {
+        return false;
+    }
+
+    auto stored = std::make_unique<RegisteredPickupVariant>();
+    stored->key = variant->key;
+    stored->itemKey = variant->itemKey;
+    stored->variantKey = variant->variantKey;
+    std::memcpy(&stored->definition, variant, std::min<size_t>(variant->structSize, sizeof(stored->definition)));
+    stored->definition.structSize = sizeof(stored->definition);
+    stored->definition.key = stored->key.c_str();
+    stored->definition.itemKey = stored->itemKey.c_str();
+    stored->definition.variantKey = stored->variantKey.c_str();
+    // The caller's strings and randomizer block may live on its stack; the registered acquisition owns copies.
+    const SOHCustomItemDefinition* registered = FindDefinition(stored->key);
+    stored->definition.iconPath = registered->iconPath;
+    stored->definition.getItemModelPath = registered->getItemModelPath;
+    stored->definition.getItemText = registered->getItemText;
+    stored->definition.randomizer = registered->randomizer;
+    sPickupVariants.emplace(stored->key, std::move(stored));
+    return true;
+}
+
+const SOHCustomPickupVariant* CustomItemRegistry_GetPickupVariant(const char* key) {
+    const auto found = sPickupVariants.find(key != nullptr ? key : "");
+    return found == sPickupVariants.end() ? nullptr : &found->second->definition;
+}
+
+const char* CustomItemRegistry_FindPickupKey(const char* itemKey, const char* variantKey) {
+    if (itemKey == nullptr || variantKey == nullptr) {
+        return nullptr;
+    }
+    for (const auto& [key, pickup] : sPickupVariants) {
+        if (pickup->itemKey == itemKey && pickup->variantKey == variantKey) {
+            return key.c_str();
+        }
+    }
+    return nullptr;
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_Find(const char* key) {
+    return key == nullptr ? nullptr : FindDefinition(key);
+}
+
+const GetItemEntry* CustomItemRegistry_FindGetItemEntry(const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    return definition == nullptr ? nullptr : &definition->getItemEntry;
+}
+
+uint16_t CustomItemRegistry_GetRuntimeId(const char* key) {
+    if (key == nullptr) {
+        return 0;
+    }
+    auto item = sCustomItems.find(key);
+    return item == sCustomItems.end() ? 0 : item->second->runtimeId;
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_FindByRuntimeId(uint16_t runtimeId) {
+    auto item = sRuntimeItems.find(runtimeId);
+    return item == sRuntimeItems.end() ? nullptr : &item->second->definition;
+}
+
+uint32_t CustomItemRegistry_GetCount(void) {
+    return (uint32_t)sCustomItems.size();
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_GetAt(uint32_t index) {
+    if (index >= sRuntimeItems.size()) {
+        return nullptr;
+    }
+    return CustomItemRegistry_FindByRuntimeId((uint16_t)(RuntimeIdBase + index));
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_FindReplacement(uint16_t vanillaItem) {
+    auto replacement = sReplacements.find(vanillaItem);
+    return replacement == sReplacements.end() ? nullptr : &replacement->second->definition;
+}
+
+bool CustomItemRegistry_IsAgeAllowed(const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (definition == nullptr) {
+        return false;
+    }
+    if (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0)) {
+        return true;
+    }
+    switch (definition->ageRequirement) {
+        case SOH_CUSTOM_ITEM_AGE_ANY:
+            return true;
+        case SOH_CUSTOM_ITEM_AGE_CHILD:
+            return LINK_IS_CHILD;
+        case SOH_CUSTOM_ITEM_AGE_ADULT:
+            return LINK_IS_ADULT;
+        default:
+            SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' has unknown age requirement {}", definition->key,
+                         definition->ageRequirement);
+            return false;
+    }
+}
+
+bool CustomItemRegistry_IsPauseItemAgeAllowed(void) {
+    const auto* definition = CustomItemRegistry_GetPauseItem();
+    return definition != nullptr && CustomItemRegistry_IsAgeAllowed(definition->key);
+}
+
+bool CustomItemRegistry_SetOwned(const char* key, bool owned) {
+    if (key == nullptr || key[0] == '\0') {
+        return false;
+    }
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (definition != nullptr && CustomItemRegistry_IsVanillaUpgrade(definition)) {
+        SPDLOG_ERROR("[CustomItemRegistry] '{}' upgrades a vanilla item; its ownership is that item's", key);
+        return false;
+    }
+    const bool wasOwned = sOwnedItems.contains(key);
+    if (owned == wasOwned) {
+        return true;
+    }
+    if (owned) {
+        sOwnedItems.insert(key);
+    } else {
+        sOwnedItems.erase(key);
+    }
+    if (definition != nullptr) {
+        SOHCustomItemStateFunc callback = owned ? definition->onAcquire : definition->onRemove;
+        if (callback != nullptr) {
+            callback(key);
+        }
+    }
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCustomItemOwnedChange>(key, owned);
+    return true;
+}
+
+std::vector<std::string> CustomItemRegistry_ListOwned() {
+    return std::vector<std::string>(sOwnedItems.begin(), sOwnedItems.end());
+}
+
+void CustomItemRegistry_ReceiveGetItem(const char* key) {
+    ProgressiveItems_ReceiveCustom(key);
+    CustomItemRegistry_SetOwned(key, true);
+
+    const auto* definition = CustomItemRegistry_Find(key);
+
+    if (definition != nullptr && definition->onReceive != nullptr) {
+        definition->onReceive(key);
+    }
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnCustomItemReceive>(key);
+}
+
+bool CustomItemRegistry_IsOwned(const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (definition == nullptr) {
+        return false;
+    }
+    if (CustomItemRegistry_IsVanillaUpgrade(definition)) {
+        return INV_CONTENT(definition->replacesItem) == definition->replacesItem;
+    }
+    return sOwnedItems.contains(key);
+}
+
+bool CustomItemRegistry_SetWorn(const char* key, bool worn) {
+    if (key == nullptr || CustomItemRegistry_Find(key) == nullptr) {
+        return false;
+    }
+    if (worn) {
+        sWornItems.insert(key);
+    } else {
+        sWornItems.erase(key);
+    }
+    return true;
+}
+
+static bool IsWornByOtherPlayer(Player* player, const char* key) {
+    const char* const* wornKeys = nullptr;
+    uint32_t wornCount = 0;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
+                                                                                           &wornCount);
+    for (uint32_t index = 0; index < wornCount; index++) {
+        if (std::strcmp(wornKeys[index], key) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// While another player is drawn, a mod's draw hooks are asking about what that player wears.
+bool CustomItemRegistry_IsWorn(const char* key) {
+    if (key == nullptr) {
+        return false;
+    }
+    Player* otherPlayer = FormModel_GetDrawnOtherPlayer();
+    return otherPlayer != nullptr ? IsWornByOtherPlayer(otherPlayer, key) : sWornItems.contains(key);
+}
+
+std::vector<std::string> CustomItemRegistry_ListWorn() {
+    return std::vector<std::string>(sWornItems.begin(), sWornItems.end());
+}
+
+bool CustomItemRegistry_Equip(uint8_t button, const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (button >= ButtonCount || definition == nullptr || CustomItemRegistry_IsVanillaUpgrade(definition) ||
+        !CustomItemRegistry_IsOwned(key) || !CustomItemRegistry_IsAgeAllowed(key) ||
+        (definition->flags & SOH_CUSTOM_ITEM_EQUIPPABLE) == 0) {
+        return false;
+    }
+    if (button == 0 && (definition->flags & SOH_CUSTOM_ITEM_B_BUTTON) == 0) {
+        return false;
+    }
+    if (button >= 1 && button <= 3 && (definition->flags & SOH_CUSTOM_ITEM_C_BUTTON) == 0) {
+        return false;
+    }
+    if (button >= 4 && (definition->flags & SOH_CUSTOM_ITEM_DPAD) == 0) {
+        return false;
+    }
+    if (button != 0) {
+        SwapOutOfOtherButtons(button, key);
+        gSaveContext.equips.cButtonSlots[button - 1] = SLOT_NONE;
+    }
+    CurrentAgeButtons()[button] = key;
+    SyncButton(gSaveContext.linkAge, button);
+    return true;
+}
+
+void CustomItemRegistry_CopyEquippedKey(uint8_t fromButton, uint8_t toButton) {
+    if (fromButton >= ButtonCount || toButton >= ButtonCount) {
+        return;
+    }
+    CurrentAgeButtons()[toButton] = CurrentAgeButtons()[fromButton];
+}
+
+void CustomItemRegistry_Unequip(uint8_t button) {
+    if (button >= ButtonCount) {
+        return;
+    }
+    CurrentAgeButtons()[button].clear();
+    SyncButton(gSaveContext.linkAge, button);
+}
+
+const char* CustomItemRegistry_GetEquippedKey(uint8_t button) {
+    if (button >= ButtonCount || gSaveContext.equips.buttonItems[button] != ITEM_CUSTOM ||
+        CurrentAgeButtons()[button].empty()) {
+        return nullptr;
+    }
+    return CurrentAgeButtons()[button].c_str();
+}
+
+uint16_t CustomItemRegistry_GetEquippedRuntimeId(uint8_t button) {
+    return CustomItemRegistry_GetRuntimeId(CustomItemRegistry_GetEquippedKey(button));
+}
+
+bool CustomItemRegistry_PressButtonItem(PlayState* play, Player* player, uint8_t button, uint16_t item) {
+    const SOHCustomItemDefinition* definition = item == ITEM_CUSTOM
+                                                    ? CustomItemRegistry_Find(CustomItemRegistry_GetEquippedKey(button))
+                                                    : CustomItemRegistry_FindReplacement(item);
+    if (definition == nullptr || !CustomItemRegistry_IsAgeAllowed(definition->key) ||
+        (definition->canUse != nullptr && !definition->canUse(player, play))) {
+        return false;
+    }
+    if ((definition->flags & SOH_CUSTOM_ITEM_INSTANT) != 0) {
+        if (definition->init != nullptr) {
+            definition->init(play, player);
+        }
+        return false;
+    }
+    sActiveItem = definition->key;
+    if (player->heldItemAction != PLAYER_IA_CUSTOM || sHeldItem.empty()) {
+        return true;
+    }
+    if (sHeldItem == sActiveItem) {
+        if (definition->use != nullptr) {
+            definition->use(player, play);
+        }
+        return true;
+    }
+    Player_InitItemAction(play, player, PLAYER_IA_CUSTOM);
+    return false;
+}
+
+bool CustomItemRegistry_SelectPauseItem(const char* key) {
+    if (key == nullptr || FindDefinition(key) == nullptr || !CustomItemRegistry_IsOwned(key)) {
+        sPauseItem.clear();
+        return false;
+    }
+    sPauseItem = key;
+    return true;
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_GetPauseItem(void) {
+    return FindDefinition(sPauseItem);
+}
+
+void CustomItemRegistry_PreparePauseMessage(void) {
+    sMessageItem = sPauseItem;
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_GetMessageItem(void) {
+    return FindDefinition(sMessageItem);
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_GetActive(void) {
+    return FindDefinition(sActiveItem);
+}
+
+static const char* ResolveOtherPlayerHeldKey(Player* player);
+
+// While another player is drawn, a mod's draw hooks are asking about that player's hand, not the local one.
+const char* CustomItemRegistry_GetHeldKey(void) {
+    Player* otherPlayer = FormModel_GetDrawnOtherPlayer();
+    if (otherPlayer != nullptr) {
+        return ResolveOtherPlayerHeldKey(otherPlayer);
+    }
+    return sHeldItem.empty() ? nullptr : sHeldItem.c_str();
+}
+
+std::string CustomItemRegistry_GetOwner(const char* key) {
+    auto item = key == nullptr ? sCustomItems.end() : sCustomItems.find(key);
+    return item == sCustomItems.end() ? std::string() : item->second->owner;
+}
+
+bool CustomItemRegistry_SetIconPath(const char* key, const char* path) {
+    auto item = sCustomItems.find(key == nullptr ? "" : key);
+    if (item == sCustomItems.end()) {
+        return false;
+    }
+    SetString(item->second->definition.iconPath, item->second->iconPath, path);
+    return true;
+}
+
+bool CustomItemRegistry_SetText(const char* key, SOHItemTextKind kind, const char* text) {
+    auto item = sCustomItems.find(key == nullptr ? "" : key);
+    if (item == sCustomItems.end()) {
+        return false;
+    }
+    switch (kind) {
+        case SOH_ITEM_TEXT_GET_ITEM:
+            SetString(item->second->definition.getItemText, item->second->getItemText, text);
+            if (item->second->definition.getItemText != nullptr && item->second->definition.getItemEntry.textId == 0) {
+                item->second->definition.getItemEntry.textId = TEXT_MOD_ITEM_GET_ITEM;
+            }
+            return true;
+        case SOH_ITEM_TEXT_PAUSE:
+            SetString(item->second->definition.pauseText, item->second->pauseText, text);
+            return true;
+        default:
+            SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' asked for unknown text {}", item->second->key,
+                         (int)kind);
+            return false;
+    }
+}
+
+uint8_t CustomItemRegistry_GetActiveMeleeWeapon(void) {
+    const auto* definition = FindDefinition(sActiveItem);
+    return definition == nullptr ? 0 : definition->meleeWeapon;
+}
+
+void CustomItemRegistry_InitHeld(PlayState* play, Player* player) {
+    if (sHeldItem != sActiveItem) {
+        PutAwayHeldItem(play, player);
+    }
+    sHeldItem = sActiveItem;
+    sHeldUpdateFrame = play->state.frames;
+    const auto* definition = FindDefinition(sHeldItem);
+    if (definition != nullptr && definition->init != nullptr) {
+        definition->init(play, player);
+    }
+}
+
+int32_t CustomItemRegistry_UpdateHeld(Player* player, PlayState* play) {
+    const auto* definition = FindDefinition(sHeldItem);
+    sHeldUpdateFrame = play->state.frames;
+    return definition != nullptr && definition->update != nullptr ? definition->update(player, play) : 0;
+}
+
+static void DrawLocalHeld(Player* player, PlayState* play) {
+    const auto* definition = FindDefinition(sHeldItem);
+    if (definition == nullptr) {
+        return;
+    }
+    if (definition->drawHeld != nullptr) {
+        definition->drawHeld(player, play);
+    } else if (definition->heldModelPath != nullptr) {
+        DrawModelPath(play, definition->heldModelPath, false);
+    }
+}
+
+static const char* ResolveOtherPlayerHeldKey(Player* player) {
+    const char* key = nullptr;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveHeldCustomItem>(player, &key);
+    return key;
+}
+
+// A mod's drawHeld reads the local player's item state, so another player only gets the static model. An item
+// with an appearance is drawn at its own limb instead (DrawOtherPlayerAppearance).
+static void DrawOtherPlayerHeld(Player* player, PlayState* play) {
+    const char* key = ResolveOtherPlayerHeldKey(player);
+    const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
+    if (definition != nullptr && definition->appearance.modelPath == nullptr && definition->heldModelPath != nullptr) {
+        DrawModelPath(play, definition->heldModelPath, false);
+    }
+}
+
+// Model DLs such as Majora's masks leave their env colour and a lighting-less geometry mode behind, which would
+// black out the limb drawn right after.
+static void RestoreLimbDrawState(PlayState* play, Player* player) {
+    const Color_RGB8 tunic = Player_GetTunicColor(player->currentTunic);
+
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(POLY_OPA_DISP++);
+    gDPSetEnvColor(POLY_OPA_DISP++, tunic.r, tunic.g, tunic.b, 0);
+    gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void DrawAppearance(PlayState* play, Player* player, const SOHCustomItemAppearance& appearance) {
+    Matrix_Push();
+    if (appearance.scale > 0.0f) {
+        // The limb matrix carries Link's own 0.01 body scale: dividing it back out leaves the offsets in world units.
+        const float unscale = player->actor.scale.x != 0.0f ? 1.0f / player->actor.scale.x : 1.0f;
+        Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
+        Matrix_RotateY(static_cast<f32>(DEG_TO_RAD(appearance.rotation[1])), MTXMODE_APPLY);
+        Matrix_RotateX(static_cast<f32>(DEG_TO_RAD(appearance.rotation[0])), MTXMODE_APPLY);
+        Matrix_RotateZ(static_cast<f32>(DEG_TO_RAD(appearance.rotation[2])), MTXMODE_APPLY);
+        Matrix_Translate(appearance.offset[0], appearance.offset[1], appearance.offset[2], MTXMODE_APPLY);
+        Matrix_Scale(appearance.scale, appearance.scale, appearance.scale, MTXMODE_APPLY);
+    }
+    DrawModelPath(play, appearance.modelPath, false);
+    Matrix_Pop();
+    RestoreLimbDrawState(play, player);
+}
+
+static void DrawAppearanceAtLimb(PlayState* play, Player* player, int32_t limbIndex, const char* key,
+                                 uint8_t defaultLimb) {
+    const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
+    if (definition == nullptr || definition->appearance.modelPath == nullptr) {
+        return;
+    }
+    const uint8_t limb = definition->appearance.limb != 0 ? definition->appearance.limb : defaultLimb;
+    if (limbIndex == limb) {
+        DrawAppearance(play, player, definition->appearance);
+    }
+}
+
+static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t limbIndex) {
+    if (player == GET_PLAYER(play)) {
+        return;
+    }
+    DrawAppearanceAtLimb(play, player, limbIndex, ResolveOtherPlayerHeldKey(player), PLAYER_LIMB_L_HAND);
+
+    const char* const* wornKeys = nullptr;
+    uint32_t wornCount = 0;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveWornCustomItems>(player, &wornKeys,
+                                                                                           &wornCount);
+    for (uint32_t index = 0; index < wornCount; index++) {
+        DrawAppearanceAtLimb(play, player, limbIndex, wornKeys[index], PLAYER_LIMB_HEAD);
+    }
+}
+
+void CustomItemRegistry_DrawHeld(Player* player, PlayState* play) {
+    if (player == GET_PLAYER(play)) {
+        DrawLocalHeld(player, play);
+        return;
+    }
+    DrawOtherPlayerHeld(player, play);
+}
+
+const char* CustomItemRegistry_GetFirstPersonModel(void) {
+    const auto* definition = FindDefinition(sHeldItem);
+    return definition == nullptr ? nullptr : definition->firstPersonModelPath;
+}
+
+void CustomItemRegistry_HoldHeld(void) {
+    if (!sHeldItem.empty() && gPlayState != nullptr) {
+        sHeldUpdateFrame = gPlayState->state.frames;
+    }
+}
+
+bool CustomItemRegistry_AttachDrop(Actor* actor, const char* key) {
+    if (!CustomItemRegistry_BindActor(actor, key)) {
+        return false;
+    }
+    sDroppedItems.insert(actor);
+    return true;
+}
+
+bool CustomItemRegistry_BindActor(Actor* actor, const char* key) {
+    if (actor == nullptr || CustomItemRegistry_Find(key) == nullptr) {
+        return false;
+    }
+    sActorItems[actor] = key;
+    return true;
+}
+
+void CustomItemRegistry_UnbindActor(Actor* actor) {
+    sActorItems.erase(actor);
+    sDroppedItems.erase(actor);
+}
+
+const char* CustomItemRegistry_GetActorItem(Actor* actor) {
+    auto item = sActorItems.find(actor);
+    return item == sActorItems.end() ? nullptr : item->second.c_str();
+}
+
+bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool autoFormat) {
+    if (play == nullptr || text == nullptr) {
+        return false;
+    }
+    sModMessageText = text;
+    sIsModMessageAutoFormatted = autoFormat;
+    Message_StartTextbox(play, TEXT_MOD_MESSAGE, nullptr);
+    return true;
+}
+
+static bool SkipCustomGetItem(int mode, GetItemCategory category) {
+    return mode == SGIA_ALL ||
+           (mode == SGIA_JUNK && (category == ITEM_CATEGORY_JUNK || category == ITEM_CATEGORY_SKULLTULA_TOKEN ||
+                                  category == ITEM_CATEGORY_HEALTH || category == ITEM_CATEGORY_LESSER));
+}
+
+static bool CanReceiveFastCustomItem(PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    return player != nullptr && !Player_InBlockingCsMode(play, player) &&
+           !(player->stateFlags1 & (PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_CARRYING_ACTOR |
+                                    PLAYER_STATE1_CHARGING_SPIN_ATTACK | PLAYER_STATE1_HANGING_OFF_LEDGE |
+                                    PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_JUMPING | PLAYER_STATE1_FREEFALL |
+                                    PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_DEAD)) &&
+           Player_GetExplosiveHeld(player) < 0;
+}
+
+bool CustomItemRegistry_Give(PlayState* play, const char* key) {
+
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (play == nullptr || definition == nullptr) {
+        return false;
+    }
+    if (IS_RANDO &&
+        SkipCustomGetItem(CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
+                          definition->getItemEntry.getItemCategory)) {
+        if (!CanReceiveFastCustomItem(play))
+            return false;
+        GetItemEntry entry = definition->getItemEntry;
+        return CustomItemRegistry_ReceiveFastGetItem(nullptr, play, &entry);
+    }
+    sPendingGetItem = definition->key;
+    if (!GiveItemEntryWithoutActor(play, definition->getItemEntry)) {
+        sPendingGetItem.clear();
+        return false;
+    }
+    // PrepareGetItem already selected the resolved stage and its message.
+    return true;
+}
+
+const char* CustomItemRegistry_ResolveTexture(const char* key, SOHItemIconSurface surface) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    if (definition == nullptr || (definition->disabledIconSurfaces & surface) != 0) {
+        return nullptr;
+    }
+    const char* path = surface == SOH_ITEM_NAME_TEXTURE ? definition->namePath : definition->iconPath;
+    return path != nullptr && path[0] != '\0' ? path : nullptr;
+}
+
+bool CustomItemRegistry_IsEditorVisible(const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    return definition != nullptr && (definition->presentationFlags & SOH_ITEM_HIDE_FROM_SAVE_EDITOR) == 0;
+}
+
+bool CustomItemRegistry_IsCustomGetItem(const GetItemEntry* entry) {
+    return entry != nullptr && entry->modIndex == MOD_NONE && entry->itemId == ITEM_CUSTOM &&
+           entry->getItemId == GI_CUSTOM;
+}
+
+bool CustomItemRegistry_HasMessageItemIcon(void) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_GetMessageItem();
+    return definition != nullptr &&
+           CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX) != nullptr;
+}
+
+static const SOHCustomItemDefinition* ResolveCustomGetItemDefinition(Actor* actor, PlayState* play, GetItemEntry* entry,
+                                                                     bool allowPending = true) {
+    const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
+    if (key == nullptr) {
+        const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+        if (named != nullptr)
+            key = named->key;
+        else if (allowPending && !sPendingGetItem.empty())
+            key = sPendingGetItem.c_str();
+    }
+    if (const char* progressive = ProgressiveItems_ResolvePickup(key, UINT16_MAX)) {
+        key = progressive;
+    }
+    GameInteractor_ExecuteOnResolveCustomGetItem(actor, play, entry, &key);
+    return CustomItemRegistry_Find(key);
+}
+
+bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
+    if (entry == nullptr) {
+        return true;
+    }
+    if (!CustomItemRegistry_IsCustomGetItem(entry) && entry->modIndex == MOD_NONE) {
+        const char* progressive = ProgressiveItems_ResolvePickup(nullptr, entry->itemId);
+        if (const auto* next = CustomItemRegistry_Find(progressive)) {
+            *entry = next->getItemEntry;
+        }
+    }
+    if (!CustomItemRegistry_IsCustomGetItem(entry)) {
+        sMessageItem.clear();
+        const auto* replacement =
+            entry->modIndex == MOD_NONE ? CustomItemRegistry_FindReplacement(entry->itemId) : nullptr;
+        if (replacement != nullptr && replacement->getItemEntry.textId != 0) {
+            entry->textId = replacement->getItemEntry.textId;
+        }
+        return true;
+    }
+    const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry);
+    if (definition == nullptr)
+        return false;
+    sPendingGetItem = definition->key;
+    sMessageItem = definition->key;
+    *entry = definition->getItemEntry;
+    return true;
+}
+
+bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
+    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry))
+        return false;
+    const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry, false);
+    if (definition == nullptr)
+        return false;
+    // Freeze the received stage before its callback advances progression. Never call
+    // Item_Give(ITEM_CUSTOM), whose native ID cannot identify a custom pickup.
+    *entry = definition->getItemEntry;
+    CustomItemRegistry_ReceiveGetItem(definition->key);
+    GameInteractor_ExecuteOnItemReceiveHooks(*entry);
+    const char* label = definition->displayName;
+    if (label == nullptr || label[0] == '\0')
+        label = definition->key;
+    std::string prefix = gSaveContext.language == LANGUAGE_FRA   ? "Vous obtenez: "
+                         : gSaveContext.language == LANGUAGE_GER ? "Du erhältst: "
+                                                                 : "You found ";
+    const char* icon =
+        definition->iconPath == nullptr ? nullptr : sFastPickupIconPaths.emplace(definition->iconPath).first->c_str();
+    Notification::Emit({ .itemIcon = icon, .message = prefix, .suffix = label });
+    return true;
+}
+
+const SOHCustomItemDefinition* CustomItemRegistry_GetPendingGetItem(void) {
+    return FindDefinition(sPendingGetItem);
+}
+
+void CustomItemRegistry_ClearPendingGetItem(void) {
+    sPendingGetItem.clear();
+}
+
+bool CustomItemRegistry_UpdateDrop(Actor* actor, PlayState* play) {
+    if (!sDroppedItems.contains(actor)) {
+        return false;
+    }
+    const char* key = CustomItemRegistry_GetActorItem(actor);
+    auto definition = CustomItemRegistry_Find(key);
+    if (definition == nullptr) {
+        Actor_Kill(actor);
+        return true;
+    }
+    if (Actor_HasParent(actor, play)) {
+        Actor_Kill(actor);
+    } else if (IS_RANDO &&
+               SkipCustomGetItem(
+                   CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
+                   definition->getItemEntry.getItemCategory)) {
+        // Same range and eligibility as the normal actor-driven get-item offer.
+        if (actor->xzDistToPlayer < 50.0f && std::fabs(actor->yDistToPlayer) < 10.0f &&
+            CanReceiveFastCustomItem(play)) {
+            GetItemEntry entry = definition->getItemEntry;
+            if (CustomItemRegistry_ReceiveFastGetItem(actor, play, &entry)) {
+                Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                     &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                Actor_Kill(actor);
+            }
+        }
+    } else {
+        GiveItemEntryFromActorWithFixedRange(actor, play, definition->getItemEntry);
+    }
+    return true;
+}
+
+bool CustomItemRegistry_DrawDrop(Actor* actor, PlayState* play) {
+    if (!sDroppedItems.contains(actor)) {
+        return false;
+    }
+    const auto* definition = CustomItemRegistry_Find(CustomItemRegistry_GetActorItem(actor));
+    if (definition == nullptr) {
+        return true;
+    }
+    // The scale the randomizer's own get-item drops use, so a mod item lies as large as a vanilla one.
+    const f32 dropModelScale = CVarGetFloat(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimationScale"), 10.0f);
+    Matrix_Scale(dropModelScale, dropModelScale, dropModelScale, MTXMODE_APPLY);
+    func_8002EBCC(actor, play, 0);
+    func_8002ED80(actor, play, 0);
+    EnItem00_CustomItemsParticles(actor, play, definition->getItemEntry);
+    if (definition->getItemEntry.drawFunc == DrawShownGetItemModel) {
+        DrawModelPath(play, definition->getItemModelPath, true);
+    } else {
+        GetItemEntry_Draw(play, definition->getItemEntry);
+    }
+    return true;
+}
+
+void CustomItemRegistry_RemoveDrop(Actor* actor) {
+    CustomItemRegistry_UnbindActor(actor);
+}
+
+void CustomItemRegistry_SetCurrentMod(const std::string& name) {
+    sCurrentMod = name;
+}
+
+void CustomItemRegistry_ClearCurrentMod() {
+    sCurrentMod.clear();
+}

@@ -42,8 +42,8 @@ const VanillaScene sVanillaScenes[] = {
 #undef DEFINE_SCENE
 #undef none
 
-// SOH [Unbound] Vanilla's horse scenes, formerly the allow-list inside func_8006CFC0 in z_horse.c. Seeding
-// them here makes SceneDB_HorseAllowed the single answer for vanilla and custom scenes alike.
+// SOH [Unbound] Vanilla's horse scenes, formerly the allow-list inside Horse_CanSpawn (func_8006CFC0) in z_horse.c.
+// Seeding them here makes SceneDB_HorseAllowed the single answer for vanilla and custom scenes alike.
 constexpr int16_t sVanillaHorseScenes[] = { SCENE_HYRULE_FIELD, SCENE_LAKE_HYLIA, SCENE_GERUDO_VALLEY,
                                             SCENE_GERUDOS_FORTRESS, SCENE_LON_LON_RANCH };
 
@@ -391,7 +391,7 @@ bool ManifestProvidesScenes(const Json& doc) {
 
 // Returns true when at least one readable base manifest is present.
 bool DetectUnboundBase() {
-    auto archiveManager = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager();
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     bool base = false;
     for (const auto& file : archiveManager->LoadFileFromAllLayers(K::kManifestPath)) {
         Json doc;
@@ -450,19 +450,11 @@ void SceneDB::LoadCustomScenes() {
         SPDLOG_INFO("[Unbound] Unbound-format archive mounted; vanilla scenes load from scene.json");
     }
 
-    Json registry = SOH::Unbound::LoadMergedJson(K::kRegistryPath);
-    if (!registry.is_object()) {
+    size_t loaded = SOH::Unbound::ForEachRegistryEntry(
+        K::kRegistryPath, "scene",
+        [this](const std::string& id, const nlohmann::json& def) { return RegisterScene(id, def); });
+    if (loaded == 0 && customEntrances.empty()) {
         return;
-    }
-    size_t loaded = 0;
-    for (const auto& id : SOH::Unbound::ListKeys(registry)) {
-        try {
-            if (registry[id].is_object() && RegisterScene(id, registry[id])) {
-                loaded++;
-            }
-        } catch (const nlohmann::json::exception& e) {
-            SPDLOG_ERROR("[Unbound] {}: scene '{}': {}", K::kRegistryPath, id, e.what());
-        }
     }
     SPDLOG_INFO("[Unbound] {}: registered {} custom scene(s), {} custom entrance(s)", K::kRegistryPath, loaded,
                 customEntrances.size());
@@ -673,12 +665,12 @@ void LoadSavedSceneName() {
     gSaveContext.savedSceneNum = (s16)id;
 }
 
-void SaveUnboundSection(SaveContext* saveContext, int sectionID, bool fullSave) {
-    SaveHorseScene(saveContext);
-    SaveSavedSceneName(saveContext);
-    SaveEntranceName("entrance", saveContext->entranceIndex);
-    SaveEntranceName("fwEntrance", saveContext->fw.entranceIndex);
-    SaveEntranceName("backupFwEntrance", saveContext->ship.backupFW.entranceIndex);
+void SaveUnboundSection(const SaveContext& saveContext, int sectionID, bool fullSave) {
+    SaveHorseScene(&saveContext);
+    SaveSavedSceneName(&saveContext);
+    SaveEntranceName("entrance", saveContext.entranceIndex);
+    SaveEntranceName("fwEntrance", saveContext.fw.entranceIndex);
+    SaveEntranceName("backupFwEntrance", saveContext.ship.backupFW.entranceIndex);
     SaveManager::Instance->SaveStruct("sceneFlags", []() {
         for (const auto& [id, flags] : sCustomSceneFlags) {
             const SceneDB::Entry& entry = SceneDB::Instance->RetrieveEntry(id);

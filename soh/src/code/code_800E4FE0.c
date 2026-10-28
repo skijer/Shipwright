@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/ModApi/AudioMix/AudioMix.h"
 
 #define SAMPLES_TO_OVERPRODUCE 0x10
 #define EXTRA_BUFFERED_AI_SAMPLES_TARGET 0x80
@@ -68,6 +69,7 @@ void AudioMgr_CreateNextAudioBuffer(s16* samples, u32 num_samples) {
     }
     s32 writtenCmds;
     AudioSynth_Update(gAudioContext.curAbiCmdBuf, &writtenCmds, samples, num_samples);
+    AudioMix_Run(samples, num_samples);
     gAudioContext.audioRandom = (gAudioContext.audioRandom + gAudioContext.totalTaskCnt) * osGetCount();
 }
 
@@ -247,11 +249,12 @@ void func_800E5584(AudioCmd* cmd) {
             AudioLoad_SyncLoadSeqParts(cmd->arg1, cmd->arg2);
             return;
         case 0x82:
-            AudioLoad_SyncInitSeqPlayer(cmd->arg0, cmd->arg1, cmd->arg2);
+            // 16-bit seqId packed in opArgs bits 0-15. See Audio_StartSequence().
+            AudioLoad_SyncInitSeqPlayer(cmd->arg0, cmd->opArgs & 0xFFFF, 0);
             func_800E59AC(cmd->arg0, cmd->data);
             return;
         case 0x85:
-            AudioLoad_SyncInitSeqPlayerSkipTicks(cmd->arg0, cmd->arg1, cmd->data);
+            AudioLoad_SyncInitSeqPlayerSkipTicks(cmd->arg0, cmd->opArgs & 0xFFFF, cmd->data);
             return;
         case 0x83:
             if (gAudioContext.seqPlayers[cmd->arg0].enabled) {
@@ -519,7 +522,7 @@ u32 func_800E5E20(u32* out) {
     return sp1C >> 0x18;
 }
 
-u8* func_800E5E84(s32 arg0, u32* arg1) {
+u16* func_800E5E84(s32 arg0, u32* arg1) {
     return AudioLoad_GetFontsForSequence(arg0, arg1);
 }
 

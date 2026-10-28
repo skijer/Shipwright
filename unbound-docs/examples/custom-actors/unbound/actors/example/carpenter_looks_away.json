@@ -1,0 +1,9 @@
+{
+  "name": "Example: a carpenter whose head turns away",
+  "model": {
+    "skeleton": "objects/object_toryo/object_toryo_Skel_007150",
+    "animation": "objects/object_toryo/object_toryo_Anim_000E50"
+  },
+  "collision": { "radius": 18, "height": 63 },
+  "look": { "limb": 15, "turnAxis": [-2, 0, 0], "nodAxis": ["0", 0, 1] }
+}

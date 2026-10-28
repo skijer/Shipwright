@@ -1,0 +1,110 @@
+name: update-downloads
+
+on:
+  workflow_run:
+    workflows: [generate-builds]
+    types: [completed]
+    branches: [unbound-modapi]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful generate-builds run to publish to the fixed download links
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rolling-unbound-downloads
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && (github.event.workflow_run.event == 'workflow_dispatch' || github.event.workflow_run.event == 'push'))
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_ID: ${{ inputs.run_id || github.event.workflow_run.id }}
+      PROJECT: soh
+    steps:
+    - uses: actions/checkout@v6
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Test download packaging
+      run: python .github/tests/test_rolling_downloads.py
+    - name: Verify build provenance
+      id: source
+      env:
+        EXPECTED_WORKFLOW: .github/workflows/generate-builds.yml
+      run: |
+        [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+        gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > run.json
+        jq -e --arg repository "$GITHUB_REPOSITORY" --arg workflow "$EXPECTED_WORKFLOW" '
+          .conclusion == "success" and .status == "completed" and
+          .head_branch == "unbound-modapi" and .head_repository.full_name == $repository and
+          .path == $workflow and (.event == "workflow_dispatch" or .event == "push")' run.json
+        COUNT=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" --jq '[.artifacts[] | select(.name == "unbound-download-source" and .expired == false)] | length')
+        if [ "$COUNT" != 1 ]; then
+          echo "This run has no rolling-download provenance; leaving releases unchanged."
+          exit 0
+        fi
+        gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name unbound-download-source --dir metadata
+        python - <<'PY'
+        import json, os
+        from pathlib import Path
+        run = json.loads(Path('run.json').read_text())
+        metadata = json.loads(Path('metadata/download-source.json').read_text())
+        assert metadata['commit'] == run['head_sha']
+        assert metadata['run_id'] == int(os.environ['RUN_ID'])
+        assert metadata['repository'] == os.environ['GITHUB_REPOSITORY']
+        assert metadata['project'] == os.environ['PROJECT']
+        PY
+        echo "eligible=true" >> "$GITHUB_OUTPUT"
+    - name: Ignore older builds
+      id: order
+      if: steps.source.outputs.eligible == 'true'
+      run: |
+        PREVIOUS=$(gh release view nei-unbound-release --repo "$GITHUB_REPOSITORY" --json body --jq .body 2>/dev/null \
+                   | sed -n 's/.*<!-- run_id: \([0-9]*\).*/\1/p')
+        if (( ${PREVIOUS:-0} > RUN_ID )); then
+          echo "A newer build is already published; leaving it in place."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        fi
+    - name: Download all six builds
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
+      run: |
+        for edition in "$PROJECT" "$PROJECT-unbound-unsafe"; do
+          for platform in windows mac linux; do
+            name="$edition-$platform"
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "rel/$name"
+          done
+        done
+    - name: Prepare ZIPs and download pages
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
+      run: python .github/scripts/package_downloads.py --artifacts rel --output dist --metadata metadata/download-source.json
+    - name: Update the fixed public and modder releases
+      if: steps.source.outputs.eligible == 'true' && steps.order.outputs.skip != 'true'
+      run: |
+        SHA=$(jq -r .commit metadata/download-source.json)
+        for edition in public modders; do
+          tag=nei-unbound-release
+          title="Shipwright: Unbound — Public downloads"
+          prerelease=false
+          if [ "$edition" = modders ]; then
+            tag=nei-unbound-modders
+            title="Shipwright: Unbound — Modder resources"
+            prerelease=true
+          fi
+          latest_args=()
+          if ! gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$SHA" --title "$title" --draft --latest=false
+            latest_args=(--latest=false)
+          fi
+          gh release upload "$tag" dist/"$edition"/*.zip --repo "$GITHUB_REPOSITORY" --clobber
+          gh release delete-asset "$tag" build-info.json --repo "$GITHUB_REPOSITORY" --yes 2>/dev/null || true
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --title "$title" --notes-file dist/"$edition"/notes.md --draft=false --prerelease="$prerelease" "${latest_args[@]}"
+        done

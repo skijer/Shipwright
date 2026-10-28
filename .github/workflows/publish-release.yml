@@ -1,0 +1,149 @@
+name: publish-release
+
+# Turns a finished generate-builds run into an Unbound release the in-game updater offers. Artifacts last a
+# day, so run this within 24 hours of the build. The release stays a draft while the mods are rebuilt for a
+# new mod API major, so nobody is offered an Unbound whose mods are not ready yet.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The generate-builds run to publish (the number in its URL)
+        required: true
+      tag:
+        description: Release tag; empty = the version the build reports, e.g. 9.3.0-unbound0.12
+        default: ''
+
+permissions: {}
+
+concurrency:
+  group: publish-release
+  cancel-in-progress: false
+
+jobs:
+
+  draft:
+    runs-on: ubuntu-22.04
+    environment: mod-signing
+    permissions:
+      contents: write
+      actions: read
+    outputs:
+      tag: ${{ steps.facts.outputs.tag }}
+      sha: ${{ steps.run.outputs.sha }}
+      rebuild_mods: ${{ steps.facts.outputs.rebuild_mods }}
+    steps:
+    - name: Find the build run
+      id: run
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RUN_ID: ${{ inputs.run_id }}
+      run: |
+        CONCLUSION=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)
+        if [ "$CONCLUSION" != success ]; then
+          echo "::error::Run $RUN_ID finished as '$CONCLUSION'; only a successful build can be released"
+          exit 1
+        fi
+        echo "sha=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" >> "$GITHUB_OUTPUT"
+    - name: Checkout the built commit
+      uses: actions/checkout@v6
+      with:
+        ref: ${{ steps.run.outputs.sha }}
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install cryptography
+    - name: Read the version and the mod API major
+      id: facts
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG_INPUT: ${{ inputs.tag }}
+      run: |
+        VERSION=$(python mod-sdk/tools/release_manifest.py version)
+        TAG="${TAG_INPUT:-$VERSION}"
+        MAJOR=$(python mod-sdk/tools/release_manifest.py modapi-major)
+        PREVIOUS=0
+        mkdir -p previous
+        if gh release download --repo "$GITHUB_REPOSITORY" --pattern unbound-release.json --dir previous 2>/dev/null; then
+          PREVIOUS=$(python3 -c 'import json; print(json.loads(json.load(open("previous/unbound-release.json"))["payload"])["modapi"])')
+        fi
+        echo "Version $VERSION, tag $TAG, mod API $MAJOR (last release: $PREVIOUS)"
+        echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+        echo "rebuild_mods=$([ "$MAJOR" != "$PREVIOUS" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+    - name: Download the builds
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RUN_ID: ${{ inputs.run_id }}
+      run: |
+        for name in soh-windows soh-mac soh-linux; do
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "rel/$name"
+        done
+    - name: Package and describe the release
+      env:
+        TAG: ${{ steps.facts.outputs.tag }}
+        VERSION: ${{ steps.facts.outputs.version }}
+        UNBOUND_RELEASE_SIGNING_KEY: ${{ secrets.UNBOUND_RELEASE_SIGNING_KEY }}
+      run: |
+        mkdir -p dist
+        (cd rel/soh-windows && zip -qr "../../dist/SoH-${TAG}-Win64.zip" .)
+        (cd rel/soh-mac && zip -qr "../../dist/SoH-${TAG}-Mac.zip" .)
+        (cd rel/soh-linux && zip -qr "../../dist/SoH-${TAG}-Linux.zip" .)
+        BASE="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG"
+        python mod-sdk/tools/release_manifest.py build --version "$VERSION" \
+               --page "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG" --release-base "$BASE" \
+               --asset "windows_x64=dist/SoH-${TAG}-Win64.zip" --asset "darwin=dist/SoH-${TAG}-Mac.zip" \
+               --asset "linux_x64=dist/SoH-${TAG}-Linux.zip" --output release-payload.json
+        python mod-sdk/tools/mod_signature.py sign-document release-payload.json --kind release \
+               --output dist/unbound-release.json
+    - name: Create the draft release
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ steps.facts.outputs.tag }}
+        SHA: ${{ steps.run.outputs.sha }}
+      run: |
+        sed "s|{{TAG}}|$TAG|g" .github/release-notes/unbound-modapi.md > release-notes.md
+        gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --target "$SHA" --draft \
+           --title "SoH: Unbound $TAG" --notes-file release-notes.md
+
+  rebuild-mods:
+    needs: draft
+    if: needs.draft.outputs.rebuild_mods == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 340
+    permissions:
+      actions: write
+      issues: read
+    steps:
+    - name: Rebuild every listed mod and wait for the queue to empty
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SHA: ${{ needs.draft.outputs.sha }}
+        RUN_ID: ${{ inputs.run_id }}
+      run: |
+        gh workflow run sign-mod.yml --repo "$GITHUB_REPOSITORY" -f resign_all=true -f unbound_ref="$SHA" -f sdk_run="$RUN_ID"
+        sleep 120
+        while true; do
+          QUEUED=$(gh issue list --repo "$GITHUB_REPOSITORY" --label sign-queued --state open --json number --jq length)
+          ACTIVE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow sign-mod.yml --limit 20 --json status \
+                   --jq '[.[] | select(.status != "completed")] | length')
+          echo "$QUEUED queued, $ACTIVE sign-mod runs active"
+          if [ "$QUEUED" = 0 ] && [ "$ACTIVE" = 0 ]; then
+            break
+          fi
+          sleep 120
+        done
+
+  publish:
+    needs: [draft, rebuild-mods]
+    if: always() && needs.draft.result == 'success' && needs.rebuild-mods.result != 'failure' && needs.rebuild-mods.result != 'cancelled'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+    - name: Publish the draft
+      env:
+        GH_TOKEN: ${{ github.token }}
+        TAG: ${{ needs.draft.outputs.tag }}
+      run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
