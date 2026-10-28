@@ -405,6 +405,8 @@ typedef enum {
     /* 03 */ QUEST_BOSSRUSH,
     /* 04 */ QUEST_SPEEDRUN,
     /* 05 */ QUEST_SPEEDRUN_MASTER,
+    // SOH [Unbound] on the file select's quest menu only, mod quest i is QUEST_MOD + i; its files play as QUEST_NORMAL
+    /* 06 */ QUEST_MOD,
 } Quest;
 
 #define IS_VANILLA (gSaveContext.ship.quest.id == QUEST_NORMAL || gSaveContext.ship.quest.id == QUEST_SPEEDRUN)

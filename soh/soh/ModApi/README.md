@@ -109,6 +109,30 @@ flag): change both together.
 - The rando save stores entrance overrides as numbers; mod entrances also go by name in `unboundDungeons`, which
   sorts after `randomizer` and fixes them up on load. `entranceOverrideTable` covers every SceneDB entrance.
 
+## Mod quests
+
+- `QUEST_MOD` exists only on the file select's quest menu. The file it makes is `QUEST_NORMAL`, and the `modQuest`
+  save section (saved with base) holds the quest's key; `SaveFileMetaInfo::modQuest` copies it for the file
+  buttons. Keeping the quest id vanilla keeps every `IS_VANILLA`/`IS_MASTER_QUEST` check as it is, and a host
+  without mod quests opens the file as Original Quest.
+- The active key is cleared by a SaveManager init function (new file and load alike), set by the section's load
+  function or `ModQuests_ApplyToNewFile`, and an adopting quest takes key-less Original Quest files in
+  `ModQuests_OnFileLoaded`, before `InitMeta` and `OnLoadFile`.
+- The key is a `char` array, not a `std::string`: save sections are written on the save thread.
+- Refusal goes through `FileChoose_IsSaveCompatible`, so a file that can't open is greyed and answers A with the
+  error sound like a Master Quest file without `oot-mq.o2r`.
+- A quest's archive is on top only while its world is played (`ModQuests` `SetWorld`): the others go under the
+  game's archives (`ArchiveManager::SetArchives`, as `SinkForeignGameArchives` does). Resources of the moved archives
+  are unloaded but kept alive for one more switch, since the game may still hold their pointers. The texture cache is
+  cleared, the message tables are rebuilt (`OTRMessage_Reload`), and the audio heap's permanent pool (fonts loaded
+  with cache policy 0) is dropped at the next audio reset, which the switch queues.
+- The world changes on file load (`ModQuests_OnFileLoaded`), on a new file (`ModQuests_ApplyToNewFile`) and at boot
+  (`ModQuests_RestoreWorld`, from `gGeneral.ModQuests.World`).
+- Hooks a quest mod registers while `ModInit` runs after its `RegisterQuest` are wrapped with the quest's world flag
+  (`Gated` in `ModApi.cpp`); `OnQuestWorldChange` fires after the flags flip, for mods to swap what they wrote.
+- `ModLabels` keeps the labels per world: the game's are copied before the first mod write, and a quest's are put
+  away when its world goes.
+
 ## Audio
 
 - `AudioMix` callbacks run on the audio thread. Gains are refreshed on the game thread and read through

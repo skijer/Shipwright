@@ -35,6 +35,8 @@ typedef struct {
     u8 maxTriforcePieces;
     bool hasFishingRod;
     bool fishingPoleShuffled;
+    // SOH [Unbound] the mod quest the file belongs to (SOHModQuest key), empty for the game's own quests
+    char modQuest[32];
 } SaveFileMetaInfo;
 
 typedef enum {

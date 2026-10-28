@@ -313,6 +313,16 @@ extern "C" void OTRMessage_Init(void) {
     PublishTables();
 }
 
+// SOH [Unbound] A mod quest's world changed the archives on top (ModQuests): build the tables again from them. The old
+// tables stay until the next reload, as a message on screen may still point into them.
+extern "C" void OTRMessage_Reload(void) {
+    static std::array<MessageTable, MSG_LANGUAGE_COUNT> sPrevious;
+    sPrevious = std::move(sTables);
+    sTables = {};
+    sInitialized = false;
+    OTRMessage_Init();
+}
+
 extern "C" MessageTableEntry* OTRMessage_Find(MessageTableEntry* table, u16 textId) {
     for (auto& t : sTables) {
         if (t.loaded && t.entries.data() == table) {

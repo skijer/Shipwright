@@ -33,15 +33,33 @@ extern "C" PlayState* gPlayState;
 
 namespace {
 
+// gate: NULL, or the flag a quest mod's hooks run under (ModQuests_GetWorldFlag): true while its world is on top.
 struct HookBinders {
-    void (*global)(void* callback);
-    void (*forId)(int32_t id, void* callback);
-    void (*forPtr)(uintptr_t ptr, void* callback);
+    void (*global)(void* callback, const bool* gate);
+    void (*forId)(int32_t id, void* callback, const bool* gate);
+    void (*forPtr)(uintptr_t ptr, void* callback, const bool* gate);
 };
+
+// A callback that runs only while the gate is open; the callback itself when there is no gate.
+template <typename H, typename Callback> typename H::fn Gated(Callback callback, const bool* gate) {
+    if (gate == nullptr) {
+        return callback;
+    }
+    return [callback, gate](auto&&... args) {
+        if (*gate) {
+            callback(std::forward<decltype(args)>(args)...);
+        }
+    };
+}
 
 std::string sCurrentMod;
 std::unordered_set<std::string> sReportedMissing;
 bool sRegisteringModUsesNetwork = false;
+
+// The calling mod's world flag, while it registers during ModInit.
+const bool* RegisteringGate() {
+    return sCurrentMod.empty() ? nullptr : ModQuests_GetWorldFlag(sCurrentMod);
+}
 constexpr const char* AppShortName = "soh";
 constexpr const char* RegistryFileName = "nocturne-registry.json";
 
@@ -198,30 +216,31 @@ bool MayModDrawOnPlayer(const DrawHookOwner& owner) {
 }
 
 void GateDrawingOnOtherPlayers(std::unordered_map<std::string, HookBinders>& entries) {
-    entries["OnPlayerResolveLimbDraw"].global = [](void* callback) {
+    entries["OnPlayerResolveLimbDraw"].global = [](void* callback, const bool* gate) {
         auto modCallback = (SOHCb_OnPlayerResolveLimbDraw)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveLimbDraw>(
-            [modCallback, owner = RegisteringDrawHookOwner()](Player* player, int32_t limbIndex, Gfx** dList,
-                                                              Gfx* limbDList, Vec3f* pos) {
-                if (MayModDrawOnPlayer(owner)) {
+            [modCallback, gate, owner = RegisteringDrawHookOwner()](Player* player, int32_t limbIndex, Gfx** dList,
+                                                                    Gfx* limbDList, Vec3f* pos) {
+                if ((gate == nullptr || *gate) && MayModDrawOnPlayer(owner)) {
                     modCallback(player, limbIndex, dList, limbDList, pos);
                 }
             });
     };
-    entries["OnPlayerPostLimbDraw"].global = [](void* callback) {
+    entries["OnPlayerPostLimbDraw"].global = [](void* callback, const bool* gate) {
         auto modCallback = (SOHCb_OnPlayerPostLimbDraw)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerPostLimbDraw>(
-            [modCallback, owner = RegisteringDrawHookOwner()](PlayState* play, Player* player, int32_t limbIndex) {
-                if (MayModDrawOnPlayer(owner)) {
+            [modCallback, gate, owner = RegisteringDrawHookOwner()](PlayState* play, Player* player,
+                                                                    int32_t limbIndex) {
+                if ((gate == nullptr || *gate) && MayModDrawOnPlayer(owner)) {
                     modCallback(play, player, limbIndex);
                 }
             });
     };
-    entries["OnPlayerResolveFaceTextures"].global = [](void* callback) {
+    entries["OnPlayerResolveFaceTextures"].global = [](void* callback, const bool* gate) {
         auto modCallback = (SOHCb_OnPlayerResolveFaceTextures)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveFaceTextures>(
-            [modCallback, owner = RegisteringDrawHookOwner()](const char** eyes, const char** mouth) {
-                if (MayModDrawOnPlayer(owner)) {
+            [modCallback, gate, owner = RegisteringDrawHookOwner()](const char** eyes, const char** mouth) {
+                if ((gate == nullptr || *gate) && MayModDrawOnPlayer(owner)) {
                     modCallback(eyes, mouth);
                 }
             });
@@ -231,17 +250,20 @@ void GateDrawingOnOtherPlayers(std::unordered_map<std::string, HookBinders>& ent
 std::unordered_map<std::string, HookBinders> BuildHookEntries() {
     std::unordered_map<std::string, HookBinders> entries;
 
-#define DEFINE_HOOK(name, args)                                                                                  \
-    entries[#name] = {                                                                                           \
-        [](void* callback) {                                                                                     \
-            GameInteractor::Instance->RegisterGameHook<GameInteractor::name>((SOHCb_##name)callback);            \
-        },                                                                                                       \
-        [](int32_t id, void* callback) {                                                                         \
-            GameInteractor::Instance->RegisterGameHookForID<GameInteractor::name>(id, (SOHCb_##name)callback);   \
-        },                                                                                                       \
-        [](uintptr_t ptr, void* callback) {                                                                      \
-            GameInteractor::Instance->RegisterGameHookForPtr<GameInteractor::name>(ptr, (SOHCb_##name)callback); \
-        },                                                                                                       \
+#define DEFINE_HOOK(name, args)                                                                                \
+    entries[#name] = {                                                                                         \
+        [](void* callback, const bool* gate) {                                                                 \
+            GameInteractor::Instance->RegisterGameHook<GameInteractor::name>(                                  \
+                Gated<GameInteractor::name>((SOHCb_##name)callback, gate));                                    \
+        },                                                                                                     \
+        [](int32_t id, void* callback, const bool* gate) {                                                     \
+            GameInteractor::Instance->RegisterGameHookForID<GameInteractor::name>(                             \
+                id, Gated<GameInteractor::name>((SOHCb_##name)callback, gate));                                \
+        },                                                                                                     \
+        [](uintptr_t ptr, void* callback, const bool* gate) {                                                  \
+            GameInteractor::Instance->RegisterGameHookForPtr<GameInteractor::name>(                            \
+                ptr, Gated<GameInteractor::name>((SOHCb_##name)callback, gate));                               \
+        },                                                                                                     \
     };
 #include "soh/Enhancements/game-interactor/GameInteractor_HookTable.h"
 #undef DEFINE_HOOK
@@ -281,7 +303,7 @@ bool RegisterHookByName(const char* name, void* callback) {
         return false;
     }
     sRegisteringModUsesNetwork = DeclaresNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()));
-    binders->global(callback);
+    binders->global(callback, RegisteringGate());
     sRegisteringModUsesNetwork = false;
     return true;
 }
@@ -291,7 +313,7 @@ bool RegisterHookForIdByName(const char* name, int32_t id, void* callback) {
     if (binders == nullptr) {
         return false;
     }
-    binders->forId(id, callback);
+    binders->forId(id, callback, RegisteringGate());
     return true;
 }
 
@@ -300,7 +322,7 @@ bool RegisterHookForPtrByName(const char* name, uintptr_t ptr, void* callback) {
     if (binders == nullptr) {
         return false;
     }
-    binders->forPtr(ptr, callback);
+    binders->forPtr(ptr, callback, RegisteringGate());
     return true;
 }
 
@@ -310,7 +332,10 @@ bool RegisterVB(GIVanillaBehavior flag, SOHVbCallback callback) {
     }
 
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnModVanillaBehavior>(
-        flag, [callback](GIVanillaBehavior, bool* should, va_list originalArgs) {
+        flag, [callback, gate = RegisteringGate()](GIVanillaBehavior, bool* should, va_list originalArgs) {
+            if (gate != nullptr && !*gate) {
+                return;
+            }
             va_list args;
             va_copy(args, originalArgs);
             callback(should, args);
@@ -504,6 +529,9 @@ SOHModApi BuildTable() {
     api.SetCustomItemWorn = CustomItemRegistry_SetWorn;
     api.IsCustomItemWorn = CustomItemRegistry_IsWorn;
     api.SetCelShadingRamp = SetCelShadingRamp;
+    api.RegisterQuest = ModQuests_Register;
+    api.GetQuest = ModQuests_GetActive;
+    api.GetQuestWorld = ModQuests_GetWorld;
     return api;
 }
 
@@ -529,7 +557,9 @@ void ModApi_Init() {
     BossRegistry_Init();
     DungeonRegistry_Init();
     ModNetwork_Init();
+    ModQuests_Init();
     ModLoader_LoadMods();
+    ModQuests_RestoreWorld();
     ModStore_Init();
     DungeonRegistry_Load();
     RegisterRegistryDumpCommand();

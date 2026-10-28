@@ -4,6 +4,7 @@
 
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/SohGui/SohModals.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/UIWidgets.hpp"
@@ -70,6 +71,10 @@ std::array<std::string, LANGUAGE_MAX> RandomizerSettingsMenuText[RSM_MAX] = {
 
 // Quests are hidden when their O2R is missing or their File Select "Hide" option is on
 bool SohFileSelect_IsQuestHidden(u8 quest) {
+    // SOH [Unbound] mod quest i is quest QUEST_MOD + i
+    if (quest >= QUEST_MOD) {
+        return quest - QUEST_MOD >= (int)ModQuests_Count();
+    }
     switch (quest) {
         case QUEST_NORMAL:
             return !ResourceMgr_GameHasOriginal() || CVarGetInteger(CVAR_ENHANCEMENT("FileSelect.HideNormalQuest"), 0);
@@ -93,7 +98,7 @@ bool SohFileSelect_IsQuestHidden(u8 quest) {
 
 u8 SohFileSelect_CountVisibleQuests() {
     u8 count = 0;
-    for (u8 quest = QUEST_NORMAL; quest <= QUEST_SPEEDRUN_MASTER; ++quest) {
+    for (u8 quest = QUEST_NORMAL; quest < QUEST_MOD + ModQuests_Count(); ++quest) {
         if (!SohFileSelect_IsQuestHidden(quest)) {
             count++;
         }

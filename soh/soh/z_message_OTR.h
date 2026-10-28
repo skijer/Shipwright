@@ -11,6 +11,9 @@ extern "C" {
 // s*MessageEntryTablePtr globals. Idempotent.
 void OTRMessage_Init(void);
 
+// Builds every language table again from the archives mounted now (a mod quest's world changed).
+void OTRMessage_Reload(void);
+
 // Hash lookup into a published table pointer. NULL when the id is absent or the table is unknown.
 MessageTableEntry* OTRMessage_Find(MessageTableEntry* table, u16 textId);
 
