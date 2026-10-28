@@ -38,6 +38,7 @@ extern "C" {
 #include <functions.h>
 #include "../../../src/overlays/actors/ovl_En_GirlA/z_en_girla.h"
 #include "src/overlays/actors/ovl_Obj_Bean/z_obj_bean.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 extern void func_80B8FE00(ObjBean*); // trigger planting
 extern PlayState* gPlayState;
 }
@@ -1019,6 +1020,7 @@ bool GenerateRandomizer(std::string seed /*= ""*/) {
         return false;
     }
     WaitForRandoGeneration();
+    ModQuests_UseGameWorld(); // SOH [Unbound] seeds are made from the game's world, not a mod quest's
 #ifdef __EMSCRIPTEN__
     // SOH [WASM] Single-threaded: generate on the next game frame (see GenerateOnNextFrame).
     // This blocks the browser tab until the seed is done, where desktop keeps drawing a

@@ -41,6 +41,7 @@ extern "C" {
 #include "soh/ModApi/ModDungeons/BossRegistry.h"
 #include "soh/ModApi/Labels/ModLabels.h"
 #include "soh/ModApi/Network/ModNetwork.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 #ifdef _WIN32
 #define SOH_MOD_EXPORT __declspec(dllexport)
@@ -227,6 +228,13 @@ typedef struct {
     uint16_t (*GetProgressiveLevel)(const char* key, SOHRandoInfBank bank);
     const char* (*GetNextProgressiveItem)(const char* key, SOHRandoInfBank bank);
     bool (*GrantLogic)(const SOHLogicGrant* grant);
+    // A quest on the file select's quest menu, beside the game's own; its files open only while the mod is loaded.
+    bool (*RegisterQuest)(const SOHModQuest* quest);
+    // The key of the mod quest the loaded file belongs to, or NULL for the game's own quests.
+    const char* (*GetQuest)(void);
+    // The mod quest whose archive covers the game's files now, or NULL for the game's own world. A quest mod's hooks
+    // and VBs registered after its RegisterQuest run only while this is its quest.
+    const char* (*GetQuestWorld)(void);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

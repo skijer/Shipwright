@@ -1,7 +1,9 @@
 #include "ModLabels.h"
 
 #include <cstdio>
+#include <cstring>
 #include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -28,6 +30,54 @@ namespace {
 std::map<int32_t, std::string> sTimestamps;
 // itemMapping entries as SoH made them, saved the first time a mod changes one
 std::map<uint32_t, ItemMapEntry> sOriginalIcons;
+
+// Everything a mod can relabel, to swap the game's labels with a mod quest's world (ModQuests)
+struct Labels {
+    std::vector<std::string> names[7];
+    char timestamps[TIMESTAMP_MAX][24];
+    std::map<int32_t, std::string> modTimestamps;
+    std::vector<TimeSplits::TimesplitObject> splits;
+    std::vector<TimeSplits::TimesplitObject> sceneSplits;
+    std::map<uint32_t, std::vector<uint32_t>> splitGroups;
+};
+
+// The labels before the first mod changed one
+std::optional<Labels> sGameLabels;
+// A quest world's labels while another world is played, by quest key
+std::map<std::string, Labels> sWorldLabels;
+
+std::vector<std::string>* const kNameLists[7] = { &itemNamesEng,      &itemNamesGer,      &itemNamesFra, &questItemNamesEng,
+                                                  &questItemNamesGer, &questItemNamesFra, &sceneNames };
+
+Labels Take() {
+    Labels labels;
+    for (size_t i = 0; i < 7; i++) {
+        labels.names[i] = *kNameLists[i];
+    }
+    std::memcpy(labels.timestamps, itemTimestampDisplayName, sizeof(labels.timestamps));
+    labels.modTimestamps = sTimestamps;
+    labels.splits = TimeSplits::splitObjectList;
+    labels.sceneSplits = TimeSplits::sceneObjectList;
+    labels.splitGroups = TimeSplits::itemSubMenuList;
+    return labels;
+}
+
+void Put(const Labels& labels) {
+    for (size_t i = 0; i < 7; i++) {
+        *kNameLists[i] = labels.names[i];
+    }
+    std::memcpy(itemTimestampDisplayName, labels.timestamps, sizeof(labels.timestamps));
+    sTimestamps = labels.modTimestamps;
+    TimeSplits::splitObjectList = labels.splits;
+    TimeSplits::sceneObjectList = labels.sceneSplits;
+    TimeSplits::itemSubMenuList = labels.splitGroups;
+}
+
+void KeepGameLabels() {
+    if (!sGameLabels.has_value()) {
+        sGameLabels = Take();
+    }
+}
 
 std::vector<std::string>* NamesFor(SOHLabelKind kind, int32_t language) {
     switch (kind) {
@@ -59,6 +109,7 @@ extern "C" bool ModLabels_Set(SOHLabelKind kind, int32_t language, int32_t index
     if ((name == nullptr) || (index < 0)) {
         return false;
     }
+    KeepGameLabels();
     if (kind == SOH_LABEL_TIMESTAMP) {
         if (index >= TIMESTAMP_MAX) {
             return false;
@@ -90,6 +141,7 @@ extern "C" bool ModLabels_SetTimeSplits(const SOHTimeSplit* splits, uint32_t cou
     if ((splits == nullptr) || (count == 0)) {
         return false;
     }
+    KeepGameLabels();
     for (uint32_t i = 0; i < count; i++) {
         const SOHTimeSplit& split = splits[i];
         TimeSplits::TimesplitObject object = {};
@@ -123,6 +175,7 @@ extern "C" bool ModLabels_SetTimeSplitGroup(uint32_t id, const uint32_t* members
     if ((count != 0) && (members == nullptr)) {
         return false;
     }
+    KeepGameLabels();
     if (count == 0) {
         TimeSplits::itemSubMenuList.erase(id);
     } else {
@@ -132,7 +185,24 @@ extern "C" bool ModLabels_SetTimeSplitGroup(uint32_t id, const uint32_t* members
 }
 
 extern "C" void ModLabels_ClearTimeSplitGroups(void) {
+    KeepGameLabels();
     TimeSplits::itemSubMenuList.clear();
+}
+
+// A quest's world is left: its labels are kept and the game's put back
+void ModLabels_LeaveWorld(const std::string& quest) {
+    if (sGameLabels.has_value()) {
+        sWorldLabels[quest] = Take();
+        Put(*sGameLabels);
+    }
+}
+
+// A quest's world comes back on top: the labels its mods set come back
+void ModLabels_EnterWorld(const std::string& quest) {
+    auto labels = sWorldLabels.find(quest);
+    if (labels != sWorldLabels.end()) {
+        Put(labels->second);
+    }
 }
 
 // SoH's windows draw item's icon as source's (as SoH made source's); source == item puts item's own back

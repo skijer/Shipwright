@@ -28,6 +28,7 @@ mods/
 | Replace a boss fight, or the final battle | [Bosses](docs/BOSSES.md) |
 | Add a whole dungeon, shuffled with the vanilla ones | [Dungeons](docs/DUNGEONS.md) |
 | Turn a new grass patch, pot or sign in a vanilla area into a randomizer check | [Checks](docs/CHECKS.md) |
+| Add my own quest to the file select, for a romhack or total conversion | [Quests](docs/QUESTS.md) |
 | Ship one `.o2r` for Windows, Linux and macOS from CI | [Publishing](docs/PUBLISHING.md) |
 | Get my mod signed so release builds run it | [Signing](docs/SIGNING.md) |
 

@@ -23,6 +23,7 @@
 #include "Enhancements/randomizer/hint.h"
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/ModApi/RandoOptions/RandoOptions.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "ResourceManagerHelpers.h"
 #include "soh/SohGui/SohGui.hpp"
 
@@ -218,6 +219,7 @@ SaveManager::SaveManager() {
         }
 
         info.quest = QUEST_NORMAL;
+        info.modQuest[0] = '\0';
         info.requiresMasterQuest = 0;
         info.requiresOriginal = 0;
 
@@ -615,6 +617,7 @@ void SaveManager::Init() {
             StartupCheckAndInitMeta(fileNum);
         }
     }
+    ModQuests_AdoptFiles(); // SOH [Unbound] files made before a mod registered its quest
     saveBlock = nlohmann::json::object();
     OTRGlobals::Instance->gRandoContext->ClearItemLocations();
 }
@@ -769,6 +772,14 @@ void SaveManager::StartupCheckAndInitMeta(int fileNum) {
             fileMetaInfo[fileNum].requiresOriginal = randoBlock["masterQuestDungeonCount"] < 12;
         }
 
+        // SOH [Unbound] a mod quest's file names its quest (ModQuests)
+        std::string modQuest;
+        if (sections.contains("modQuest") && sections["modQuest"].contains("data")) {
+            modQuest = sections["modQuest"]["data"].value("key", ""s);
+        }
+        SohUtils::CopyStringToCharArray(fileMetaInfo[fileNum].modQuest, modQuest,
+                                        ARRAY_COUNT(fileMetaInfo[fileNum].modQuest));
+
         nlohmann::json& statsBlock = sections["sohStats"]["data"];
         fileMetaInfo[fileNum].buildVersionMajor = statsBlock.value("buildVersionMajor", 0);
         fileMetaInfo[fileNum].buildVersionMinor = statsBlock.value("buildVersionMinor", 0);
@@ -820,6 +831,9 @@ void SaveManager::InitMeta(int fileNum) {
     }
 
     fileMetaInfo[fileNum].quest = gSaveContext.ship.quest.id;
+    SohUtils::CopyStringToCharArray(fileMetaInfo[fileNum].modQuest,
+                                    ModQuests_GetActive() != nullptr ? ModQuests_GetActive() : "",
+                                    ARRAY_COUNT(fileMetaInfo[fileNum].modQuest));
     // If the file is marked as a Master Quest file or if we're randomized and have at least one master quest dungeon,
     // we need the mq otr.
     fileMetaInfo[fileNum].requiresMasterQuest =
@@ -1420,6 +1434,7 @@ void SaveManager::LoadFile(int fileNum) {
                 assert(false);
                 break;
         }
+        ModQuests_OnFileLoaded();
         InitMeta(fileNum);
         GameInteractor::Instance->ExecuteHooks<GameInteractor::OnLoadFile>(fileNum);
     } catch ([[maybe_unused]] const std::exception& e) {
@@ -2518,6 +2533,7 @@ void SaveManager::DeleteZeldaFile(int fileNum) {
     }
     fileMetaInfo[fileNum].valid = false;
     fileMetaInfo[fileNum].quest = QUEST_NORMAL;
+    fileMetaInfo[fileNum].modQuest[0] = '\0';
     fileMetaInfo[fileNum].requiresMasterQuest = false;
     fileMetaInfo[fileNum].requiresOriginal = false;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnDeleteFile>(fileNum);

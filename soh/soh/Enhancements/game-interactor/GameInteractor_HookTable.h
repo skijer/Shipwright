@@ -147,6 +147,8 @@ DEFINE_HOOK(OnUpdateFileBossRushOptionSelection, (uint8_t optionIndex, uint8_t o
 DEFINE_HOOK(OnUpdateFileRandomizerOptionSelection, (uint8_t optionIndex));
 DEFINE_HOOK(OnUpdateFileNameSelection, (int16_t charCode));
 DEFINE_HOOK(OnFileChooseMain, (void* gameState));
+// SOH [Unbound] A mod quest's archive went on top of the game's files (world: its key) or under them (world: NULL)
+DEFINE_HOOK(OnQuestWorldChange, (const char* world));
 DEFINE_HOOK(OnGenerationCompletion, ());
 
 DEFINE_HOOK(OnSetGameLanguage, ());

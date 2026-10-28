@@ -33,6 +33,11 @@ void ModLabels_ApplyTimestamps(void);
 
 #ifdef __cplusplus
 }
+
+#include <string>
+
+void ModLabels_LeaveWorld(const std::string& quest);
+void ModLabels_EnterWorld(const std::string& quest);
 #endif
 
 #endif

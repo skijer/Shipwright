@@ -14,6 +14,7 @@
 #include "overlays/gamestates/ovl_file_choose/file_choose.h"
 #include "soh/Enhancements/boss-rush/BossRush.h"
 #include "soh/Enhancements/FileSelectEnhancements.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 extern "C" {
 extern MapData* gMapData;
@@ -829,6 +830,9 @@ void RegisterOnUpdateMainMenuSelection() {
                 break;
             }
             default:
+                if (questIndex >= QUEST_MOD) {
+                    SpeechSynthesizer::Instance->Speak(ModQuests_GetName(questIndex - QUEST_MOD), GetLanguageCode());
+                }
                 break;
         }
     });
