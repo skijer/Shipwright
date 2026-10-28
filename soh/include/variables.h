@@ -239,7 +239,7 @@ extern "C"
 	extern HOST_DATA Arena gSystemArena;
 	extern HOST_DATA OSPifRam __osPifInternalBuff;
 	extern HOST_DATA u8 __osContLastPoll;
-	extern HOST_DATA u8 __osMaxControllers;
+	extern LUS_DATA u8 __osMaxControllers;
 	extern HOST_DATA __OSInode __osPfsInodeCache;
 	extern HOST_DATA OSPifRam gPifMempakBuf;
 	extern HOST_DATA u16 gZBuffer[SCREEN_HEIGHT][SCREEN_WIDTH]; // 0x25800 bytes

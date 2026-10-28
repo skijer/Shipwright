@@ -5,6 +5,7 @@
 #include "soh/z_message_OTR.h"
 #include "soh/unbound/UnboundFactories.h"
 #include "soh/unbound/UnboundSchema.h"
+#include "soh/Fleet/FleetGame.h"
 #include "OTRAudio.h"
 #include <algorithm>
 #include <atomic>
@@ -298,14 +299,32 @@ static bool sohArchiveVersionMatch = false;
 #define WASM_AUDIO_DROP_THRESHOLD 6000
 #endif
 
-OTRGlobals::OTRGlobals() {
-    context = Ship::Context::CreateUninitializedInstance("Ship of Harkinian", appShortName, "shipofharkinian.json");
-
+static void LocatePortArchive() {
     portArchivePath = Ship::Context::LocateFileAcrossAppDirs("soh.o2r");
     OTRVersion portArchiveVersion = DetectOTRVersion("soh.o2r", false);
     sohArchiveVersionMatch = portArchiveVersion.major == gBuildVersionMajor &&
                              portArchiveVersion.minor == gBuildVersionMinor &&
                              portArchiveVersion.patch == gBuildVersionPatch;
+}
+
+// SOH [Fleet] Runs in the window Fleet opened, with Ship's own resources registered beside the other game's.
+static Ship::Context* JoinFleetContext() {
+    Ship::Context* context = Ship::Context::GetRawInstance();
+    FleetGame_JoinHostContext();
+    LocatePortArchive();
+    FleetGame_CreateResources(portArchivePath);
+    context->GetWindow()->GetGui()->RegisterResourceFactories();
+    sohFast3dWindow = std::dynamic_pointer_cast<Fast::Fast3dWindow>(context->GetWindow());
+    if (sohFast3dWindow != nullptr) {
+        sohFast3dWindow->SetIsRunning(true);
+    }
+    return context;
+}
+
+static Ship::Context* CreateStandaloneContext() {
+    Ship::Context* context =
+        Ship::Context::CreateUninitializedInstance("Ship of Harkinian", appShortName, "shipofharkinian.json");
+    LocatePortArchive();
 
     context->InitConfiguration();
     context->InitConsoleVariables();
@@ -331,6 +350,14 @@ OTRGlobals::OTRGlobals() {
     sohFast3dWindow =
         std::make_shared<Fast::Fast3dWindow>(std::vector<std::shared_ptr<Ship::GuiWindow>>({ sohInputEditorWindow }));
     context->InitWindow(sohFast3dWindow);
+    return context;
+}
+
+OTRGlobals::OTRGlobals() {
+    const bool hosted = FleetGame_IsHosted();
+    context = hosted ? JoinFleetContext() : CreateStandaloneContext();
+    // GImGui is per module: with a shared libultraship the context lives in the other module.
+    ImGui::SetCurrentContext(context->GetWindow()->GetGui()->GetImGuiContext());
 
     SohGui::SetupMenu();
 
@@ -355,6 +382,10 @@ OTRGlobals::OTRGlobals() {
     previousImGuiScaleIndex = -1;
     previousImGuiScale = defaultImGuiScale;
     ScaleImGui();
+    // Fleet's backend already built the font atlas; the fonts added above need it rebuilt.
+    if (hosted) {
+        context->GetWindow()->GetGui()->RebuildFontTexture();
+    }
 }
 
 typedef enum ExtractSteps {
@@ -1904,6 +1935,11 @@ extern "C" void DeinitOTR() {
     sohFast3dWindow = nullptr;
 
     OTRGlobals::Instance->context = nullptr;
+    // Fleet owns the Context it hosts Ship in.
+    if (FleetGame_IsHosted()) {
+        FleetGame_LeaveHostContext();
+    }
+    ImGui::SetCurrentContext(nullptr);
 }
 
 #ifdef _WIN32

@@ -7,6 +7,7 @@ import zipfile
 from pathlib import Path
 
 # Mirrors soh/soh/ModApi/ModTrust/ModTrust.cpp, which shows the same findings when asking about an unsigned mod.
+HOST_MODULES = {"soh.dll", "libultraship.dll"}
 WINDOWS_RUNTIME_PREFIXES = ("vcruntime140", "msvcp140", "ucrtbase", "api-ms-win-crt-")
 WINDOWS_STARTUP_KERNEL_IMPORTS = {
     "DisableThreadLibraryCalls", "GetCurrentProcess", "GetCurrentProcessId", "GetCurrentThreadId",
@@ -61,7 +62,7 @@ def parse_binary(data):
 
 
 def is_allowed_windows_import(library, function):
-    if library == "soh.exe":
+    if library in HOST_MODULES:
         return not HOST_TRUST_INTERNALS.search(function)
     if library == "kernel32.dll":
         return function in WINDOWS_STARTUP_KERNEL_IMPORTS or function in WINDOWS_STATIC_INIT_KERNEL_IMPORTS

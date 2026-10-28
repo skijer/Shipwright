@@ -119,34 +119,44 @@ bool WriteFile(const fs::path& path, const std::vector<char>& data) {
     return static_cast<bool>(output);
 }
 
-// Windows lets a running exe be renamed, never overwritten: the old image keeps running from the .old name.
-bool ReplaceExecutable(const fs::path& executable, const std::vector<char>& data, std::string& error) {
-    const fs::path old = executable.string() + OldSuffix;
+// Windows lets a loaded module be renamed, never overwritten: the old image keeps running from the .old name.
+bool ReplaceLoadedModule(const fs::path& module, const std::vector<char>& data, std::string& error) {
+    const fs::path old = module.string() + OldSuffix;
     std::error_code ignored;
     fs::remove(old, ignored);
     std::error_code renameError;
-    fs::rename(executable, old, renameError);
+    fs::rename(module, old, renameError);
     if (renameError) {
-        error = "could not move the running exe aside: " + renameError.message();
+        error = "could not move the running " + module.filename().string() + " aside: " + renameError.message();
         return false;
     }
-    if (!WriteFile(executable, data)) {
-        fs::rename(old, executable, ignored);
-        error = "could not write the new exe";
+    if (!WriteFile(module, data)) {
+        fs::rename(old, module, ignored);
+        error = "could not write the new " + module.filename().string();
         return false;
     }
     return true;
 }
 
+// The game module, libultraship and the CRT are loaded beside the exe and locked like it.
+bool IsLoadedModule(const fs::path& path) {
+    return GetModuleHandleW(path.wstring().c_str()) != nullptr;
+}
+
 bool StageFiles(const std::vector<StagedFile>& files, std::string& error) {
     const fs::path executable = ExecutablePath();
     const fs::path directory = executable.parent_path();
-    const StagedFile* newExecutable = nullptr;
+    std::vector<std::pair<fs::path, const StagedFile*>> loadedModules;
     Json staged = Json::array();
     for (const StagedFile& file : files) {
-        // The running exe may have been renamed; the release always ships it as soh.exe.
-        if (IsSameFileName(file.name, ReleaseExecutable) && !fs::path(file.name).has_parent_path()) {
-            newExecutable = &file;
+        const bool isTopLevel = !fs::path(file.name).has_parent_path();
+        // The running exe may have been renamed; the release always ships it under its own name.
+        if (isTopLevel && IsSameFileName(file.name, ReleaseExecutable)) {
+            loadedModules.emplace_back(executable, &file);
+            continue;
+        }
+        if (isTopLevel && IsLoadedModule(directory / file.name)) {
+            loadedModules.emplace_back(directory / file.name, &file);
             continue;
         }
         if (!WriteFile(directory / (file.name + UpdateSuffix), file.data)) {
@@ -155,14 +165,33 @@ bool StageFiles(const std::vector<StagedFile>& files, std::string& error) {
         }
         staged.push_back(file.name);
     }
-    if (newExecutable == nullptr) {
+    const bool hasExecutable = std::any_of(loadedModules.begin(), loadedModules.end(),
+                                           [&](const auto& module) { return module.first == executable; });
+    if (!hasExecutable) {
         error = std::string("the update has no ") + ReleaseExecutable;
         return false;
     }
 
     std::ofstream list(directory / StagedListName, std::ios::trunc);
     list << Json{ { "files", staged } }.dump(2) << '\n';
-    return list && ReplaceExecutable(executable, newExecutable->data, error);
+    if (!list) {
+        return false;
+    }
+    for (const auto& [path, file] : loadedModules) {
+        if (!ReplaceLoadedModule(path, file->data, error)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void RemoveReplacedModules(const fs::path& directory) {
+    std::error_code error;
+    for (const fs::directory_entry& entry : fs::directory_iterator(directory, error)) {
+        if (entry.path().extension() == OldSuffix) {
+            fs::remove(entry.path(), error);
+        }
+    }
 }
 
 #endif
@@ -204,10 +233,9 @@ bool ModStore_StageRelease([[maybe_unused]] const StoreRelease& release, std::st
 
 void ModStore_ApplyStagedUpdate() {
 #if defined(_WIN32)
-    const fs::path executable = ExecutablePath();
-    const fs::path directory = executable.parent_path();
+    const fs::path directory = ExecutablePath().parent_path();
     std::error_code error;
-    fs::remove(executable.string() + OldSuffix, error);
+    RemoveReplacedModules(directory);
 
     const fs::path listPath = directory / StagedListName;
     std::ifstream input(listPath);

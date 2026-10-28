@@ -194,7 +194,8 @@ endif()
 file(GLOB_RECURSE src__ CONFIGURE_DEPENDS RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "src/*.c" "src/*.h")
 set_source_files_properties(${src__} PROPERTIES COMPILE_OPTIONS "${WARNING_OVERRIDE}")
 
-list(APPEND src__ ${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc)
+set(launcher__ launcher/main.c ${CMAKE_CURRENT_SOURCE_DIR}/Resource.rc)
+source_group("launcher" FILES ${launcher__})
 list(FILTER src__ EXCLUDE REGEX "src/dmadata/")
 list(FILTER src__ EXCLUDE REGEX "src/elf_message/")
 list(FILTER src__ EXCLUDE REGEX "src/libultra/io/")
@@ -234,7 +235,27 @@ set(ALL_FILES
 ################################################################################
 # Target
 ################################################################################
-add_executable(${PROJECT_NAME} ${ALL_FILES})
+if(NOT SOH_LAUNCHER_TARGET)
+    set(SOH_LAUNCHER_TARGET ${PROJECT_NAME})
+endif()
+
+# SOH [Fleet] The game is a shared module next to a thin launcher (see the root CMakeLists).
+if(SOH_SHARED_GAME_MODULE)
+    add_library(${PROJECT_NAME} SHARED ${ALL_FILES})
+    add_executable(${SOH_LAUNCHER_TARGET} ${launcher__})
+    target_link_libraries(${SOH_LAUNCHER_TARGET} PRIVATE ${PROJECT_NAME})
+    # Resource.rc reads the game's generated properties.h and a libultraship header.
+    target_include_directories(${SOH_LAUNCHER_TARGET} PRIVATE
+        $<TARGET_PROPERTY:${PROJECT_NAME},INCLUDE_DIRECTORIES>
+        $<TARGET_PROPERTY:libultraship,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    # As on Windows, mods see the game's own symbols only, not its static dependencies (torch, libgfxd...).
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--exclude-libs,ALL")
+    endif()
+else()
+    add_executable(${PROJECT_NAME} ${ALL_FILES} ${launcher__})
+endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     ENABLE_EXPORTS ON
@@ -261,6 +282,7 @@ if (MSVC)
         COMMAND ${CMAKE_COMMAND}
             -DOBJECT_DIR=${SOH_OBJECT_DIR}
             -DLIBULTRASHIP_OBJECT_DIR=${LIBULTRASHIP_OBJECT_DIR}
+            -DFORWARD_LIBULTRASHIP=${SOH_SHARED_GAME_MODULE}
             -DOUTPUT=${SOH_WINDOWS_EXPORTS}
             -DPYTHON=${Python3_EXECUTABLE}
             -P ${CMAKE_CURRENT_SOURCE_DIR}/soh/ModApi/GenerateWindowsExports.cmake
@@ -275,23 +297,45 @@ endif()
 set(ROOT_NAMESPACE soh)
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
-    set_target_properties(${PROJECT_NAME} PROPERTIES
+    set_target_properties(${PROJECT_NAME} ${SOH_LAUNCHER_TARGET} PROPERTIES
         VS_GLOBAL_KEYWORD "Win32Proj"
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
+    )
+    set_target_properties(${SOH_LAUNCHER_TARGET} PROPERTIES
         OUTPUT_NAME "soh-macos"
     )
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    set_target_properties(${PROJECT_NAME} PROPERTIES
+    set_target_properties(${SOH_LAUNCHER_TARGET} PROPERTIES
     OUTPUT_NAME "soh.elf"
+    )
+endif()
+
+if(SOH_SHARED_GAME_MODULE)
+    # The launcher keeps the soh name; its PDB must not overwrite the game's.
+    set_target_properties(${SOH_LAUNCHER_TARGET} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+        PDB_NAME "${SOH_LAUNCHER_TARGET}"
+        BUILD_RPATH "$<IF:$<PLATFORM_ID:Darwin>,@executable_path,$ORIGIN>"
+        INSTALL_RPATH "$<IF:$<PLATFORM_ID:Darwin>,@executable_path,$ORIGIN/../lib>"
+    )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        set_target_properties(${SOH_LAUNCHER_TARGET} PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+    endif()
+    # The game module finds libultraship beside itself once packaged (AppImage, app bundle).
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        BUILD_RPATH "$<IF:$<PLATFORM_ID:Darwin>,@loader_path,$ORIGIN>"
+        INSTALL_RPATH "$<IF:$<PLATFORM_ID:Darwin>,@loader_path,$ORIGIN>"
     )
 endif()
 ################################################################################
 # MSVC runtime library
 ################################################################################
-if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if (SOH_MSVC_RUNTIME_LIBRARY)
+    set_target_properties(${PROJECT_NAME} ${SOH_LAUNCHER_TARGET} PROPERTIES MSVC_RUNTIME_LIBRARY ${SOH_MSVC_RUNTIME_LIBRARY})
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Windows")
     get_property(MSVC_RUNTIME_LIBRARY_DEFAULT TARGET ${PROJECT_NAME} PROPERTY MSVC_RUNTIME_LIBRARY)
     if(SOH_WINDOWS_64BIT)
         string(CONCAT "MSVC_RUNTIME_LIBRARY_STR"
@@ -523,6 +567,10 @@ if(MSVC)
             /SUBSYSTEM:WINDOWS
         )
     endif()
+    if(SOH_SHARED_GAME_MODULE)
+        # Not incremental: its .ilk would share the game module's name.
+        target_link_options(${SOH_LAUNCHER_TARGET} PRIVATE /INCREMENTAL:NO /MANIFEST:NO /DEBUG /SUBSYSTEM:WINDOWS)
+    endif()
 endif()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
@@ -668,6 +716,14 @@ add_custom_command(
     COMMENT "Copying asset ymls..."
     COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${CMAKE_SOURCE_DIR}/soh/assets/yml $<TARGET_FILE_DIR:soh>/assets
 )
+if(SOH_SHARED_GAME_MODULE)
+    add_custom_command(
+        TARGET ${PROJECT_NAME}
+        POST_BUILD
+        COMMENT "Copying libultraship next to the game..."
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:libultraship> $<TARGET_FILE_DIR:soh>
+    )
+endif()
 ################################################################################
 # Dependencies
 ################################################################################
@@ -698,7 +754,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
             "torch;"
             "glu32;"
             "SDL2::SDL2;"
-            "SDL2::SDL2main;"
             "SDL2_net::SDL2_net-static"
             "glfw;"
             "winmm;"
@@ -718,7 +773,6 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
             "torch;"
             "glu32;"
             "SDL2::SDL2;"
-            "SDL2::SDL2main;"
             "glfw;"
             "winmm;"
             "imm32;"
@@ -824,7 +878,21 @@ endif()
 
 
 if(NOT CMAKE_SYSTEM_NAME MATCHES "Darwin|NintendoSwitch|CafeOS")
-INSTALL(TARGETS soh DESTINATION . COMPONENT ship)
+# Linux installs into <prefix>/bin, so shared modules go to the sibling lib folder the AppImage expects.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(SOH_MODULE_DESTINATION ../lib)
+else()
+    set(SOH_MODULE_DESTINATION .)
+endif()
+INSTALL(TARGETS soh
+    RUNTIME DESTINATION . COMPONENT ship
+    LIBRARY DESTINATION ${SOH_MODULE_DESTINATION} COMPONENT ship
+    ARCHIVE DESTINATION . COMPONENT ship)
+if(SOH_SHARED_GAME_MODULE)
+INSTALL(TARGETS ${SOH_LAUNCHER_TARGET} libultraship
+    RUNTIME DESTINATION . COMPONENT ship
+    LIBRARY DESTINATION ${SOH_MODULE_DESTINATION} COMPONENT ship)
+endif()
 endif()
 
 if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
@@ -837,7 +905,10 @@ execute_process(COMMAND ${CURL} -sSfL https://raw.githubusercontent.com/mdqinc/S
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
 configure_file( ${CMAKE_CURRENT_SOURCE_DIR}/macosx/Info.plist.in ${CMAKE_BINARY_DIR}/macosx/Info.plist @ONLY)
-INSTALL(TARGETS soh DESTINATION ../MacOS COMPONENT ship)
+INSTALL(TARGETS ${SOH_LAUNCHER_TARGET} DESTINATION ../MacOS COMPONENT ship)
+if(SOH_SHARED_GAME_MODULE)
+INSTALL(TARGETS soh libultraship LIBRARY DESTINATION ../MacOS COMPONENT ship)
+endif()
 INSTALL(FILES ${CMAKE_BINARY_DIR}/gamecontrollerdb.txt DESTINATION ../MacOS COMPONENT ship)
 INSTALL(FILES ${CMAKE_BINARY_DIR}/soh/soh.o2r DESTINATION ../Resources COMPONENT ship)
 elseif(NOT "${CMAKE_SYSTEM_NAME}" MATCHES "NintendoSwitch|CafeOS")
