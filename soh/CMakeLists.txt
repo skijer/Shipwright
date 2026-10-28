@@ -304,6 +304,10 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set_target_properties(${PROJECT_NAME} PROPERTIES
         XCODE_ATTRIBUTE_CLANG_ENABLE_OBJC_ARC YES
     )
+    # A shared libultraship no longer passes its frameworks on; the speech synthesizer needs these.
+    find_library(OSX_FOUNDATION Foundation)
+    find_library(OSX_AVFOUNDATION AVFoundation)
+    target_link_libraries(${PROJECT_NAME} PRIVATE ${OSX_FOUNDATION} ${OSX_AVFOUNDATION})
     set_target_properties(${SOH_LAUNCHER_TARGET} PROPERTIES
         OUTPUT_NAME "soh-macos"
     )
