@@ -15,7 +15,9 @@ body:
         After that, publish a GitHub release in your repository, or comment `/sign <tag or commit>`, and only the
         mods whose sources changed are signed again. `/unlist <mod>` takes a mod out of the store, `/relist <mod>`
         brings it back. A `packs.json` next to your mods groups them into packs players can pick parts of.
-        See mod-sdk/docs/SIGNING.md for the rules.
+        Add description and icon fields to packs for their store cards. The issue author or a maintainer can
+        also use `/pack {"id":"starter","name":"Starter","mods":["whip"],"icon":"ITEM_BOW"}`,
+        `/unpack starter`, or `/mod-icon whip ITEM_BOW` here. See mod-sdk/docs/SIGNING.md for the rules.
   - type: input
     id: repository
     attributes:

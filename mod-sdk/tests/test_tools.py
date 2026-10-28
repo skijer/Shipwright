@@ -3,6 +3,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
@@ -484,6 +485,19 @@ class BuildCatalogTests(unittest.TestCase):
         self.package("whip", modapi=2)
         self.assertIn("whip", self.plan(build_catalog.empty_catalog(), {"whip": "h1"})["rejected"])
 
+    def test_manifest_icons_can_change_and_issue_icons_take_precedence(self):
+        catalog = build_catalog.empty_catalog()
+        for index, icon in enumerate(["ITEM_BOW", "ITEM_BOMB", "ITEM_OCARINA_TIME"]):
+            package = self.root / "packages" / "whip.o2r"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("manifest.json", json.dumps({"name": "Whip", "icon": icon}))
+            result = {"modapi": 1, "publish": ["whip"]}
+            build_catalog.apply(catalog, result, self.REQUEST, self.root / "packages", {}, [], [],
+                                "https://example.invalid")
+            self.assertEqual(catalog["mods"]["whip"]["icon"], "ITEM_SWORD_KOKIRI" if index == 2 else icon)
+            if index == 1:
+                build_catalog.edit_metadata(catalog, 7, "mod-icon", "whip ITEM_SWORD_KOKIRI")
+
     def test_packs_keep_only_mods_of_their_issue(self):
         self.package("whip")
         result = self.plan(build_catalog.empty_catalog(), {"whip": "h1"})
@@ -509,6 +523,109 @@ class BuildCatalogTests(unittest.TestCase):
                                          encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "nope"):
             build_catalog.read_packs(mods)
+
+
+class PackMetadataTests(unittest.TestCase):
+    def catalog(self):
+        catalog = build_catalog.empty_catalog()
+        catalog["mods"] = {"whip": {"issue": 7}, "foreign": {"issue": 8}}
+        catalog["sources"]["7"] = {"author": "someone", "permissions": []}
+        return catalog
+
+    def test_only_issue_author_or_maintainer_can_change_packs(self):
+        issue = {"number": 7, "author": "someone"}
+        body = '/pack {"id":"items","name":"Items","mods":["whip"]}'
+        with patch.object(sign_queue, "is_maintainer", return_value=False):
+            self.assertIsNone(sign_queue.handle_command("owner/repo", issue, body, "stranger", set()))
+            result = sign_queue.handle_command("owner/repo", issue, body, "someone", set())
+            self.assertEqual(result["mode"], "catalog")
+        with patch.object(sign_queue, "is_maintainer", return_value=True):
+            result = sign_queue.handle_command("owner/repo", issue, body, "maintainer", set())
+            self.assertEqual(result["issue"], 7)
+
+    def test_pack_versions_are_optional_and_roundtrip_through_issues(self):
+        pack = {"id": "items", "name": "Items", "mods": ["whip"], "version": "2.4"}
+        catalog = build_catalog.edit_metadata(self.catalog(), 7, "pack", json.dumps(pack))
+        self.assertEqual(catalog["packs"][0]["version"], "2.4")
+        self.assertEqual(build_catalog.validate_packs([{**pack, "version": ""}], {"whip"})[0]["version"], "")
+        for invalid in [7, "v" * 65]:
+            with self.assertRaises(ValueError):
+                build_catalog.validate_packs([{**pack, "version": invalid}], {"whip"})
+
+    def test_issue_pack_roundtrip_and_namespace(self):
+        pack = {"id": "items", "name": "My items", "mods": ["whip", "whip"],
+                "icon": "ITEM_BOW", "description": "A starter pack"}
+        command, argument = sign_request.parse_command("/pack " + json.dumps(pack))
+        catalog = build_catalog.edit_metadata(self.catalog(), 7, command, argument)
+        self.assertEqual(catalog["packs"][0]["id"], "7-items")
+        self.assertEqual(catalog["packs"][0]["mods"], ["whip"])
+        self.assertEqual(catalog["packs"][0]["icon"], "ITEM_BOW")
+        self.assertGreater(catalog["sequence"], 0)
+        build_catalog.edit_metadata(catalog, 7, "unpack", "items")
+        self.assertEqual(catalog["packs"], [])
+        self.assertEqual(catalog["sources"]["7"]["pack_overrides"], ["items"])
+
+    def test_foreign_mods_and_path_icons_are_rejected(self):
+        for mods, icon in [(["foreign"], "ITEM_BOW"), (["whip"], "../../file"), ([], "")]:
+            with self.subTest(mods=mods, icon=icon), self.assertRaises(ValueError):
+                build_catalog.edit_metadata(self.catalog(), 7, "pack", json.dumps(
+                    {"id": "items", "name": "Items", "mods": mods, "icon": icon}))
+        with self.assertRaises(ValueError):
+            build_catalog.edit_metadata(self.catalog(), 7, "mod-icon", "foreign ITEM_BOW")
+
+    def test_icon_update_and_input_limits(self):
+        catalog = build_catalog.edit_metadata(self.catalog(), 7, "mod-icon", "whip ITEM_BOW")
+        self.assertEqual(catalog["mods"]["whip"]["icon"], "ITEM_BOW")
+        with self.assertRaises(ValueError):
+            sign_request.parse_command("/pack " + "a" * 8193)
+        with self.assertRaises(ValueError):
+            build_catalog.edit_metadata(self.catalog(), 7, "pack", "{broken}")
+
+    def test_issue_override_and_removal_survive_signing(self):
+        catalog = self.catalog()
+        pack = {"id": "items", "name": "Issue pack", "mods": ["whip"]}
+        build_catalog.edit_metadata(catalog, 7, "pack", json.dumps(pack))
+        request = {"issue": 7, "repository": "someone/mods", "directory": "mods",
+                   "commit": "c" * 40, "author": "someone"}
+        plan = {"modapi": 1, "publish": []}
+        repo_pack = {**pack, "name": "Repository pack"}
+        build_catalog.apply(catalog, plan, request, Path("."), {}, [repo_pack], [], "https://example.invalid")
+        self.assertEqual([p["name"] for p in catalog["packs"]], ["Issue pack"])
+        build_catalog.edit_metadata(catalog, 7, "unpack", "items")
+        build_catalog.apply(catalog, plan, request, Path("."), {}, [repo_pack], [], "https://example.invalid")
+        self.assertEqual(catalog["packs"], [])
+
+
+class StoreOptionTests(unittest.TestCase):
+    def test_switches_are_scoped_by_id_and_cannot_choose_arbitrary_cvars(self):
+        option = {"id": "mask_blast", "name": "Blast Mask", "cvar": "gCheats.InfiniteHealth"}
+        self.assertEqual(build_catalog.read_options({"options": [option]}),
+                         [{"id": "mask_blast", "name": "Blast Mask"}])
+        for invalid in [[{"id": "../../setting", "name": "bad"}], [option, option],
+                        [{"id": "x", "name": ""}], [{"id": "x", "name": "a" * 161}], "invalid"]:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                build_catalog.read_options({"options": invalid})
+
+    def test_invalid_options_are_rejected_before_signing(self):
+        with tempfile.TemporaryDirectory() as directory:
+            package = Path(directory) / "probe.o2r"
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("manifest.json", json.dumps({"options": [{"id": "../x", "name": "bad"}]}))
+            result = build_catalog.plan(build_catalog.empty_catalog(), [package], {}, 7, True, True, set(), 1)
+            self.assertEqual(result["publish"], [])
+            self.assertIn("probe", result["rejected"])
+
+    def test_options_survive_publication_from_a_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            options = [{"id": "hookshot", "name": "Hookshot / Ultrashot"}]
+            with zipfile.ZipFile(root / "probe.o2r", "w") as archive:
+                archive.writestr("manifest.json", json.dumps({"name": "Probe", "options": options}))
+            request = {"issue": 7, "author": "author", "repository": "author/mods", "commit": "c" * 40,
+                       "directory": "mods"}
+            catalog = build_catalog.apply(build_catalog.empty_catalog(), {"publish": ["probe"], "modapi": 1},
+                                          request, root, {}, [], [], "https://example.invalid")
+            self.assertEqual(catalog["mods"]["probe"]["options"], options)
 
 
 class ReleaseManifestTests(unittest.TestCase):

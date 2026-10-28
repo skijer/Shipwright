@@ -49,18 +49,95 @@ def read_packs(mods_directory):
     if not isinstance(packs, list) or len(packs) > MAX_PACKS:
         raise ValueError(f"packs.json holds at most {MAX_PACKS} packs")
     known = {mod.name for mod in find_mod_directories(mods_directory)}
+    return validate_packs(packs, known)
+
+
+ICON = re.compile(r"^ITEM_[A-Z0-9_]{1,60}$")
+
+
+def validate_packs(packs, known):
+    if not isinstance(packs, list) or len(packs) > MAX_PACKS:
+        raise ValueError(f"at most {MAX_PACKS} packs are allowed")
+    result, seen = [], set()
     for pack in packs:
-        if not isinstance(pack, dict) or not PACK_ID.match(str(pack.get("id", ""))):
-            raise ValueError("every pack needs an 'id' of lowercase letters, digits and dashes")
+        if not isinstance(pack, dict) or not PACK_ID.fullmatch(str(pack.get("id", ""))):
+            raise ValueError("every pack needs an id of lowercase letters, digits and dashes")
+        if pack["id"] in seen:
+            raise ValueError("duplicate pack id")
+        seen.add(pack["id"])
         if not isinstance(pack.get("name"), str) or not 0 < len(pack["name"]) <= MAX_NAME_LENGTH:
-            raise ValueError(f"pack '{pack['id']}' needs a 'name' of up to {MAX_NAME_LENGTH} characters")
+            raise ValueError("pack name must have 1 to 60 characters")
         mods = pack.get("mods")
-        if not isinstance(mods, list) or not all(isinstance(mod, str) and MOD_ID.match(mod) for mod in mods):
-            raise ValueError(f"pack '{pack['id']}' needs 'mods', a list of mod folder names")
+        if not isinstance(mods, list) or not mods or len(mods) > 256 or not all(
+                isinstance(mod, str) and MOD_ID.fullmatch(mod) for mod in mods):
+            raise ValueError("pack needs 1 to 256 mod folder names")
         unknown = sorted(set(mods) - known)
         if unknown:
-            raise ValueError(f"pack '{pack['id']}' lists mods this folder does not have: {', '.join(unknown)}")
-    return [{"id": pack["id"], "name": pack["name"], "mods": pack["mods"]} for pack in packs]
+            raise ValueError("unknown or unowned mods: " + ", ".join(unknown))
+        description, icon = pack.get("description", ""), pack.get("icon", "")
+        if not isinstance(description, str) or len(description) > 1000:
+            raise ValueError("description must have at most 1000 characters")
+        if not isinstance(icon, str) or (icon and not ICON.fullmatch(icon)):
+            raise ValueError("icon must be an ITEM_ texture name, e.g. ITEM_BOW")
+        version = pack.get("version", "")
+        if not isinstance(version, str) or len(version.encode("utf-8")) > 64:
+            raise ValueError("pack version must have at most 64 UTF-8 bytes")
+        result.append({"id": pack["id"], "name": pack["name"], "mods": list(dict.fromkeys(mods)),
+                       "description": description, "icon": icon, "version": version})
+    return result
+
+
+def edit_metadata(catalog, issue, command, argument):
+    owned = {key for key, mod in catalog["mods"].items() if mod["issue"] == issue}
+    source = catalog["sources"].get(str(issue))
+    if not source or not owned:
+        raise ValueError("this issue has no published mods yet")
+    if command == "mod-icon":
+        mod_id, _, icon = argument.partition(" ")
+        if mod_id not in owned or not ICON.fullmatch(icon):
+            raise ValueError("use /mod-icon <owned mod id> <ITEM_ texture name>")
+        catalog["mods"][mod_id]["icon"] = icon
+        catalog["mods"][mod_id]["icon_override"] = True
+    else:
+        if command == "pack":
+            try:
+                pack = validate_packs([json.loads(argument)], owned)[0]
+            except (json.JSONDecodeError, TypeError) as error:
+                raise ValueError("/pack needs a JSON object on one line") from error
+            pack_id = pack["id"]
+        else:
+            pack_id = argument
+            if not PACK_ID.fullmatch(pack_id):
+                raise ValueError("invalid pack id")
+        full_id = f"{issue}-{pack_id}"
+        existing = [p for p in catalog["packs"] if p.get("issue") == issue]
+        if command == "pack" and len(existing) >= MAX_PACKS and not any(p["id"] == full_id for p in existing):
+            raise ValueError("too many packs in this issue")
+        catalog["packs"] = [p for p in catalog["packs"] if p["id"] != full_id]
+        if command == "pack":
+            catalog["packs"].append({**pack, "id": full_id, "issue": issue,
+                                     "author": source["author"], "issue_override": True})
+        overrides = source.setdefault("pack_overrides", [])
+        if pack_id not in overrides:
+            overrides.append(pack_id)
+    catalog["sequence"] = max(catalog["sequence"] + 1, int(time.time()))
+    return catalog
+
+
+def read_options(manifest):
+    options = manifest.get("options", [])
+    if not isinstance(options, list) or len(options) > 64:
+        raise ValueError("options must be a list of at most 64 switches")
+    seen, result = set(), []
+    for option in options:
+        if not isinstance(option, dict) or not isinstance(option.get("id"), str) or not MOD_ID.fullmatch(option["id"]):
+            raise ValueError("each option needs a stable lowercase id")
+        name = option.get("name")
+        if option["id"] in seen or not isinstance(name, str) or not name or len(name.encode("utf-8")) > 160:
+            raise ValueError("options need unique ids and names of 1 to 160 UTF-8 bytes")
+        seen.add(option["id"])
+        result.append({"id": option["id"], "name": name})
+    return result
 
 
 def read_package_manifest(package):
@@ -82,6 +159,11 @@ def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions, 
     for package in sorted(packages):
         mod_id = package.stem
         manifest = read_package_manifest(package)
+        try:
+            read_options(manifest)
+        except ValueError as error:
+            result["rejected"][mod_id] = str(error)
+            continue
         existing = catalog["mods"].get(mod_id)
         build = (existing or {}).get("builds", {}).get(str(major), {})
         new_permissions = sorted(set(manifest.get("permissions", [])) - allowed) if allowed is not None else []
@@ -115,22 +197,30 @@ def apply(catalog, plan_result, request, signed, hashes, packs, links, release_b
         builds[major] = {"file": asset, "url": f"{release_base}/{asset}", "hash": file_hash(package),
                          "size": package.stat().st_size, "source_hash": hashes.get(mod_id, "")}
         catalog["mods"][mod_id] = {
-            "name": manifest.get("name", mod_id), "author": manifest.get("author", request["author"]),
+            "name": manifest.get("display_name") or manifest.get("name", mod_id), "author": manifest.get("author", request["author"]),
             "description": manifest.get("description", ""), "version": str(manifest.get("version", "")),
             "repository": request["repository"], "commit": request["commit"], "issue": issue,
             "owner": request["author"], "permissions": manifest.get("permissions", []),
             "dependencies": manifest.get("dependencies", []), "listed": existing.get("listed", True),
+            "options": read_options(manifest),
+            "dependency_only": manifest.get("dependency_only") is True,
             "builds": builds,
+            "icon": existing.get("icon", "") if existing.get("icon_override") else manifest.get("icon", ""),
+            "icon_override": existing.get("icon_override", False),
         }
         permissions |= set(manifest.get("permissions", []))
 
     catalog["sources"][str(issue)] = {"repository": request["repository"], "directory": request["directory"],
                                       "author": request["author"], "commit": request["commit"],
-                                      "permissions": sorted(permissions)}
+                                      "permissions": sorted(permissions),
+                                      "pack_overrides": source.get("pack_overrides", [])}
     owned = {mod_id for mod_id, mod in catalog["mods"].items() if mod["issue"] == issue}
-    catalog["packs"] = [pack for pack in catalog["packs"] if pack.get("issue") != issue]
+    catalog["packs"] = [pack for pack in catalog["packs"] if pack.get("issue") != issue or pack.get("issue_override")]
     catalog["packs"] += [{"id": f"{issue}-{pack['id']}", "name": pack["name"], "author": request["author"],
-                          "issue": issue, "mods": [mod for mod in pack["mods"] if mod in owned]} for pack in packs]
+                          "issue": issue, "description": pack.get("description", ""), "icon": pack.get("icon", ""),
+                          "version": pack.get("version", ""),
+                          "mods": [mod for mod in pack["mods"] if mod in owned]} for pack in packs
+                         if pack["id"] not in source.get("pack_overrides", [])]
     catalog["links"] = links
     catalog["sequence"] = max(catalog["sequence"] + 1, int(time.time()))
     return catalog
@@ -236,6 +326,11 @@ def main():
         args.summary.write_text(summarize(plan_result, catalog) + "\n", encoding="utf-8")
     else:
         name, _, mod_id = args.command.partition(":")
+        if name in ("pack", "unpack", "mod-icon"):
+            catalog = edit_metadata(read_catalog(args.catalog), args.issue, name, mod_id)
+            write_json(args.output, catalog)
+            args.summary.write_text(f"Store metadata updated for #{args.issue}: {name}.\n", encoding="utf-8")
+            return
         if name not in ("unlist", "relist"):
             raise ValueError(f"unknown listing command '{args.command}'")
         catalog = set_listed(read_catalog(args.catalog), args.issue, mod_id, name == "relist")

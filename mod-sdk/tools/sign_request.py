@@ -9,7 +9,7 @@ PATTERNS = {
     "directory": re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$"),
 }
 SECTION = re.compile(r"^### (.+?)[ \t]*\n(.*?)(?=^### |\Z)", re.MULTILINE | re.DOTALL)
-COMMAND = re.compile(r"^/(sign|unlist|relist)(?:[ \t]+(\S+))?[ \t]*$", re.MULTILINE)
+COMMAND = re.compile(r"^/(sign|unlist|relist|pack|unpack|mod-icon)(?:[ \t]+([^\n]+?))?[ \t]*$", re.MULTILINE)
 REFERENCE = re.compile(r"^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$")
 MOD_ID = re.compile(r"^[a-z0-9_-]{1,64}$")
 MARKER = re.compile(r"<!-- unbound-(?P<kind>[a-z]+)(?P<values>(?: [a-z_]+=[A-Za-z0-9._/,-]*)*) -->")
@@ -40,14 +40,22 @@ def validate_request(request):
 
 
 def parse_command(comment):
-    """The first /sign, /unlist or /relist line of a comment as (command, argument), or None."""
+    """The first store command line of a comment as (command, argument), or None."""
     match = COMMAND.search(comment.replace("\r\n", "\n"))
     if match is None:
         return None
     command, argument = match.group(1), match.group(2) or ""
     if command == "sign" and not REFERENCE.match(argument):
         raise ValueError("/sign needs a tag, branch or commit of your repository, e.g. `/sign v1.2.0`")
-    if command != "sign" and not MOD_ID.match(argument):
+    if command in ("pack", "mod-icon"):
+        if not argument or len(argument) > 8192:
+            raise ValueError(f"/{command} needs metadata on a single line (maximum 8192 characters)")
+        return command, argument
+    if command == "unpack":
+        if not re.fullmatch(r"[a-z0-9-]{1,40}", argument):
+            raise ValueError("/unpack needs a pack id")
+        return command, argument
+    if command != "sign" and not MOD_ID.fullmatch(argument):
         raise ValueError(f"/{command} needs the folder name of one of your mods, e.g. `/{command} whip`")
     return command, argument
 

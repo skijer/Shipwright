@@ -151,3 +151,64 @@ The in-game updater has a key of its own, so a leaked mod key cannot ship an Unb
 - A request whose run was cancelled stays queued; the workflow also runs every two hours and picks it up.
 - **Store links:** `.github/mod-signing/store-links.json` lists the links the store's Links tab shows; they
   reach the catalog on the next signature.
+
+
+## Pack presentation and issue commands
+
+Authors can define packs in `packs.json` beside their mods. Each pack accepts `id`, `name`, `mods`,
+`description` (up to 1000 characters), and `icon` (a game item texture such as `ITEM_BOW`,
+`ITEM_SWORD_KOKIRI`, `ITEM_OCARINA_TIME`, or `ITEM_BOMB`). A mod's manifest also accepts `icon`.
+Icons use images already available in Ship; unknown names display a default icon.
+
+The issue author or a repository maintainer can comment on the open signing issue:
+
+```text
+/pack {"id":"starter","name":"Starter pack","description":"Recommended items","icon":"ITEM_BOW","mods":["whip","shield"]}
+/mod-icon whip ITEM_SWORD_KOKIRI
+/unpack starter
+```
+
+Put each command on its own line; one command is processed per comment. `/pack` creates or replaces
+that pack using only mods published by this issue. There are at most 20 packs per issue. The issue
+number namespaces the pack id. Issue changes take precedence over `packs.json` on later signatures;
+`/unpack` also prevents the repository pack from reappearing. Recreate it with `/pack` when needed.
+These commands update the signed catalog without rebuilding packages.
+
+In the store, **Install pack** installs every member and its dependencies. **Configure pack**
+lets players choose a subset, with Select all / Select none and per-mod status. Choices are saved between sessions. It selects installations;
+it does not remove already installed mods or change their gameplay settings. Incompatible members
+are unavailable for selection. Search matches pack names, authors and descriptions.
+
+
+## Individual feature switches
+
+A mod manifest can publish `"options": [{"id": "mask_blast", "name": "Blast Mask"}]` (up to 64).
+The store shows these switches under **Configure pack > Feature options**, and in **Installed**.
+Every option defaults to enabled. The store saves only `gMods.Store.<mod-id>.<option-id>`;
+metadata cannot choose another CVar. The mod must read these settings during registration and
+skip disabled features. Changes require a restart; existing item ownership is retained.
+
+The NEI mods expose 17 wearable masks, four boss remains, two MM items, and five progressive
+weapon chains independently. MM songs remain enabled with mm_collectables. Disabled weapon
+chains leave vanilla weapon handling in place. Mods outside curated packs are grouped by catalog
+owner (with author credits as a fallback). **Install pack** installs all members and dependencies
+with one click; **Configure pack** selects members and individual features.
+
+
+To run the native catalog regression from a Visual Studio Developer Command Prompt at the Unbound root:
+
+```bat
+cl /EHsc /std:c++20 /utf-8 /DFMT_HEADER_ONLY /Isoh /Ibuild/vcpkg/installed/x64-windows-static/include mod-sdk/tests/store_catalog_options.cpp soh/soh/ModApi/ModStore/StoreCatalog.cpp /Febuild/store-catalog-options.exe
+build\store-catalog-options.exe
+```
+
+Resource packages can declare `"dependency_only": true`. They stay available to dependency resolution
+and the Installed tab but are omitted from the automatic author groups. `mm_assets` uses this flag;
+it is always included when installing a mod that declares it in `dependencies`.
+
+
+Packs appear in a three-column grid. Click a card to expand its description and mod/feature options
+below that row; the Install pack button remains directly available. Cards show a large pack icon,
+a larger title (up to three lines), author, and pack version. Authors can add `"version": "1.0"` to
+`packs.json` or `/pack` metadata (up to 64 UTF-8 bytes). Legacy packs without a version display
+"Versions: per mod"; the expanded list shows the actual version of each member.

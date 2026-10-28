@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <regex>
+#include <set>
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -66,6 +67,23 @@ std::optional<StoreMod> ReadMod(const std::string& id, const Json& object) {
     mod.description = ReadString(object, "description");
     mod.version = ReadString(object, "version");
     mod.repository = ReadString(object, "repository");
+    mod.icon = ReadString(object, "icon");
+    mod.owner = ReadString(object, "owner");
+    const auto dependencyOnly = object.find("dependency_only");
+    mod.dependencyOnly = dependencyOnly != object.end() && dependencyOnly->is_boolean() && dependencyOnly->get<bool>();
+    const auto options = object.find("options");
+    std::set<std::string> optionIds;
+    if (options != object.end() && options->is_array() && options->size() <= 64) {
+        for (const auto& option : *options) {
+            if (!option.is_object())
+                continue;
+            const auto id = ReadString(option, "id");
+            const auto name = ReadString(option, "name");
+            if (std::regex_match(id, ModId) && !name.empty() && name.size() <= 160 && optionIds.insert(id).second) {
+                mod.options.push_back({ id, name });
+            }
+        }
+    }
     mod.permissions = ReadStrings(object, "permissions");
     mod.dependencies = ReadStrings(object, "dependencies");
     const auto builds = object.find("builds");
@@ -106,10 +124,30 @@ std::optional<StoreCatalog> ModStore_ParseCatalog(const std::string& payload) {
             }
         }
     }
-    for (const Json& object : root.value("packs", Json::array())) {
-        if (object.is_object()) {
-            catalog.packs.push_back({ ReadString(object, "id"), ReadString(object, "name"),
-                                      ReadString(object, "author"), ReadStrings(object, "mods") });
+    const auto packs = root.find("packs");
+    std::set<std::string> packIds;
+    if (packs != root.end() && packs->is_array()) {
+        for (const Json& object : *packs) {
+            if (!object.is_object()) {
+                continue;
+            }
+            StorePack pack = { ReadString(object, "id"),          ReadString(object, "name"),
+                               ReadString(object, "author"),      {},
+                               ReadString(object, "description"), ReadString(object, "icon"),
+                               ReadString(object, "version") };
+            if (!std::regex_match(pack.id, ModId) || pack.id == "other" || pack.name.empty() ||
+                !packIds.insert(pack.id).second) {
+                continue;
+            }
+            std::set<std::string> seen;
+            for (const auto& id : ReadStrings(object, "mods")) {
+                if (catalog.mods.count(id) && seen.insert(id).second) {
+                    pack.mods.push_back(id);
+                }
+            }
+            if (!pack.mods.empty()) {
+                catalog.packs.push_back(std::move(pack));
+            }
         }
     }
     for (const Json& object : root.value("links", Json::array())) {

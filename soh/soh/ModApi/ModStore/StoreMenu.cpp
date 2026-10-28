@@ -1,18 +1,29 @@
 #include "ModStore.h"
 #include "StoreHttp.h"
 #include "StoreInternal.h"
+#include "StorePackCard.h"
+#include "StorePackDefaults.h"
 
 #include <algorithm>
 #include <functional>
+#include <cctype>
+#include <nlohmann/json.hpp>
+#include <ship/resource/File.h>
+#include <ship/resource/ResourceManager.h>
+#include <ship/resource/archive/Archive.h>
+#include <ship/resource/archive/ArchiveManager.h>
 #include <set>
+#include <sstream>
 
 #include <SDL2/SDL_misc.h>
 #include <ship/Context.h>
+#include <fast/Fast3dGui.h>
 
 #include "soh/cvar_prefixes.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/UIWidgets.hpp"
 #include "variables.h"
+#include "soh/ModApi/ModApi.h"
 
 namespace {
 
@@ -20,12 +31,20 @@ namespace {
 constexpr int StartupCheckUnasked = 0;
 constexpr int StartupCheckOn = 1;
 constexpr int StartupCheckOff = 2;
-constexpr const char* OtherModsPack = "other";
 
 using Actions = std::vector<std::function<void()>>;
 
 std::map<std::string, std::set<std::string>> sUncheckedByPack;
 bool sRequestedCatalog = false;
+std::string sConfiguringPack;
+ImGuiTextFilter sPackFilter;
+bool sOptionsChanged = false;
+// Icons use the game's existing texture cache; catalog metadata cannot open local paths.
+ImTextureID PackIcon(const std::string& icon) {
+    const auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
+    const std::string key = icon.rfind("ITEM_", 0) == 0 && gui->HasTextureByName(icon) ? icon : "ITEM_SONG_TIME";
+    return gui->HasTextureByName(key) ? gui->GetTextureByName(key) : static_cast<ImTextureID>(0);
+}
 
 UIWidgets::ButtonOptions InlineButton() {
     return UIWidgets::ButtonOptions().Size(UIWidgets::Sizes::Inline).Color(THEME_COLOR);
@@ -125,83 +144,270 @@ void ConfirmIfNeeded(const StoreView& view, const StoreMod& mod, const char* ver
 }
 
 std::vector<StorePack> PacksWithOtherMods(const StoreCatalog& catalog) {
-    std::vector<StorePack> packs = catalog.packs;
-    std::set<std::string> packed;
+    std::vector<StorePack> packs;
+    std::set<std::string> curatedIds;
+    for (auto pack : ModStore_DefaultPacks()) {
+        curatedIds.insert(pack.mods.begin(), pack.mods.end());
+        pack.mods.erase(std::remove_if(pack.mods.begin(), pack.mods.end(), [&](const std::string& id) {
+            return catalog.mods.count(id) == 0;
+        }), pack.mods.end());
+        if (!pack.mods.empty()) packs.push_back(std::move(pack));
+    }
+    // Older catalogs group these same mods differently. Preserve unrelated community packs.
+    for (const auto& pack : catalog.packs) {
+        if (std::none_of(pack.mods.begin(), pack.mods.end(), [&](const std::string& id) {
+            return curatedIds.count(id) != 0 || id == "mm_assets";
+        })) packs.push_back(pack);
+    }
+    std::set<std::string> packed = { "mm_assets" };
     for (const StorePack& pack : packs) {
         packed.insert(pack.mods.begin(), pack.mods.end());
     }
-    StorePack other = { OtherModsPack, "Other mods", "", {} };
+    std::map<std::string, StorePack> byAuthor;
     for (const auto& [id, mod] : catalog.mods) {
-        if (packed.count(id) == 0) {
-            other.mods.push_back(id);
+        if (packed.count(id) != 0 || mod.dependencyOnly)
+            continue;
+        const std::string author = !mod.owner.empty() ? mod.owner : !mod.author.empty() ? mod.author : "Unknown author";
+        auto& group = byAuthor[author];
+        if (group.id.empty()) {
+            // Encode the author instead of using credits text as a CVar path.
+            group.id = "other-";
+            constexpr char hex[] = "0123456789abcdef";
+            for (unsigned char c : author) {
+                group.id += hex[c >> 4];
+                group.id += hex[c & 15];
+            }
+            group.name = "Other mods - " + author;
+            group.author = author;
+            group.description = "Mods by this author outside a curated pack.";
+            group.icon = "ITEM_BOMB";
         }
+        group.mods.push_back(id);
     }
-    if (!other.mods.empty()) {
-        packs.push_back(std::move(other));
+    for (auto& [author, group] : byAuthor) {
+        packs.push_back(std::move(group));
     }
     return packs;
 }
 
-void DrawPack(const StoreView& view, const StorePack& pack, Actions& actions) {
-    std::set<std::string>& unchecked = sUncheckedByPack[pack.id];
-    std::vector<std::string> selected;
-    std::vector<std::string> outdated;
-    for (const std::string& id : pack.mods) {
-        const auto mod = view.catalog.mods.find(id);
-        if (mod == view.catalog.mods.end()) {
-            continue;
+std::string PackSelectionKey(const std::string& id) {
+    return CVAR_SETTING("ModStore.PackSelection.") + id;
+}
+
+std::set<std::string>& PackSelection(const std::string& id) {
+    const auto [entry, inserted] = sUncheckedByPack.try_emplace(id);
+    if (inserted) {
+        std::istringstream saved(CVarGetString(PackSelectionKey(id).c_str(), ""));
+        std::string mod;
+        while (std::getline(saved, mod, ',')) {
+            entry->second.insert(mod);
         }
-        bool checked = unchecked.count(id) == 0;
-        if (UIWidgets::Checkbox((mod->second.name + "##" + pack.id + id).c_str(), &checked,
-                                UIWidgets::CheckboxOptions().Color(THEME_COLOR))) {
+    }
+    return entry->second;
+}
+
+void SavePackSelection(const std::string& id, const std::set<std::string>& unchecked) {
+    std::string saved;
+    for (const auto& mod : unchecked) {
+        saved += (saved.empty() ? "" : ",") + mod;
+    }
+    CVarSetString(PackSelectionKey(id).c_str(), saved.c_str());
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+}
+
+// Installed manifests can expose options before a new remote catalog is published.
+// Only read mounted package metadata; never change download URLs, hashes or trust decisions.
+const std::vector<StoreOption>& InstalledOptions(const std::string& id) {
+    static const auto optionsByMod = [] {
+        std::map<std::string, std::vector<StoreOption>> result;
+        auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
+        for (const auto& archive : *archives) {
+            const auto packageId = std::filesystem::path(archive->GetPath()).stem().string();
+            try {
+                const auto file = archive->LoadFile("manifest.json");
+                if (!file || !file->IsLoaded || !file->Buffer || file->Buffer->size() > 1024 * 1024) continue;
+                const auto manifest = nlohmann::json::parse(file->Buffer->begin(), file->Buffer->end());
+                const auto options = manifest.find("options");
+                if (options == manifest.end() || !options->is_array() || options->size() > 64) continue;
+                std::set<std::string> seen;
+                for (const auto& option : *options) {
+                    if (!option.is_object() || !option.contains("id") || !option["id"].is_string() ||
+                        !option.contains("name") || !option["name"].is_string()) continue;
+                    const auto key = option["id"].get<std::string>();
+                    const auto name = option["name"].get<std::string>();
+                    const bool valid = !key.empty() && key.size() <= 64 &&
+                        std::all_of(key.begin(), key.end(), [](unsigned char c) {
+                            return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-';
+                        });
+                    if (valid && !name.empty() && name.size() <= 160 && seen.insert(key).second)
+                        result[packageId].push_back({ key, name });
+                }
+            } catch (const std::exception&) {
+                // Malformed optional UI metadata must not prevent browsing the store.
+            }
+        }
+        return result;
+    }();
+    static const std::vector<StoreOption> empty;
+    const auto found = optionsByMod.find(id);
+    return found == optionsByMod.end() ? empty : found->second;
+}
+
+void DrawModOptions(const StoreMod& mod) {
+    const auto& installedOptions = InstalledOptions(mod.id);
+    const auto& options = installedOptions.empty() ? mod.options : installedOptions;
+    if (options.empty()) return;
+    ImGui::PushID(mod.id.c_str());
+    if (ImGui::TreeNodeEx("Items and features", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextWrapped("Enable individual features. Changes apply after restarting Unbound.");
+        for (const auto& option : options) {
+            ImGui::PushID(option.id.c_str());
+            const std::string cvar = "gMods.Store." + mod.id + "." + option.id;
+            bool enabled = CVarGetInteger(cvar.c_str(), 1) != 0;
+            if (UIWidgets::Checkbox(option.name.c_str(), &enabled, UIWidgets::CheckboxOptions().Color(THEME_COLOR))) {
+                CVarSetInteger(cvar.c_str(), enabled ? 1 : 0);
+                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+                sOptionsChanged = true;
+            }
+            ImGui::PopID();
+        }
+        ImGui::TreePop();
+    }
+    ImGui::PopID();
+}
+
+void DrawPackTile(const StoreView& view, const StorePack& pack, Actions& actions) {
+    ImGui::PushID(pack.id.c_str());
+    const std::string version = pack.version.empty() ? "Versions: per mod" : "Version " + pack.version;
+    if (StorePackCard::Draw(pack.name, pack.author.empty() ? "Community" : pack.author, version, PackIcon(pack.icon),
+                            sConfiguringPack == pack.id, ImGui::GetContentRegionAvail().x)) {
+        sConfiguringPack = sConfiguringPack == pack.id ? "" : pack.id;
+    }
+    int installed = 0;
+    bool compatible = true;
+    for (const auto& id : pack.mods) {
+        installed += ModStore_IsInstalled(StateOf(view, id));
+        compatible &= view.catalog.mods.at(id).builds.count(SOH_MOD_API_MAJOR) != 0;
+    }
+    ImGui::BeginDisabled(view.busy || pack.mods.empty() || !compatible);
+    if (UIWidgets::Button(
+            "Install pack",
+            InlineButton().Tooltip("Install every mod in this pack and its dependencies. Applies after restart."))) {
+        const auto ids = pack.mods;
+        actions.push_back([ids] { ModStore_Install(ids); });
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::TextDisabled("%d/%zu installed", installed, pack.mods.size());
+    ImGui::PopID();
+}
+
+void DrawPackDetails(const StoreView& view, const StorePack& pack, Actions& actions) {
+    ImGui::PushID(pack.id.c_str());
+    ImGui::Spacing();
+    ImGui::SeparatorText(pack.name.c_str());
+    ImGui::TextWrapped("%s", pack.description.empty() ? "No description provided." : pack.description.c_str());
+    if (ImGui::SmallButton("Collapse details")) {
+        sConfiguringPack.clear();
+    }
+    auto& unchecked = PackSelection(pack.id);
+    ImGui::Indent();
+    ImGui::TextWrapped("Choose which mods to install. Required dependencies are included automatically. This does "
+                       "not remove installed mods.");
+    if (ImGui::SmallButton("Select all")) {
+        unchecked.clear();
+        SavePackSelection(pack.id, unchecked);
+    }
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Select none")) {
+        unchecked = std::set<std::string>(pack.mods.begin(), pack.mods.end());
+        SavePackSelection(pack.id, unchecked);
+    }
+    std::vector<std::string> selected;
+    for (const auto& id : pack.mods) {
+        const auto& mod = view.catalog.mods.at(id);
+        const bool available = mod.builds.count(SOH_MOD_API_MAJOR) != 0;
+        bool checked = available && unchecked.count(id) == 0;
+        ImGui::PushID(id.c_str());
+        ImGui::BeginDisabled(!available);
+        if (UIWidgets::Checkbox("##selected", &checked, UIWidgets::CheckboxOptions().Color(THEME_COLOR))) {
             if (checked) {
                 unchecked.erase(id);
             } else {
                 unchecked.insert(id);
             }
+            SavePackSelection(pack.id, unchecked);
         }
-        DrawModTooltip(mod->second);
-        DrawModLabel(view, mod->second);
-        if (checked) {
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::TextUnformatted(ModStore_DisplayName(mod).c_str());
+        DrawModTooltip(mod);
+        DrawModLabel(view, mod);
+        DrawModOptions(mod);
+        ImGui::PopID();
+        if (checked)
             selected.push_back(id);
-        }
-        if (StateOf(view, id) == StoreModState::Outdated) {
-            outdated.push_back(id);
-        }
     }
-
+    ImGui::TextDisabled("%zu selected", selected.size());
     ImGui::BeginDisabled(view.busy || selected.empty());
-    if (UIWidgets::Button(("Install selected##" + pack.id).c_str(), InlineButton())) {
+    if (UIWidgets::Button("Install selection", InlineButton())) {
         actions.push_back([selected] { ModStore_Install(selected); });
     }
     ImGui::EndDisabled();
-    if (!outdated.empty()) {
-        ImGui::SameLine();
-        ImGui::BeginDisabled(view.busy);
-        if (UIWidgets::Button(("Update " + std::to_string(outdated.size()) + "##" + pack.id).c_str(), InlineButton())) {
-            actions.push_back([outdated] { ModStore_Install(outdated); });
-        }
-        ImGui::EndDisabled();
-    }
+    ImGui::Unindent();
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    ImGui::PopID();
 }
 
 void DrawPacks(const StoreView& view, Actions& actions) {
-    for (const StorePack& pack : PacksWithOtherMods(view.catalog)) {
-        const std::string header = pack.name + " (" + std::to_string(pack.mods.size()) + " mods)##" + pack.id;
-        if (!ImGui::CollapsingHeader(header.c_str())) {
-            continue;
+    sPackFilter.Draw("Search packs", 240.0f);
+    const auto packs = PacksWithOtherMods(view.catalog);
+    std::vector<const StorePack*> visible;
+    for (const auto& pack : packs) {
+        const std::string searchable = pack.name + " " + pack.author + " " + pack.description;
+        if (sPackFilter.PassFilter(searchable.c_str())) {
+            visible.push_back(&pack);
         }
-        ImGui::Indent();
-        if (!pack.author.empty()) {
-            ImGui::TextDisabled("by %s", pack.author.c_str());
-        }
-        DrawPack(view, pack, actions);
-        ImGui::Unindent();
     }
+    if (visible.empty()) {
+        ImGui::TextDisabled("No packs found.");
+        return;
+    }
+    constexpr size_t Columns = 3;
+    // Keep three readable columns on narrow menus; the child supplies horizontal scrolling.
+    const float contentWidth = std::max(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 60.0f);
+    ImGui::SetNextWindowContentSize(ImVec2(contentWidth, 0));
+    if (ImGui::BeginChild("##PackGridScroll", ImVec2(0, 0), ImGuiChildFlags_None,
+                          ImGuiWindowFlags_HorizontalScrollbar)) {
+        for (size_t row = 0; row < visible.size(); row += Columns) {
+            ImGui::PushID(static_cast<int>(row));
+            if (ImGui::BeginTable("##PackGrid", Columns,
+                                  ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_NoPadOuterX,
+                                  ImVec2(contentWidth, 0))) {
+                for (size_t column = 0; column < Columns && row + column < visible.size(); ++column) {
+                    ImGui::TableNextColumn();
+                    DrawPackTile(view, *visible[row + column], actions);
+                }
+                ImGui::EndTable();
+            }
+            for (size_t column = 0; column < Columns && row + column < visible.size(); ++column) {
+                const auto& pack = *visible[row + column];
+                if (sConfiguringPack == pack.id) {
+                    DrawPackDetails(view, pack, actions);
+                    break;
+                }
+            }
+            ImGui::Spacing();
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
 }
 
 void DrawInstalledRow(const StoreView& view, const StoreMod& mod, StoreModState state, Actions& actions) {
-    ImGui::TextUnformatted(mod.name.c_str());
+    ImGui::TextUnformatted(ModStore_DisplayName(mod).c_str());
     DrawModTooltip(mod);
     DrawModLabel(view, mod);
     const std::string id = mod.id;
@@ -228,6 +434,7 @@ void DrawInstalledRow(const StoreView& view, const StoreMod& mod, StoreModState 
         }
     }
     ImGui::EndDisabled();
+    DrawModOptions(mod);
 }
 
 void DrawInstalled(const StoreView& view, Actions& actions) {
@@ -313,7 +520,7 @@ void DrawReleaseBanner(const StoreView& view, Actions& actions) {
 }
 
 void DrawRestartBanner(const StoreView& view) {
-    if (!view.restartNeeded) {
+    if (!view.restartNeeded && !sOptionsChanged) {
         return;
     }
     ImGui::TextColored(UIWidgets::ColorValues.at(UIWidgets::Colors::Cyan),

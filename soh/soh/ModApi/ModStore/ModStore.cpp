@@ -419,10 +419,14 @@ void InstallNow(const std::vector<std::string>& ids) {
     }
     std::string error;
     const std::vector<std::string> order = ResolveInstallOrder(catalog, ids, error);
-    const std::set<std::string> requested(ids.begin(), ids.end());
     std::vector<std::string> downloads;
     for (const std::string& id : order) {
-        if (NeedsDownload(states[id], requested.count(id) != 0)) {
+        if (catalog.mods.at(id).builds.count(SOH_MOD_API_MAJOR) == 0) {
+            error = catalog.mods.at(id).name + " has no build for this version of Unbound yet";
+            break;
+        }
+        // A disabled dependency must be enabled along with the requested pack.
+        if (NeedsDownload(states[id], true)) {
             downloads.push_back(id);
         }
     }
