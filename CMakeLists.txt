@@ -87,7 +87,54 @@ endif()
 
 set(CMAKE_PROJECT_GIT_COMMIT_TAG "${GIT_COMMIT_TAG}" CACHE STRING "Git commit tag" FORCE)
 
-set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT soh)
+# SOH [Fleet] On desktop the game is a shared library next to a thin launcher, sharing one libultraship
+# with its mods and with Fleet, which loads Ship and 2Ship into one process.
+if(CMAKE_SYSTEM_NAME MATCHES "Windows|Linux|Darwin")
+    option(SOH_SHARED_GAME_MODULE "Build the game as a shared library loaded by a thin launcher" ON)
+else()
+    set(SOH_SHARED_GAME_MODULE OFF)
+endif()
+set(LUS_BUILD_SHARED ${SOH_SHARED_GAME_MODULE})
+if(SOH_SHARED_GAME_MODULE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+    # The game target keeps the name "soh" so mods keep linking against soh.lib.
+    set(SOH_LAUNCHER_TARGET soh-launcher)
+else()
+    set(SOH_LAUNCHER_TARGET soh)
+endif()
+set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${SOH_LAUNCHER_TARGET})
+
+# Modules that exchange C++ objects must share one CRT heap.
+if(MSVC AND SOH_SHARED_GAME_MODULE)
+    set(SOH_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
+    set(CMAKE_MSVC_RUNTIME_LIBRARY ${SOH_MSVC_RUNTIME_LIBRARY})
+endif()
+
+# Subprojects that pin the static CRT on their own targets are moved back to the shared one.
+function(soh_use_shared_crt_in directory)
+    if(NOT SOH_MSVC_RUNTIME_LIBRARY)
+        return()
+    endif()
+    get_property(targets DIRECTORY "${directory}" PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target IN LISTS targets)
+        get_target_property(type ${target} TYPE)
+        if(type MATCHES "INTERFACE_LIBRARY|UTILITY")
+            continue()
+        endif()
+        set_target_properties(${target} PROPERTIES MSVC_RUNTIME_LIBRARY ${SOH_MSVC_RUNTIME_LIBRARY})
+        # Torch also passes /MT as a plain compile option, which the property cannot override.
+        get_target_property(options ${target} COMPILE_OPTIONS)
+        if(options)
+            string(REGEX REPLACE "/MT(d?)" "/MD\\1" options "${options}")
+            set_target_properties(${target} PROPERTIES COMPILE_OPTIONS "${options}")
+        endif()
+    endforeach()
+    get_property(subdirectories DIRECTORY "${directory}" PROPERTY SUBDIRECTORIES)
+    foreach(subdirectory IN LISTS subdirectories)
+        soh_use_shared_crt_in("${subdirectory}")
+    endforeach()
+endfunction()
+
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/MP>)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/utf-8>)
 add_compile_options($<$<CXX_COMPILER_ID:MSVC>:/Zc:preprocessor>)
@@ -106,11 +153,15 @@ if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
 
     include(CMake/automate-vcpkg.cmake)
 
-    set(VCPKG_TRIPLET x64-windows-static)
-    set(VCPKG_TARGET_TRIPLET x64-windows-static)
+    # "-static-md": static libraries built against the shared CRT.
+    if(SOH_SHARED_GAME_MODULE)
+        set(SOH_VCPKG_CRT_SUFFIX "-md")
+    endif()
+    set(VCPKG_TRIPLET x64-windows-static${SOH_VCPKG_CRT_SUFFIX})
+    set(VCPKG_TARGET_TRIPLET x64-windows-static${SOH_VCPKG_CRT_SUFFIX})
     if(SOH_WINDOWS_ARM64)
-        set(VCPKG_TRIPLET arm64-windows-static)
-        set(VCPKG_TARGET_TRIPLET arm64-windows-static)
+        set(VCPKG_TRIPLET arm64-windows-static${SOH_VCPKG_CRT_SUFFIX})
+        set(VCPKG_TARGET_TRIPLET arm64-windows-static${SOH_VCPKG_CRT_SUFFIX})
     endif()
 
     vcpkg_bootstrap()
@@ -361,6 +412,7 @@ endfunction()
 if(NOT EMSCRIPTEN OR SOH_WASM_EXTRACTOR)
 add_subdirectory(torch SYSTEM)
 quiet_dependency_tree(${CMAKE_CURRENT_SOURCE_DIR}/torch)
+soh_use_shared_crt_in(${CMAKE_CURRENT_SOURCE_DIR}/torch)
 
 target_compile_definitions(torch INTERFACE YAML_CPP_STATIC_DEFINE)
 
@@ -394,7 +446,9 @@ add_executable(soh-o2r-packer EXCLUDE_FROM_ALL
 )
 target_link_libraries(soh-o2r-packer PRIVATE torch)
 
-if(MSVC)
+if(SOH_MSVC_RUNTIME_LIBRARY)
+    set_target_properties(soh-torch soh-o2r-packer PROPERTIES MSVC_RUNTIME_LIBRARY ${SOH_MSVC_RUNTIME_LIBRARY})
+elseif(MSVC)
     set_target_properties(soh-torch soh-o2r-packer PROPERTIES
         MSVC_RUNTIME_LIBRARY "$<IF:$<CONFIG:Debug>,MultiThreadedDebug,MultiThreaded>")
 endif()
@@ -476,9 +530,9 @@ if(EMSCRIPTEN AND SOH_WASM_EXTRACTOR)
 endif()
 
 if(NOT EMSCRIPTEN)
-set_property(TARGET soh PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
-set_property(TARGET soh PROPERTY APPIMAGE_DESKTOP_FILE "${CMAKE_SOURCE_DIR}/scripts/linux/appimage/soh.desktop")
-set_property(TARGET soh PROPERTY APPIMAGE_ICON_FILE "${CMAKE_BINARY_DIR}/sohIcon.png")
+set_property(TARGET ${SOH_LAUNCHER_TARGET} PROPERTY APPIMAGE_DESKTOP_FILE_TERMINAL YES)
+set_property(TARGET ${SOH_LAUNCHER_TARGET} PROPERTY APPIMAGE_DESKTOP_FILE "${CMAKE_SOURCE_DIR}/scripts/linux/appimage/soh.desktop")
+set_property(TARGET ${SOH_LAUNCHER_TARGET} PROPERTY APPIMAGE_ICON_FILE "${CMAKE_BINARY_DIR}/sohIcon.png")
 endif()
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Linux")
@@ -517,7 +571,7 @@ add_custom_target(CreateOSXIcons
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Creating OSX icons ..."
     )
-add_dependencies(soh CreateOSXIcons)
+add_dependencies(${SOH_LAUNCHER_TARGET} CreateOSXIcons)
 
 set(PROGRAM_PERMISSIONS_EXECUTE OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ WORLD_EXECUTE WORLD_READ)
 
@@ -531,6 +585,13 @@ install(CODE "
     fixup_bundle(\"\${CMAKE_INSTALL_PREFIX}/../MacOS/soh\" \"\" \"${dirs}\")
     ")
 
+endif()
+
+if(MSVC AND SOH_SHARED_GAME_MODULE)
+    # The shared CRT ships beside the game so players need no Visual C++ redistributable.
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_DESTINATION .)
+    set(CMAKE_INSTALL_SYSTEM_RUNTIME_COMPONENT ship)
+    include(InstallRequiredSystemLibraries)
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Windows|NintendoSwitch|CafeOS")

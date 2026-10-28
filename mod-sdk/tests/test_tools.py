@@ -315,7 +315,9 @@ class ScanModSourcesTests(unittest.TestCase):
 
 class CheckModBinaryTests(unittest.TestCase):
     def test_game_and_runtime_imports_are_allowed(self):
-        self.assertTrue(check_mod_binary.is_allowed_windows_import("soh.exe", "Player_GetStrength"))
+        self.assertTrue(check_mod_binary.is_allowed_windows_import("soh.dll", "Player_GetStrength"))
+        self.assertTrue(check_mod_binary.is_allowed_windows_import("libultraship.dll", "CVarGetInteger"))
+        self.assertFalse(check_mod_binary.is_allowed_windows_import("soh.exe", "Player_GetStrength"))
         self.assertTrue(check_mod_binary.is_allowed_windows_import("vcruntime140.dll", "memcpy"))
         self.assertTrue(check_mod_binary.is_allowed_windows_import("kernel32.dll", "IsDebuggerPresent"))
         self.assertTrue(check_mod_binary.is_allowed_windows_import("api-ms-win-crt-runtime-l1-1-0.dll",
@@ -328,10 +330,10 @@ class CheckModBinaryTests(unittest.TestCase):
         self.assertFalse(check_mod_binary.is_allowed_windows_import("msvcp140.dll", "__std_fs_open_handle"))
 
     def test_trust_system_internals_are_refused(self):
-        self.assertFalse(check_mod_binary.is_allowed_windows_import("soh.exe", "ModPermissions_RegisterMod"))
+        self.assertFalse(check_mod_binary.is_allowed_windows_import("soh.dll", "ModPermissions_RegisterMod"))
         self.assertFalse(check_mod_binary.is_allowed_windows_import(
-            "soh.exe", "?ModPermissions_FindCaller@@YAPEBUModIdentity@@PEBX@Z"))
-        self.assertTrue(check_mod_binary.is_allowed_windows_import("soh.exe", "Microphone_Open"))
+            "soh.dll", "?ModPermissions_FindCaller@@YAPEBUModIdentity@@PEBX@Z"))
+        self.assertTrue(check_mod_binary.is_allowed_windows_import("soh.dll", "Microphone_Open"))
 
 
 class SignQueueTests(unittest.TestCase):

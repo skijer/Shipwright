@@ -10,6 +10,7 @@
 #include <soh/Enhancements/bootcommands.h>
 #include "soh/OTRGlobals.h"
 #include "soh/CrashHandlerExt.h"
+#include "soh/Fleet/FleetGame.h"
 
 s32 gScreenWidth = SCREEN_WIDTH;
 s32 gScreenHeight = SCREEN_HEIGHT;
@@ -43,20 +44,21 @@ void Main_LogSystemHeap(void) {
     osSyncPrintf(VT_RST);
 }
 
+// SOH [Fleet] Entered from the launcher (soh/launcher/main.c); argv is UTF-8 on every platform.
+int Soh_RunMain(int argc, char* argv[]) {
 #ifdef _WIN32
-int SDL_main(int argc, char* argv[]) {
-    AllocConsole();
-    (void)freopen("CONIN$", "r", stdin);
-    (void)freopen("CONOUT$", "w", stdout);
-    (void)freopen("CONOUT$", "w", stderr);
+    // Inside Fleet the console and the locale are Fleet's.
+    if (!FleetGame_IsHosted()) {
+        AllocConsole();
+        (void)freopen("CONIN$", "r", stdin);
+        (void)freopen("CONOUT$", "w", stdout);
+        (void)freopen("CONOUT$", "w", stderr);
 #ifndef _DEBUG
-    ShowWindow(GetConsoleWindow(), SW_HIDE);
+        ShowWindow(GetConsoleWindow(), SW_HIDE);
 #endif
-    // Allow non-ascii characters for Windows
-    setlocale(LC_ALL, ".UTF8");
-
-#else //_WIN32
-int main(int argc, char* argv[]) {
+        // Allow non-ascii characters for Windows
+        setlocale(LC_ALL, ".UTF8");
+    }
 #endif
     GameConsole_Init();
     InitOTR(argc, argv);

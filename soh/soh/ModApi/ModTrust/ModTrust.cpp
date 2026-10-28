@@ -26,6 +26,7 @@ using Json = nlohmann::json;
 
 constexpr const char* SignatureFileName = "unbound-signature.json";
 constexpr const char* SignatureDomain = "unbound-mod-signature-v1";
+constexpr std::string_view HostModules[] = { "soh.dll", "libultraship.dll" };
 constexpr size_t ContentHashSize = 64;
 constexpr size_t SignatureSize = 64;
 constexpr size_t MaxImportedLibraries = 256;
@@ -389,7 +390,7 @@ std::vector<std::string> ModTrust_ListUnusualImports(const std::vector<char>& bi
     std::set<std::string> unusual;
     for (const PeImport& import : ReadPeImports(binary)) {
         const std::string library = Lowercase(import.library);
-        if (library == "soh.exe") {
+        if (Contains(HostModules, library)) {
             if (ContainsAny(HostTrustInternals, import.function)) {
                 unusual.insert(import.library + "!" + import.function);
             }

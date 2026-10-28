@@ -13,6 +13,7 @@ runs:
         cd deps/tinyxml2-10.0.0
         mkdir -p build
         cd build
-        cmake ..
+        # The static library is linked into the shared game module.
+        cmake .. -DCMAKE_POSITION_INDEPENDENT_CODE=ON
         make
         $SUDO make install

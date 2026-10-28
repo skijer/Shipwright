@@ -6,7 +6,7 @@ if(NOT UNBOUND_ROOT)
 endif()
 set(UNBOUND_ROOT "${UNBOUND_ROOT}" CACHE PATH "Unbound source checkout the mods compile against")
 set(UNBOUND_IMPORT_LIBRARY "${UNBOUND_ROOT}/x64/$<CONFIG>/soh.lib" CACHE STRING
-    "Windows only: soh.lib, the import library of the soh.exe the mods will load into")
+    "Windows only: soh.lib, the import library of the soh game module the mods will load into")
 set(UNBOUND_GAME_DIR "" CACHE PATH "Game folder; when set, every built mod is copied into its mods/ folder")
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -60,7 +60,9 @@ if(NOT TARGET unbound_mod_sdk)
         )
     endif()
     if(WIN32)
+        # soh.lib also forwards libultraship's symbols, which live in libultraship.dll.
         target_link_libraries(unbound_mod_sdk INTERFACE "${UNBOUND_IMPORT_LIBRARY}")
+        target_compile_definitions(unbound_mod_sdk INTERFACE LUS_SHARED_LIBRARY)
     elseif(APPLE)
         target_link_options(unbound_mod_sdk INTERFACE "LINKER:-undefined,dynamic_lookup")
     endif()

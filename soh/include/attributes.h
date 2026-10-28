@@ -15,4 +15,11 @@
 #define HOST_DATA
 #endif
 
+// libultraship's own globals live in libultraship.dll when it is a shared library.
+#if defined(_WIN32) && defined(LUS_SHARED_LIBRARY)
+#define LUS_DATA __declspec(dllimport)
+#else
+#define LUS_DATA
+#endif
+
 #endif
