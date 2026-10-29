@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <libultraship/bridge/consolevariablebridge.h>
 #include <nlohmann/json.hpp>
@@ -35,16 +36,61 @@ char* CopyString(const std::string& text) {
     return copy;
 }
 
-std::set<RandomizerTrick> ParseEnabledTricks() {
-    std::set<RandomizerTrick> tricks;
+// The rando menu keeps the enabled tricks as one comma-separated list of name tags.
+std::vector<std::string> EnabledTrickTags() {
+    std::vector<std::string> tags;
     std::stringstream names(CVarGetString(CVAR_RANDOMIZER_SETTING("EnabledTricks"), ""));
     std::string name;
     while (std::getline(names, name, ',')) {
-        if (Rando::StaticData::trickToEnum.contains(name)) {
-            tricks.insert(Rando::StaticData::trickToEnum[name]);
+        if (!name.empty()) {
+            tags.push_back(name);
+        }
+    }
+    return tags;
+}
+
+std::set<RandomizerTrick> ParseEnabledTricks() {
+    std::set<RandomizerTrick> tricks;
+    for (const std::string& tag : EnabledTrickTags()) {
+        if (Rando::StaticData::trickToEnum.contains(tag)) {
+            tricks.insert(Rando::StaticData::trickToEnum[tag]);
         }
     }
     return tricks;
+}
+
+// Every option lives in its CVar, so the CVars alone reproduce the seed's settings on another machine.
+nlohmann::json DumpSettings() {
+    nlohmann::json settings = nlohmann::json::object();
+    for (const Rando::Option& option : Rando::Settings::GetInstance()->GetAllOptions()) {
+        const std::string& cvar = option.GetCVarName();
+        if (!cvar.empty()) {
+            settings[cvar] = CVarGetInteger(cvar.c_str(), option.GetMenuOptionDefault());
+        }
+    }
+    settings[CVAR_RANDOMIZER_SETTING("ExcludedLocations")] =
+        CVarGetString(CVAR_RANDOMIZER_SETTING("ExcludedLocations"), "");
+    return { { "settings", std::move(settings) }, { "enabledTricks", EnabledTrickTags() } };
+}
+
+// The snapshot is authoritative: what it leaves out falls back to no exclusions and no tricks.
+void RestoreSettings(const nlohmann::json& snapshot) {
+    CVarSetString(CVAR_RANDOMIZER_SETTING("ExcludedLocations"), "");
+    const nlohmann::json settings = snapshot.value("settings", nlohmann::json::object());
+    for (const auto& [cvar, value] : settings.items()) {
+        if (value.is_string()) {
+            CVarSetString(cvar.c_str(), value.get<std::string>().c_str());
+        } else if (value.is_number_integer()) {
+            CVarSetInteger(cvar.c_str(), value.get<int32_t>());
+        }
+    }
+    std::string tags;
+    for (const nlohmann::json& tag : snapshot.value("enabledTricks", nlohmann::json::array())) {
+        if (tag.is_string()) {
+            tags += tag.get<std::string>() + ",";
+        }
+    }
+    CVarSetString(CVAR_RANDOMIZER_SETTING("EnabledTricks"), tags.c_str());
 }
 
 // The native generator's preparation up to its free fill: settings, then everything confined to Ship.
@@ -266,6 +312,13 @@ char* FleetRando_Request(const char* op, const char* json) {
     }
     if (request == "SetSeed") {
         sSeed = input.value("seed", 0u);
+        return CopyString("{}");
+    }
+    if (request == "DumpSettings") {
+        return CopyString(DumpSettings().dump());
+    }
+    if (request == "RestoreSettings") {
+        RestoreSettings(input.is_object() ? input : nlohmann::json::object());
         return CopyString("{}");
     }
     if (request == "GetForcedPlacements") {
