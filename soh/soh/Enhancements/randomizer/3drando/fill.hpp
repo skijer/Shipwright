@@ -57,6 +57,8 @@ struct GetAccessibleLocationsStruct {
 void ClearProgress();
 void VanillaFill();
 int Fill();
+// Fill() up to its confined placements, for a generator that places the free pool itself. Leaves it in itemPool.
+void FillConfinedItems();
 void SetAreas();
 
 std::vector<RandomizerCheck> GetEmptyLocations(std::vector<RandomizerCheck> allowedLocations);

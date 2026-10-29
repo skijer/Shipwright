@@ -1,4 +1,5 @@
 #include "FleetGame.h"
+#include "FleetRando.h"
 
 #include <cassert>
 #include <filesystem>
@@ -56,6 +57,13 @@ const FleetGameApi sGameApi = {
     .Attach = Attach,
     .Run = Run,
     .Detach = Detach,
+    .DumpRandoStaticData = FleetRando_DumpStaticData,
+    .RandoReset = FleetRando_Reset,
+    .RandoSetOwnedItems = FleetRando_SetOwnedItems,
+    .RandoGetReachableChecks = FleetRando_GetReachableChecks,
+    .RandoPlaceItem = FleetRando_PlaceItem,
+    .FreeString = FleetRando_FreeString,
+    .RandoRequest = FleetRando_Request,
 };
 
 } // namespace

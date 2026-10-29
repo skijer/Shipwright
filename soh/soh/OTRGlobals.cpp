@@ -388,6 +388,49 @@ OTRGlobals::OTRGlobals() {
     }
 }
 
+// Assumes Fleet attached Ship and created the Context: Ship joins it with its own settings and archive.
+OTRGlobals::OTRGlobals(RandoOnly) {
+    context = Ship::Context::GetRawInstance();
+    FleetGame_JoinHostContext();
+    LocatePortArchive();
+    FleetGame_CreateResources(portArchivePath);
+    hasOriginal = std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r"));
+    hasMasterQuest = std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r"));
+}
+
+void OTRGlobals::InitRandoHeadless() {
+    if (Instance != nullptr) {
+        return;
+    }
+    Instance = new OTRGlobals(RandoOnly{});
+    Lang::LoadLangs();
+    Instance->gRandoContext = Rando::Context::CreateInstance();
+    Instance->gRandoContext->InitStaticData();
+    Rando::Settings::GetInstance()->AssignContext(Instance->gRandoContext);
+    Rando::StaticData::InitItemTable();
+    // The full boot registers these through ShipInit; they are plain tables.
+    Rando::StaticData::RegisterSongLocations();
+    Rando::StaticData::RegisterBeehiveLocations();
+    Rando::StaticData::RegisterCowLocations();
+    Rando::StaticData::RegisterFishLocations();
+    Rando::StaticData::RegisterFairyLocations();
+    Rando::StaticData::RegisterPotLocations();
+    Rando::StaticData::RegisterFreestandingLocations();
+    Rando::StaticData::RegisterSilverLocations();
+    Rando::StaticData::RegisterGrassLocations();
+    Rando::StaticData::RegisterCrateLocations();
+    Rando::StaticData::RegisterRockLocations();
+    Rando::StaticData::RegisterTreeLocations();
+    Rando::StaticData::RegisterSignLocations();
+    Rando::StaticData::RegisterWonderItemLocations();
+    Rando::StaticData::RegisterBeggarLocations();
+    Rando::StaticData::RegisterIcicleLocations();
+    Rando::StaticData::RegisterRedIceLocations();
+    Rando::StaticData::InitHashMaps();
+    Rando::Settings::GetInstance()->CreateOptions();
+    Instance->gRandoContext->AddExcludedOptions();
+}
+
 typedef enum ExtractSteps {
     ES_PORT_ARCHIVE,
     ES_WINDOWS,

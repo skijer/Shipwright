@@ -64,6 +64,8 @@ class OTRGlobals {
 
     OTRGlobals();
     ~OTRGlobals();
+    // SOH [Fleet] Only the randomizer tables, for Fleet's seed generator: no window, audio, menu or game loop.
+    static void InitRandoHeadless();
 
     void ScaleImGui();
     void Initialize();
@@ -73,6 +75,9 @@ class OTRGlobals {
     uint32_t GetInterpolationFPS();
 
   private:
+    struct RandoOnly {};
+    explicit OTRGlobals(RandoOnly);
+
     bool hasMasterQuest;
     bool hasOriginal;
     ImFont* CreateFontWithSize(float size, std::string fontPath, bool isJapaneseFont = false);
