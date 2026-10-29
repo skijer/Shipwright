@@ -1,5 +1,6 @@
 #include "FleetRando.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -18,15 +19,26 @@
 #include "soh/Enhancements/randomizer/3drando/item_pool.hpp"
 #include "soh/Enhancements/randomizer/3drando/starting_inventory.hpp"
 #include "soh/Enhancements/randomizer/SeedContext.h"
+#include "soh/Enhancements/randomizer/dungeon.h"
 #include "soh/Enhancements/randomizer/location_access.h"
 #include "soh/Enhancements/randomizer/rng.h"
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 
 namespace {
 
 uint32_t sSeed = 0;
 bool sPortalOpen = false;
+
+// What the combined seed decides for both games. pieces is this game's share of the Triforce Hunt, -1 = unset.
+struct ComboGoal {
+    bool hunt = false;
+    uint8_t required = 0;
+    int pieces = -1;
+    bool mmStart = false;
+};
+ComboGoal sComboGoal;
 // Confined fill rolls these once per seed; every oracle reset wipes them with the placements.
 std::unordered_map<RandomizerCheck, uint16_t> sPrices;
 
@@ -93,10 +105,38 @@ void RestoreSettings(const nlohmann::json& snapshot) {
     CVarSetString(CVAR_RANDOMIZER_SETTING("EnabledTricks"), tags.c_str());
 }
 
-// The native generator's preparation up to its free fill: settings, then everything confined to Ship.
-void PrepareSeed() {
+// The combined goal replaces the player's own. A hunt counts pieces from both games, so the local wincon
+// shows the combined count while this pool holds only its share; the Mask Shop is the portal, never a hint.
+void ApplyComboGoal() {
+    auto ctx = Rando::Context::GetInstance();
+    ctx->GetOption(RSK_MASK_SHOP_HINT).Set(RO_GENERIC_OFF);
+    ctx->GetOption(RSK_WINCON).Set(sComboGoal.hunt ? RO_WINCON_TRIFORCE_PIECES : RO_WINCON_DEFEAT_GANON);
+    ctx->GetOption(RSK_TRIFORCE_HUNT_PIECES_LOCATION).Set(RO_TRIFORCE_HUNT_LOCATION_ANYWHERE);
+    ctx->GetOption(RSK_WINCON_TRIFORCE_COUNT).Set(sComboGoal.required);
+    if (sComboGoal.pieces >= 0) {
+        const uint8_t pieces = sComboGoal.hunt ? static_cast<uint8_t>(sComboGoal.pieces) : 0;
+        ctx->GetOption(RSK_TRIFORCE_HUNT_PIECES_TOTAL).Set(pieces);
+        for (RandomizerSettingKey key :
+             { RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT, RSK_GBK_TRIFORCE_COUNT, RSK_GANONS_SOUL_TRIFORCE_COUNT }) {
+            if (ctx->GetOption(key).Get() > pieces) {
+                ctx->GetOption(key).Set(pieces);
+            }
+        }
+    }
+    // Starting in MM drops an itemless child at the Mask Shop, who must still be able to leave the forest.
+    if (sComboGoal.mmStart) {
+        ctx->GetOption(RSK_STARTING_AGE).Set(RO_AGE_CHILD);
+        if (ctx->GetOption(RSK_FOREST).Is(RO_CLOSED_FOREST_ON)) {
+            ctx->GetOption(RSK_FOREST).Set(RO_CLOSED_FOREST_DEKU_ONLY);
+        }
+    }
+}
+
+// The native generator's preparation up to its free fill: settings, entrances, then everything confined to Ship.
+bool PrepareSeed() {
     auto ctx = Rando::Context::GetInstance();
     Rando::Settings::GetInstance()->SetAllToContext();
+    ApplyComboGoal();
     Random_Init(sSeed);
     ctx->overrides.clear();
     ctx->ItemReset();
@@ -107,7 +147,10 @@ void PrepareSeed() {
         Rando::StaticData::ParseExcludedLocations(CVarGetString(CVAR_RANDOMIZER_SETTING("ExcludedLocations"), "")),
         ParseEnabledTricks());
     Random_Init(sSeed);
-    FillConfinedItems();
+    BossRegistry_AssignForSeed();
+    if (!FillConfinedItems()) {
+        return false;
+    }
     sPrices.clear();
     for (RandomizerCheck rc : ctx->allLocations) {
         Rando::ItemLocation* location = ctx->GetItemLocation(rc);
@@ -115,6 +158,34 @@ void PrepareSeed() {
             sPrices[rc] = location->GetPrice();
         }
     }
+    return true;
+}
+
+// FinalizeSettings rolls these from the seed, so they belong to the seed rather than to the settings.
+nlohmann::json DumpMasterQuestDungeons() {
+    nlohmann::json names = nlohmann::json::array();
+    for (const Rando::DungeonInfo* dungeon : Rando::Context::GetInstance()->GetDungeons()->GetDungeonList()) {
+        if (dungeon->IsMQ()) {
+            names.push_back(dungeon->GetName());
+        }
+    }
+    return names;
+}
+
+// The shuffled entrances in the spoiler's own format; the table ends at its first all-zero row.
+nlohmann::json DumpEntrances() {
+    nlohmann::json entrances = nlohmann::json::array();
+    for (const EntranceOverride& entrance : Rando::Context::GetInstance()->GetEntranceShuffler()->entranceOverrides) {
+        if (entrance.type == 0 && entrance.index == 0 && entrance.override == 0) {
+            break;
+        }
+        entrances.push_back({ { "type", entrance.type },
+                              { "index", entrance.index },
+                              { "destination", entrance.destination },
+                              { "override", entrance.override },
+                              { "overrideDestination", entrance.overrideDestination } });
+    }
+    return entrances;
 }
 
 // Hearts never gate glitchless logic, so they fill like junk.
@@ -175,7 +246,10 @@ nlohmann::json ForcedPlacements() {
 
 char* FleetRando_DumpStaticData(void) {
     auto ctx = Rando::Context::GetInstance();
-    PrepareSeed();
+    if (!PrepareSeed()) {
+        SPDLOG_ERROR("[Fleet] Ship could not place its entrances and confined items for seed {}", sSeed);
+        return nullptr;
+    }
 
     nlohmann::json checks = nlohmann::json::array();
     nlohmann::json fixed = nlohmann::json::array();
@@ -314,8 +388,18 @@ char* FleetRando_Request(const char* op, const char* json) {
         sSeed = input.value("seed", 0u);
         return CopyString("{}");
     }
+    if (request == "SetComboGoal") {
+        sComboGoal = { .hunt = input.value("hunt", false),
+                       .required = static_cast<uint8_t>(std::clamp(input.value("required", 0), 0, 100)),
+                       .pieces = std::clamp(input.value("pieces", -1), -1, 100),
+                       .mmStart = input.value("startingGame", std::string("OOT")) == "MM" };
+        return CopyString("{}");
+    }
     if (request == "DumpSettings") {
-        return CopyString(DumpSettings().dump());
+        nlohmann::json settings = DumpSettings();
+        settings["entrances"] = DumpEntrances();
+        settings["masterQuestDungeons"] = DumpMasterQuestDungeons();
+        return CopyString(settings.dump());
     }
     if (request == "RestoreSettings") {
         RestoreSettings(input.is_object() ? input : nlohmann::json::object());

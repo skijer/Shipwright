@@ -1467,18 +1467,58 @@ static void PlaceConfinedItems() {
     SPDLOG_INFO("Dungeon Items Done");
 }
 
-void FillConfinedItems() {
+// The world a seed fills against: graph, pools and shuffled entrances. False when the entrances found no valid layout.
+static bool PrepareWorld() {
     auto ctx = Rando::Context::GetInstance();
     placementFailure = false;
-    RegionTable_Init();
-    ctx->ItemReset();
+    ctx->playthroughLocations.clear();
+    ctx->GetEntranceShuffler()->playthroughEntrances.clear();
+    RegionTable_Init(); // Reset the world graph to initialize the proper locations
+    ctx->ItemReset();   // Reset shops incase of shopsanity random
     ctx->GenerateLocationPool();
     GenerateItemPool();
     GenerateStartingInventory();
     FillExcludedLocations();
+
+    // Temporarily add shop items to the itemPool so that entrance randomization
+    // can validate the world using deku/hylian shields
+    StartPerformanceTimer(PT_ENTRANCE_SHUFFLE);
+    SohUtils::AppendVector(itemPool, GetMinVanillaShopItems(8)); // assume worst case shopsanity 7
+    if (ctx->GetOption(RSK_SHUFFLE_ENTRANCES)) {
+        SPDLOG_INFO("Shuffling Entrances...");
+        if (ctx->GetEntranceShuffler()->ShuffleAllEntrances() == ENTRANCE_SHUFFLE_FAILURE) {
+            return false;
+        }
+        SPDLOG_INFO("Shuffling Entrances Done");
+    }
     SetAreas();
-    PlaceConfinedItems();
-    StopPerformanceTimer(PT_LIMITED_CHECKS);
+    // erase temporary shop items
+    std::erase_if(itemPool, [](const auto item) {
+        return Rando::StaticData::RetrieveItem(item).GetItemType() == ITEMTYPE_SHOP;
+    });
+    StopPerformanceTimer(PT_ENTRANCE_SHUFFLE);
+    return true;
+}
+
+bool FillConfinedItems() {
+    for (int retries = 0; retries < 5; retries++) {
+        if (!PrepareWorld()) {
+            ClearProgress();
+            continue;
+        }
+        PlaceConfinedItems();
+        StopPerformanceTimer(PT_LIMITED_CHECKS);
+        if (placementFailure) {
+            Regions::ResetAllLocations();
+            logic->Reset();
+            ClearProgress();
+            continue;
+        }
+        Rando::Context::GetInstance()->GetEntranceShuffler()->CreateEntranceOverrides();
+        CreateWarpSongTexts();
+        return true;
+    }
+    return false;
 }
 
 int Fill() {
@@ -1487,36 +1527,11 @@ int Fill() {
     SPDLOG_INFO("Starting seed generation...");
     while (retries < 5) {
         SPDLOG_INFO("Attempt {}...", retries + 1);
-        placementFailure = false;
-        // showItemProgress = false;
-        ctx->playthroughLocations.clear();
-        ctx->GetEntranceShuffler()->playthroughEntrances.clear();
-        RegionTable_Init(); // Reset the world graph to initialize the proper locations
-        ctx->ItemReset();   // Reset shops incase of shopsanity random
-        ctx->GenerateLocationPool();
-        GenerateItemPool();
-        GenerateStartingInventory();
-        FillExcludedLocations();
-
-        // Temporarily add shop items to the itemPool so that entrance randomization
-        // can validate the world using deku/hylian shields
-        StartPerformanceTimer(PT_ENTRANCE_SHUFFLE);
-        SohUtils::AppendVector(itemPool, GetMinVanillaShopItems(8)); // assume worst case shopsanity 7
-        if (ctx->GetOption(RSK_SHUFFLE_ENTRANCES)) {
-            SPDLOG_INFO("Shuffling Entrances...");
-            if (ctx->GetEntranceShuffler()->ShuffleAllEntrances() == ENTRANCE_SHUFFLE_FAILURE) {
-                retries++;
-                ClearProgress();
-                continue;
-            }
-            SPDLOG_INFO("Shuffling Entrances Done");
+        if (!PrepareWorld()) {
+            retries++;
+            ClearProgress();
+            continue;
         }
-        SetAreas();
-        // erase temporary shop items
-        std::erase_if(itemPool, [](const auto item) {
-            return Rando::StaticData::RetrieveItem(item).GetItemType() == ITEMTYPE_SHOP;
-        });
-        StopPerformanceTimer(PT_ENTRANCE_SHUFFLE);
 
         PlaceConfinedItems();
 
