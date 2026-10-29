@@ -32,13 +32,14 @@ uint32_t sSeed = 0;
 bool sPortalOpen = false;
 
 // What the combined seed decides for both games. pieces is this game's share of the Triforce Hunt, -1 = unset.
-struct ComboGoal {
+struct ComboOptions {
     bool hunt = false;
     uint8_t required = 0;
     int pieces = -1;
     bool mmStart = false;
+    bool sharedWallets = false;
 };
-ComboGoal sComboGoal;
+ComboOptions sComboOptions;
 // Confined fill rolls these once per seed; every oracle reset wipes them with the placements.
 std::unordered_map<RandomizerCheck, uint16_t> sPrices;
 
@@ -107,14 +108,14 @@ void RestoreSettings(const nlohmann::json& snapshot) {
 
 // The combined goal replaces the player's own. A hunt counts pieces from both games, so the local wincon
 // shows the combined count while this pool holds only its share; the Mask Shop is the portal, never a hint.
-void ApplyComboGoal() {
+void ApplyComboOptions() {
     auto ctx = Rando::Context::GetInstance();
     ctx->GetOption(RSK_MASK_SHOP_HINT).Set(RO_GENERIC_OFF);
-    ctx->GetOption(RSK_WINCON).Set(sComboGoal.hunt ? RO_WINCON_TRIFORCE_PIECES : RO_WINCON_DEFEAT_GANON);
+    ctx->GetOption(RSK_WINCON).Set(sComboOptions.hunt ? RO_WINCON_TRIFORCE_PIECES : RO_WINCON_DEFEAT_GANON);
     ctx->GetOption(RSK_TRIFORCE_HUNT_PIECES_LOCATION).Set(RO_TRIFORCE_HUNT_LOCATION_ANYWHERE);
-    ctx->GetOption(RSK_WINCON_TRIFORCE_COUNT).Set(sComboGoal.required);
-    if (sComboGoal.pieces >= 0) {
-        const uint8_t pieces = sComboGoal.hunt ? static_cast<uint8_t>(sComboGoal.pieces) : 0;
+    ctx->GetOption(RSK_WINCON_TRIFORCE_COUNT).Set(sComboOptions.required);
+    if (sComboOptions.pieces >= 0) {
+        const uint8_t pieces = sComboOptions.hunt ? static_cast<uint8_t>(sComboOptions.pieces) : 0;
         ctx->GetOption(RSK_TRIFORCE_HUNT_PIECES_TOTAL).Set(pieces);
         for (RandomizerSettingKey key :
              { RSK_RAINBOW_BRIDGE_TRIFORCE_COUNT, RSK_GBK_TRIFORCE_COUNT, RSK_GANONS_SOUL_TRIFORCE_COUNT }) {
@@ -123,8 +124,12 @@ void ApplyComboGoal() {
             }
         }
     }
+    // MM has no Child Wallet, so a wallet both games share cannot start from one.
+    if (sComboOptions.sharedWallets) {
+        ctx->GetOption(RSK_SHUFFLE_CHILD_WALLET).Set(RO_GENERIC_OFF);
+    }
     // Starting in MM drops an itemless child at the Mask Shop, who must still be able to leave the forest.
-    if (sComboGoal.mmStart) {
+    if (sComboOptions.mmStart) {
         ctx->GetOption(RSK_STARTING_AGE).Set(RO_AGE_CHILD);
         if (ctx->GetOption(RSK_FOREST).Is(RO_CLOSED_FOREST_ON)) {
             ctx->GetOption(RSK_FOREST).Set(RO_CLOSED_FOREST_DEKU_ONLY);
@@ -136,7 +141,7 @@ void ApplyComboGoal() {
 bool PrepareSeed() {
     auto ctx = Rando::Context::GetInstance();
     Rando::Settings::GetInstance()->SetAllToContext();
-    ApplyComboGoal();
+    ApplyComboOptions();
     Random_Init(sSeed);
     ctx->overrides.clear();
     ctx->ItemReset();
@@ -388,11 +393,12 @@ char* FleetRando_Request(const char* op, const char* json) {
         sSeed = input.value("seed", 0u);
         return CopyString("{}");
     }
-    if (request == "SetComboGoal") {
-        sComboGoal = { .hunt = input.value("hunt", false),
+    if (request == "SetComboOptions") {
+        sComboOptions = { .hunt = input.value("hunt", false),
                        .required = static_cast<uint8_t>(std::clamp(input.value("required", 0), 0, 100)),
                        .pieces = std::clamp(input.value("pieces", -1), -1, 100),
-                       .mmStart = input.value("startingGame", std::string("OOT")) == "MM" };
+                       .mmStart = input.value("startingGame", std::string("OOT")) == "MM",
+                       .sharedWallets = input.value("sharedWallets", false) };
         return CopyString("{}");
     }
     if (request == "DumpSettings") {
