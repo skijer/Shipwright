@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include <fleet/FleetGameApi.h>
+
 #ifdef __cplusplus
 #include <memory>
 #include <string>
@@ -27,6 +29,9 @@ void FleetGame_JoinHostContext(void);
 void FleetGame_LeaveHostContext(void);
 // Between frames: Fleet may park Ship here and run the other game. No-op outside Fleet.
 void FleetGame_FrameEnd(void);
+// Asks Fleet to continue in the other game after this frame. No-op outside Fleet.
+void FleetGame_RequestSwitch(const FleetDestination* destination);
+void FleetGame_Log(FleetLogLevel level, const char* message);
 
 #ifdef __cplusplus
 }

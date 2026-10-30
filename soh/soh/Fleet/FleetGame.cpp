@@ -1,9 +1,11 @@
 #include "FleetGame.h"
+#include "FleetPortal.h"
 #include "FleetRando.h"
 
 #include <cassert>
-#include <cstddef>
 #include <filesystem>
+#include <string_view>
+#include <unordered_map>
 
 #include <fleet/FleetGameApi.h>
 #include <ship/Context.h>
@@ -21,65 +23,82 @@ constexpr const char* GameName = "oot";
 constexpr const char* SettingsFileName = "shipofharkinian.json";
 constexpr uint32_t ResourceThreadReserve = 3;
 
-const FleetHostApi* sHost = nullptr;
+FleetGetFunctionFn sHostFunction = nullptr;
+FleetLogFn sLog = nullptr;
+FleetRequestSwitchFn sRequestSwitch = nullptr;
+FleetFrameEndFn sFrameEnd = nullptr;
 std::string sInstallDirectory;
 bool sHasRun = false;
 
+template <class Function> Function HostFunction(const char* name) {
+    return reinterpret_cast<Function>(sHostFunction(name));
+}
+
+const char* Name() {
+    return GameName;
+}
+
 bool Attach(const FleetAttachInfo* info) {
-    if (info == nullptr || info->structSize < sizeof(FleetAttachInfo) || info->host == nullptr ||
-        info->installDirectory == nullptr) {
+    if (info == nullptr || info->hostFunction == nullptr || info->installDirectory == nullptr) {
         return false;
     }
+    sHostFunction = info->hostFunction;
+    sLog = HostFunction<FleetLogFn>("Log");
     const std::string problem = Ship_InstallProblem(info->installDirectory);
     if (!problem.empty()) {
-        info->host->Log(GameName, FLEET_LOG_ERROR, problem.c_str());
+        FleetGame_Log(FLEET_LOG_ERROR, problem.c_str());
+        sHostFunction = nullptr;
         return false;
     }
-    sHost = info->host;
+    sRequestSwitch = HostFunction<FleetRequestSwitchFn>("RequestSwitch");
+    sFrameEnd = HostFunction<FleetFrameEndFn>("FrameEnd");
     sInstallDirectory = info->installDirectory;
     return true;
 }
 
 void Run(const FleetDestination* arrival) {
     if (sHasRun) {
-        SPDLOG_ERROR("[Fleet] Ship cannot resume after its loop ended yet");
+        SPDLOG_ERROR("[Fleet] Ship cannot run its loop twice");
         return;
     }
     sHasRun = true;
+    FleetPortal_Arrive(arrival);
     char program[] = "soh";
     char* argv[] = { program, nullptr };
     Soh_RunMain(1, argv);
 }
 
 void Detach() {
-    sHost = nullptr;
+    sHostFunction = nullptr;
 }
 
-const FleetGameApi sGameApi = {
-    .structSize = sizeof(FleetGameApi),
-    .major = FLEET_GAME_API_MAJOR,
-    .minor = FLEET_GAME_API_MINOR,
-    .name = GameName,
-    .Attach = Attach,
-    .Run = Run,
-    .Detach = Detach,
-    .DumpRandoStaticData = FleetRando_DumpStaticData,
-    .RandoReset = FleetRando_Reset,
-    .RandoSetOwnedItems = FleetRando_SetOwnedItems,
-    .RandoGetReachableChecks = FleetRando_GetReachableChecks,
-    .RandoPlaceItem = FleetRando_PlaceItem,
-    .FreeString = FleetRando_FreeString,
-    .RandoRequest = FleetRando_Request,
-};
+const std::unordered_map<std::string_view, void*>& Functions() {
+    static const std::unordered_map<std::string_view, void*> functions = {
+        { "Name", reinterpret_cast<void*>(Name) },
+        { "Attach", reinterpret_cast<void*>(Attach) },
+        { "Run", reinterpret_cast<void*>(Run) },
+        { "Arrive", reinterpret_cast<void*>(FleetPortal_Arrive) },
+        { "Detach", reinterpret_cast<void*>(Detach) },
+        { "FreeString", reinterpret_cast<void*>(FleetRando_FreeString) },
+        { "DumpRandoStaticData", reinterpret_cast<void*>(FleetRando_DumpStaticData) },
+        { "RandoReset", reinterpret_cast<void*>(FleetRando_Reset) },
+        { "RandoSetOwnedItems", reinterpret_cast<void*>(FleetRando_SetOwnedItems) },
+        { "RandoGetReachableChecks", reinterpret_cast<void*>(FleetRando_GetReachableChecks) },
+        { "RandoPlaceItem", reinterpret_cast<void*>(FleetRando_PlaceItem) },
+        { "RandoRequest", reinterpret_cast<void*>(FleetRando_Request) },
+    };
+    return functions;
+}
 
 } // namespace
 
-extern "C" const FleetGameApi* Fleet_GetGameApi(uint16_t major) {
-    return major == FLEET_GAME_API_MAJOR ? &sGameApi : nullptr;
+extern "C" void* Fleet_GetFunction(const char* name) {
+    auto function = Functions().find(name != nullptr ? name : "");
+    return function == Functions().end() ? nullptr : function->second;
 }
 
 extern "C" bool FleetGame_IsHosted(void) {
-    return sHost != nullptr;
+    return sHostFunction != nullptr;
 }
 
 extern "C" void FleetGame_JoinHostContext(void) {
@@ -111,9 +130,20 @@ extern "C" void FleetGame_LeaveHostContext(void) {
 }
 
 extern "C" void FleetGame_FrameEnd(void) {
-    const bool offered =
-        sHost != nullptr && sHost->structSize >= offsetof(FleetHostApi, FrameEnd) + sizeof(sHost->FrameEnd);
-    if (offered && sHost->FrameEnd != nullptr) {
-        sHost->FrameEnd(GameName);
+    FleetPortal_FrameEnd();
+    if (sFrameEnd != nullptr) {
+        sFrameEnd(GameName);
+    }
+}
+
+extern "C" void FleetGame_RequestSwitch(const FleetDestination* destination) {
+    if (sRequestSwitch != nullptr) {
+        sRequestSwitch(GameName, destination);
+    }
+}
+
+extern "C" void FleetGame_Log(FleetLogLevel level, const char* message) {
+    if (sLog != nullptr) {
+        sLog(GameName, level, message);
     }
 }
