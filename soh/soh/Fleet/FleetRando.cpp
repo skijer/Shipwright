@@ -1,9 +1,11 @@
 #include "FleetRando.h"
+#include "FleetCrossDungeon.h"
 #include "FleetHints.h"
 
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -248,6 +250,28 @@ nlohmann::json ForcedPlacements() {
     return forced;
 }
 
+// The cross-game entrance services; nullopt for any other request.
+std::optional<nlohmann::json> HandleCrossDungeonRequest(const std::string& request, const nlohmann::json& input) {
+    if (request == "DumpCrossDungeonCatalogue") {
+        return FleetCrossDungeon_DumpCatalogue(input);
+    }
+    if (request == "DumpCrossDungeonCatalogueForSeed") {
+        return FleetCrossDungeon_DumpCatalogueForSeed(input);
+    }
+    if (request == "SetCrossDungeonSeed") {
+        FleetCrossDungeon_SetSeed(input);
+        return nlohmann::json::object();
+    }
+    if (request == "SetCrossDungeonAccess") {
+        FleetCrossDungeon_SetAccess(input);
+        return nlohmann::json::object();
+    }
+    if (request == "GetCrossDungeonExits") {
+        return FleetCrossDungeon_GetExits();
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 char* FleetRando_DumpStaticData(void) {
@@ -356,7 +380,13 @@ void FleetRando_SetOwnedItems(const char* itemsJson) {
 
 char* FleetRando_GetReachableChecks(void) {
     auto ctx = Rando::Context::GetInstance();
-    const std::vector<RandomizerCheck> reachable = ReachabilitySearch(ctx->allLocations);
+    std::vector<RandomizerCheck> reachable;
+    try {
+        FleetCrossDungeonSearch crossRoutes;
+        reachable = ReachabilitySearch(ctx->allLocations);
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[Fleet] Ship could not search the cross-game routes: {}", e.what());
+    }
     // The Happy Mask Shop holds no checks of its own: Fleet gates Majora's Mask on reaching it.
     Region* portal = RegionTable(RR_MARKET_MASK_SHOP);
     sPortalOpen = portal->Child() || portal->Adult();
@@ -412,6 +442,17 @@ char* FleetRando_Request(const char* op, const char* json) {
         RestoreSettings(input.is_object() ? input : nlohmann::json::object());
         return CopyString("{}");
     }
+    // A saved seed's prices win over this preparation's rolls, so wallet logic judges what the player pays.
+    if (request == "SetCheckPrices") {
+        sPrices.clear();
+        for (const auto& [name, price] : input.items()) {
+            auto check = Rando::StaticData::locationNameToEnum.find(name);
+            if (check != Rando::StaticData::locationNameToEnum.end() && price.is_number_integer()) {
+                sPrices[check->second] = price.get<uint16_t>();
+            }
+        }
+        return CopyString("{}");
+    }
     if (request == "DumpHintData") {
         // Authored hint text may hold malformed UTF-8; replacing it keeps the dump from throwing across the ABI.
         return CopyString(FleetHints_DumpHintData().dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
@@ -422,6 +463,14 @@ char* FleetRando_Request(const char* op, const char* json) {
     // Describes the owned set of the latest GetReachableChecks.
     if (request == "GetPortalOpen") {
         return CopyString(nlohmann::json{ { "open", sPortalOpen } }.dump());
+    }
+    try {
+        if (const std::optional<nlohmann::json> reply = HandleCrossDungeonRequest(request, input)) {
+            return CopyString(reply->dump());
+        }
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[Fleet] Ship rejected '{}': {}", request, e.what());
+        return nullptr;
     }
     SPDLOG_WARN("[Fleet] Ship has no randomizer service '{}'", request);
     return nullptr;

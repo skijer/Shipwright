@@ -105,11 +105,17 @@ bool Entrance::CheckConditionAtAgeTime(bool& age, bool& time, bool passAnyway) c
     time = true;
     age = true;
 
-    return GetConditionsMet() && (connectedRegion != RR_NONE || passAnyway);
+    return GetConditionsMet() && (GetConnectedRegionKey() != RR_NONE || passAnyway);
+}
+
+static ConnectedRegionOverride sConnectedRegionOverride;
+
+void SetConnectedRegionOverride(ConnectedRegionOverride regionOverride) {
+    sConnectedRegionOverride = std::move(regionOverride);
 }
 
 RandomizerRegion Entrance::GetConnectedRegionKey() const {
-    return connectedRegion;
+    return sConnectedRegionOverride ? sConnectedRegionOverride(*this, connectedRegion) : connectedRegion;
 }
 
 RandomizerRegion Entrance::GetOriginalConnectedRegionKey() const {
@@ -117,7 +123,7 @@ RandomizerRegion Entrance::GetOriginalConnectedRegionKey() const {
 }
 
 Region* Entrance::GetConnectedRegion() const {
-    return RegionTable(connectedRegion);
+    return RegionTable(GetConnectedRegionKey());
 }
 
 void Entrance::SetParentRegion(RandomizerRegion newParent) {
@@ -266,7 +272,7 @@ std::string EntranceNameByRegions(RandomizerRegion parentRegion, RandomizerRegio
 
 std::unordered_map<int16_t, Entrance*> entranceMap;
 
-void SetAllEntrancesData() {
+std::vector<EntranceInfoPair> GetEntranceShuffleTable() {
     std::vector<EntranceInfoPair> entranceShuffleTable = {
         // clang-format off
         // Type                         Parent Region                        Connected Region                      Index
@@ -609,9 +615,12 @@ void SetAllEntrancesData() {
         // clang-format on
     };
     DungeonRegistry_AppendEntrancePairs(entranceShuffleTable);
+    return entranceShuffleTable;
+}
 
+void SetAllEntrancesData() {
     auto ctx = Rando::Context::GetInstance();
-    for (auto& entrancePair : entranceShuffleTable) {
+    for (const auto& entrancePair : GetEntranceShuffleTable()) {
         auto& forwardEntry = entrancePair.first;
         auto& returnEntry = entrancePair.second;
 
