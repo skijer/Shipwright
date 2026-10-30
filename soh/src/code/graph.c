@@ -10,6 +10,7 @@
 #include <libultraship/bridge/windowbridge.h>
 #include "soh/Enhancements/gameconsole.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/EmbedderBridge.h"
 
 #ifdef __EMSCRIPTEN__
@@ -579,6 +580,7 @@ void Graph_ThreadEntry(void* arg0) {
 #else
     while (WindowIsRunning()) {
         RunFrame();
+        FleetGame_FrameEnd();
     }
 #endif
 }

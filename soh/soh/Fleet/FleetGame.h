@@ -13,6 +13,8 @@ class ResourceManager;
 
 // Gives Ship its own resources inside the Context Fleet created.
 std::shared_ptr<Ship::ResourceManager> FleetGame_CreateResources(const std::string& archivePath);
+// What keeps Ship from booting from its install folder, in words a player can act on; empty when nothing does.
+std::string Ship_InstallProblem(const std::string& directory);
 
 extern "C" {
 #endif
@@ -23,6 +25,8 @@ bool FleetGame_IsHosted(void);
 void FleetGame_JoinHostContext(void);
 // Releases what JoinHostContext and CreateResources registered. Main thread, at deinit.
 void FleetGame_LeaveHostContext(void);
+// Between frames: Fleet may park Ship here and run the other game. No-op outside Fleet.
+void FleetGame_FrameEnd(void);
 
 #ifdef __cplusplus
 }

@@ -562,6 +562,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     }
     return;
 #else
+    // Inside Fleet the archives come with Ship's install, already checked when Fleet attached it.
+    if (FleetGame_IsHosted()) {
+        return;
+    }
     bool extractDone = false;
     ExtractSteps extractStep = ES_PORT_ARCHIVE;
     WindowsSteps windowsStep = WS_TEMP;
@@ -1794,6 +1798,46 @@ extern "C" void Messagebox_ShowErrorBox(char* title, char* body) {
 
 bool VerifyArchiveVersion(OTRVersion version) {
     return version.major != INT16_MAX && version.major != gBuildVersionMajor;
+}
+
+static std::string VersionText(uint16_t major, uint16_t minor, uint16_t patch) {
+    return std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch);
+}
+
+std::string Ship_InstallProblem(const std::string& directory) {
+    const std::filesystem::path folder(directory);
+    const std::string where = " in " + folder.string();
+    const std::filesystem::path port = folder / "soh.o2r";
+    if (!std::filesystem::exists(port)) {
+        return "soh.o2r is missing" + where + ". Reinstall Ship of Harkinian there.";
+    }
+    const OTRVersion portVersion = ReadPortVersionFromOTR(port.string());
+    if (portVersion.major != gBuildVersionMajor || portVersion.minor != gBuildVersionMinor ||
+        portVersion.patch != gBuildVersionPatch) {
+        return "soh.o2r" + where + " belongs to Ship " +
+               VersionText(portVersion.major, portVersion.minor, portVersion.patch) + ", but soh.dll is Ship " +
+               VersionText(gBuildVersionMajor, gBuildVersionMinor, gBuildVersionPatch) +
+               ". Reinstall Ship of Harkinian there.";
+    }
+    bool hasGameArchive = std::filesystem::exists(folder / SOH::Unbound::kBaseArchiveName);
+    for (const char* name : { "oot.o2r", "oot-mq.o2r" }) {
+        const std::filesystem::path archive = folder / name;
+        if (!std::filesystem::exists(archive)) {
+            continue;
+        }
+        hasGameArchive = true;
+        const OTRVersion version = ReadPortVersionFromOTR(archive.string());
+        if (VerifyArchiveVersion(version)) {
+            return std::string(name) + where + " was extracted by Ship " + std::to_string(version.major) +
+                   ".x, and this Ship needs " + std::to_string(gBuildVersionMajor) +
+                   ".x. Open Ship of Harkinian from that folder to extract it again.";
+        }
+    }
+    if (!hasGameArchive) {
+        return "The OoT game archive (oot.o2r or oot-mq.o2r) is missing" + where +
+               ". Open Ship of Harkinian from that folder once to extract it from your ROM.";
+    }
+    return "";
 }
 
 static void Unbound_ExportFromCommandLine(int argc, char* argv[]) {

@@ -2,6 +2,7 @@
 #include "FleetRando.h"
 
 #include <cassert>
+#include <cstddef>
 #include <filesystem>
 
 #include <fleet/FleetGameApi.h>
@@ -27,6 +28,11 @@ bool sHasRun = false;
 bool Attach(const FleetAttachInfo* info) {
     if (info == nullptr || info->structSize < sizeof(FleetAttachInfo) || info->host == nullptr ||
         info->installDirectory == nullptr) {
+        return false;
+    }
+    const std::string problem = Ship_InstallProblem(info->installDirectory);
+    if (!problem.empty()) {
+        info->host->Log(GameName, FLEET_LOG_ERROR, problem.c_str());
         return false;
     }
     sHost = info->host;
@@ -102,4 +108,12 @@ std::shared_ptr<Ship::ResourceManager> FleetGame_CreateResources(const std::stri
 
 extern "C" void FleetGame_LeaveHostContext(void) {
     Ship::GameRegistry::Unregister(GameName);
+}
+
+extern "C" void FleetGame_FrameEnd(void) {
+    const bool offered =
+        sHost != nullptr && sHost->structSize >= offsetof(FleetHostApi, FrameEnd) + sizeof(sHost->FrameEnd);
+    if (offered && sHost->FrameEnd != nullptr) {
+        sHost->FrameEnd(GameName);
+    }
 }
