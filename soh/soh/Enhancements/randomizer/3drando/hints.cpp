@@ -324,6 +324,16 @@ static bool ConditionalAlwaysHintApplies(const ConditionalAlwaysHint& h) {
     return !h.extra || h.extra();
 }
 
+std::vector<RandomizerCheck> GetAlwaysHintCandidates() {
+    std::vector<RandomizerCheck> candidates;
+    for (const auto& hint : conditionalAlwaysHints) {
+        if (ConditionalAlwaysHintApplies(hint)) {
+            candidates.push_back(hint.loc);
+        }
+    }
+    return candidates;
+}
+
 static std::vector<RandomizerCheck> GetEmptyGossipStones() {
     auto emptyGossipStones = GetEmptyLocations(Rando::StaticData::GetGossipStoneLocations());
     return emptyGossipStones;

@@ -1,4 +1,5 @@
 #include "FleetRando.h"
+#include "FleetHints.h"
 
 #include <algorithm>
 #include <cstdlib>
@@ -410,6 +411,10 @@ char* FleetRando_Request(const char* op, const char* json) {
     if (request == "RestoreSettings") {
         RestoreSettings(input.is_object() ? input : nlohmann::json::object());
         return CopyString("{}");
+    }
+    if (request == "DumpHintData") {
+        // Authored hint text may hold malformed UTF-8; replacing it keeps the dump from throwing across the ABI.
+        return CopyString(FleetHints_DumpHintData().dump(-1, ' ', false, nlohmann::json::error_handler_t::replace));
     }
     if (request == "GetForcedPlacements") {
         return CopyString(ForcedPlacements().dump());
