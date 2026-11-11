@@ -159,7 +159,7 @@ jobs:
             platform: windows_x64
           - os: ubuntu-22.04
             platform: linux_x64
-          - os: macos-15
+          - os: macos-15-intel
             platform: darwin
     runs-on: ${{ matrix.os }}
     permissions:

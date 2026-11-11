@@ -106,7 +106,7 @@ jobs:
 
   build-macos:
     needs: generate-soh-otr
-    runs-on: macos-15
+    runs-on: macos-15-intel
     steps:
     - name: Git Checkout
       uses: actions/checkout@v7
