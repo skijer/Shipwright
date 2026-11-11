@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h"
 #include "vt.h"
 
@@ -260,6 +261,11 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
     gSaveContext.n64ddFlag = fileChooseCtx->n64ddFlag;
 
     u8 currentQuest = fileChooseCtx->questType[fileChooseCtx->buttonIndex];
+
+    if (currentQuest == QUEST_RANDOMIZER &&
+        FleetGame_CreateNamedSave(fileChooseCtx->buttonIndex, gSaveContext.playerName, gSaveContext.ship.filenameLanguage)) {
+        return;
+    }
 
     if (currentQuest == QUEST_RANDOMIZER && (Randomizer_IsSeedGenerated() || Randomizer_IsSpoilerLoaded())) {
         gSaveContext.ship.quest.id = QUEST_RANDOMIZER;

@@ -6,6 +6,7 @@
 #include <ship/Context.h>
 
 #include "Menu.h"
+#include "soh/Fleet/FleetGame.h"
 #include "BackendTypes.h"
 #include "UIWidgets.hpp"
 #include "soh/Enhancements/speedrun/Speedrun.h"
@@ -630,7 +631,8 @@ void Menu::DrawElement() {
     auto windowCond = ImGuiCond_Always;
     if (!popout) {
         ImGui::SetNextWindowSize({ static_cast<float>(windowWidth), static_cast<float>(windowHeight) }, windowCond);
-        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), windowCond, { 0.5f, 0.5f });
+        ImVec2 center = ImGui::GetMainViewport()->GetCenter();
+        ImGui::SetNextWindowPos(center, windowCond, { 0.5f, 0.5f });
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
     }
 

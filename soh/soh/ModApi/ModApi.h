@@ -48,10 +48,6 @@ extern "C" {
 #define SOH_MOD_EXPORT __attribute__((visibility("default")))
 #endif
 
-// Bump only when a change breaks mods built before it (a moved struct field, a removed export). Appending to
-// SOHModApi does not: mods test tableSize. pack_mod.py stamps it into each manifest; other majors are refused.
-#define SOH_MOD_API_MAJOR 2
-
 #define DEFINE_HOOK(name, args) typedef void(*SOHCb_##name) args;
 #include "soh/Enhancements/game-interactor/GameInteractor_HookTable.h"
 #undef DEFINE_HOOK
@@ -227,6 +223,7 @@ typedef struct {
     uint16_t (*GetProgressiveLevel)(const char* key, SOHRandoInfBank bank);
     const char* (*GetNextProgressiveItem)(const char* key, SOHRandoInfBank bank);
     bool (*GrantLogic)(const SOHLogicGrant* grant);
+    bool (*IsCustomItemFormAllowed)(const char* key);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

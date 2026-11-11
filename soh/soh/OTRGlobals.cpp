@@ -398,6 +398,15 @@ OTRGlobals::OTRGlobals(RandoOnly) {
     hasMasterQuest = std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r"));
 }
 
+void VanillaItemTable_Init();
+static void SinkForeignGameArchives();
+extern "C" void OTRExtScanner();
+
+static void InitHeadlessItemTables() {
+    ItemTableManager::Instance = new ItemTableManager();
+    VanillaItemTable_Init();
+}
+
 void OTRGlobals::InitRandoHeadless() {
     if (Instance != nullptr) {
         return;
@@ -429,6 +438,20 @@ void OTRGlobals::InitRandoHeadless() {
     Rando::StaticData::InitHashMaps();
     Rando::Settings::GetInstance()->CreateOptions();
     Instance->gRandoContext->AddExcludedOptions();
+    GameInteractor::Instance = new GameInteractor();
+    SaveManager::Instance = new SaveManager();
+    ActorDB::Instance = new ActorDB();
+    for (const char* file : { "oot-mq.o2r", "oot.o2r", "oot-unbound.o2r" }) {
+        const auto archive = Ship::Context::LocateFileAcrossAppDirs(file);
+        if (!archive.empty()) {
+            Instance->context->GetResourceManager()->GetArchiveManager()->AddArchive(archive);
+        }
+    }
+    // Mods check their resources as they load (MM masks need mm.o2r): the generator must see the files the game does.
+    SinkForeignGameArchives();
+    OTRExtScanner();
+    InitHeadlessItemTables();
+    ModApi_Init();
 }
 
 typedef enum ExtractSteps {
@@ -958,12 +981,12 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 
 // SOH [Unbound] Mounts oot-unbound.o2r as the game archive when neither ROM archive exists (see
 // CheckStandaloneBaseArchive; the browser build installs Unbound that way). Returns whether it did.
-static bool MountStandaloneUnboundBase(const std::string& ootPath, const std::string& mqPath) {
+static std::shared_ptr<Ship::Archive> MountStandaloneUnboundBase(const std::string& ootPath, const std::string& mqPath) {
     std::string basePath = Ship::Context::LocateFileAcrossAppDirs(SOH::Unbound::kBaseArchiveName, appShortName);
     if (std::filesystem::exists(ootPath) || std::filesystem::exists(mqPath) || !std::filesystem::exists(basePath)) {
-        return false;
+        return nullptr;
     }
-    return Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->AddArchive(basePath) != nullptr;
+    return Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->AddArchive(basePath);
 }
 
 // SOH [Unbound] A base archive converted during this launch, reported to the embedding page by InitOTR.
@@ -1047,15 +1070,12 @@ static void SinkForeignGameArchives() {
 }
 
 void OTRGlobals::Initialize() {
+    auto archiveManager = context->GetResourceManager()->GetArchiveManager();
     std::string mqPath = Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName);
-    if (std::filesystem::exists(mqPath)) {
-        context->GetResourceManager()->GetArchiveManager()->AddArchive(mqPath);
-    }
     std::string ootPath = Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName);
-    if (std::filesystem::exists(ootPath)) {
-        context->GetResourceManager()->GetArchiveManager()->AddArchive(ootPath);
-    }
-    bool standaloneUnboundBase = MountStandaloneUnboundBase(ootPath, mqPath); // SOH [Unbound]
+    auto mqArchive = std::filesystem::exists(mqPath) ? archiveManager->AddArchive(mqPath) : nullptr;
+    auto ootArchive = std::filesystem::exists(ootPath) ? archiveManager->AddArchive(ootPath) : nullptr;
+    auto standaloneUnboundBase = MountStandaloneUnboundBase(ootPath, mqPath);
 
     std::unordered_set<uint32_t> ValidHashes = {
         OOT_PAL_MQ,     OOT_NTSC_JP_MQ, OOT_NTSC_US_MQ, OOT_PAL_GC_MQ_DBG, OOT_NTSC_US_10,
@@ -1144,9 +1164,11 @@ void OTRGlobals::Initialize() {
         cameraStrings[i] = strdup(constCameraStrings[i]);
     }
 
-    auto versions = context->GetResourceManager()->GetArchiveManager()->GetGameVersions();
-
-    for (uint32_t version : versions) {
+    for (const auto& archive : { mqArchive, ootArchive, standaloneUnboundBase }) {
+        if (archive == nullptr || !archive->HasGameVersion()) {
+            continue;
+        }
+        const uint32_t version = archive->GetGameVersion();
         if (!ValidHashes.contains(version)) {
 #if defined(__SWITCH__)
             SPDLOG_ERROR("Invalid OTR File!");
@@ -1184,7 +1206,7 @@ void OTRGlobals::Initialize() {
         }
     }
 
-    MountUnboundBase(standaloneUnboundBase, ootPath, mqPath); // SOH [Unbound] needs the factories above
+    MountUnboundBase(standaloneUnboundBase != nullptr, ootPath, mqPath); // SOH [Unbound] needs the factories above
 }
 
 // Every resource type the game reads, binary, XML and (SOH [Unbound]) JSON. Shared with the wasm Unbound converter

@@ -32,6 +32,7 @@ owned but not used. The host copies the definition and its strings once, at regi
 | `Z64Items_SetButtons(def, flags)` | `flags` | `SOH_CUSTOM_ITEM_B_BUTTON`, `_C_BUTTON`, `_DPAD`. Makes the item equippable. |
 | `Z64Items_SetPlacement(def, page, slot, priority)` | `preferredPage`, `preferredSlot`, `priority` | Where it appears in the pause menu (see [Placement](#placement)). |
 | `Z64Items_SetAge(def, age)` | `ageRequirement` | `SOH_CUSTOM_ITEM_AGE_ANY` (0), `_CHILD`, `_ADULT`. |
+| `Z64Items_SetAllowedForms(def, keys, count)` | `allowedForms`, `allowedFormCount` | Form keys that may use the item: `SOH_FORM_KEY_HUMAN` (Link without a form) or any registered form's key. Empty means every form. The same call and keys work in 2Ship. |
 | `Z64Items_SetTextbox(def, text)` | `getItemText` | The textbox shown when the item is obtained. |
 | `Z64Items_SetPauseText(def, text)` | `pauseText` | The description shown with C-Up on the pause screen. |
 | `Z64Items_SetCanUse(def, fn)` | `canUse` | Called before every use; return `false` to refuse (error sound, nothing happens). |

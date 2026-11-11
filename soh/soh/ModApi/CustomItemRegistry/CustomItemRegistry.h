@@ -136,6 +136,9 @@ typedef struct {
     SOHCustomItemAppearance appearance;
     // Optional UTF-8 label for notifications; omitted labels fall back to the registered key.
     const char* displayName;
+    // Optional form keys (SOH_FORM_KEY_* or a registered form's key) that may use the item; none means every form.
+    const char* const* allowedForms;
+    uint32_t allowedFormCount;
 } SOHCustomItemDefinition;
 
 typedef void (*SOHPickupVariantReceiveFunc)(const char* itemKey, const char* variantKey);
@@ -179,6 +182,9 @@ static inline bool CustomItemRegistry_IsVanillaUpgrade(const SOHCustomItemDefini
 bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition);
 const SOHCustomItemDefinition* CustomItemRegistry_FindReplacement(uint16_t vanillaItem);
 bool CustomItemRegistry_IsAgeAllowed(const char* key);
+bool CustomItemRegistry_IsFormAllowed(const char* key);
+// The one gate for showing, equipping and using an item: its age and its form both allow the player.
+bool CustomItemRegistry_IsUsableNow(const char* key);
 bool CustomItemRegistry_IsPauseItemAgeAllowed(void);
 const char* CustomItemRegistry_ResolveTexture(const char* key, SOHItemIconSurface surface);
 bool CustomItemRegistry_IsEditorVisible(const char* key);

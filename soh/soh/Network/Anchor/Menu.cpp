@@ -1,6 +1,7 @@
 #include <ship/Context.h>
 
 #include "Anchor.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/SohMenu.h"
 #include "soh/util.h"
@@ -15,7 +16,7 @@ static const char* pvpModes[3] = { "Off", "On", "On + Friendly Fire" };
 static std::vector<const char*> teleportModes = { "None", "Team Only", "All" };
 static std::vector<const char*> showLocationsModes = { "None", "Team Only", "All" };
 
-void AnchorMainMenu(WidgetInfo& info) {
+void AnchorFormMenu(WidgetInfo& info) {
     auto anchor = Anchor::Instance;
 
     std::string host = CVarGetString(CVAR_REMOTE_ANCHOR("Host"), "anchor.hm64.org");
@@ -92,7 +93,7 @@ void AnchorMainMenu(WidgetInfo& info) {
         CVarSetString(CVAR_REMOTE_ANCHOR("Host"), "anchor.hm64.org");
         CVarSetInteger(CVAR_REMOTE_ANCHOR("Port"), 43383);
         CVarSetString(CVAR_REMOTE_ANCHOR("TeamId"), "default");
-        CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), "soh-global");
+        CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), Anchor::GLOBAL_ROOM_ID.c_str());
         Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
 
@@ -118,8 +119,16 @@ void AnchorMainMenu(WidgetInfo& info) {
     UIWidgets::PopStyleButton();
     ImGui::EndDisabled();
     ImGui::Spacing();
+}
+
+void AnchorRoomMenu(WidgetInfo& info) {
+    auto anchor = Anchor::Instance;
 
     if (!anchor->isEnabled) {
+        // Fleet draws this room under its own heading, away from the Enable button.
+        if (FleetGame_IsHosted()) {
+            ImGui::TextDisabled("Off");
+        }
         return;
     }
 
@@ -166,10 +175,9 @@ void AnchorMainMenu(WidgetInfo& info) {
 
 void AnchorAdminMenu(WidgetInfo& info) {
     auto anchor = Anchor::Instance;
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 
     if (!anchor->isEnabled || !anchor->isConnected || anchor->roomState.ownerClientId != anchor->ownClientId ||
-        isGlobalRoom) {
+        Anchor::IsGlobalRoom()) {
         return;
     }
 
@@ -247,8 +255,11 @@ void AnchorInstructionsMenu(WidgetInfo& info) {
 
 void RegisterAnchorMenu() {
     WidgetPath path = { "Network", "Anchor", SECTION_COLUMN_1 };
-    SohGui::mSohMenu->AddWidget(path, "AnchorMainMenu", WIDGET_CUSTOM)
-        .CustomFunction(AnchorMainMenu)
+    SohGui::mSohMenu->AddWidget(path, "AnchorFormMenu", WIDGET_CUSTOM)
+        .CustomFunction(AnchorFormMenu)
+        .HideInSearch(true);
+    SohGui::mSohMenu->AddWidget(path, "AnchorRoomMenu", WIDGET_CUSTOM)
+        .CustomFunction(AnchorRoomMenu)
         .HideInSearch(true);
     path.column = SECTION_COLUMN_2;
     SohGui::mSohMenu->AddWidget(path, "AnchorAdminMenu", WIDGET_CUSTOM)

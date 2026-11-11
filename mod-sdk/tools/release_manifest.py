@@ -22,29 +22,21 @@ def read_version(root=REPOSITORY_ROOT):
     return f"{base.group(1)}-{fork.group(1)}"
 
 
-def read_modapi_major(root=REPOSITORY_ROOT):
-    header = (root / "soh" / "soh" / "ModApi" / "ModApi.h").read_text(encoding="utf-8")
-    major = re.search(r"^#define SOH_MOD_API_MAJOR ([0-9]+)$", header, re.MULTILINE)
-    if major is None:
-        raise ValueError("ModApi.h does not define SOH_MOD_API_MAJOR")
-    return int(major.group(1))
-
-
-def build_manifest(version, modapi_major, page, release_base, assets):
+def build_manifest(version, page, release_base, assets):
     entries = {}
     for platform, path in assets.items():
         if platform not in PLATFORMS:
             raise ValueError(f"'{platform}' is not one of {', '.join(PLATFORMS)}")
         entries[platform] = {"file": path.name, "url": f"{release_base}/{path.name}", "size": path.stat().st_size,
                              "hash": hashlib.blake2b(path.read_bytes(), digest_size=64).hexdigest()}
-    return {"format": RELEASE_FORMAT, "version": version, "modapi": modapi_major, "page": page, "assets": entries}
+    # Updaters up to unbound0.11 ignore a release without "modapi" and skip the mod rebuild only when it reads 2.
+    return {"format": RELEASE_FORMAT, "version": version, "modapi": 2, "page": page, "assets": entries}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Describe an Unbound release for the in-game updater.")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("version", help="Print the version a build of this checkout reports")
-    commands.add_parser("modapi-major", help="Print SOH_MOD_API_MAJOR")
     build = commands.add_parser("build", help="Write the manifest payload for a set of release assets")
     build.add_argument("--version", required=True)
     build.add_argument("--page", required=True)
@@ -55,14 +47,12 @@ def main():
 
     if args.command == "version":
         print(read_version())
-    elif args.command == "modapi-major":
-        print(read_modapi_major())
     else:
         assets = {}
         for entry in args.asset:
             platform, _, path = entry.partition("=")
             assets[platform] = Path(path)
-        manifest = build_manifest(args.version, read_modapi_major(), args.page, args.release_base.rstrip("/"), assets)
+        manifest = build_manifest(args.version, args.page, args.release_base.rstrip("/"), assets)
         args.output.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(manifest, indent=2))
 

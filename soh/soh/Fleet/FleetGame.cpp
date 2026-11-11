@@ -1,7 +1,14 @@
 #include "FleetGame.h"
 #include "FleetPortal.h"
+#include "FleetRuntime.h"
 #include "FleetRando.h"
+#include "FleetItemDraw.h"
+#include "soh/Enhancements/controls/SohInputEditorWindow.h"
+#include "soh/cvar_prefixes.h"
+#include <ship/window/Window.h>
+#include <ship/window/gui/Gui.h>
 
+#include <atomic>
 #include <cassert>
 #include <filesystem>
 #include <string_view>
@@ -75,6 +82,9 @@ void Detach() {
 const std::unordered_map<std::string_view, void*>& Functions() {
     static const std::unordered_map<std::string_view, void*> functions = {
         { "Name", reinterpret_cast<void*>(Name) },
+        { "DrawItem", reinterpret_cast<void*>(FleetItemDraw_Draw) },
+        { "ItemIcon", reinterpret_cast<void*>(FleetItemDraw_Icon) },
+        { "Reset", reinterpret_cast<void*>(Soh_ResetToTitle) },
         { "Attach", reinterpret_cast<void*>(Attach) },
         { "Run", reinterpret_cast<void*>(Run) },
         { "Arrive", reinterpret_cast<void*>(FleetPortal_Arrive) },
@@ -101,6 +111,66 @@ extern "C" bool FleetGame_IsHosted(void) {
     return sHostFunction != nullptr;
 }
 
+std::string FleetGame_NetworkRoom(const std::string& room) {
+    return FleetGame_IsHosted() && !room.empty() ? room + "@" + GameName : room;
+}
+
+extern "C" void* FleetGame_GetHostFunction(const char* name) {
+    return sHostFunction != nullptr ? sHostFunction(name) : nullptr;
+}
+
+extern "C" const char* FleetGame_GetSaveDirectory(void) {
+    using GetDirectory = const char* (*)(const char*);
+    const auto getDirectory = reinterpret_cast<GetDirectory>(FleetGame_GetHostFunction("GetSaveDirectory"));
+    return getDirectory != nullptr ? getDirectory(GameName) : nullptr;
+}
+
+extern "C" bool FleetGame_FileSelect(void) {
+    const auto show = reinterpret_cast<bool (*)()>(FleetGame_GetHostFunction("FileSelect"));
+    return show != nullptr && show();
+}
+
+extern "C" bool FleetGame_SelectFile(int slot) {
+    const auto select = reinterpret_cast<bool (*)(int)>(FleetGame_GetHostFunction("SelectFile"));
+    return select != nullptr && select(slot);
+}
+
+extern "C" bool FleetGame_ConfigureRandomizer(int slot) {
+    const auto configure = reinterpret_cast<bool (*)(int)>(FleetGame_GetHostFunction("ConfigureRandomizer"));
+    return configure != nullptr && configure(slot);
+}
+
+extern "C" bool FleetGame_HasGeneratedSeed(int slot) {
+    const auto has = reinterpret_cast<bool (*)(int)>(FleetGame_GetHostFunction("HasGeneratedSeed"));
+    return has != nullptr && has(slot);
+}
+
+extern "C" bool FleetGame_GenerateRandomizer(int slot) {
+    const auto generate = reinterpret_cast<bool (*)(int)>(FleetGame_GetHostFunction("GenerateRandomizer"));
+    return generate != nullptr && generate(slot);
+}
+
+extern "C" int FleetGame_RandomizerGenerationState(void) {
+    const auto state = reinterpret_cast<int (*)()>(FleetGame_GetHostFunction("RandomizerGenerationState"));
+    return state != nullptr ? state() : 0;
+}
+
+extern "C" bool FleetGame_HasSaveSlot(int slot) {
+    const auto exists = reinterpret_cast<bool (*)(int)>(FleetGame_GetHostFunction("HasSaveSlot"));
+    return exists != nullptr && exists(slot);
+}
+
+extern "C" bool FleetGame_ManageSave(const char* operation, int from, int to) {
+    const auto manage = reinterpret_cast<bool (*)(const char*, int, int)>(FleetGame_GetHostFunction("ManageSave"));
+    return manage != nullptr && manage(operation, from, to);
+}
+
+extern "C" const char* FleetGame_GetSaveFilePath(int slot, bool backup) {
+    const auto path =
+        reinterpret_cast<const char* (*)(const char*, int, bool)>(FleetGame_GetHostFunction("GetSaveFilePath"));
+    return path != nullptr ? path(GameName, slot, backup) : nullptr;
+}
+
 extern "C" void FleetGame_JoinHostContext(void) {
     Ship::Context* context = Ship::Context::GetRawInstance();
     // Assumes Fleet created the Context, its settings and its console variables before Run.
@@ -114,6 +184,13 @@ extern "C" void FleetGame_JoinHostContext(void) {
     game->ConsoleVariables = std::make_shared<Ship::ConsoleVariable>(game->Settings);
     game->ConsoleVariables->DelegateToHost(hostConsoleVariables, Ship::ConsoleVariable::GetEngineKeys());
     Ship::GameRegistry::SetActive(GameName);
+    if (context->GetWindow()) {
+        auto gui = context->GetWindow()->GetGui();
+        if (!gui->GetGuiWindow("Configure Controller")) {
+            gui->AddGuiWindow(
+                std::make_shared<SohInputEditorWindow>(CVAR_WINDOW("ControllerConfiguration"), "Configure Controller"));
+        }
+    }
 }
 
 std::shared_ptr<Ship::ResourceManager> FleetGame_CreateResources(const std::string& archivePath) {
@@ -121,7 +198,8 @@ std::shared_ptr<Ship::ResourceManager> FleetGame_CreateResources(const std::stri
     assert(game != nullptr);
     // Assigned before Init so the manager's own workers already run as this game.
     game->Resources = std::make_shared<Ship::ResourceManager>();
-    game->Resources->Init({ archivePath }, {}, ResourceThreadReserve);
+    game->Resources->Init({ archivePath, Ship::Context::GetPathRelativeToAppDirectory("mods") }, {},
+                          ResourceThreadReserve);
     return game->Resources;
 }
 
@@ -130,6 +208,7 @@ extern "C" void FleetGame_LeaveHostContext(void) {
 }
 
 extern "C" void FleetGame_FrameEnd(void) {
+    FleetRuntime_FrameEnd();
     FleetPortal_FrameEnd();
     if (sFrameEnd != nullptr) {
         sFrameEnd(GameName);
@@ -140,6 +219,34 @@ extern "C" void FleetGame_RequestSwitch(const FleetDestination* destination) {
     if (sRequestSwitch != nullptr) {
         sRequestSwitch(GameName, destination);
     }
+}
+
+namespace {
+std::atomic<int> sAutomaticSaves = 0;
+}
+
+FleetAutomaticSave::FleetAutomaticSave() {
+    sAutomaticSaves++;
+}
+
+FleetAutomaticSave::~FleetAutomaticSave() {
+    sAutomaticSaves--;
+}
+
+extern "C" void FleetGame_CommitSave(void) {
+    const auto commit = reinterpret_cast<void (*)()>(FleetGame_GetHostFunction("CommitSave"));
+    if (commit != nullptr && sAutomaticSaves == 0) {
+        commit();
+    }
+}
+
+extern "C" bool FleetGame_ResetActiveGame(void) {
+    const auto reset = reinterpret_cast<FleetResetActiveGameFn>(FleetGame_GetHostFunction("ResetActiveGame"));
+    if (reset == nullptr) {
+        return false;
+    }
+    reset();
+    return true;
 }
 
 extern "C" void FleetGame_Log(FleetLogLevel level, const char* message) {

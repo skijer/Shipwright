@@ -157,6 +157,12 @@ class Anchor : public Network {
     std::map<uint32_t, AnchorClient> clients;
     RoomState roomState;
 
+    inline static const std::string GLOBAL_ROOM_ID = "soh-global";
+    // Inside Fleet both games share one Room ID setting, so the other game's public id also means this one's.
+    static bool IsGlobalRoom();
+    // The room the handshake asks for: the public room as it is, any other kept per game inside Fleet.
+    static std::string RoomToJoin();
+
     void Enable();
     void Disable();
     void OnIncomingJson(nlohmann::json payload);

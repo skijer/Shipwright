@@ -2,6 +2,7 @@
 #define FLEET_RANDO_H
 
 #include <fleet/FleetGameApi.h>
+#include <nlohmann/json.hpp>
 
 // Ship's half of Fleet's combined randomizer: the reachability oracle and the services behind RandoRequest.
 char* FleetRando_DumpStaticData(void);
@@ -11,5 +12,6 @@ char* FleetRando_GetReachableChecks(void);
 bool FleetRando_PlaceItem(const char* check, const char* item);
 char* FleetRando_Request(const char* op, const char* json);
 void FleetRando_FreeString(char* text);
+void FleetRando_CreateCombinedSave(const nlohmann::json& seed, int slot);
 
 #endif

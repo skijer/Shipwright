@@ -430,16 +430,16 @@ class BuildCatalogTests(unittest.TestCase):
         self.root = Path(self.workspace.name)
         (self.root / "packages").mkdir()
 
-    def package(self, mod_id, permissions=(), modapi=1):
+    def package(self, mod_id, permissions=()):
         path = self.root / "packages" / f"{mod_id}.o2r"
-        manifest = {"name": mod_id, "version": "1.0", "permissions": list(permissions), "modapi": modapi}
+        manifest = {"name": mod_id, "version": "1.0", "permissions": list(permissions)}
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("manifest.json", json.dumps(manifest))
         return path
 
     def plan(self, catalog, hashes, trusted=False, approved=False, held=frozenset()):
         packages = sorted((self.root / "packages").glob("*.o2r"))
-        return build_catalog.plan(catalog, packages, hashes, 7, trusted, approved, set(held), 1)
+        return build_catalog.plan(catalog, packages, hashes, 7, trusted, approved, set(held))
 
     def test_first_request_publishes_everything_it_built(self):
         self.package("whip", ["network"])
@@ -473,19 +473,16 @@ class BuildCatalogTests(unittest.TestCase):
 
     def test_a_name_belongs_to_the_issue_that_published_it(self):
         catalog = build_catalog.empty_catalog()
-        catalog["mods"]["whip"] = {"issue": 3, "builds": {}}
+        catalog["mods"]["whip"] = {"issue": 3}
         self.package("whip")
         self.assertIn("whip", self.plan(catalog, {"whip": "h1"})["rejected"])
 
-    def test_packages_from_an_older_sdk_count_as_mod_api_1(self):
-        path = self.root / "packages" / "legacy.o2r"
-        with zipfile.ZipFile(path, "w") as archive:
-            archive.writestr("manifest.json", json.dumps({"name": "legacy", "version": "1.0"}))
-        self.assertEqual(self.plan(build_catalog.empty_catalog(), {"legacy": "h1"})["publish"], ["legacy"])
-
-    def test_packages_for_another_mod_api_are_refused(self):
-        self.package("whip", modapi=2)
-        self.assertIn("whip", self.plan(build_catalog.empty_catalog(), {"whip": "h1"})["rejected"])
+    def test_catalogs_with_a_build_per_mod_api_keep_the_newest(self):
+        path = self.root / "catalog.json"
+        old = {"builds": {"1": {"file": "whip-api1.o2r"}, "2": {"file": "whip-api2.o2r"}}, "issue": 7}
+        path.write_text(json.dumps({**build_catalog.empty_catalog(), "mods": {"whip": old}}), encoding="utf-8")
+        self.assertEqual(build_catalog.read_catalog(path)["mods"]["whip"], {"build": {"file": "whip-api2.o2r"},
+                                                                             "issue": 7})
 
     def test_manifest_icons_can_change_and_issue_icons_take_precedence(self):
         catalog = build_catalog.empty_catalog()
@@ -493,7 +490,7 @@ class BuildCatalogTests(unittest.TestCase):
             package = self.root / "packages" / "whip.o2r"
             with zipfile.ZipFile(package, "w") as archive:
                 archive.writestr("manifest.json", json.dumps({"name": "Whip", "icon": icon}))
-            result = {"modapi": 1, "publish": ["whip"]}
+            result = {"publish": ["whip"]}
             build_catalog.apply(catalog, result, self.REQUEST, self.root / "packages", {}, [], [],
                                 "https://example.invalid")
             self.assertEqual(catalog["mods"]["whip"]["icon"], "ITEM_SWORD_KOKIRI" if index == 2 else icon)
@@ -508,11 +505,11 @@ class BuildCatalogTests(unittest.TestCase):
                                       {"whip": "h1"}, packs, [], "https://example.invalid")
         self.assertEqual(catalog["packs"][0]["id"], "7-items")
         self.assertEqual(catalog["packs"][0]["mods"], ["whip"])
-        self.assertEqual(catalog["mods"]["whip"]["builds"]["1"]["file"], "whip-api1.o2r")
+        self.assertEqual(catalog["mods"]["whip"]["build"]["file"], "whip.o2r")
 
     def test_only_the_owning_issue_can_unlist_a_mod(self):
         catalog = build_catalog.empty_catalog()
-        catalog["mods"]["whip"] = {"issue": 7, "builds": {}}
+        catalog["mods"]["whip"] = {"issue": 7}
         self.assertFalse(build_catalog.set_listed(catalog, 7, "whip", False)["mods"]["whip"]["listed"])
         with self.assertRaisesRegex(ValueError, "not one of the mods"):
             build_catalog.set_listed(catalog, 8, "whip", False)
@@ -589,7 +586,7 @@ class PackMetadataTests(unittest.TestCase):
         build_catalog.edit_metadata(catalog, 7, "pack", json.dumps(pack))
         request = {"issue": 7, "repository": "someone/mods", "directory": "mods",
                    "commit": "c" * 40, "author": "someone"}
-        plan = {"modapi": 1, "publish": []}
+        plan = {"publish": []}
         repo_pack = {**pack, "name": "Repository pack"}
         build_catalog.apply(catalog, plan, request, Path("."), {}, [repo_pack], [], "https://example.invalid")
         self.assertEqual([p["name"] for p in catalog["packs"]], ["Issue pack"])
@@ -613,7 +610,7 @@ class StoreOptionTests(unittest.TestCase):
             package = Path(directory) / "probe.o2r"
             with zipfile.ZipFile(package, "w") as archive:
                 archive.writestr("manifest.json", json.dumps({"options": [{"id": "../x", "name": "bad"}]}))
-            result = build_catalog.plan(build_catalog.empty_catalog(), [package], {}, 7, True, True, set(), 1)
+            result = build_catalog.plan(build_catalog.empty_catalog(), [package], {}, 7, True, True, set())
             self.assertEqual(result["publish"], [])
             self.assertIn("probe", result["rejected"])
 
@@ -625,7 +622,7 @@ class StoreOptionTests(unittest.TestCase):
                 archive.writestr("manifest.json", json.dumps({"name": "Probe", "options": options}))
             request = {"issue": 7, "author": "author", "repository": "author/mods", "commit": "c" * 40,
                        "directory": "mods"}
-            catalog = build_catalog.apply(build_catalog.empty_catalog(), {"publish": ["probe"], "modapi": 1},
+            catalog = build_catalog.apply(build_catalog.empty_catalog(), {"publish": ["probe"]},
                                           request, root, {}, [], [], "https://example.invalid")
             self.assertEqual(catalog["mods"]["probe"]["options"], options)
 
@@ -633,7 +630,6 @@ class StoreOptionTests(unittest.TestCase):
 class ReleaseManifestTests(unittest.TestCase):
     def test_version_matches_what_the_build_reports(self):
         self.assertRegex(release_manifest.read_version(), r"^[0-9.]+-unbound[0-9.]+$")
-        self.assertGreaterEqual(release_manifest.read_modapi_major(), 1)
 
 
 class StoreScanTests(unittest.TestCase):

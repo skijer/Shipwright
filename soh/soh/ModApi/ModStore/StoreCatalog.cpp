@@ -1,7 +1,6 @@
 #include "StoreCatalog.h"
 
-#include <algorithm>
-#include <cctype>
+#include <cstdlib>
 #include <regex>
 #include <set>
 
@@ -56,6 +55,25 @@ std::optional<StoreDownload> ReadDownload(const Json& object) {
     return download;
 }
 
+// The published catalog still lists one download per old API number; the newest one is this host's.
+std::optional<StoreDownload> ReadLegacyDownload(const Json& object) {
+    const auto builds = object.find("builds");
+    if (builds == object.end() || !builds->is_object()) {
+        return std::nullopt;
+    }
+    std::optional<StoreDownload> newest;
+    int newestNumber = -1;
+    for (const auto& [number, build] : builds->items()) {
+        const int parsed = std::atoi(number.c_str());
+        const std::optional<StoreDownload> download = ReadDownload(build);
+        if (download && parsed > newestNumber) {
+            newest = download;
+            newestNumber = parsed;
+        }
+    }
+    return newest;
+}
+
 std::optional<StoreMod> ReadMod(const std::string& id, const Json& object) {
     if (!std::regex_match(id, ModId) || !object.is_object() || !object.value("listed", true)) {
         return std::nullopt;
@@ -75,8 +93,9 @@ std::optional<StoreMod> ReadMod(const std::string& id, const Json& object) {
     std::set<std::string> optionIds;
     if (options != object.end() && options->is_array() && options->size() <= 64) {
         for (const auto& option : *options) {
-            if (!option.is_object())
+            if (!option.is_object()) {
                 continue;
+            }
             const auto id = ReadString(option, "id");
             const auto name = ReadString(option, "name");
             if (std::regex_match(id, ModId) && !name.empty() && name.size() <= 160 && optionIds.insert(id).second) {
@@ -86,18 +105,14 @@ std::optional<StoreMod> ReadMod(const std::string& id, const Json& object) {
     }
     mod.permissions = ReadStrings(object, "permissions");
     mod.dependencies = ReadStrings(object, "dependencies");
-    const auto builds = object.find("builds");
-    if (builds == object.end() || !builds->is_object()) {
+    std::optional<StoreDownload> build = ReadDownload(object.value("build", Json()));
+    if (!build) {
+        build = ReadLegacyDownload(object);
+    }
+    if (!build) {
         return std::nullopt;
     }
-    for (const auto& [major, build] : builds->items()) {
-        auto download = ReadDownload(build);
-        const bool isMajor = !major.empty() && major.size() < 6 &&
-                             std::all_of(major.begin(), major.end(), [](unsigned char c) { return std::isdigit(c); });
-        if (download && isMajor) {
-            mod.builds[std::stoi(major)] = *download;
-        }
-    }
+    mod.build = *build;
     if (mod.name.empty()) {
         mod.name = id;
     }
@@ -169,7 +184,6 @@ std::optional<StoreRelease> ModStore_ParseRelease(const std::string& payload) {
     StoreRelease release;
     release.version = ReadString(root, "version");
     release.pageUrl = ReadString(root, "page");
-    release.modApiMajor = root.value("modapi", 0);
     const auto assets = root.find("assets");
     if (assets != root.end() && assets->is_object()) {
         for (const auto& [platform, object] : assets->items()) {
@@ -179,7 +193,7 @@ std::optional<StoreRelease> ModStore_ParseRelease(const std::string& payload) {
             }
         }
     }
-    if (release.version.empty() || release.modApiMajor <= 0 || !IsHttps(release.pageUrl)) {
+    if (release.version.empty() || !IsHttps(release.pageUrl)) {
         return std::nullopt;
     }
     return release;

@@ -9,6 +9,7 @@
  */
 
 #include "randomizer_entrance.h"
+#include "soh/Fleet/FleetRuntimeBridge.h"
 #include "randomizer_grotto.h"
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
@@ -294,6 +295,16 @@ s16 Entrance_PeekNextIndexOverride(int16_t nextEntranceIndex) {
     return Grotto_GetEntranceValueHandlingGrottoRando(Entrance_GetOverride(nextEntranceIndex));
 }
 
+static s16 Entrance_ResolveFleetRoute(s16 entrance) {
+    int32_t composed = FleetRuntime_ResolveExit(entrance, true);
+    if (composed >= 0) {
+        return Grotto_OverrideSpecialEntrance(composed);
+    }
+    s16 resolved = Entrance_GetOverride(entrance);
+    composed = FleetRuntime_ResolveExit(resolved, false);
+    return Grotto_OverrideSpecialEntrance(composed >= 0 ? composed : resolved);
+}
+
 s16 Entrance_OverrideNextIndex(s16 nextEntranceIndex) {
     // Exiting through the crawl space from Hyrule Castle courtyard is the same exit as leaving Ganon's castle
     // Don't override the entrance if we came from the Castle courtyard (day and night scenes)
@@ -306,13 +317,13 @@ s16 Entrance_OverrideNextIndex(s16 nextEntranceIndex) {
 
     Entrance_SetEntranceDiscovered(nextEntranceIndex, false);
     EntranceTracker_SetLastEntranceOverride(nextEntranceIndex);
-    return Grotto_OverrideSpecialEntrance(Entrance_GetOverride(nextEntranceIndex));
+    return Entrance_ResolveFleetRoute(nextEntranceIndex);
 }
 
 s16 Entrance_OverrideDynamicExit(s16 dynamicExitIndex) {
     Entrance_SetEntranceDiscovered(dynamicExitList[dynamicExitIndex], false);
     EntranceTracker_SetLastEntranceOverride(dynamicExitList[dynamicExitIndex]);
-    return Grotto_OverrideSpecialEntrance(Entrance_GetOverride(dynamicExitList[dynamicExitIndex]));
+    return Entrance_ResolveFleetRoute(dynamicExitList[dynamicExitIndex]);
 }
 
 u32 Entrance_SceneAndSpawnAre(u8 scene, u8 spawn) {
@@ -339,6 +350,11 @@ u32 Entrance_SceneAndSpawnAre(u8 scene, u8 spawn) {
 
 // Properly respawn the player after a game over, accounting for dungeon entrance randomizer
 void Entrance_SetGameOverEntrance(void) {
+    int32_t recovery = FleetRuntime_RecoveryEntrance();
+    if (recovery >= 0) {
+        gSaveContext.entranceIndex = recovery;
+        return;
+    }
     s16 scene = gPlayState->sceneNum;
 
     // When in a boss room and boss shuffle is on, use the boss scene to find the death warp entrance
@@ -384,6 +400,11 @@ void Entrance_SetGameOverEntrance(void) {
 
 // Properly savewarp the player accounting for dungeon entrance randomizer.
 void Entrance_SetSavewarpEntrance(void) {
+    int32_t recovery = FleetRuntime_RecoveryEntrance();
+    if (recovery >= 0) {
+        gSaveContext.entranceIndex = recovery;
+        return;
+    }
     s16 scene = gSaveContext.savedSceneNum;
 
     // When in a boss room and boss shuffle is on, use the boss scene to find the savewarp entrance

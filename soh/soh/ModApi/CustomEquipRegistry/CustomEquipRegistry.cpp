@@ -16,6 +16,8 @@
 #include "soh/SaveManager.h"
 #include "soh/cvar_prefixes.h"
 #include "soh/ModApi/ConsoleArguments.h"
+#include "soh/ModApi/Forms/FormKeyList.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 
 extern "C" {
@@ -35,6 +37,7 @@ constexpr size_t SaveKeyLimit = 128;
 struct RegisteredEquip {
     std::string owner;
     std::string key;
+    FormKeyList allowedForms;
     SOHCustomEquipDefinition definition = {};
 };
 
@@ -107,6 +110,28 @@ bool IsAgeAllowed(const SOHCustomEquipDefinition* definition) {
     return (definition->ageRequirement == SOH_CUSTOM_ITEM_AGE_CHILD) == (gSaveContext.linkAge == LINK_AGE_CHILD);
 }
 
+bool IsFormAllowed(const SOHCustomEquipDefinition* definition) {
+    return definition != nullptr &&
+           FormRegistry_IsCurrentFormIn(definition->allowedForms, definition->allowedFormCount);
+}
+
+bool IsUsableNow(const SOHCustomEquipDefinition* definition) {
+    return IsAgeAllowed(definition) && IsFormAllowed(definition);
+}
+
+// Reads the host's copy, where a definition older than these fields left them zeroed.
+bool StoreAllowedForms(RegisteredEquip& entry) {
+    SOHCustomEquipDefinition& definition = entry.definition;
+    if (!FormKeyList::IsValid(definition.allowedForms, definition.allowedFormCount)) {
+        SPDLOG_ERROR("[CustomEquipRegistry] Equipment '{}' supplied an invalid form list", entry.key);
+        return false;
+    }
+    entry.allowedForms.Assign(definition.allowedForms, definition.allowedFormCount);
+    definition.allowedForms = entry.allowedForms.Data();
+    definition.allowedFormCount = entry.allowedForms.Count();
+    return true;
+}
+
 void SetWorn(uint8_t slot, RegisteredEquip* entry, bool writesVanilla) {
     if (slot >= SOH_EQUIP_SLOT_MAX) {
         return;
@@ -148,7 +173,7 @@ void WatchWornEquipment() {
             continue;
         }
         const bool vanillaTookSlot = IsVanillaSlot(slot) && ReadVanillaValue(slot) != sAppliedValue[slot];
-        if (!IsAgeAllowed(&worn->definition) || vanillaTookSlot) {
+        if (!IsUsableNow(&worn->definition) || vanillaTookSlot) {
             SetWorn(slot, nullptr, false);
         }
     }
@@ -232,6 +257,9 @@ bool RegisterCompanionItem(const SOHCustomEquipDefinition& equip) {
     item.getItemText = equip.getItemText;
     item.getItemModelPath = equip.getItemModelPath;
     item.randomizer = equip.randomizer;
+    item.ageRequirement = equip.ageRequirement;
+    item.allowedForms = equip.allowedForms;
+    item.allowedFormCount = equip.allowedFormCount;
     item.presentationFlags = SOH_ITEM_HIDE_FROM_SAVE_EDITOR | SOH_ITEM_HIDE_FROM_KALEIDO;
     item.onReceive = MarkOwnedFromPickup;
     return CustomItemRegistry_Register(&item);
@@ -271,7 +299,7 @@ bool CustomEquipRegistry_Register(const SOHCustomEquipDefinition* definition) {
     entry->definition.structSize = sizeof(entry->definition);
     entry->definition.key = entry->key.c_str();
 
-    if (!RegisterCompanionItem(entry->definition)) {
+    if (!StoreAllowedForms(*entry) || !RegisterCompanionItem(entry->definition)) {
         return false;
     }
     sByKey[entry->key] = entry.get();
@@ -332,7 +360,7 @@ std::vector<std::string> CustomEquipRegistry_ListOwned() {
 
 bool CustomEquipRegistry_Wear(const char* key) {
     RegisteredEquip* entry = Find(key);
-    if (entry == nullptr || !CustomEquipRegistry_IsOwned(entry->key.c_str()) || !IsAgeAllowed(&entry->definition)) {
+    if (entry == nullptr || !CustomEquipRegistry_IsOwned(entry->key.c_str()) || !IsUsableNow(&entry->definition)) {
         return false;
     }
     if (entry->definition.slot == SOH_EQUIP_SLOT_UPGRADE) {
@@ -387,6 +415,14 @@ const SOHCustomEquipDefinition* CustomEquipRegistry_Find(const char* key) {
 
 bool CustomEquipRegistry_IsAgeAllowed(const char* key) {
     return IsAgeAllowed(CustomEquipRegistry_Find(key));
+}
+
+bool CustomEquipRegistry_IsFormAllowed(const char* key) {
+    return IsFormAllowed(CustomEquipRegistry_Find(key));
+}
+
+bool CustomEquipRegistry_IsUsableNow(const char* key) {
+    return IsUsableNow(CustomEquipRegistry_Find(key));
 }
 
 void CustomEquipRegistry_Init(void) {

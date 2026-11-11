@@ -36,9 +36,7 @@ void AnchorRoomWindow::Draw() {
 }
 
 void AnchorRoomWindow::DrawElement() {
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
-
-    if (isGlobalRoom) {
+    if (Anchor::IsGlobalRoom()) {
         u32 activeClients = 0;
         for (auto& [clientId, client] : Anchor::Instance->clients) {
             if (client.online) {

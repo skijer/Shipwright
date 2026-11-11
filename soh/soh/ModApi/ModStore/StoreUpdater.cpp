@@ -35,15 +35,27 @@ struct StagedFile {
     std::vector<char> data;
 };
 
-fs::path ExecutablePath() {
+fs::path ModulePath(HMODULE module) {
     std::wstring buffer(MAX_PATH, L'\0');
-    DWORD length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+    DWORD length = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
     while (length == buffer.size()) {
         buffer.resize(buffer.size() * 2);
-        length = GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size()));
+        length = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
     }
     buffer.resize(length);
     return fs::path(buffer);
+}
+
+fs::path ExecutablePath() {
+    return ModulePath(nullptr);
+}
+
+// Inside Fleet the process executable is Fleet's: the game's files are the ones beside this module.
+fs::path GameDirectory() {
+    HMODULE gameModule = nullptr;
+    GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                       reinterpret_cast<LPCWSTR>(&GameDirectory), &gameModule);
+    return ModulePath(gameModule).parent_path();
 }
 
 bool IsSafeEntryName(const std::string& name) {
@@ -145,13 +157,18 @@ bool IsLoadedModule(const fs::path& path) {
 
 bool StageFiles(const std::vector<StagedFile>& files, std::string& error) {
     const fs::path executable = ExecutablePath();
-    const fs::path directory = executable.parent_path();
+    const fs::path directory = GameDirectory();
+    std::error_code ignored;
+    const bool isStandalone = fs::equivalent(executable.parent_path(), directory, ignored);
+    bool hasLauncher = false;
     std::vector<std::pair<fs::path, const StagedFile*>> loadedModules;
     Json staged = Json::array();
     for (const StagedFile& file : files) {
         const bool isTopLevel = !fs::path(file.name).has_parent_path();
+        const bool isLauncher = isTopLevel && IsSameFileName(file.name, ReleaseExecutable);
+        hasLauncher = hasLauncher || isLauncher;
         // The running exe may have been renamed; the release always ships it under its own name.
-        if (isTopLevel && IsSameFileName(file.name, ReleaseExecutable)) {
+        if (isLauncher && isStandalone) {
             loadedModules.emplace_back(executable, &file);
             continue;
         }
@@ -165,9 +182,7 @@ bool StageFiles(const std::vector<StagedFile>& files, std::string& error) {
         }
         staged.push_back(file.name);
     }
-    const bool hasExecutable = std::any_of(loadedModules.begin(), loadedModules.end(),
-                                           [&](const auto& module) { return module.first == executable; });
-    if (!hasExecutable) {
+    if (!hasLauncher) {
         error = std::string("the update has no ") + ReleaseExecutable;
         return false;
     }
@@ -233,7 +248,7 @@ bool ModStore_StageRelease([[maybe_unused]] const StoreRelease& release, std::st
 
 void ModStore_ApplyStagedUpdate() {
 #if defined(_WIN32)
-    const fs::path directory = ExecutablePath().parent_path();
+    const fs::path directory = GameDirectory();
     std::error_code error;
     RemoveReplacedModules(directory);
 

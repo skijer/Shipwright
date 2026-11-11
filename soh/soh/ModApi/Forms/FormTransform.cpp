@@ -69,7 +69,7 @@ constexpr const char* FaceGlowDl = "__OTR__objects/gameplay_keep/gameplay_keep_D
 constexpr int32_t FaceGlowSegment = 0x0B;
 constexpr Vec3f LinkFaceGlowOffset = { -230.0f, -520.0f, 0.0f };
 
-#define DEG_TO_BINANG_F(degrees) ((s16)(s32)((degrees)*182.04167f))
+#define DEG_TO_BINANG_F(degrees) ((s16)(s32)((degrees) * 182.04167f))
 
 struct EnvKey {
     s16 fogNear;

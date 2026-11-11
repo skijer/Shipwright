@@ -10,8 +10,9 @@ namespace StorePackCard {
 
 inline std::string SingleLine(std::string value) {
     for (char& c : value) {
-        if (c == '\n' || c == '\r' || c == '\t')
+        if (c == '\n' || c == '\r' || c == '\t') {
             c = ' ';
+        }
     }
     return value;
 }
@@ -81,15 +82,17 @@ inline bool Draw(const std::string& name, const std::string& author, const std::
                                                                    nameEnd, textWidth);
         if (wrap <= remaining) {
             wrap = remaining + 1;
-            while ((*wrap & 0xc0) == 0x80)
+            while ((*wrap & 0xc0) == 0x80) {
                 ++wrap;
+            }
         }
         std::string title = line == 2 ? FitLine(remaining, titleSize, textWidth) : std::string(remaining, wrap);
         draw->AddText(ImGui::GetFont(), titleSize, ImVec2(textX, imageMin.y + line * titleLine),
                       ImGui::GetColorU32(ImGuiCol_Text), title.c_str(), nullptr, 0, &clip);
         remaining = wrap;
-        while (*remaining == ' ' || *remaining == '\n' || *remaining == '\r')
+        while (*remaining == ' ' || *remaining == '\n' || *remaining == '\r') {
             ++remaining;
+        }
     }
     ImVec4 secondary = ImGui::GetStyleColorVec4(ImGuiCol_Text);
     secondary.w *= 0.78f;

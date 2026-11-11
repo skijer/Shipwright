@@ -9,6 +9,7 @@
 #include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
+#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -564,7 +565,7 @@ bool Logic::CanUse(RandomizerGet itemName) {
         return false;
 
     if (RandoItems_IsModItem(itemName)) {
-        return true;
+        return RandoLogic_CanMeetItemRestriction(*this, itemName);
     }
 
     if (!ItemUseAllowed(itemName)) {
@@ -2412,9 +2413,11 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
                         SetRandoInf(RAND_INF_HAS_WALLET, true);
                     } else if (currentLevel == 0 && !state) {
                         SetRandoInf(RAND_INF_HAS_WALLET, false);
+                    } else if (state) {
+                        // Plentiful pools hold a copy past Tycoon; the 2-bit wallet field would wrap to Child.
+                        SetUpgrade(UPG_WALLET, std::min<uint32_t>(currentLevel + 1, 3));
                     } else {
-                        auto newLevel = currentLevel + (!state ? -1 : 1);
-                        SetUpgrade(UPG_WALLET, newLevel);
+                        SetUpgrade(UPG_WALLET, currentLevel - 1);
                     }
                 } break;
                 case RG_PROGRESSIVE_SCALE: {

@@ -4,6 +4,7 @@
  */
 
 #include "randomizer_grotto.h"
+#include "soh/Fleet/FleetRuntimeBridge.h"
 #include "soh/OTRGlobals.h"
 
 #include "variables.h"
@@ -151,7 +152,7 @@ static void Grotto_SetupReturnInfo(GrottoReturnInfo grotto, RespawnMode respawnM
 // This method doesn't change player respawn data, so only use this if you are querying an entrance index.
 s16 Grotto_GetEntranceValueHandlingGrottoRando(s16 nextEntranceIndex) {
     // Don't change anything unless grotto shuffle has been enabled
-    if (!Randomizer_GetSettingValue(RSK_SHUFFLE_GROTTO_ENTRANCES) &&
+    if (!FleetRuntime_EntrancesEnabled() && !Randomizer_GetSettingValue(RSK_SHUFFLE_GROTTO_ENTRANCES) &&
         !Randomizer_GetSettingValue(RSK_SHUFFLE_OVERWORLD_SPAWNS) &&
         !Randomizer_GetSettingValue(RSK_SHUFFLE_WARP_SONGS)) {
         return nextEntranceIndex;
@@ -207,6 +208,14 @@ s16 Grotto_OverrideSpecialEntrance(s16 nextEntranceIndex) {
 
     // If Link hits a grotto exit, load the entrance index from the grotto exit list
     // based on the current grotto ID
+    if (grottoExit) {
+        int32_t composed = FleetRuntime_ResolveExit(ENTRANCE_GROTTO_EXIT_START + grottoId, true);
+        if (composed >= 0) {
+            nextEntranceIndex = composed;
+            grottoExit = false;
+        }
+    }
+
     if (grottoExit) {
         Entrance_SetEntranceDiscovered(ENTRANCE_GROTTO_EXIT_START + grottoId, false);
         EntranceTracker_SetLastEntranceOverride(ENTRANCE_GROTTO_EXIT_START + grottoId);
@@ -294,6 +303,10 @@ void Grotto_OverrideActorEntrance(Actor* thisx) {
             Entrance_SetEntranceDiscovered(ENTRANCE_GROTTO_LOAD_START + index, false);
             EntranceTracker_SetLastEntranceOverride(ENTRANCE_GROTTO_LOAD_START + index);
             index = grottoLoadList[index];
+            int32_t composed = FleetRuntime_ResolveExit(index, false);
+            if (composed >= 0) {
+                index = composed;
+            }
 
             // Run the index through the special entrances override check
             lastEntranceType = GROTTO_LOAD;

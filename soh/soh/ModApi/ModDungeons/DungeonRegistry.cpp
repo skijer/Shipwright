@@ -868,8 +868,8 @@ void DungeonRegistry_AddRegions() {
     for (size_t index = 0; index < sChecks.size(); index++) {
         const ModCheck& check = sChecks[index];
         if (check.vanillaRegion != RR_NONE) {
-            areaTable[check.vanillaRegion].locations.push_back(LocationAccess(
-                static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
+            areaTable[check.vanillaRegion].locations.push_back(
+                LocationAccess(static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
         }
     }
 }

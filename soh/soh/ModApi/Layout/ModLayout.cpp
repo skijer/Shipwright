@@ -270,8 +270,9 @@ std::vector<Entry> NativeEntries(uint8_t kind) {
             "Broken Goron's Sword", "Prescription", "Eyeball Frog", "Eye Drops",    "Claim Check"
         };
         for (int item = ITEM_WEIRD_EGG; item <= ITEM_CLAIM_CHECK; ++item) {
-            if (item == ITEM_SOLD_OUT || VanillaItems_IsVanillaSuppressed(item))
+            if (item == ITEM_SOLD_OUT || VanillaItems_IsVanillaSuppressed(item)) {
                 continue;
+            }
             const bool child = item <= ITEM_MASK_TRUTH;
             const int first = child ? ITEM_WEIRD_EGG : ITEM_POCKET_EGG;
             const int slot = child ? SLOT_TRADE_CHILD : SLOT_TRADE_ADULT;
@@ -311,8 +312,9 @@ std::vector<Entry> Entries(uint8_t kind) {
             source = std::find_if(sources.begin(), sources.end(),
                                   [&](const Entry& entry) { return entry.source == reference.source; });
         }
-        if (source == sources.end())
+        if (source == sources.end()) {
             continue;
+        }
         Entry entry = *source;
         entry.key = reference.key;
         entry.kind = kind;
@@ -686,10 +688,10 @@ void MoveCursor(PlayState* play, const Page& page, const std::vector<Entry>& ent
 
 bool IsAgeAllowed(const Entry& entry) {
     if (entry.custom != nullptr) {
-        return CustomItemRegistry_IsAgeAllowed(entry.key.c_str());
+        return CustomItemRegistry_IsUsableNow(entry.key.c_str());
     }
     if (entry.equipment != nullptr) {
-        return CustomEquipRegistry_IsAgeAllowed(entry.key.c_str());
+        return CustomEquipRegistry_IsUsableNow(entry.key.c_str());
     }
     if (entry.sourceKind == SOH_LAYOUT_ITEMS) {
         return CHECK_AGE_REQ_ITEM(entry.item);
@@ -1051,7 +1053,7 @@ int16_t ModLayout_GetItemCellSlot(uint8_t cell) {
 bool ModLayout_BeginCustomEquip(PlayState* play, const char* key, uint8_t button, int16_t x, int16_t y) {
     const auto* definition = CustomItemRegistry_Find(key);
     if (play == nullptr || definition == nullptr || button < 1 || button > 7 || !CustomItemRegistry_IsOwned(key) ||
-        !CustomItemRegistry_IsAgeAllowed(key) || CustomItemRegistry_IsVanillaUpgrade(definition) ||
+        !CustomItemRegistry_IsUsableNow(key) || CustomItemRegistry_IsVanillaUpgrade(definition) ||
         !(definition->flags & SOH_CUSTOM_ITEM_EQUIPPABLE) ||
         !(definition->flags & (button <= 3 ? SOH_CUSTOM_ITEM_C_BUTTON : SOH_CUSTOM_ITEM_DPAD))) {
         return false;

@@ -194,33 +194,39 @@ bool ModUI_ColorButton(const char* label, const float* rgba, uint32_t flags, flo
            ImGui::ColorButton(label, ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]), flags, ImVec2(width, height));
 }
 void ModUI_TextWrapped(const char* text) {
-    if (text)
+    if (text) {
         ImGui::TextWrapped("%s", text);
+    }
 }
 void ModUI_TextColored(const float* rgba, const char* text) {
-    if (rgba && text)
+    if (rgba && text) {
         ImGui::TextColored(ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]), "%s", text);
+    }
 }
 void ModUI_TextDisabled(const char* text) {
-    if (text)
+    if (text) {
         ImGui::TextDisabled("%s", text);
+    }
 }
 void ModUI_BulletText(const char* text) {
-    if (text)
+    if (text) {
         ImGui::BulletText("%s", text);
+    }
 }
 void ModUI_ProgressBar(float fraction, float width, float height, const char* overlay) {
     ImGui::ProgressBar(fraction, ImVec2(width, height), overlay);
 }
 void ModUI_PlotLines(const char* label, const float* values, int32_t count, float minimum, float maximum, float width,
                      float height) {
-    if (label && values && count > 0)
+    if (label && values && count > 0) {
         ImGui::PlotLines(label, values, count, 0, nullptr, minimum, maximum, ImVec2(width, height));
+    }
 }
 void ModUI_PlotHistogram(const char* label, const float* values, int32_t count, float minimum, float maximum,
                          float width, float height) {
-    if (label && values && count > 0)
+    if (label && values && count > 0) {
         ImGui::PlotHistogram(label, values, count, 0, nullptr, minimum, maximum, ImVec2(width, height));
+    }
 }
 void ModUI_Image(uintptr_t texture, float width, float height) {
     ImGui::Image((ImTextureID)texture, ImVec2(width, height));
@@ -302,8 +308,9 @@ bool ModUI_TableSetColumnIndex(int32_t column) {
     return column >= 0 && column < ImGui::TableGetColumnCount() && ImGui::TableSetColumnIndex(column);
 }
 void ModUI_OpenPopup(const char* id) {
-    if (id)
+    if (id) {
         ImGui::OpenPopup(id);
+    }
 }
 bool ModUI_BeginPopup(const char* id, uint32_t flags) {
     return id && ImGui::BeginPopup(id, flags);
@@ -363,8 +370,9 @@ void ModUI_SetNextItemAllowOverlap(void) {
     ImGui::SetNextItemAllowOverlap();
 }
 void ModUI_SeparatorText(const char* text) {
-    if (text)
+    if (text) {
         ImGui::SeparatorText(text);
+    }
 }
 void ModUI_SameLine(float offset, float spacing) {
     ImGui::SameLine(offset, spacing);
@@ -400,8 +408,9 @@ bool ModUI_BeginTooltip(void) {
     return ImGui::BeginTooltip();
 }
 void ModUI_SetTooltip(const char* text) {
-    if (text)
+    if (text) {
         ImGui::SetTooltip("%s", text);
+    }
 }
 bool ModUI_IsItemHovered(void) {
     return ImGui::IsItemHovered();
@@ -459,47 +468,57 @@ void ModUI_SetScrollY(float value) {
 }
 void ModUI_GetContentRegionAvailable(float* width, float* height) {
     ImVec2 size = ImGui::GetContentRegionAvail();
-    if (width)
+    if (width) {
         *width = size.x;
-    if (height)
+    }
+    if (height) {
         *height = size.y;
+    }
 }
 void ModUI_GetCursorPosition(float* x, float* y) {
     ImVec2 pos = ImGui::GetCursorPos();
-    if (x)
+    if (x) {
         *x = pos.x;
-    if (y)
+    }
+    if (y) {
         *y = pos.y;
+    }
 }
 void ModUI_SetCursorPosition(float x, float y) {
     ImGui::SetCursorPos(ImVec2(x, y));
 }
 void ModUI_SetClipboardText(const char* text) {
-    if (text)
+    if (text) {
         ImGui::SetClipboardText(text);
+    }
 }
 const char* ModUI_GetClipboardText(void) {
     return ImGui::GetClipboardText();
 }
 void ModUI_PushStyleColor(int32_t index, const float* rgba) {
-    if (rgba && index >= 0 && index < ImGuiCol_COUNT)
+    if (rgba && index >= 0 && index < ImGuiCol_COUNT) {
         ImGui::PushStyleColor(index, ImVec4(rgba[0], rgba[1], rgba[2], rgba[3]));
+    }
 }
 void ModUI_PopStyleColor(int32_t count) {
-    if (count > 0)
+    if (count > 0) {
         ImGui::PopStyleColor(count);
+    }
 }
 void ModUI_PushStyleFloat(int32_t index, float value) {
-    if (index >= 0 && index < ImGuiStyleVar_COUNT)
+    if (index >= 0 && index < ImGuiStyleVar_COUNT) {
         ImGui::PushStyleVar(index, value);
+    }
 }
 void ModUI_PushStyleVec2(int32_t index, float x, float y) {
-    if (index >= 0 && index < ImGuiStyleVar_COUNT)
+    if (index >= 0 && index < ImGuiStyleVar_COUNT) {
         ImGui::PushStyleVar(index, ImVec2(x, y));
+    }
 }
 void ModUI_PopStyleVar(int32_t count) {
-    if (count > 0)
+    if (count > 0) {
         ImGui::PopStyleVar(count);
+    }
 }
 
 bool ModUI_CheckboxFlags(const char* label, uint32_t* value, uint32_t flags) {
@@ -538,8 +557,9 @@ bool ModUI_SliderAngle(const char* label, float* radians, float minDegrees, floa
     return label && radians && minDegrees <= maxDegrees && ImGui::SliderAngle(label, radians, minDegrees, maxDegrees);
 }
 void ModUI_LabelText(const char* label, const char* text) {
-    if (label && text)
+    if (label && text) {
         ImGui::LabelText(label, "%s", text);
+    }
 }
 void ModUI_Bullet(void) {
     ImGui::Bullet();
@@ -554,8 +574,9 @@ bool ModUI_TabItemButton(const char* label, uint32_t flags) {
     return label && ImGui::TabItemButton(label, flags);
 }
 void ModUI_SetTabItemClosed(const char* label) {
-    if (label)
+    if (label) {
         ImGui::SetTabItemClosed(label);
+    }
 }
 void ModUI_SetNextItemOpen(bool open, uint32_t condition) {
     ImGui::SetNextItemOpen(open, condition);
@@ -573,17 +594,22 @@ bool ModUI_BeginDragDropTarget(void) {
     return ImGui::BeginDragDropTarget();
 }
 uint32_t ModUI_AcceptDragDropPayload(const char* type, void* output, uint32_t capacity, bool* delivered) {
-    if (delivered)
+    if (delivered) {
         *delivered = false;
-    if (!type)
+    }
+    if (!type) {
         return 0;
+    }
     const ImGuiPayload* p = ImGui::AcceptDragDropPayload(type);
-    if (!p)
+    if (!p) {
         return 0;
-    if (delivered)
+    }
+    if (delivered) {
         *delivered = p->IsDelivery();
-    if (output && capacity >= uint32_t(p->DataSize))
+    }
+    if (output && capacity >= uint32_t(p->DataSize)) {
         std::memcpy(output, p->Data, p->DataSize);
+    }
     return uint32_t(p->DataSize);
 }
 void ModUI_EndDragDropTarget(void) {
@@ -591,21 +617,27 @@ void ModUI_EndDragDropTarget(void) {
 }
 void ModUI_GetItemRectangle(float* x1, float* y1, float* x2, float* y2) {
     ImVec2 a = ImGui::GetItemRectMin(), b = ImGui::GetItemRectMax();
-    if (x1)
+    if (x1) {
         *x1 = a.x;
-    if (y1)
+    }
+    if (y1) {
         *y1 = a.y;
-    if (x2)
+    }
+    if (x2) {
         *x2 = b.x;
-    if (y2)
+    }
+    if (y2) {
         *y2 = b.y;
+    }
 }
 void ModUI_GetCursorScreenPosition(float* x, float* y) {
     ImVec2 p = ImGui::GetCursorScreenPos();
-    if (x)
+    if (x) {
         *x = p.x;
-    if (y)
+    }
+    if (y) {
         *y = p.y;
+    }
 }
 void ModUI_SetCursorScreenPosition(float x, float y) {
     ImGui::SetCursorScreenPos(ImVec2(x, y));
@@ -620,14 +652,17 @@ void ModUI_DrawRectFilled(float x1, float y1, float x2, float y2, uint32_t rgba,
     ImGui::GetWindowDrawList()->AddRectFilled(ImVec2(x1, y1), ImVec2(x2, y2), rgba, rounding);
 }
 void ModUI_DrawCircle(float x, float y, float radius, uint32_t rgba, float thickness) {
-    if (radius > 0)
+    if (radius > 0) {
         ImGui::GetWindowDrawList()->AddCircle(ImVec2(x, y), radius, rgba, 0, thickness);
+    }
 }
 void ModUI_DrawCircleFilled(float x, float y, float radius, uint32_t rgba) {
-    if (radius > 0)
+    if (radius > 0) {
         ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(x, y), radius, rgba);
+    }
 }
 void ModUI_DrawText(float x, float y, uint32_t rgba, const char* text) {
-    if (text)
+    if (text) {
         ImGui::GetWindowDrawList()->AddText(ImVec2(x, y), rgba, text);
+    }
 }

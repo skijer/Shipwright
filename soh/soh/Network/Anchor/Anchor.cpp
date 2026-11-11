@@ -4,12 +4,32 @@
 #include "soh/Enhancements/nametag.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
 #include "soh/ModApi/Network/ModNetwork.h"
+#include "soh/Fleet/FleetGame.h"
 
 extern "C" {
 #include "macros.h"
 #include "variables.h"
 #include "functions.h"
 extern PlayState* gPlayState;
+}
+
+// MARK: - Rooms
+
+static const std::string sMajorasMaskGlobalRoomId = "2ship-global";
+
+bool Anchor::IsGlobalRoom() {
+    const std::string room = CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), "");
+    if (room == GLOBAL_ROOM_ID) {
+        return true;
+    }
+    return FleetGame_IsHosted() && room == sMajorasMaskGlobalRoomId;
+}
+
+std::string Anchor::RoomToJoin() {
+    if (IsGlobalRoom()) {
+        return GLOBAL_ROOM_ID;
+    }
+    return FleetGame_NetworkRoom(CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 }
 
 // MARK: - Overrides

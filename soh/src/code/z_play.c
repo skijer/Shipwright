@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Fleet/FleetRuntimeBridge.h"
 #include "soh/unbound/SceneDB.h"
 #include "vt.h"
 
@@ -224,6 +225,7 @@ Gfx* Play_SetFog(PlayState* play, Gfx* gfx) {
 }
 
 void Play_Destroy(GameState* thisx) {
+    FleetRuntime_CancelTransition();
     PlayState* play = (PlayState*)thisx;
     Player* player = GET_PLAYER(play);
 
@@ -383,6 +385,7 @@ u8 CheckBridgeRewardCount() {
 }
 
 void Play_Init(GameState* thisx) {
+    FleetRuntime_SetLoading(0);
     PlayState* play = (PlayState*)thisx;
     GraphicsContext* gfxCtx = play->state.gfxCtx;
     uintptr_t zAlloc;
@@ -412,6 +415,7 @@ void Play_Init(GameState* thisx) {
     }
 
     gPlayState = play;
+    FleetRuntime_SetLoading(1);
 
     SystemArena_Display();
 
@@ -691,6 +695,7 @@ void Play_Init(GameState* thisx) {
 }
 
 void Play_Update(PlayState* play) {
+    FleetRuntime_SetLoading(0);
     Input* input = play->state.input;
     s32 isPaused;
     s32 pad1;
@@ -929,6 +934,9 @@ void Play_Update(PlayState* play) {
                                 play->transitionMode = TRANS_MODE_OFF;
                             }
                         } else if (play->transitionTrigger != TRANS_TRIGGER_END) {
+                            if (FleetRuntime_CompleteTransition()) {
+                                break;
+                            }
                             play->state.running = false;
 
                             if (gSaveContext.gameMode != GAMEMODE_FILE_SELECT) {
@@ -985,6 +993,9 @@ void Play_Update(PlayState* play) {
                     play->envCtx.screenFillColor[3] = (sTransitionFillTimer / 20.0f) * 255.0f;
 
                     if (sTransitionFillTimer >= 20) {
+                        if (FleetRuntime_CompleteTransition()) {
+                            break;
+                        }
                         play->state.running = false;
                         SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                         gSaveContext.entranceIndex = play->nextEntranceIndex;
@@ -1027,6 +1038,9 @@ void Play_Update(PlayState* play) {
 
                 case TRANS_MODE_INSTANT:
                     if (play->transitionTrigger != TRANS_TRIGGER_END) {
+                        if (FleetRuntime_CompleteTransition()) {
+                            break;
+                        }
                         play->state.running = 0;
                         SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                         gSaveContext.entranceIndex = play->nextEntranceIndex;
@@ -1074,6 +1088,9 @@ void Play_Update(PlayState* play) {
                         }
                     } else {
                         if (play->envCtx.sandstormEnvA == 255) {
+                            if (FleetRuntime_CompleteTransition()) {
+                                break;
+                            }
                             play->state.running = false;
                             SET_NEXT_GAMESTATE(&play->state, Play_Init, PlayState);
                             gSaveContext.entranceIndex = play->nextEntranceIndex;

@@ -31,7 +31,7 @@ struct StoreMod {
     std::vector<StoreOption> options;
     std::vector<std::string> permissions;
     std::vector<std::string> dependencies;
-    std::map<int, StoreDownload> builds;
+    StoreDownload build;
 };
 
 struct StorePack {
@@ -60,7 +60,6 @@ struct StoreCatalog {
 struct StoreRelease {
     std::string version;
     std::string pageUrl;
-    int modApiMajor = 0;
     std::map<std::string, StoreDownload> assets;
 };
 

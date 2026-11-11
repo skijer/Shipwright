@@ -1994,7 +1994,8 @@ s32 Attention_ShouldReleaseLockOn(Actor* actor, Player* player, s32 flag) {
 u32 Actor_ProcessTalkRequest(Actor* actor, PlayState* play) {
     if (actor->flags & ACTOR_FLAG_TALK) {
         actor->flags &= ~ACTOR_FLAG_TALK;
-        return GameInteractor_ExecuteOnActorTalk(actor, play);
+        GameInteractor_ExecuteOnActorTalk(actor, play);
+        return true;
     }
 
     return false;

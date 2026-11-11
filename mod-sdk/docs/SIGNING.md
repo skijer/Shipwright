@@ -63,10 +63,8 @@ A mod that needs another one names it in its manifest, and the store installs bo
 
 ### Unbound versions
 
-`SOH_MOD_API_MAJOR` in `soh/soh/ModApi/ModApi.h` goes up only when a change breaks mods built before it; adding
-entries to `SOHModApi` does not. The SDK stamps it into every package, and the game refuses packages built for
-another major. When a release bumps it, `publish-release.yml` rebuilds every listed mod at its last signed commit
-before the release goes public, and reports each result on its issue.
+Mods carry no API version. Each mod has one build in the store; the game compares its hash with the installed
+file and offers the update. Guard newer `SOHModApi` entries with `SOH_MOD_API_HAS`.
 
 The signature names your GitHub account, the repository and the commit, and links to the workflow run with
 every scan and build log. The game shows it in the Mod Menu next to the file name.
@@ -138,7 +136,7 @@ The in-game updater has a key of its own, so a leaked mod key cannot ship an Unb
    `UNBOUND_RELEASE_SIGNING_KEY` of **mod-signing**, delete the file and commit the header.
 6. To release, run **publish-release** from the branch the environment allows, with the id of a successful
    generate-builds run less than a day old (artifacts expire after that). It drafts the release with a signed
-   `unbound-release.json`, rebuilds the mods if the mod API major changed, and then publishes it as latest.
+   `unbound-release.json` and publishes it as latest.
 
 ## Running the queue (maintainers)
 

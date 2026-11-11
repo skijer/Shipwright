@@ -12,6 +12,9 @@ extern "C" {
 void FleetPortal_Arrive(const FleetDestination* arrival);
 // Once per frame: hands a pending departure to Fleet and walks into a pending arrival.
 void FleetPortal_FrameEnd(void);
+bool FleetPortal_LoadPending(void);
+// Leaves for the other game through `portal` at the next frame end.
+void FleetPortal_RequestDeparture(const char* portal);
 
 #ifdef __cplusplus
 }

@@ -15,6 +15,7 @@ nlohmann::json FleetCrossDungeon_DumpCatalogueForSeed(const nlohmann::json& spoi
 void FleetCrossDungeon_SetSeed(const nlohmann::json& seed);
 void FleetCrossDungeon_SetAccess(const nlohmann::json& access);
 nlohmann::json FleetCrossDungeon_GetExits();
+uint16_t FleetCrossDungeon_GetBossDefeated();
 
 // While alive, logic follows the installed routes and starts from their arrivals in Ship.
 class FleetCrossDungeonSearch {

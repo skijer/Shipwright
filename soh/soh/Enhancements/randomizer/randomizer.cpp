@@ -1,4 +1,5 @@
 #include <atomic>
+#include "soh/Fleet/FleetRuntimeBridge.h"
 #include <fstream>
 #include <sstream>
 #include <tuple>
@@ -896,7 +897,11 @@ CheckIdentity Randomizer::IdentifySilver(s32 sceneNum, Vec3f pos) {
 }
 
 u8 Randomizer::GetRandoSettingValue(RandomizerSettingKey randoSettingKey) {
-    return Rando::Context::GetInstance()->GetOption(randoSettingKey).Get();
+    const uint8_t native = Rando::Context::GetInstance()->GetOption(randoSettingKey).Get();
+    const bool entranceRule = randoSettingKey == RSK_SHUFFLE_ENTRANCES ||
+                              randoSettingKey == RSK_SHUFFLE_DUNGEON_ENTRANCES ||
+                              randoSettingKey == RSK_SHUFFLE_GROTTO_ENTRANCES;
+    return entranceRule && native == 0 && FleetRuntime_EntrancesEnabled() ? 1 : native;
 }
 
 u8 Randomizer::GetTriforcePiecesRequired() {

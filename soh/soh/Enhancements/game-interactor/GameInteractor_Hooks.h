@@ -66,7 +66,7 @@ void GameInteractor_ExecuteOnActorInit(void* actor);
 void GameInteractor_ExecuteOnActorSpawn(void* actor);
 bool GameInteractor_ShouldActorUpdate(void* actor);
 void GameInteractor_ExecuteOnActorUpdate(void* actor);
-bool GameInteractor_ExecuteOnActorTalk(Actor* actor, PlayState* play);
+void GameInteractor_ExecuteOnActorTalk(Actor* actor, PlayState* play);
 bool GameInteractor_ExecuteOnActorPlaySfx(Actor* actor, int32_t kind, uint16_t* sfxId);
 bool GameInteractor_ExecuteOnActorDraw(Actor* actor, PlayState* play);
 void GameInteractor_ExecuteOnActorDrawEnd(Actor* actor, PlayState* play);

@@ -324,22 +324,27 @@ bool HasHook(const char* name) {
 }
 
 void SetCelShadingRamp(float center, float softness, float highlight, float shadow, bool debugBands) {
-    if (!std::isfinite(center) || !std::isfinite(softness) || !std::isfinite(highlight) || !std::isfinite(shadow))
+    if (!std::isfinite(center) || !std::isfinite(softness) || !std::isfinite(highlight) || !std::isfinite(shadow)) {
         return;
+    }
     auto* context = Ship::Context::GetRawInstance();
-    if (!context)
+    if (!context) {
         return;
+    }
     auto window = std::dynamic_pointer_cast<Fast::Fast3dWindow>(context->GetWindow());
-    if (!window)
+    if (!window) {
         return;
+    }
     auto interpreter = window->GetInterpreterWeak().lock();
-    if (!interpreter)
+    if (!interpreter) {
         return;
+    }
     auto* renderer = interpreter->GetCurrentRenderingAPI();
-    if (renderer)
+    if (renderer) {
         renderer->SetToonRamp(std::clamp(center, 0.0f, 1.0f), std::clamp(softness, 0.001f, 0.5f),
                               std::clamp(highlight, 0.0f, 2.0f), std::clamp(shadow, 0.0f, 1.0f),
                               debugBands ? 1.0f : 0.0f);
+    }
 }
 
 SOHModApi BuildTable() {
@@ -388,6 +393,7 @@ SOHModApi BuildTable() {
     api.IsCustomItemEditorVisible = CustomItemRegistry_IsEditorVisible;
     api.FindCustomItemReplacement = CustomItemRegistry_FindReplacement;
     api.IsCustomItemAgeAllowed = CustomItemRegistry_IsAgeAllowed;
+    api.IsCustomItemFormAllowed = CustomItemRegistry_IsFormAllowed;
     api.GetSlotItemCount = KaleidoItemManager_GetSlotItemCount;
     api.GetSlotItemAt = KaleidoItemManager_GetSlotItemAt;
     api.RegisterHookForIdByName = RegisterHookForIdByName;
@@ -519,18 +525,24 @@ void ModApi_Init() {
     AudioMix_Init();
     KaleidoItemManager_Init();
     KaleidoQuestManager_Init();
-    ModLayout_Init();
+    if (Ship::Context::GetRawInstance()->GetWindow() != nullptr) {
+        ModLayout_Init();
+    }
     PlayerInput_Init();
     FormRegistry_Init();
     VanillaItems_Init();
     TimeControl_Init();
     Timers_Init();
-    Microphone_Init();
+    if (Ship::Context::GetRawInstance()->GetWindow() != nullptr) {
+        Microphone_Init();
+    }
     BossRegistry_Init();
     DungeonRegistry_Init();
     ModNetwork_Init();
     ModLoader_LoadMods();
-    ModStore_Init();
+    if (Ship::Context::GetRawInstance()->GetWindow() != nullptr) {
+        ModStore_Init();
+    }
     DungeonRegistry_Load();
     RegisterRegistryDumpCommand();
     ModApi_WriteRegistry(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));

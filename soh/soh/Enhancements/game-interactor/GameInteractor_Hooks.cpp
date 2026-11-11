@@ -282,14 +282,14 @@ void GameInteractor_ExecuteOnActorUpdate(void* actor) {
     GameInteractor::Instance->ExecuteHooksForFilter<GameInteractor::OnActorUpdate>(actor);
 }
 
-bool GameInteractor_ExecuteOnActorTalk(Actor* actor, PlayState* play) {
+// continueVanilla is ignored: a refused talk would leave the player waiting for a textbox that never opens.
+void GameInteractor_ExecuteOnActorTalk(Actor* actor, PlayState* play) {
     bool continueVanilla = true;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnActorTalk>(actor, play, &continueVanilla);
     GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnActorTalk>(actor->id, actor, play, &continueVanilla);
     GameInteractor::Instance->ExecuteHooksForPtr<GameInteractor::OnActorTalk>((uintptr_t)actor, actor, play,
                                                                               &continueVanilla);
     GameInteractor::Instance->ExecuteHooksForFilter<GameInteractor::OnActorTalk>(actor, play, &continueVanilla);
-    return continueVanilla;
 }
 
 bool GameInteractor_ExecuteOnActorPlaySfx(Actor* actor, int32_t kind, uint16_t* sfxId) {

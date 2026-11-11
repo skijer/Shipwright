@@ -610,6 +610,23 @@ bool FormRegistry_IsActive(const char* key) {
     return key != nullptr && activeKey != nullptr && std::strcmp(activeKey, key) == 0;
 }
 
+const char* FormRegistry_GetCurrentKey(void) {
+    return sActiveForm == nullptr ? SOH_FORM_KEY_HUMAN : sActiveForm->key.c_str();
+}
+
+bool FormRegistry_IsCurrentFormIn(const char* const* formKeys, uint32_t formKeyCount) {
+    if (formKeys == nullptr || formKeyCount == 0) {
+        return true;
+    }
+    const char* currentKey = FormRegistry_GetCurrentKey();
+    for (uint32_t index = 0; index < formKeyCount; index++) {
+        if (std::strcmp(formKeys[index], currentKey) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void FormRegistry_SetCurrentMod(const std::string& name) {
     sCurrentMod = name;
 }

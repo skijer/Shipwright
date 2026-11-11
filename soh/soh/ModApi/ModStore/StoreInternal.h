@@ -17,7 +17,6 @@ enum class StoreModState {
     InstallsOnRestart,
     DisabledOnRestart,
     RemovedOnRestart,
-    Unavailable,
 };
 
 struct StoreView {

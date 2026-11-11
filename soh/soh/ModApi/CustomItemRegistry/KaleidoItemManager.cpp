@@ -74,63 +74,6 @@ std::string VanillaCellCvar(uint8_t slot) {
     return std::string(CVAR_CUSTOM_ITEM_MANAGER("Layout.vanilla.")) + std::to_string(slot) + ".Cell";
 }
 
-void DrawLayoutEditor(SaveContext*) {
-    if (!ImGui::BeginTabItem("Item Layout")) {
-        return;
-    }
-    ImGui::TextUnformatted("Page 0 is the first extra item page; slots are 1-24. Items sharing a slot form a wheel.");
-    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
-        const auto* definition = CustomItemRegistry_GetAt(index);
-        if (definition == nullptr || !CustomItemRegistry_IsEditorVisible(definition->key) ||
-            CustomItemRegistry_IsVanillaUpgrade(definition)) {
-            continue;
-        }
-        SOHCustomItemPlacement placement;
-        KaleidoItemManager_GetPlacement(definition->key, &placement);
-        ImGui::PushID(definition->key);
-        ImGui::TextUnformatted(definition->key);
-        int page = placement.page;
-        int slot = placement.slot + 1;
-        bool changed = ImGui::InputInt("Page", &page);
-        changed |= ImGui::SliderInt("Slot", &slot, 1, 24);
-        if (changed && page >= 0 && page <= UINT16_MAX) {
-            placement = { static_cast<uint16_t>(page), static_cast<uint8_t>(slot - 1) };
-            KaleidoItemManager_SetPlacement(definition->key, &placement);
-            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-        }
-        ImGui::PopID();
-    }
-    if (ImGui::TreeNode("Ocarina of Time items")) {
-        ImGui::TextUnformatted("Which cell of the vanilla grid each vanilla slot is drawn in. The inventory itself is "
-                               "not touched.");
-        for (uint8_t slot = 0; slot < 24; ++slot) {
-            ImGui::PushID(slot);
-            int cell = CVarGetInteger(VanillaCellCvar(slot).c_str(), slot) + 1;
-            if (ImGui::SliderInt(std::to_string(slot + 1).c_str(), &cell, 1, 24)) {
-                CVarSetInteger(VanillaCellCvar(slot).c_str(), cell - 1);
-                Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
-            }
-            ImGui::PopID();
-        }
-        ImGui::TreePop();
-    }
-    for (const auto& pool : sPools) {
-        if (ImGui::TreeNode(pool.key.c_str())) {
-            for (const auto& entry : pool.entries) {
-                if (entry.customKey.empty()) {
-                    ImGui::Text("Vanilla item: %u", entry.vanillaItem);
-                } else {
-                    if (CustomItemRegistry_IsEditorVisible(entry.customKey.c_str())) {
-                        ImGui::TextUnformatted(entry.customKey.c_str());
-                    }
-                }
-            }
-            ImGui::TreePop();
-        }
-    }
-    ImGui::EndTabItem();
-}
-
 std::string sDescribedItem;
 
 const SOHCustomItemDefinition* GetCursorItemDefinition(PlayState* play) {
@@ -417,7 +360,7 @@ void* ResolveInventoryIcon(const SOHCustomItemDefinition* definition) {
 }
 
 KaleidoCycleIcon GetWheelIcon(const SOHCustomItemDefinition* definition) {
-    return { ResolveInventoryIcon(definition), CustomItemRegistry_IsAgeAllowed(definition->key) };
+    return { ResolveInventoryIcon(definition), CustomItemRegistry_IsUsableNow(definition->key) };
 }
 
 void ResetShownPage() {
@@ -561,7 +504,7 @@ void* KaleidoItemManager_GetSlotIcon(uint8_t slot) {
 
 bool KaleidoItemManager_IsSlotAgeAllowed(uint8_t slot) {
     const SOHCustomItemDefinition* definition = GetShownSlotItem(slot);
-    return definition != nullptr && CustomItemRegistry_IsAgeAllowed(definition->key);
+    return definition != nullptr && CustomItemRegistry_IsUsableNow(definition->key);
 }
 
 bool KaleidoItemManager_CycleItemPage(PlayState* play) {

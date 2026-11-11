@@ -34,6 +34,9 @@ class SohMenu : public Ship::Menu {
     void DrawElement() override;
     void UpdateElement() override;
     void Draw() override;
+    std::string FleetMenuModel();
+    void FleetDrawWidget(const std::string& section, const std::string& sidebar, int column, int index);
+    void FleetDrawPage(const std::string& section, const std::string& sidebar);
 
     void AddSidebarEntry(std::string sectionName, std::string sidbarName, uint32_t columnCount);
     bool EnsureModSidebar(const std::string& section, const std::string& sidebar, const char* cvar, uint32_t columns);
@@ -52,6 +55,10 @@ class SohMenu : public Ship::Menu {
     static void UpdateLanguageMap(std::map<int32_t, const char*>& languageMap);
 
   private:
+    SidebarEntry* FindFleetPage(const std::string& section, const std::string& sidebar);
+    void PrepareFleetPage(const std::string& section, const std::string& sidebar);
+    bool CanFleetDrawWidget(const WidgetInfo& widget) const;
+
     char mGitCommitHashTruncated[8];
     bool mIsTaggedVersion;
     bool mMenuElementsInitialized = false;

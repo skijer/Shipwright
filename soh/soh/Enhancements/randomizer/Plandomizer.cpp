@@ -427,6 +427,11 @@ void PlandomizerItemImageCorrection(Rando::Item randoItem) {
     }
 }
 
+PlandomizerItemImage Plandomizer_GetItemImage(const Rando::Item& item) {
+    PlandomizerItemImageCorrection(item);
+    return { textureID, textureUV0, textureUV1, itemColor };
+}
+
 void PlandomizerRandomizeHint(int32_t status, int32_t index) {
     if (status == HINT_SINGLE) {
         plandoHintData[index].hintText =

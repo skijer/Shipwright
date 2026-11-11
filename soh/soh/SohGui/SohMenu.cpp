@@ -2,6 +2,10 @@
 #include <ship/Context.h>
 
 #include "SohMenu.h"
+#include <nlohmann/json.hpp>
+#include "soh/Fleet/FleetGame.h"
+#include <ship/window/Window.h>
+#include <ship/window/gui/Gui.h>
 
 extern "C" {
 extern PlayState* gPlayState;
@@ -213,7 +217,135 @@ void SohMenu::UpdateElement() {
     Ship::Menu::UpdateElement();
 }
 
+std::string SohMenu::FleetMenuModel() {
+    if (!mMenuElementsInitialized) {
+        return "null";
+    }
+    nlohmann::json sections = nlohmann::json::array();
+    for (const auto& name : menuOrder) {
+        const auto& section = menuEntries.at(name);
+        nlohmann::json sidebars = nlohmann::json::array();
+        for (const auto& label : section.sidebarOrder) {
+            if (label == "Search") {
+                continue;
+            }
+            const auto& sidebar = section.sidebars.at(label);
+            nlohmann::json widgets = nlohmann::json::array();
+            for (size_t column = 0; column < sidebar.columnWidgets.size(); column++) {
+                const auto& entries = sidebar.columnWidgets[column];
+                for (size_t index = 0; index < entries.size(); index++) {
+                    const auto& widget = entries[index];
+                    if (widget.type == WIDGET_SEARCH) {
+                        continue;
+                    }
+                    widgets.push_back({ { "name", widget.name }, { "cvar", widget.cVar ? widget.cVar : "" },
+                        { "tooltip", widget.options ? std::string(widget.options->tooltip) : "" },
+                        { "search", !widget.hideInSearch }, { "column", column }, { "index", index } });
+                }
+            }
+            sidebars.push_back({ { "name", label }, { "columns", sidebar.columnCount }, { "widgets", widgets } });
+        }
+        sections.push_back({ { "name", name }, { "sidebars", sidebars } });
+    }
+    return sections.dump();
+}
+
+SidebarEntry* SohMenu::FindFleetPage(const std::string& section, const std::string& sidebar) {
+    const auto entry = menuEntries.find(section);
+    if (entry == menuEntries.end()) {
+        return nullptr;
+    }
+    const auto side = entry->second.sidebars.find(sidebar);
+    return side != entry->second.sidebars.end() ? &side->second : nullptr;
+}
+
+// Fleet draws a page outside DrawElement: run what DrawElement runs first, once per page and frame.
+void SohMenu::PrepareFleetPage(const std::string& section, const std::string& sidebar) {
+    ImGui::SetCurrentContext(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetImGuiContext());
+    static std::map<std::pair<std::string, std::string>, int> updatedPages;
+    const int frame = ImGui::GetFrameCount();
+    auto& updatedFrame = updatedPages[std::make_pair(section, sidebar)];
+    if (updatedFrame != frame) {
+        updatedFrame = frame;
+        auto& updates = MenuInit::GetUpdateFuncs();
+        const auto sectionUpdates = updates.find(menuEntries.at(section).label);
+        if (sectionUpdates != updates.end()) {
+            const auto pageUpdates = sectionUpdates->second.find(sidebar);
+            if (pageUpdates != sectionUpdates->second.end()) {
+                for (auto& update : pageUpdates->second) {
+                    update();
+                }
+            }
+        }
+    }
+    static int previousFrame = -1;
+    if (previousFrame != frame) {
+        previousFrame = frame;
+        for (auto& [reason, info] : disabledMap) {
+            info.active = info.evaluation(info);
+        }
+        UpdateElement();
+    }
+}
+
+// A combobox whose CVar holds a value it no longer lists would assert inside ImGui.
+bool SohMenu::CanFleetDrawWidget(const WidgetInfo& widget) const {
+    if (widget.type != WIDGET_CVAR_COMBOBOX || widget.cVar == nullptr || widget.cVar[0] == '\0') {
+        return true;
+    }
+    const auto options = std::static_pointer_cast<UIWidgets::ComboboxOptions>(widget.options);
+    return options && options->comboMap.contains(CVarGetInteger(widget.cVar, options->defaultIndex));
+}
+
+void SohMenu::FleetDrawWidget(const std::string& section, const std::string& sidebar, int column, int index) {
+    SidebarEntry* page = FindFleetPage(section, sidebar);
+    if (page == nullptr || column < 0 || column >= static_cast<int>(page->columnWidgets.size())) {
+        return;
+    }
+    auto& widgets = page->columnWidgets[column];
+    if (index < 0 || index >= static_cast<int>(widgets.size())) {
+        return;
+    }
+    PrepareFleetPage(section, sidebar);
+    if (CanFleetDrawWidget(widgets[index])) {
+        MenuDrawItem(widgets[index], GetMenuThemeColor());
+    }
+}
+
+// The column block of DrawElement, so a page Fleet shows looks exactly as it does in Ship's own menu.
+void SohMenu::FleetDrawPage(const std::string& section, const std::string& sidebar) {
+    SidebarEntry* page = FindFleetPage(section, sidebar);
+    if (page == nullptr) {
+        return;
+    }
+    PrepareFleetPage(section, sidebar);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const size_t columns = ImGui::GetMainViewport()->WorkSize.x < 800 ? 1 : std::max<size_t>(page->columnCount, 1);
+    const bool useColumns = columns > 1;
+    const float columnWidth = (ImGui::GetContentRegionAvail().x - style.ItemSpacing.x * columns) / columns;
+    for (size_t column = 0; column < page->columnWidgets.size(); column++) {
+        if (useColumns) {
+            ImGui::BeginChild((sidebar + " Column " + std::to_string(column)).c_str(), { columnWidth, 0 },
+                              ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoTitleBar);
+        }
+        for (auto& widget : page->columnWidgets[column]) {
+            if (CanFleetDrawWidget(widget)) {
+                MenuDrawItem(widget, GetMenuThemeColor());
+            }
+        }
+        if (useColumns) {
+            ImGui::EndChild();
+        }
+        if (column + 1 < columns) {
+            ImGui::SameLine();
+        }
+    }
+}
+
 void SohMenu::Draw() {
+    if (FleetGame_IsHosted()) {
+        ImGui::SetCurrentContext(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetImGuiContext());
+    }
     Ship::Menu::Draw();
 }
 

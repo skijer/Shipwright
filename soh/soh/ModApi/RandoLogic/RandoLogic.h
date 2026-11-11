@@ -152,6 +152,12 @@ bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, co
 bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
                                  const std::function<bool()>& evaluate);
 bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, const std::function<bool()>& evaluate);
+
+namespace Rando {
+class Logic;
+}
+// Whether the Link that state describes can meet a mod item's age requirement and reach one of its forms.
+bool RandoLogic_CanMeetItemRestriction(Rando::Logic& state, int32_t randoGet);
 #endif
 
 #define LOGIC_MOD_GRANTS(name)                                                          \

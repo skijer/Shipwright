@@ -11,6 +11,7 @@
 #include <string>
 
 #include "soh/OTRGlobals.h"
+#include "soh/Fleet/FleetGame.h"
 #include <soh/Enhancements/item-tables/ItemTableManager.h>
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/cosmetics/CosmeticsEditor.h"
@@ -250,14 +251,25 @@ static bool SetPosHandler(std::shared_ptr<Ship::Console> Console, const std::vec
     return 0;
 }
 
-static bool ResetHandler(std::shared_ptr<Ship::Console> Console, std::vector<std::string> args, std::string* output) {
+extern "C" void Soh_ResetToTitle(void) {
     if (gGameState == nullptr) {
-        ERROR_MESSAGE("gGameState == nullptr");
-        return 1;
+        return;
     }
     SET_NEXT_GAMESTATE(gGameState, TitleSetup_Init, GameState);
     gGameState->running = false;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnExitGame>(gSaveContext.fileNum);
+}
+
+// Inside Fleet both games share one console, so the command resets whichever game is being played.
+static bool ResetHandler(std::shared_ptr<Ship::Console> Console, std::vector<std::string> args, std::string* output) {
+    if (FleetGame_ResetActiveGame()) {
+        return 0;
+    }
+    if (gGameState == nullptr) {
+        ERROR_MESSAGE("gGameState == nullptr");
+        return 1;
+    }
+    Soh_ResetToTitle();
     return 0;
 }
 

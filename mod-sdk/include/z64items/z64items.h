@@ -3,6 +3,8 @@
 
 #include "soh/ModApi/ModApi.h"
 
+#include <string.h>
+
 #define Z64ITEMS_MELEE_NONE 0
 #define Z64ITEMS_MELEE_MASTER_SWORD 1
 #define Z64ITEMS_MELEE_KOKIRI_SWORD 2
@@ -86,6 +88,23 @@ static inline void Z64Items_SetAge(SOHCustomItemDefinition* definition, SOHCusto
     definition->ageRequirement = (uint8_t)age;
 }
 
+// The game copies the keys when the item registers; until then the array must stay alive.
+static inline void Z64Items_SetAllowedForms(SOHCustomItemDefinition* definition, const char* const* formKeys,
+                                            uint32_t formKeyCount) {
+    definition->allowedForms = formKeys;
+    definition->allowedFormCount = formKeyCount;
+}
+
+static inline void Z64Items_SetEquipAge(SOHCustomEquipDefinition* definition, SOHCustomItemAge age) {
+    definition->ageRequirement = (uint8_t)age;
+}
+
+static inline void Z64Items_SetEquipAllowedForms(SOHCustomEquipDefinition* definition, const char* const* formKeys,
+                                                 uint32_t formKeyCount) {
+    definition->allowedForms = formKeys;
+    definition->allowedFormCount = formKeyCount;
+}
+
 static inline void Z64Items_SetReplaces(SOHCustomItemDefinition* definition, uint16_t vanillaItem) {
     definition->flags |= SOH_CUSTOM_ITEM_REPLACES_VANILLA;
     definition->replacesItem = vanillaItem;
@@ -110,6 +129,41 @@ static inline void Z64Items_SetLogic(SOHCustomItemDefinition* definition, const 
 
 static inline bool Z64Items_Register(const SOHModApi* api, const SOHCustomItemDefinition* definition) {
     return SOH_MOD_API_HAS(api, RegisterCustomItem) && api->RegisterCustomItem(definition);
+}
+
+// Saves own items, and seeds place them, by key: a renamed item keeps its old key registered and hidden. It stays a
+// randomizer item that never joins a pool, so an older seed can still place it; ownership moves to the new key.
+static inline bool Z64Items_RegisterLegacyKey(const SOHModApi* api, const SOHCustomItemDefinition* current,
+                                              const char* legacyKey) {
+    SOHCustomItemDefinition legacy = *current;
+    SOHCustomItemRandomizer placeableOnly;
+    legacy.key = legacyKey;
+    legacy.presentationFlags |= SOH_ITEM_HIDE_FROM_KALEIDO | SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
+    if (current->randomizer != NULL) {
+        placeableOnly = *current->randomizer;
+        placeableOnly.poolCount = 0;
+        placeableOnly.poolCountOption = NULL;
+        placeableOnly.poolSources = NULL;
+        placeableOnly.poolSourceCount = 0;
+        legacy.randomizer = &placeableOnly;
+    }
+    return Z64Items_Register(api, &legacy);
+}
+
+static inline void Z64Items_MigrateLegacyKey(const SOHModApi* api, const char* legacyKey, const char* key) {
+    if (legacyKey == NULL || !api->IsCustomItemOwned(legacyKey)) {
+        return;
+    }
+    api->SetCustomItemOwned(key, true);
+    api->SetCustomItemOwned(legacyKey, false);
+}
+
+// For an OnCustomItemOwnedChange hook: an old seed's item becomes the renamed one the moment it is received.
+static inline void Z64Items_ForwardLegacyKey(const SOHModApi* api, const char* changedKey, bool owned,
+                                             const char* legacyKey, const char* key) {
+    if (owned && legacyKey != NULL && strcmp(changedKey, legacyKey) == 0) {
+        Z64Items_MigrateLegacyKey(api, legacyKey, key);
+    }
 }
 
 // acquisitionKey is what the seed stores; itemKey must already be registered.

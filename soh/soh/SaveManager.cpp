@@ -12,6 +12,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #include "SaveManager.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/unbound/SceneDB.h"
 #include "OTRGlobals.h"
 #include "Enhancements/game-interactor/GameInteractor.h"
@@ -125,9 +126,19 @@ void SaveManager::ReadSaveFile(std::filesystem::path savePath, uintptr_t addr, v
     saveFile.close();
 }
 
+static std::filesystem::path SaveFolderPath() {
+    const char* fleetDirectory = FleetGame_GetSaveDirectory();
+    const std::filesystem::path sSavePath = fleetDirectory != nullptr
+        ? std::filesystem::path(fleetDirectory) / "Save"
+        : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory("Save"));
+    return sSavePath;
+}
+
 std::filesystem::path SaveManager::GetFileName(int fileNum) {
-    const std::filesystem::path sSavePath(Ship::Context::GetPathRelativeToAppDirectory("Save"));
-    return sSavePath / ("file" + std::to_string(fileNum + 1) + ".sav");
+    if (const char* file = FleetGame_GetSaveFilePath(fileNum, false)) {
+        return file;
+    }
+    return SaveFolderPath() / ("file" + std::to_string(fileNum + 1) + ".sav");
 }
 
 std::vector<RandomizerHint> Rando::StaticData::oldVerHintOrder{
@@ -561,7 +572,7 @@ void SaveManager::SaveRandomizer(const SaveContext& saveContext, int sectionID, 
 void SaveManager::Init() {
     // Wait on saves that snuck through the Wait in OnExitGame
     ThreadPoolWait();
-    const std::filesystem::path sSavePath(Ship::Context::GetPathRelativeToAppDirectory("Save"));
+    const std::filesystem::path sSavePath = SaveFolderPath();
     const std::filesystem::path sGlobalPath = sSavePath / std::string("global.sav");
     auto sOldSavePath = Ship::Context::GetPathRelativeToAppDirectory("oot_save.sav");
     auto sOldBackupSavePath = Ship::Context::GetPathRelativeToAppDirectory("oot_save.bak");
@@ -572,7 +583,7 @@ void SaveManager::Init() {
     }
 
     // If there is a lingering unversioned save, convert it
-    if (std::filesystem::exists(sOldSavePath)) {
+    if (FleetGame_GetSaveDirectory() == nullptr && std::filesystem::exists(sOldSavePath)) {
         ConvertFromUnversioned();
         std::filesystem::rename(sOldSavePath, sOldBackupSavePath);
     }
@@ -613,6 +624,13 @@ void SaveManager::Init() {
     for (int fileNum = 0; fileNum < MaxFiles; fileNum++) {
         if (std::filesystem::exists(GetFileName(fileNum))) {
             StartupCheckAndInitMeta(fileNum);
+        } else if (FleetGame_HasSaveSlot(fileNum)) {
+            auto& metadata = fileMetaInfo[fileNum];
+            metadata.valid = true;
+            metadata.quest = QUEST_RANDOMIZER;
+            metadata.health = metadata.healthCapacity = 0x30;
+            const uint8_t name[8] = { 0x15, 0x2C, 0x31, 0x2E, 0x3E, 0x3E, 0x3E, 0x3E };
+            std::copy(std::begin(name), std::end(name), metadata.playerName);
         }
     }
     saveBlock = nlohmann::json::object();
@@ -1351,7 +1369,7 @@ void SaveManager::SaveGlobal() {
     globalBlock["zTargetSetting"] = gSaveContext.zTargetSetting;
     globalBlock["language"] = gSaveContext.language;
 
-    const std::filesystem::path sSavePath(Ship::Context::GetPathRelativeToAppDirectory("Save"));
+    const std::filesystem::path sSavePath = SaveFolderPath();
     const std::filesystem::path sGlobalPath = sSavePath / std::string("global.sav");
 
     WriteFileSafely(sGlobalPath, globalBlock.dump(1));
@@ -2502,6 +2520,10 @@ void SaveManager::LoadStruct(const std::string& name, LoadStructFunc func) {
 }
 
 void SaveManager::CopyZeldaFile(int from, int to) {
+    if (FleetGame_ManageSave("copy", from, to)) {
+        fileMetaInfo[to] = fileMetaInfo[from];
+        return;
+    }
     assert(std::filesystem::exists(GetFileName(from)));
     DeleteZeldaFile(to);
 #if defined(__WIIU__) || defined(__SWITCH__)
@@ -2513,7 +2535,7 @@ void SaveManager::CopyZeldaFile(int from, int to) {
 }
 
 void SaveManager::DeleteZeldaFile(int fileNum) {
-    if (std::filesystem::exists(GetFileName(fileNum))) {
+    if (!FleetGame_ManageSave("erase", fileNum, -1) && std::filesystem::exists(GetFileName(fileNum))) {
         std::filesystem::remove(GetFileName(fileNum));
     }
     fileMetaInfo[fileNum].valid = false;

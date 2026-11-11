@@ -12310,7 +12310,9 @@ void Player_Update(Actor* thisx, PlayState* play) {
     Player* this = (Player*)thisx;
     s32 dogParams;
     s32 pad;
-    Input input;
+    // Static: sControlInput keeps pointing here after this update, and Player_StartTalking writes through it
+    // when an NPC calls play->talkWithPlayer from its own update.
+    static Input input;
 
     if (Player_UpdateNoclip(this, play)) {
         if (gSaveContext.dogParams < 0) {
@@ -12436,10 +12438,14 @@ void Player_Update(Actor* thisx, PlayState* play) {
         // Actor_PlaySfx_Flagged(&player->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
     }
 
+    // Item hooks must not act on C-Up during a conversation; the textbox updates later and still advances with it.
+    u16 hiddenFromHooks = 0;
     if (this->stateFlags1 & PLAYER_STATE1_TALKING) {
-        play->state.input[0].press.button &= ~BTN_CUP;
+        hiddenFromHooks = play->state.input[0].press.button & BTN_CUP;
     }
+    play->state.input[0].press.button &= ~hiddenFromHooks;
     GameInteractor_ExecuteOnPlayerUpdate();
+    play->state.input[0].press.button |= hiddenFromHooks;
 }
 
 typedef struct BunnyEarKinematics {

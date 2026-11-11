@@ -1,5 +1,6 @@
 #include "Network.h"
 #include <spdlog/spdlog.h>
+#include <ship/GameRegistry.h>
 
 // MARK: - Public
 
@@ -26,7 +27,11 @@ void Network::Enable(const char* host, uint16_t port) {
         receiveThread.join();
     }
 
-    receiveThread = std::thread(&Network::ReceiveFromServer, this);
+    // Inside Fleet a new thread has no game: the handshake must read this game's settings, not the active game's.
+    receiveThread = std::thread([this, game = Ship::GameRegistry::GetCurrent()] {
+        Ship::GameScope scope(game);
+        ReceiveFromServer();
+    });
 }
 
 void Network::Disable() {

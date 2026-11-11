@@ -13,9 +13,8 @@ extern PlayState* gPlayState;
 nlohmann::json Anchor::PrepRoomState() {
     nlohmann::json payload;
     payload["ownerClientId"] = ownClientId;
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 
-    if (isGlobalRoom) {
+    if (IsGlobalRoom()) {
         // Global room uses hardcoded settings
         payload["pvpMode"] = 0;
         payload["showLocationsMode"] = 0;

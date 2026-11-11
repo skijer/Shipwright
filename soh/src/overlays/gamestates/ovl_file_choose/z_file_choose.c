@@ -1,6 +1,8 @@
 ﻿#include "file_choose.h"
 
 #include <string.h>
+#include "soh/Fleet/FleetRuntimeBridge.h"
+#include "soh/Fleet/FleetGame.h"
 #include <stdio.h>
 
 #include "textures/title_static/title_static.h"
@@ -383,12 +385,14 @@ int retries = 0;
 bool fileSelectSpoilerFileLoaded = false;
 
 void FileChoose_UpdateRandomizer() {
-    if (Randomizer_IsGenerating() && generating == 0) {
+    const int fleetState = FleetGame_RandomizerGenerationState();
+    const bool isGenerating = fleetState == 1 || Randomizer_IsGenerating();
+    if (isGenerating && generating == 0) {
         generating = 1;
         Audio_PlaySequenceWithSeqPlayerIO(SEQ_PLAYER_BGM_MAIN, NA_BGM_HORSE, 0, 7, 1);
         return;
-    } else if (!Randomizer_IsGenerating() && generating) {
-        if (Randomizer_IsSeedGenerated()) {
+    } else if (!isGenerating && generating) {
+        if (fleetState == 2 || Randomizer_IsSeedGenerated()) {
             Audio_PlayFanfare(NA_BGM_HORSE_GOAL);
             retries = 0;
         } else {
@@ -444,6 +448,9 @@ static s16 sLastFileChooseButtonIndex;
  * Update function for `CM_MAIN_MENU`
  */
 void FileChoose_UpdateMainMenu(GameState* thisx) {
+    if (FleetGame_FileSelect()) {
+        return;
+    }
     static u8 emptyName[] = { 0x3E, 0x3E, 0x3E, 0x3E, 0x3E, 0x3E, 0x3E, 0x3E };
     static u8 emptyNameNES[] = { 0xDF, 0xDF, 0xDF, 0xDF, 0xDF, 0xDF, 0xDF, 0xDF };
     static u8 linkName[] = { 0x15, 0x2C, 0x31, 0x2E, 0x3E, 0x3E, 0x3E, 0x3E };
@@ -463,6 +470,9 @@ void FileChoose_UpdateMainMenu(GameState* thisx) {
 
     if (CHECK_BTN_ALL(input->press.button, BTN_START) || CHECK_BTN_ALL(input->press.button, BTN_A)) {
         if (this->buttonIndex <= FS_BTN_MAIN_FILE_3) {
+            if (FleetGame_SelectFile(this->buttonIndex)) {
+                return;
+            }
             if (!Save_GetSaveMetaInfo(this->buttonIndex)->valid) {
                 Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                      &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
@@ -846,6 +856,9 @@ void FileChoose_UpdateQuestMenu(GameState* thisx) {
 }
 
 void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
+    if (FleetGame_FileSelect()) {
+        return;
+    }
     FileChoose_UpdateStickDirectionPromptAnim(thisx);
     FileChooseContext* this = (FileChooseContext*)thisx;
     Input* input = &this->state.input[0];
@@ -869,6 +882,12 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
 
     if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
         if (this->randomizerIndex == RSM_START_RANDOMIZER) {
+            if (FleetGame_HasGeneratedSeed(this->buttonIndex)) {
+                Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                     &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                FileChoose_StartNameEntryFromMenu(this);
+                return;
+            }
             if (Randomizer_IsSeedGenerated() || Randomizer_IsSpoilerLoaded()) {
                 SohFileSelect_ShowPresetModal();
                 Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
@@ -879,8 +898,14 @@ void FileChoose_UpdateRandomizerMenu(GameState* thisx) {
                 Sfx_PlaySfxCentered(NA_SE_SY_OCARINA_ERROR);
             }
         } else if (this->randomizerIndex == RSM_GENERATE_RANDOMIZER) {
+            if (FleetGame_GenerateRandomizer(this->buttonIndex)) {
+                return;
+            }
             Randomizer_GenerateRandomizer();
         } else if (this->randomizerIndex == RSM_OPEN_RANDOMIZER_SETTINGS) {
+            if (FleetGame_ConfigureRandomizer(this->buttonIndex)) {
+                return;
+            }
             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                  &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
             Randomizer_ShowRandomizerMenu();
@@ -2040,7 +2065,8 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
 
             // If no randomizer is loaded and text is "start randomizer" or when a seed is generating, make all options
             // gray.
-            if ((index == RSM_START_RANDOMIZER && !Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded()) ||
+            if ((index == RSM_START_RANDOMIZER && !FleetGame_HasGeneratedSeed(this->buttonIndex) &&
+                 !Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded()) ||
                 generating) {
                 textColorR = textColorG = textColorB = 100;
             }
@@ -2057,7 +2083,7 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
 
         // If no randomizer is generated and "start randomizer" is selected, show text to explain why user can't start
         // the randomizer.
-        if (!Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded() &&
+        if (!FleetGame_HasGeneratedSeed(this->buttonIndex) && !Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded() &&
             this->randomizerIndex == RSM_START_RANDOMIZER) {
             Interface_DrawTextLine(this->state.gfxCtx,
                                    SohFileSelect_GetSettingText(RSM_NO_RANDOMIZER_GENERATED, language), 70, (80 + 64),
@@ -2704,36 +2730,8 @@ void FileChoose_FadeOut(GameState* thisx) {
  * Note: On Debug ROM, File 1 will go to Map Select.
  * Update function for `SM_LOAD_GAME`
  */
-void FileChoose_LoadGame(GameState* thisx) {
-    FileChooseContext* this = (FileChooseContext*)thisx;
-    u16 swordEquipValue;
-    s32 pad;
-
-    Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
-    gSaveContext.fileNum = this->buttonIndex;
-    gSaveContext.gameMode = GAMEMODE_NORMAL;
-    Randomizer_WaitForGeneration();
-
-    if ((this->buttonIndex == FS_BTN_SELECT_FILE_1 &&
-         Ship_QuestDebugEnabled(Save_GetSaveMetaInfo(this->buttonIndex)->quest)) ||
-        this->buttonIndex == 0xFF) {
-        if (this->buttonIndex == 0xFF) {
-            Sram_InitDebugSave();
-        } else {
-            Sram_OpenSave();
-        }
-        SET_NEXT_GAMESTATE(&this->state, Select_Init, SelectContext);
-    } else {
-        if (this->buttonIndex == 0xFE) {
-            Sram_InitBossRushSave();
-        } else {
-            Sram_OpenSave();
-        }
-        SET_NEXT_GAMESTATE(&this->state, Play_Init, PlayState);
-    }
-
-    this->state.running = false;
+void FileChoose_PrepareLoadedSave(GameState* state) {
+    state->running = false;
 
     gSaveContext.respawn[0].entranceIndex = ENTR_LOAD_OPENING;
     gSaveContext.respawnFlag = 0;
@@ -2781,6 +2779,43 @@ void FileChoose_LoadGame(GameState* thisx) {
     gSaveContext.naviTimer = 0;
 
     GameInteractor_ExecuteOnLoadGame(gSaveContext.fileNum);
+    int32_t fleetRecovery = FleetRuntime_RecoveryEntrance();
+    if (fleetRecovery >= 0) {
+        gSaveContext.entranceIndex = fleetRecovery;
+        gSaveContext.cutsceneIndex = 0;
+    }
+}
+
+void FileChoose_LoadGame(GameState* thisx) {
+    FileChooseContext* this = (FileChooseContext*)thisx;
+    u16 swordEquipValue;
+    s32 pad;
+
+    Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    gSaveContext.fileNum = this->buttonIndex;
+    gSaveContext.gameMode = GAMEMODE_NORMAL;
+    Randomizer_WaitForGeneration();
+
+    if ((this->buttonIndex == FS_BTN_SELECT_FILE_1 &&
+         Ship_QuestDebugEnabled(Save_GetSaveMetaInfo(this->buttonIndex)->quest)) ||
+        this->buttonIndex == 0xFF) {
+        if (this->buttonIndex == 0xFF) {
+            Sram_InitDebugSave();
+        } else {
+            Sram_OpenSave();
+        }
+        SET_NEXT_GAMESTATE(&this->state, Select_Init, SelectContext);
+    } else {
+        if (this->buttonIndex == 0xFE) {
+            Sram_InitBossRushSave();
+        } else {
+            Sram_OpenSave();
+        }
+        SET_NEXT_GAMESTATE(&this->state, Play_Init, PlayState);
+    }
+
+    FileChoose_PrepareLoadedSave(&this->state);
 }
 
 static void (*gSelectModeUpdateFuncs[])(GameState*) = {

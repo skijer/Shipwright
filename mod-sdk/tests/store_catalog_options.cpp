@@ -10,7 +10,9 @@ int main() {
         "mods": {
             "masks": {
                 "name": "Masks", "author": "Author and contributors", "owner": "author",
-                "builds": {}, "dependency_only": true,
+                "build": {"file": "masks.o2r", "url": "https://example.invalid/masks.o2r", "size": 1,
+                          "hash": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"},
+                "dependency_only": true,
                 "options": [
                     {"id": "blast", "name": "Blast Mask", "cvar": "gCheats.InfiniteHealth"},
                     {"id": "blast", "name": "Duplicate"},
@@ -20,7 +22,8 @@ int main() {
                     null
                 ]
             },
-            "private": {"listed": false, "builds": {}}
+            "private": {"listed": false},
+            "unbuilt": {"name": "No build"}
         },
         "packs": [
             {"id": "mm-items", "name": "MM Items", "version": "2.4", "mods": ["masks", "masks", "private", "missing"]},
@@ -34,11 +37,10 @@ int main() {
   assert(mod.options.size() == 2);
   assert(mod.options[0].id == "blast");
   assert(mod.options[1].name == "Stone Mask");
+  assert(catalog->mods.count("unbuilt") == 0);
+  assert(mod.build.file == "masks.o2r");
   assert(catalog->packs.size() == 1);
   assert(catalog->packs[0].mods == std::vector<std::string>{"masks"});
-  const auto legacy =
-      ModStore_ParseCatalog(R"({"format":1,"mods":{"old":{"builds":{}}}})");
-  assert(legacy && legacy->mods.at("old").options.empty());
   const auto packs = ModStore_DefaultPacks();
   assert(packs.size() == 8);
   const size_t expectedCounts[] = {3, 28, 20, 3, 9, 5, 6, 3};
@@ -54,5 +56,5 @@ int main() {
   assert(members.size() == 77);
   assert(std::find(packs[2].mods.begin(), packs[2].mods.end(), "four_sword") != packs[2].mods.end());
   assert(std::find(packs[7].mods.begin(), packs[7].mods.end(), "ray_gun") != packs[7].mods.end());
-  std::cout << "Store catalog options and legacy compatibility passed\n";
+  std::cout << "Store catalog options passed\n";
 }

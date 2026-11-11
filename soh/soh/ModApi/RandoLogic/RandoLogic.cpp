@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <list>
 #include <string>
 #include <unordered_map>
@@ -13,6 +14,9 @@
 #include "soh/Enhancements/randomizer/entrance.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
 
 bool gRandoLogicHasCapabilityGrants = false;
 bool gRandoLogicHasItemGrants = false;
@@ -568,6 +572,63 @@ bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, 
     entry.condition = &condition;
     EntryScope scope(entry);
     return ResolveEvent(logicEvent, evaluate());
+}
+
+namespace {
+
+bool IsAgeMet(const Rando::Logic& state, uint8_t ageRequirement) {
+    switch (ageRequirement) {
+        case SOH_CUSTOM_ITEM_AGE_ANY:
+            return true;
+        case SOH_CUSTOM_ITEM_AGE_CHILD:
+            return state.IsChild;
+        case SOH_CUSTOM_ITEM_AGE_ADULT:
+            return state.IsAdult;
+        default:
+            return false;
+    }
+}
+
+// A form is reachable once the item that turns Link into it is; a form that is not registered never is.
+bool IsFormReachable(Rando::Logic& state, const char* formKey) {
+    if (std::strcmp(formKey, SOH_FORM_KEY_HUMAN) == 0) {
+        return true;
+    }
+    const SOHFormDefinition* form = FormRegistry_Find(formKey);
+    if (form == nullptr) {
+        return false;
+    }
+    if (form->item == nullptr) {
+        return true;
+    }
+    const int32_t formItem = RandoItems_GetRandoGet(form->item);
+    if (!RandoItems_IsModItem(formItem)) {
+        return CustomItemRegistry_IsOwned(form->item);
+    }
+    return state.HasItem(static_cast<RandomizerGet>(formItem));
+}
+
+bool IsAnyAllowedFormReachable(Rando::Logic& state, const SOHCustomItemDefinition& definition) {
+    if (definition.allowedFormCount == 0) {
+        return true;
+    }
+    for (uint32_t index = 0; index < definition.allowedFormCount; index++) {
+        if (IsFormReachable(state, definition.allowedForms[index])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+// A randomizer item with no custom item definition (a host item) carries no restriction.
+bool RandoLogic_CanMeetItemRestriction(Rando::Logic& state, int32_t randoGet) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(RandoItems_GetKey(randoGet));
+    if (definition == nullptr) {
+        return true;
+    }
+    return IsAgeMet(state, definition->ageRequirement) && IsAnyAllowedFormReachable(state, *definition);
 }
 
 bool RandoLogic_CanUseItem(int32_t randoGet) {

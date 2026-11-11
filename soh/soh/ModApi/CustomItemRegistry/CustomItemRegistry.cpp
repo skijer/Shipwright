@@ -25,6 +25,8 @@
 #include "soh/ModApi/ConsoleArguments.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/ModApi/Forms/FormModel.h"
+#include "soh/ModApi/Forms/FormKeyList.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
@@ -72,6 +74,7 @@ struct RegisteredCustomItem {
     std::string poolCountOption;
     std::string poolModeOption;
     std::vector<int32_t> poolSources;
+    FormKeyList allowedForms;
     SOHCustomItemRandomizer randomizer = {};
     SOHCustomItemDefinition definition = {};
     uint16_t runtimeId = 0;
@@ -649,6 +652,19 @@ bool IsValidDefinition(const SOHCustomItemDefinition* definition) {
     return true;
 }
 
+// Reads the host's copy, where a definition older than these fields left them zeroed.
+bool StoreAllowedForms(RegisteredCustomItem& item) {
+    SOHCustomItemDefinition& definition = item.definition;
+    if (!FormKeyList::IsValid(definition.allowedForms, definition.allowedFormCount)) {
+        SPDLOG_ERROR("[CustomItemRegistry] Custom item '{}' supplied an invalid form list", item.key);
+        return false;
+    }
+    item.allowedForms.Assign(definition.allowedForms, definition.allowedFormCount);
+    definition.allowedForms = item.allowedForms.Data();
+    definition.allowedFormCount = item.allowedForms.Count();
+    return true;
+}
+
 } // namespace
 
 static void DrawOtherPlayerAppearance(PlayState* play, Player* player, int32_t limbIndex);
@@ -696,6 +712,9 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     SetString(item->definition.getItemModelPath, item->getItemModelPath, item->definition.getItemModelPath);
     SetString(item->definition.firstPersonModelPath, item->firstPersonModelPath, item->definition.firstPersonModelPath);
     SetString(item->definition.appearance.modelPath, item->appearanceModelPath, item->definition.appearance.modelPath);
+    if (!StoreAllowedForms(*item)) {
+        return false;
+    }
     ApplyDataDrivenDefaults(item->definition);
     item->definition.randomizer = nullptr;
 
@@ -857,9 +876,19 @@ bool CustomItemRegistry_IsAgeAllowed(const char* key) {
     }
 }
 
+bool CustomItemRegistry_IsFormAllowed(const char* key) {
+    const auto* definition = CustomItemRegistry_Find(key);
+    return definition != nullptr &&
+           FormRegistry_IsCurrentFormIn(definition->allowedForms, definition->allowedFormCount);
+}
+
+bool CustomItemRegistry_IsUsableNow(const char* key) {
+    return CustomItemRegistry_IsAgeAllowed(key) && CustomItemRegistry_IsFormAllowed(key);
+}
+
 bool CustomItemRegistry_IsPauseItemAgeAllowed(void) {
     const auto* definition = CustomItemRegistry_GetPauseItem();
-    return definition != nullptr && CustomItemRegistry_IsAgeAllowed(definition->key);
+    return definition != nullptr && CustomItemRegistry_IsUsableNow(definition->key);
 }
 
 bool CustomItemRegistry_SetOwned(const char* key, bool owned) {
@@ -958,7 +987,7 @@ std::vector<std::string> CustomItemRegistry_ListWorn() {
 bool CustomItemRegistry_Equip(uint8_t button, const char* key) {
     const auto* definition = CustomItemRegistry_Find(key);
     if (button >= ButtonCount || definition == nullptr || CustomItemRegistry_IsVanillaUpgrade(definition) ||
-        !CustomItemRegistry_IsOwned(key) || !CustomItemRegistry_IsAgeAllowed(key) ||
+        !CustomItemRegistry_IsOwned(key) || !CustomItemRegistry_IsUsableNow(key) ||
         (definition->flags & SOH_CUSTOM_ITEM_EQUIPPABLE) == 0) {
         return false;
     }
@@ -1011,7 +1040,7 @@ bool CustomItemRegistry_PressButtonItem(PlayState* play, Player* player, uint8_t
     const SOHCustomItemDefinition* definition = item == ITEM_CUSTOM
                                                     ? CustomItemRegistry_Find(CustomItemRegistry_GetEquippedKey(button))
                                                     : CustomItemRegistry_FindReplacement(item);
-    if (definition == nullptr || !CustomItemRegistry_IsAgeAllowed(definition->key) ||
+    if (definition == nullptr || !CustomItemRegistry_IsUsableNow(definition->key) ||
         (definition->canUse != nullptr && !definition->canUse(player, play))) {
         return false;
     }
@@ -1294,8 +1323,9 @@ bool CustomItemRegistry_Give(PlayState* play, const char* key) {
     if (IS_RANDO &&
         SkipCustomGetItem(CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
                           definition->getItemEntry.getItemCategory)) {
-        if (!CanReceiveFastCustomItem(play))
+        if (!CanReceiveFastCustomItem(play)) {
             return false;
+        }
         GetItemEntry entry = definition->getItemEntry;
         return CustomItemRegistry_ReceiveFastGetItem(nullptr, play, &entry);
     }
@@ -1338,10 +1368,11 @@ static const SOHCustomItemDefinition* ResolveCustomGetItemDefinition(Actor* acto
     const char* key = actor != nullptr ? CustomItemRegistry_GetActorItem(actor) : nullptr;
     if (key == nullptr) {
         const SOHCustomItemDefinition* named = CustomItemRegistry_FindByRuntimeId(entry->tableId);
-        if (named != nullptr)
+        if (named != nullptr) {
             key = named->key;
-        else if (allowPending && !sPendingGetItem.empty())
+        } else if (allowPending && !sPendingGetItem.empty()) {
             key = sPendingGetItem.c_str();
+        }
     }
     if (const char* progressive = ProgressiveItems_ResolvePickup(key, UINT16_MAX)) {
         key = progressive;
@@ -1370,8 +1401,9 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
         return true;
     }
     const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry);
-    if (definition == nullptr)
+    if (definition == nullptr) {
         return false;
+    }
     sPendingGetItem = definition->key;
     sMessageItem = definition->key;
     *entry = definition->getItemEntry;
@@ -1379,19 +1411,22 @@ bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEnt
 }
 
 bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry) {
-    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry))
+    if (play == nullptr || !CustomItemRegistry_IsCustomGetItem(entry)) {
         return false;
+    }
     const auto* definition = ResolveCustomGetItemDefinition(actor, play, entry, false);
-    if (definition == nullptr)
+    if (definition == nullptr) {
         return false;
+    }
     // Freeze the received stage before its callback advances progression. Never call
     // Item_Give(ITEM_CUSTOM), whose native ID cannot identify a custom pickup.
     *entry = definition->getItemEntry;
     CustomItemRegistry_ReceiveGetItem(definition->key);
     GameInteractor_ExecuteOnItemReceiveHooks(*entry);
     const char* label = definition->displayName;
-    if (label == nullptr || label[0] == '\0')
+    if (label == nullptr || label[0] == '\0') {
         label = definition->key;
+    }
     std::string prefix = gSaveContext.language == LANGUAGE_FRA   ? "Vous obtenez: "
                          : gSaveContext.language == LANGUAGE_GER ? "Du erhältst: "
                                                                  : "You found ";

@@ -45,4 +45,13 @@ typedef enum PlandoHints {
     HINT_ALL,
 } PlandoHints;
 
+struct PlandomizerItemImage {
+    ImTextureID texture;
+    ImVec2 uv0;
+    ImVec2 uv1;
+    ImVec4 tint;
+};
+
+PlandomizerItemImage Plandomizer_GetItemImage(const Rando::Item& item);
+
 #endif

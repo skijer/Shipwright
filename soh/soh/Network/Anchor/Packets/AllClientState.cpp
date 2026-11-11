@@ -17,7 +17,7 @@
 
 void Anchor::HandlePacket_AllClientState(nlohmann::json payload) {
     std::vector<AnchorClient> newClients = payload["state"].get<std::vector<AnchorClient>>();
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
+    const bool isGlobalRoom = IsGlobalRoom();
 
     // add new clients
     for (auto& client : newClients) {

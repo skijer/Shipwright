@@ -1,5 +1,6 @@
 #include "FleetCrossDungeon.h"
 
+#include <array>
 #include <map>
 #include <optional>
 #include <set>
@@ -170,7 +171,8 @@ std::map<int32_t, InteriorKind> PhysicalInteriorKinds(const PoolOptions& options
     };
     for (const auto& pair : Rando::GetEntranceShuffleTable()) {
         const auto& source = pair.first;
-        const bool ingress = pair.second.index >= 0 && source.index != ENTR_HAPPY_MASK_SHOP_0 && IsInteriorEntrance(source);
+        const bool ingress =
+            pair.second.index >= 0 && source.index != ENTR_HAPPY_MASK_SHOP_0 && IsInteriorEntrance(source);
         const InteriorKind kind = ingress ? InteriorKindForEntrance(source.index) : InteriorKind::Passage;
         record(source.index,
                options.legacyInteriors && kind == InteriorKind::ShopPassage ? InteriorKind::Passage : kind);
@@ -179,10 +181,19 @@ std::map<int32_t, InteriorKind> PhysicalInteriorKinds(const PoolOptions& options
     return kinds;
 }
 
+// Link spawns inside these. Routed into the other game, whose logic stays closed until the portal opens, the
+// start would hold a handful of checks and need an ocarina warp to leave; the fill dead-ends on the buttons.
+bool IsSpawnInterior(int32_t entrance) {
+    return entrance == ENTR_LINKS_HOUSE_1 || entrance == ENTR_TEMPLE_OF_TIME_ENTRANCE;
+}
+
 std::optional<Pool> PoolFor(const Rando::EntranceLinkInfo& entry, bool includeGanon, const PoolOptions& options,
                             const std::map<int32_t, InteriorKind>& physicalKinds) {
-    const bool dungeon = entry.type == Rando::EntranceType::Dungeon ||
-                         (includeGanon && entry.type == Rando::EntranceType::GanonDungeon);
+    if (IsSpawnInterior(entry.index)) {
+        return std::nullopt;
+    }
+    const bool dungeon =
+        entry.type == Rando::EntranceType::Dungeon || (includeGanon && entry.type == Rando::EntranceType::GanonDungeon);
     if (options.dungeons && dungeon) {
         return Pool::Dungeon;
     }
@@ -206,7 +217,8 @@ std::optional<Pool> PoolFor(const Rando::EntranceLinkInfo& entry, bool includeGa
 
 std::vector<Dungeon> BaseCatalogue(bool includeGanon, const PoolOptions& options,
                                    const std::map<int32_t, int32_t>& overrides) {
-    const bool needsPhysicalKinds = !options.interiors && (options.doorInteriors || (options.legacyInteriors && options.shops));
+    const bool needsPhysicalKinds =
+        !options.interiors && (options.doorInteriors || (options.legacyInteriors && options.shops));
     const std::map<int32_t, InteriorKind> physicalKinds =
         needsPhysicalKinds ? PhysicalInteriorKinds(options, overrides) : std::map<int32_t, InteriorKind>{};
     std::vector<Dungeon> base;
@@ -244,11 +256,61 @@ const std::map<int32_t, int32_t>& BlueWarpExits() {
     return warps;
 }
 
+struct BossRoom {
+    int32_t entrance;
+    int32_t blueWarp;
+    LogicVal cleared;
+    const char* owner;
+};
+
+// Boss ids 0-7 are Ship's in Fleet's shared numbering; MM owns 8-11.
+constexpr std::array<BossRoom, 8> kBossRooms = { {
+    { ENTR_DEKU_TREE_BOSS_ENTRANCE, ENTR_KOKIRI_FOREST_DEKU_TREE_BLUE_WARP, LOGIC_DEKU_TREE_CLEAR, "oot:deku-tree" },
+    { ENTR_DODONGOS_CAVERN_BOSS_ENTRANCE, ENTR_DEATH_MOUNTAIN_TRAIL_DODONGO_BLUE_WARP, LOGIC_DODONGOS_CAVERN_CLEAR,
+      "oot:dodongos-cavern" },
+    { ENTR_JABU_JABU_BOSS_ENTRANCE, ENTR_ZORAS_FOUNTAIN_JABU_JABU_BLUE_WARP, LOGIC_JABU_JABUS_BELLY_CLEAR,
+      "oot:jabu-jabu" },
+    { ENTR_FOREST_TEMPLE_BOSS_ENTRANCE, ENTR_SACRED_FOREST_MEADOW_FOREST_TEMPLE_BLUE_WARP, LOGIC_FOREST_TEMPLE_CLEAR,
+      "oot:forest-temple" },
+    { ENTR_FIRE_TEMPLE_BOSS_ENTRANCE, ENTR_DEATH_MOUNTAIN_CRATER_FIRE_TEMPLE_BLUE_WARP, LOGIC_FIRE_TEMPLE_CLEAR,
+      "oot:fire-temple" },
+    { ENTR_WATER_TEMPLE_BOSS_ENTRANCE, ENTR_LAKE_HYLIA_WATER_TEMPLE_BLUE_WARP, LOGIC_WATER_TEMPLE_CLEAR,
+      "oot:water-temple" },
+    { ENTR_SPIRIT_TEMPLE_BOSS_ENTRANCE, ENTR_DESERT_COLOSSUS_SPIRIT_TEMPLE_BLUE_WARP, LOGIC_SPIRIT_TEMPLE_CLEAR,
+      "oot:spirit-temple" },
+    { ENTR_SHADOW_TEMPLE_BOSS_ENTRANCE, ENTR_GRAVEYARD_SHADOW_TEMPLE_BLUE_WARP, LOGIC_SHADOW_TEMPLE_CLEAR,
+      "oot:shadow-temple" },
+} };
+
+int32_t BossDoorExit(int32_t entrance) {
+    for (const auto& pair : Rando::GetEntranceShuffleTable()) {
+        if (pair.first.index == entrance) {
+            return pair.second.index;
+        }
+    }
+    throw std::logic_error("boss entrance missing from Ship's entrance table");
+}
+
+// The arena's blue warp leaves to wherever native ER already sends this boss door's dungeon.
+void AppendBossRooms(std::vector<Dungeon>& catalogue, const std::map<int32_t, int32_t>& overrides) {
+    for (size_t boss = 0; boss < kBossRooms.size(); boss++) {
+        const BossRoom& room = kBossRooms[boss];
+        const int32_t exit = BossDoorExit(room.entrance);
+        Dungeon arena{ std::string("boss:") + room.owner,
+                       { kShip, room.entrance },
+                       { kShip, exit },
+                       { kShip, ResolveNativeIndex(exit, exit, overrides) } };
+        arena.pool = Pool::Boss;
+        arena.boss = static_cast<int>(boss);
+        arena.owner = room.owner;
+        arena.escapeExits = { { kShip, room.blueWarp } };
+        arena.warpReturn = Endpoint{ kShip, ResolveNativeIndex(room.blueWarp, room.blueWarp, overrides) };
+        catalogue.push_back(std::move(arena));
+    }
+}
+
 // Dungeons compose with their blue warps first; every other portal returns where native ER sends its exit.
 nlohmann::json Catalogue(bool includeGanon, const std::map<int32_t, int32_t>& overrides, const PoolOptions& options) {
-    if (options.bosses) {
-        throw std::invalid_argument("cross-game boss entrances are not served by Ship yet");
-    }
     std::vector<Dungeon> catalogue = BaseCatalogue(includeGanon, options, overrides);
     std::vector<Dungeon> dungeons;
     for (const Dungeon& entry : catalogue) {
@@ -264,6 +326,9 @@ nlohmann::json Catalogue(bool includeGanon, const std::map<int32_t, int32_t>& ov
         } else {
             entry.returnTo.index = ResolveNativeIndex(entry.exit.index, entry.exit.index, overrides);
         }
+    }
+    if (options.bosses) {
+        AppendBossRooms(catalogue, overrides);
     }
     Validate(catalogue);
     nlohmann::json out = nlohmann::json::array();
@@ -289,7 +354,8 @@ nlohmann::json FleetCrossDungeon_DumpCatalogue(const nlohmann::json& options) {
 nlohmann::json FleetCrossDungeon_DumpCatalogueForSeed(const nlohmann::json& spoiler) {
     const int dungeonSetting =
         spoiler.at("oot").at("settings").value(CVAR_RANDOMIZER_SETTING("ShuffleDungeonsEntrances"), 0);
-    if (dungeonSetting < RO_DUNGEON_ENTRANCE_SHUFFLE_OFF || dungeonSetting > RO_DUNGEON_ENTRANCE_SHUFFLE_ON_PLUS_GANON) {
+    if (dungeonSetting < RO_DUNGEON_ENTRANCE_SHUFFLE_OFF ||
+        dungeonSetting > RO_DUNGEON_ENTRANCE_SHUFFLE_ON_PLUS_GANON) {
         throw std::invalid_argument("invalid native dungeon shuffle setting");
     }
     std::map<int32_t, int> knownTypes;
@@ -320,6 +386,11 @@ void FleetCrossDungeon_SetSeed(const nlohmann::json& seed) {
             }
         }
     }
+    for (const Passage& passage : DecodePassages(seed)) {
+        if (passage.from.game == kShip && !known.contains(passage.from.index)) {
+            throw std::invalid_argument("cross-game passage names unknown OoT entrance");
+        }
+    }
     sState.Install(seed);
     Rando::SetConnectedRegionOverride(RerouteDuringSearch);
 }
@@ -346,15 +417,37 @@ nlohmann::json FleetCrossDungeon_GetExits() {
             exits.push_back(EndpointJson(route->to));
         }
     }
+    for (const Passage& passage : sState.passages) {
+        const auto region = sRegions.find(passage.from.index);
+        if (passage.from.game != kShip || region == sRegions.end()) {
+            continue;
+        }
+        Region* area = RegionTable(region->second);
+        if (area->Child() || area->Adult()) {
+            exits.push_back(EndpointJson(passage.to));
+        }
+    }
     logic->CurrentRegionKey = previousRegion;
     sSearching = previousSearching;
     RestoreDungeonRules(dungeonRule);
     return exits;
 }
 
+// Physical kills in Ship's arenas, read from the last search; Fleet maps them to the doors that led there.
+uint16_t FleetCrossDungeon_GetBossDefeated() {
+    const auto logic = Rando::Context::GetInstance()->GetLogic();
+    uint16_t defeated = 0;
+    for (size_t boss = 0; boss < kBossRooms.size(); boss++) {
+        if (logic->Get(kBossRooms[boss].cleared)) {
+            defeated |= 1u << boss;
+        }
+    }
+    return defeated;
+}
+
 // Without routes this only marks the search, so native baseline probes ignore the playing slot as well.
 FleetCrossDungeonSearch::FleetCrossDungeonSearch() : mPreviousSearching(sSearching) {
-    if (!sState.routes.empty()) {
+    if (sState.HasLinks()) {
         IndexRegions();
         for (int32_t index : sState.arrivals) {
             if (!sRegions.contains(index)) {

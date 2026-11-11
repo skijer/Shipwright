@@ -146,7 +146,7 @@ void* KaleidoEquipManager_GetCellIcon(uint8_t row, uint8_t column) {
 
 bool KaleidoEquipManager_IsCellAgeAllowed(uint8_t row, uint8_t column) {
     const SOHCustomEquipDefinition* claim = FindClaim(row, column);
-    return claim != nullptr && CustomEquipRegistry_IsAgeAllowed(claim->key);
+    return claim != nullptr && CustomEquipRegistry_IsUsableNow(claim->key);
 }
 
 bool KaleidoEquipManager_IsCellEquipped(uint8_t row, uint8_t column) {
@@ -163,7 +163,7 @@ bool KaleidoEquipManager_EquipCell(PlayState* play, uint8_t row, uint8_t column)
     if (claim == nullptr) {
         return false;
     }
-    if (!CustomEquipRegistry_IsAgeAllowed(claim->key)) {
+    if (!CustomEquipRegistry_IsUsableNow(claim->key)) {
         PlayPauseSfx(NA_SE_SY_ERROR);
         return true;
     }

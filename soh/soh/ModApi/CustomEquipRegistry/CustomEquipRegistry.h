@@ -44,6 +44,9 @@ typedef struct {
     GetItemEntry getItemEntry;
     const char* getItemModelPath;
     const SOHCustomItemRandomizer* randomizer;
+    // Optional form keys that may wear the piece, as in SOHCustomItemDefinition; none means every form.
+    const char* const* allowedForms;
+    uint32_t allowedFormCount;
 } SOHCustomEquipDefinition;
 
 bool CustomEquipRegistry_Register(const SOHCustomEquipDefinition* definition);
@@ -71,6 +74,8 @@ uint32_t CustomEquipRegistry_GetCount(void);
 const SOHCustomEquipDefinition* CustomEquipRegistry_GetAt(uint32_t index);
 const SOHCustomEquipDefinition* CustomEquipRegistry_Find(const char* key);
 bool CustomEquipRegistry_IsAgeAllowed(const char* key);
+bool CustomEquipRegistry_IsFormAllowed(const char* key);
+bool CustomEquipRegistry_IsUsableNow(const char* key);
 void CustomEquipRegistry_Init(void);
 
 #ifdef __cplusplus
