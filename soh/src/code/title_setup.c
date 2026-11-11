@@ -1,6 +1,8 @@
 #include "global.h"
+#include "soh/Fleet/FleetPortal.h"
 
 void TitleSetup_InitImpl(GameState* gameState) {
+    if (FleetPortal_LoadPending()) return;
     osSyncPrintf("ゼルダ共通データ初期化\n"); // "Zelda common data initalization"
     SaveContext_Init();
     gameState->running = false;

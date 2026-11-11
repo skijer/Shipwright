@@ -1,9 +1,11 @@
+#include <ship/window/gui/IconsFontAwesome4.h>
+
 #include "Anchor.h"
 #include "soh/OTRGlobals.h"
+#include "soh/util.h"
+#include "soh/Enhancements/randomizer/SeedContext.h"
 
 extern "C" {
-#include "variables.h"
-#include "functions.h"
 extern PlayState* gPlayState;
 }
 
@@ -34,9 +36,7 @@ void AnchorRoomWindow::Draw() {
 }
 
 void AnchorRoomWindow::DrawElement() {
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
-
-    if (isGlobalRoom) {
+    if (Anchor::IsGlobalRoom()) {
         u32 activeClients = 0;
         for (auto& [clientId, client] : Anchor::Instance->clients) {
             if (client.online) {

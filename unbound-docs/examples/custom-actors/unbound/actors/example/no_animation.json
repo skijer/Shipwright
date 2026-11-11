@@ -1,0 +1,5 @@
+{
+  "name": "Example: a skeleton with no animation (rejected)",
+  "model": { "skeleton": "objects/object_toryo/object_toryo_Skel_007150" },
+  "collision": { "radius": 18, "height": 63 }
+}

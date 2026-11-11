@@ -1,10 +1,6 @@
-#ifndef SOHMENU_H
-#define SOHMENU_H
+#pragma once
 
-#include <libultraship/libultraship.h>
 #include "Menu.h"
-#include <fast/backends/gfx_rendering_api.h>
-#include "soh/cvar_prefixes.h"
 
 extern "C" {
 #include "z64.h"
@@ -28,6 +24,7 @@ static std::map<int32_t, const char*> languages = {
 };
 void UpdateMenuTricks();
 void UpdateMenuLocations();
+void MarkRandomizerMenusDirty();
 
 class SohMenu : public Ship::Menu {
   public:
@@ -37,8 +34,17 @@ class SohMenu : public Ship::Menu {
     void DrawElement() override;
     void UpdateElement() override;
     void Draw() override;
+    std::string FleetMenuModel();
+    void FleetDrawWidget(const std::string& section, const std::string& sidebar, int column, int index);
+    void FleetDrawPage(const std::string& section, const std::string& sidebar);
 
     void AddSidebarEntry(std::string sectionName, std::string sidbarName, uint32_t columnCount);
+    bool EnsureModSidebar(const std::string& section, const std::string& sidebar, const char* cvar, uint32_t columns);
+    bool MoveModWidget(const WidgetPath& path, const std::string& label, const std::string& anchor, bool after);
+    bool HasModWidgetPath(const WidgetPath& path) const;
+    bool AreMenuElementsInitialized() const {
+        return mMenuElementsInitialized;
+    }
     WidgetInfo& AddWidget(WidgetPath& pathInfo, std::string widgetName, WidgetType widgetType);
     void AddMenuElements();
     void AddMenuSettings();
@@ -49,10 +55,12 @@ class SohMenu : public Ship::Menu {
     static void UpdateLanguageMap(std::map<int32_t, const char*>& languageMap);
 
   private:
+    SidebarEntry* FindFleetPage(const std::string& section, const std::string& sidebar);
+    void PrepareFleetPage(const std::string& section, const std::string& sidebar);
+    bool CanFleetDrawWidget(const WidgetInfo& widget) const;
+
     char mGitCommitHashTruncated[8];
     bool mIsTaggedVersion;
     bool mMenuElementsInitialized = false;
 };
 } // namespace SohGui
-
-#endif // SOHMENU_H

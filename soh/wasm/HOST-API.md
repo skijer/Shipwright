@@ -24,17 +24,21 @@ Do not supply `soh.o2r`; it is inside the module.
 base: a complete game archive converted from `oot.o2r` (scenes, collision, text and paths
 rewritten in the Unbound format, every other file copied). Supply exactly one of:
 
-- **`/oot-unbound.o2r`** alone: the normal boot. It must have been converted by this same
-  release of the game; one converted by another release stops the game with an `error` event
-  (`… was converted by soh X, not soh Y; convert the ROM again`).
+- **`/oot-unbound.o2r`** alone: the normal boot. A base converted by an earlier or later
+  release works as long as its manifest's `baseVersion` is this release's (SPEC.md §6, §10.1);
+  `baseVersion` changes only when an older base would no longer play correctly, and the release
+  notes say so. An incompatible base stops the game with an `error` event (`oot-unbound.o2r is
+  base version 1; this build reads base version 2; convert the ROM again`, or the same for the
+  format version or the SoH major version).
 - **`/oot.o2r`** alone: the fallback install boot, for a host that has not converted it
   itself with `soh-unbound-convert.js` (§7). The game converts it during startup (under a second
   in a release build; the tab stays busy) and sends the result as a `file-saved` event with path
   `/oot-unbound.o2r`, before the title screen. Keep those bytes and supply them, without
   `oot.o2r`, from then on. The event carries a copy of about 60 MB.
 
-Supplying both also works (desktop's layout): the base is checked against `oot.o2r` and
-converted again, and reported again, whenever it is stale. A base converted from one archive
+Supplying both also works (desktop's layout): the base is converted again, and reported again,
+when it was converted from another archive than `oot.o2r` (another ROM, or the same ROM extracted
+again) or is incompatible as above. A base converted from one archive
 carries only that archive's game, so a Master Quest base comes from `oot-mq.o2r` alone.
 
 ## 2. Events out: `CustomEvent('soh')` on `window`
@@ -183,9 +187,10 @@ is `-1` outside a play state.
 ## 6. Converting a ROM: `soh-extract.js`
 
 A second, independent module built next to `soh.js`: `soh-extract.js` + `soh-extract.wasm`
-(37 MB raw, about 0.8 MB brotli). It turns a ROM into the `oot.o2r` / `oot-mq.o2r` that §1
-asks for, as the desktop game would (the same ROM checks, the same ZAPD run, the same
-archive entry for entry; it accepts every ROM version ZAPD has a recipe for). It has no window, no canvas and no idea who is calling: run it in a worker, keep
+(69 MB raw, about 1.1 MB brotli). It turns a ROM into the `oot.o2r` / `oot-mq.o2r` that §1
+asks for, as the desktop game would (the same ROM checks, the same Torch run over the same
+yml recipe, the same archive entry for entry; it accepts every ROM version Torch has a recipe
+for). It has no window, no canvas and no idea who is calling: run it in a worker, keep
 the bytes wherever you like.
 
 For SoH: Unbound it is the first half of an install: hand its `oot.o2r` to
@@ -203,19 +208,14 @@ const { name, version, bytes } = await mod.extractRom(romBytes, {
 ```
 
 - `romBytes` is a `Uint8Array` of the whole file in any byte order (`.z64`, `.n64`, `.v64`).
-- `onProgress(done, total, info)` runs in two phases, each counting its own units, so a
-  host can weight a progress bar by measured time rather than by count:
-  - `info.phase === 'recipe'`: `done`/`total` over ZAPD's recipe files (547 for NTSC 1.0),
-    one call per file as it starts, `done` counting 1, 2, ... `total`. `info.file` is that
-    file's path in the recipe (`assets/xml/N64_NTSC_10/objects/object_link_boy.xml`), stable
-    for a ROM version across runs and machines. So `(total, total)` means the last file is
-    being extracted, not that the phase is over. This phase is about three quarters of the run.
-  - `info.phase === 'write'`: `done`/`total` over the archive's entries (38,390 for NTSC 1.0)
-    while libzip writes the archive. It starts with `(0, total)`, ends with `(total, total)`,
-    and reports in half-percent steps between. This is the last quarter of the run.
-  Expect about 10 s in all, in a worker on a desktop machine. The third argument was added
-  after the first release; a host that reads only `done`/`total` still works, but its bar
-  fills during the recipe phase and then restarts from zero for the write.
+- `onProgress(done, total, info)` counts the ROM version's recipe files (1,449 for NTSC 1.0):
+  one call with `(0, total)` before the first, then one as Torch finishes parsing each, so
+  `done` runs 0, 1, 2, ... `total`. `info.phase` is always `'recipe'`; there is no `info.file`
+  (Torch reports a file without naming it) and no `'write'` phase (the archive is compressed
+  entry by entry during the run, and what follows the last call is about 6% of it). The order
+  is the same on every run for a ROM version, so a host can weight a bar by `done` itself.
+  If Torch skipped a file, one more `(total, total)` call follows the silent tail.
+  Expect about 6 s in all, in a worker on a desktop machine.
 - **One conversion per instance.** Call the factory again for the next ROM; a second
   `extractRom` on the same instance rejects.
 - **Rejections** are `Error`s with a numeric `error.code`, worded as the desktop game words
@@ -228,16 +228,17 @@ const { name, version, bytes } = await mod.extractRom(romBytes, {
   | `-3` | looks like a zip / rar / 7z |
   | `-4` | header CRC is not a version this build has a recipe for |
   | `-5` | whole-file CRC is not a known-good dump |
-  | `-6` | ZAPD failed part-way; what it said is in the message |
-  | `-7` | ZAPD finished but wrote no archive |
+  | `-6` | extraction failed and Torch said why; that is in the message |
+  | `-7` | extraction wrote no archive without saying why, or wrote one under another name (the message names it) |
   | `-8` | this instance has already converted; make a new one |
 
-  Anything ZAPD printed to stderr during a failed run is appended to the message.
-- `quiet: true` keeps ZAPD's stdout out of the console; its warnings on stderr always show.
+  Warnings and errors the converter logged during a failed run are appended to the message.
+- `quiet: true` keeps the converter's routine log lines out of the console; warnings and
+  errors always show.
 - The module resolves its own `.wasm` and carries its data inside it, so it can be imported
   from anywhere; `locateFile` still works if you move the `.wasm` elsewhere.
-- Memory: about 500–800 MB of heap for a 32 MB ROM (the exporter builds the whole archive in
-  memory before writing it). The module starts at 256 MB and grows.
+- Memory: about 1.3 GB for a 32 MB ROM (node RSS; Torch holds every parsed asset until the
+  archive is written). The module starts at 256 MB and grows, up to 4 GB.
 
 **Build the two together.** The archive records the port version, and the game refuses one
 from any other build (§1's `error` event, "extract it again"). Copy `soh-extract.*` from the
@@ -259,7 +260,7 @@ const { bytes: oot } = await extractor.extractRom(romBytes, { onProgress });
 const converter = await createSohUnboundConverter();
 const { bytes, report } = await converter.convertToUnbound(oot);
 // bytes: Uint8Array, the base (about 65 MB, a stored zip)
-// report: { code: 0, error: '', converter: 'soh ... unbound r1', scenes, rooms, messages, copied, failures }
+// report: { code: 0, error: '', converter: 'soh 9.3.0-unbound0.11', scenes, rooms, messages, copied, failures }
 ```
 
 - Import `soh-unbound-convert.js` as an ES module; the factory is its default export,
@@ -284,6 +285,6 @@ const { bytes, report } = await converter.convertToUnbound(oot);
 - Memory: the source and the base sit in the module's filesystem (about 100 MB, outside the
   wasm heap) while it runs; the heap starts at 256 MB and grows if it must.
 
-**Build all three together.** The game refuses a base whose converter is not its own (§1's
-`error` event, "convert the ROM again"), and the converter refuses an `oot.o2r` from another
-port version. Copy `soh-unbound-convert.*` from the same build as `soh.*` and `soh-extract.*`.
+**Build all three together.** The converter refuses an `oot.o2r` from another SoH major
+version, and the game refuses a base of another base version (§1's `error` event, "convert the
+ROM again"); a base from another release of the same base version is accepted. Copy `soh-unbound-convert.*` from the same build as `soh.*` and `soh-extract.*`.

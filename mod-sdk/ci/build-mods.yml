@@ -1,0 +1,106 @@
+name: build-mods
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  UNBOUND_REPOSITORY: skijer/Shipwright
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows_x64
+          - os: ubuntu-22.04
+            platform: linux_x64
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+    - name: Checkout mods
+      uses: actions/checkout@v6
+    - name: Read the Unbound release these mods target
+      id: unbound
+      shell: bash
+      run: echo "tag=$(tr -d '[:space:]' < UNBOUND_REF)" >> "$GITHUB_OUTPUT"
+    - name: Checkout Unbound at that release
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ env.UNBOUND_REPOSITORY }}
+        ref: ${{ steps.unbound.outputs.tag }}
+        path: external/Unbound
+        submodules: true
+    - name: Download soh.lib from that release
+      if: runner.os == 'Windows'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: gh release download "${{ steps.unbound.outputs.tag }}" --repo "$UNBOUND_REPOSITORY" --pattern soh.lib --dir external/soh-lib
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Install Python dependencies
+      run: python -m pip install pillow
+    - name: Build
+      shell: bash
+      run: |
+        IMPORT_LIBRARY=""
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          IMPORT_LIBRARY="-DUNBOUND_IMPORT_LIBRARY=$GITHUB_WORKSPACE/external/soh-lib/soh.lib"
+        fi
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DUNBOUND_ROOT="$GITHUB_WORKSPACE/external/Unbound" $IMPORT_LIBRARY
+        cmake --build build --config Release --parallel
+    - name: Upload packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: mods-${{ matrix.platform }}
+        if-no-files-found: error
+        path: build/packages/Release/*.o2r
+
+  universal:
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Checkout mods
+      uses: actions/checkout@v6
+    - name: Read the Unbound release these mods target
+      id: unbound
+      run: echo "tag=$(tr -d '[:space:]' < UNBOUND_REF)" >> "$GITHUB_OUTPUT"
+    - name: Checkout the SDK tools
+      uses: actions/checkout@v6
+      with:
+        repository: ${{ env.UNBOUND_REPOSITORY }}
+        ref: ${{ steps.unbound.outputs.tag }}
+        path: external/Unbound
+        sparse-checkout: mod-sdk/tools
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Download platform packages
+      uses: actions/download-artifact@v7
+      with:
+        pattern: mods-*
+        path: platform-packages
+    - name: Merge into one package per mod
+      run: |
+        mkdir -p universal
+        for mod in $(find platform-packages -name '*.o2r' -exec basename {} \; | sort -u); do
+          python external/Unbound/mod-sdk/tools/merge_mod_packages.py platform-packages/*/"$mod" --output "universal/$mod"
+        done
+    - name: Upload universal packages
+      uses: actions/upload-artifact@v7
+      with:
+        name: mods-universal
+        path: universal/*.o2r
+    - name: Attach to the release
+      if: github.ref_type == 'tag'
+      uses: softprops/action-gh-release@v2
+      with:
+        files: universal/*.o2r

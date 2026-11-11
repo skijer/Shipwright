@@ -1,4 +1,5 @@
 #include "global.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "objects/object_gi_key/object_gi_key.h"
 #include "objects/object_gi_jewel/object_gi_jewel.h"
 #include "objects/object_gi_melody/object_gi_melody.h"
@@ -391,7 +392,7 @@ DrawItemTableEntry sDrawItemTable[] = {
     { GetItem_DrawGenericMusicNote, { gGiSongNoteDL } },  // Song of time
     { GetItem_DrawGenericMusicNote, { gGiSongNoteDL } },  // Song of storms
     { GetItem_DrawTriforcePiece, { gTriforcePiece0DL } }, // Triforce Piece
-    { GetItem_DrawFishingPole, { gFishingPoleGiDL } },    // Fishing Pole
+    { GetItem_DrawFishingPole, { gGiFishingPoleDL } },    // Fishing Pole
 };
 
 /**
@@ -407,11 +408,14 @@ void GetItem_Draw(PlayState* play, s16 drawId) {
  * Uses the Custom Draw Function if it exists, or just calls `GetItem_Draw`
  */
 void GetItemEntry_Draw(PlayState* play, GetItemEntry getItemEntry) {
-    if (getItemEntry.drawFunc != NULL) {
-        getItemEntry.drawFunc(play, &getItemEntry);
-    } else {
-        GetItem_Draw(play, getItemEntry.gid);
+    if (!GameInteractor_ExecuteOnGetItemDraw(play, &getItemEntry)) {
+        if (getItemEntry.drawFunc != NULL) {
+            getItemEntry.drawFunc(play, &getItemEntry);
+        } else {
+            GetItem_Draw(play, getItemEntry.gid);
+        }
     }
+    GameInteractor_ExecuteOnGetItemDrawPost(play, &getItemEntry);
 }
 
 // All remaining functions in this file are draw functions referenced in the table and called by the function above
@@ -1036,7 +1040,7 @@ void GetItem_DrawFishingPole(PlayState* play, s16 drawId) {
     Matrix_Scale(0.2, 0.2, 0.2, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gFishingPoleGiDL);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiFishingPoleDL);
 
     // Draw lure
     Matrix_Push();

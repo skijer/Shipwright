@@ -1,11 +1,8 @@
 [submodule "libultraship"]
 	path = libultraship
-	url = https://github.com/roborich/libultraship.git
-	branch = unbound
-[submodule "ZAPDTR"]
-	path = ZAPDTR
-	url = https://github.com/roborich/ZAPDTR
-	branch = wasm
-[submodule "OTRExporter"]
-	path = OTRExporter
-	url = https://github.com/harbourmasters/OTRExporter
+	url = https://github.com/skijer/libultraship.git
+	branch = unbound-fleet
+[submodule "torch"]
+	path = torch
+	url = https://github.com/HarbourMasters/Torch.git
+	branch = main

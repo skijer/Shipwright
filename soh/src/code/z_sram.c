@@ -1,4 +1,6 @@
 #include "global.h"
+#include "soh/Fleet/FleetGame.h"
+#include "soh/Enhancements/game-interactor/vanilla-behavior/GIVanillaBehavior.h"
 #include "vt.h"
 
 #include <string.h>
@@ -7,7 +9,9 @@
 #include "soh/Enhancements/randomizer/savefile.h"
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
+#include "soh/Enhancements/speedrun/Speedrun.h"
 #include "soh/ResourceManagerHelpers.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #define NUM_DUNGEONS 8
 #define NUM_COWS 10
@@ -143,25 +147,20 @@ void Sram_OpenSave() {
             break;
     }
 
-    if (!CVarGetInteger(CVAR_ENHANCEMENT("PersistentMasks"), 0)) {
-        gSaveContext.ship.maskMemory = PLAYER_MASK_NONE;
-    }
-
     osSyncPrintf("scene_no = %d\n", gSaveContext.entranceIndex);
     osSyncPrintf(VT_RST);
 
-    if (gSaveContext.health < STARTING_HEALTH) {
-        gSaveContext.health =
-            CVarGetInteger(CVAR_ENHANCEMENT("FullHealthSpawn"), 0) ? gSaveContext.healthCapacity : STARTING_HEALTH;
+    if (GameInteractor_Should(VB_FULL_HEALTH_SPAWN, gSaveContext.health < STARTING_HEALTH)) {
+        gSaveContext.health = STARTING_HEALTH;
     }
 
     if (gSaveContext.scarecrowLongSongSet) {
         osSyncPrintf(VT_FGCOL(BLUE));
         osSyncPrintf("\n====================================================================\n");
 
-        memcpy(gScarecrowCustomSongPtr, gSaveContext.scarecrowLongSong, sizeof(gSaveContext.scarecrowLongSong));
+        memcpy(gScarecrowLongSongPtr, gSaveContext.scarecrowLongSong, sizeof(gSaveContext.scarecrowLongSong));
 
-        ptr = (u8*)gScarecrowCustomSongPtr;
+        ptr = (u8*)gScarecrowLongSongPtr;
         for (i = 0; i < ARRAY_COUNT(gSaveContext.scarecrowLongSong); i++, ptr++) {
             osSyncPrintf("%d, ", *ptr);
         }
@@ -232,7 +231,8 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
     u16* ptr;
     u16 checksum;
 
-    if (fileChooseCtx->buttonIndex != 0 || !CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0)) {
+    if (fileChooseCtx->buttonIndex != 0 ||
+        !Ship_QuestDebugEnabled(fileChooseCtx->questType[fileChooseCtx->buttonIndex])) {
         Sram_InitNewSave();
     } else {
         Sram_InitDebugSave();
@@ -249,7 +249,8 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
             (gSaveContext.language == LANGUAGE_JPN) ? NAME_LANGUAGE_NTSC_JPN : NAME_LANGUAGE_NTSC_ENG;
     }
 
-    if ((fileChooseCtx->buttonIndex == 0 && CVarGetInteger(CVAR_DEVELOPER_TOOLS("DebugEnabled"), 0))) {
+    if ((fileChooseCtx->buttonIndex == 0 &&
+         Ship_QuestDebugEnabled(fileChooseCtx->questType[fileChooseCtx->buttonIndex]))) {
         gSaveContext.cutsceneIndex = 0;
     }
 
@@ -261,12 +262,21 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
 
     u8 currentQuest = fileChooseCtx->questType[fileChooseCtx->buttonIndex];
 
+    if (currentQuest == QUEST_RANDOMIZER &&
+        FleetGame_CreateNamedSave(fileChooseCtx->buttonIndex, gSaveContext.playerName, gSaveContext.ship.filenameLanguage)) {
+        return;
+    }
+
     if (currentQuest == QUEST_RANDOMIZER && (Randomizer_IsSeedGenerated() || Randomizer_IsSpoilerLoaded())) {
         gSaveContext.ship.quest.id = QUEST_RANDOMIZER;
 
         Randomizer_InitSaveFile();
     } else {
         gSaveContext.ship.quest.id = currentQuest;
+    }
+
+    if (IS_SPEEDRUN) {
+        Speedrun_InitSaveFile(fileChooseCtx->speedrunIndex);
     }
 
     Save_SaveFile();
@@ -276,5 +286,5 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
 void Sram_InitSram(GameState* gameState) {
     Save_Init();
 
-    func_800F6700(gSaveContext.audioSetting);
+    Audio_SetSoundOutputMode(gSaveContext.audioSetting);
 }

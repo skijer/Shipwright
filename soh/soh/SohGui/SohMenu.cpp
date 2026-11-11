@@ -1,8 +1,11 @@
+#include <libultraship/bridge/consolevariablebridge.h>
+#include <ship/Context.h>
+
 #include "SohMenu.h"
-#include <ship/window/gui/GuiMenuBar.h>
-#include <ship/window/gui/GuiElement.h>
-#include <ship/utils/StringHelper.h>
-#include <spdlog/fmt/fmt.h>
+#include <nlohmann/json.hpp>
+#include "soh/Fleet/FleetGame.h"
+#include <ship/window/Window.h>
+#include <ship/window/gui/Gui.h>
 
 extern "C" {
 extern PlayState* gPlayState;
@@ -14,6 +17,51 @@ namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
 
 using namespace UIWidgets;
+
+bool SohMenu::EnsureModSidebar(const std::string& section, const std::string& sidebar, const char* cvar,
+                               uint32_t columns) {
+    if (!menuEntries.contains(section)) {
+        AddMenuEntry(section, cvar);
+    }
+    auto& entry = menuEntries.at(section);
+    if (!entry.sidebars.contains(sidebar)) {
+        AddSidebarEntry(section, sidebar, columns);
+    }
+    return entry.sidebars.at(sidebar).columnCount >= columns;
+}
+
+bool SohMenu::MoveModWidget(const WidgetPath& path, const std::string& label, const std::string& anchor, bool after) {
+    if (!menuEntries.contains(path.sectionName)) {
+        return false;
+    }
+    auto& sidebars = menuEntries.at(path.sectionName).sidebars;
+    if (!sidebars.contains(path.sidebarName) || sidebars.at(path.sidebarName).columnWidgets.size() <= path.column) {
+        return false;
+    }
+    auto& widgets = sidebars.at(path.sidebarName).columnWidgets.at(path.column);
+    auto source =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == label; });
+    auto target =
+        std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    if (source == widgets.end() || target == widgets.end() || source == target) {
+        return false;
+    }
+    auto moved = std::move(*source);
+    widgets.erase(source);
+    target = std::find_if(widgets.begin(), widgets.end(), [&](const auto& widget) { return widget.name == anchor; });
+    widgets.insert(target + (after ? 1 : 0), std::move(moved));
+    return true;
+}
+
+bool SohMenu::HasModWidgetPath(const WidgetPath& path) const {
+    auto section = menuEntries.find(path.sectionName);
+    if (section == menuEntries.end()) {
+        return false;
+    }
+    auto sidebar = section->second.sidebars.find(path.sidebarName);
+    return sidebar != section->second.sidebars.end() &&
+           static_cast<uint32_t>(path.column) < sidebar->second.columnCount;
+}
 
 void SohMenu::AddSidebarEntry(std::string sectionName, std::string sidebarName, uint32_t columnCount) {
     assert(!sectionName.empty());
@@ -29,7 +77,7 @@ WidgetInfo& SohMenu::AddWidget(WidgetPath& pathInfo, std::string widgetName, Wid
     std::unordered_map<std::string, SidebarEntry>& sidebar = menuEntries.at(pathInfo.sectionName).sidebars;
     uint8_t column = pathInfo.column;
     if (sidebar.contains(pathInfo.sidebarName)) {
-        while (sidebar.at(pathInfo.sidebarName).columnWidgets.size() < column + 1) {
+        while (sidebar.at(pathInfo.sidebarName).columnWidgets.size() < static_cast<size_t>(column) + 1) {
             sidebar.at(pathInfo.sidebarName).columnWidgets.push_back({});
         }
     }
@@ -108,29 +156,29 @@ void SohMenu::InitElement() {
     disabledMap = {
         { DISABLE_FOR_NO_VSYNC,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->CanDisableVerticalSync();
+               return !Ship::Context::GetRawInstance()->GetWindow()->CanDisableVerticalSync();
            },
             "Disabling VSync not supported" } },
         { DISABLE_FOR_NO_WINDOWED_FULLSCREEN,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->SupportsWindowedFullscreen();
+               return !Ship::Context::GetRawInstance()->GetWindow()->SupportsWindowedFullscreen();
            },
             "Windowed Fullscreen not supported" } },
         { DISABLE_FOR_NO_MULTI_VIEWPORT,
           { [](disabledInfo& info) -> bool {
-               return !Ship::Context::GetInstance()->GetWindow()->GetGui()->SupportsViewports();
+               return !Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SupportsViewports();
            },
             "Multi-viewports not supported" } },
         { DISABLE_FOR_NOT_DIRECTX,
           { [](disabledInfo& info) -> bool {
-               return Ship::Context::GetInstance()->GetWindow()->GetWindowBackend() !=
-                      Ship::WindowBackend::FAST3D_DXGI_DX11;
+               return Ship::Context::GetRawInstance()->GetWindow()->GetWindowBackend() !=
+                      Fast::WindowBackend::FAST3D_DXGI_DX11;
            },
             "Available Only on DirectX" } },
         { DISABLE_FOR_DIRECTX,
           { [](disabledInfo& info) -> bool {
-               return Ship::Context::GetInstance()->GetWindow()->GetWindowBackend() ==
-                      Ship::WindowBackend::FAST3D_DXGI_DX11;
+               return Ship::Context::GetRawInstance()->GetWindow()->GetWindowBackend() ==
+                      Fast::WindowBackend::FAST3D_DXGI_DX11;
            },
             "Not Available on DirectX" } },
         { DISABLE_FOR_MATCH_REFRESH_RATE_ON,
@@ -169,7 +217,135 @@ void SohMenu::UpdateElement() {
     Ship::Menu::UpdateElement();
 }
 
+std::string SohMenu::FleetMenuModel() {
+    if (!mMenuElementsInitialized) {
+        return "null";
+    }
+    nlohmann::json sections = nlohmann::json::array();
+    for (const auto& name : menuOrder) {
+        const auto& section = menuEntries.at(name);
+        nlohmann::json sidebars = nlohmann::json::array();
+        for (const auto& label : section.sidebarOrder) {
+            if (label == "Search") {
+                continue;
+            }
+            const auto& sidebar = section.sidebars.at(label);
+            nlohmann::json widgets = nlohmann::json::array();
+            for (size_t column = 0; column < sidebar.columnWidgets.size(); column++) {
+                const auto& entries = sidebar.columnWidgets[column];
+                for (size_t index = 0; index < entries.size(); index++) {
+                    const auto& widget = entries[index];
+                    if (widget.type == WIDGET_SEARCH) {
+                        continue;
+                    }
+                    widgets.push_back({ { "name", widget.name }, { "cvar", widget.cVar ? widget.cVar : "" },
+                        { "tooltip", widget.options ? std::string(widget.options->tooltip) : "" },
+                        { "search", !widget.hideInSearch }, { "column", column }, { "index", index } });
+                }
+            }
+            sidebars.push_back({ { "name", label }, { "columns", sidebar.columnCount }, { "widgets", widgets } });
+        }
+        sections.push_back({ { "name", name }, { "sidebars", sidebars } });
+    }
+    return sections.dump();
+}
+
+SidebarEntry* SohMenu::FindFleetPage(const std::string& section, const std::string& sidebar) {
+    const auto entry = menuEntries.find(section);
+    if (entry == menuEntries.end()) {
+        return nullptr;
+    }
+    const auto side = entry->second.sidebars.find(sidebar);
+    return side != entry->second.sidebars.end() ? &side->second : nullptr;
+}
+
+// Fleet draws a page outside DrawElement: run what DrawElement runs first, once per page and frame.
+void SohMenu::PrepareFleetPage(const std::string& section, const std::string& sidebar) {
+    ImGui::SetCurrentContext(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetImGuiContext());
+    static std::map<std::pair<std::string, std::string>, int> updatedPages;
+    const int frame = ImGui::GetFrameCount();
+    auto& updatedFrame = updatedPages[std::make_pair(section, sidebar)];
+    if (updatedFrame != frame) {
+        updatedFrame = frame;
+        auto& updates = MenuInit::GetUpdateFuncs();
+        const auto sectionUpdates = updates.find(menuEntries.at(section).label);
+        if (sectionUpdates != updates.end()) {
+            const auto pageUpdates = sectionUpdates->second.find(sidebar);
+            if (pageUpdates != sectionUpdates->second.end()) {
+                for (auto& update : pageUpdates->second) {
+                    update();
+                }
+            }
+        }
+    }
+    static int previousFrame = -1;
+    if (previousFrame != frame) {
+        previousFrame = frame;
+        for (auto& [reason, info] : disabledMap) {
+            info.active = info.evaluation(info);
+        }
+        UpdateElement();
+    }
+}
+
+// A combobox whose CVar holds a value it no longer lists would assert inside ImGui.
+bool SohMenu::CanFleetDrawWidget(const WidgetInfo& widget) const {
+    if (widget.type != WIDGET_CVAR_COMBOBOX || widget.cVar == nullptr || widget.cVar[0] == '\0') {
+        return true;
+    }
+    const auto options = std::static_pointer_cast<UIWidgets::ComboboxOptions>(widget.options);
+    return options && options->comboMap.contains(CVarGetInteger(widget.cVar, options->defaultIndex));
+}
+
+void SohMenu::FleetDrawWidget(const std::string& section, const std::string& sidebar, int column, int index) {
+    SidebarEntry* page = FindFleetPage(section, sidebar);
+    if (page == nullptr || column < 0 || column >= static_cast<int>(page->columnWidgets.size())) {
+        return;
+    }
+    auto& widgets = page->columnWidgets[column];
+    if (index < 0 || index >= static_cast<int>(widgets.size())) {
+        return;
+    }
+    PrepareFleetPage(section, sidebar);
+    if (CanFleetDrawWidget(widgets[index])) {
+        MenuDrawItem(widgets[index], GetMenuThemeColor());
+    }
+}
+
+// The column block of DrawElement, so a page Fleet shows looks exactly as it does in Ship's own menu.
+void SohMenu::FleetDrawPage(const std::string& section, const std::string& sidebar) {
+    SidebarEntry* page = FindFleetPage(section, sidebar);
+    if (page == nullptr) {
+        return;
+    }
+    PrepareFleetPage(section, sidebar);
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const size_t columns = ImGui::GetMainViewport()->WorkSize.x < 800 ? 1 : std::max<size_t>(page->columnCount, 1);
+    const bool useColumns = columns > 1;
+    const float columnWidth = (ImGui::GetContentRegionAvail().x - style.ItemSpacing.x * columns) / columns;
+    for (size_t column = 0; column < page->columnWidgets.size(); column++) {
+        if (useColumns) {
+            ImGui::BeginChild((sidebar + " Column " + std::to_string(column)).c_str(), { columnWidth, 0 },
+                              ImGuiChildFlags_AutoResizeY, ImGuiWindowFlags_NoTitleBar);
+        }
+        for (auto& widget : page->columnWidgets[column]) {
+            if (CanFleetDrawWidget(widget)) {
+                MenuDrawItem(widget, GetMenuThemeColor());
+            }
+        }
+        if (useColumns) {
+            ImGui::EndChild();
+        }
+        if (column + 1 < columns) {
+            ImGui::SameLine();
+        }
+    }
+}
+
 void SohMenu::Draw() {
+    if (FleetGame_IsHosted()) {
+        ImGui::SetCurrentContext(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetImGuiContext());
+    }
     Ship::Menu::Draw();
 }
 

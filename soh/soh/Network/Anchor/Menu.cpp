@@ -1,8 +1,11 @@
+#include <ship/Context.h>
+
 #include "Anchor.h"
-#include <libultraship/libultraship.h>
+#include "soh/Fleet/FleetGame.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/SohMenu.h"
 #include "soh/util.h"
+#include "soh/SohGui/UIWidgets.hpp"
 
 namespace SohGui {
 extern std::shared_ptr<SohMenu> mSohMenu;
@@ -13,7 +16,7 @@ static const char* pvpModes[3] = { "Off", "On", "On + Friendly Fire" };
 static std::vector<const char*> teleportModes = { "None", "Team Only", "All" };
 static std::vector<const char*> showLocationsModes = { "None", "Team Only", "All" };
 
-void AnchorMainMenu(WidgetInfo& info) {
+void AnchorFormMenu(WidgetInfo& info) {
     auto anchor = Anchor::Instance;
 
     std::string host = CVarGetString(CVAR_REMOTE_ANCHOR("Host"), "anchor.hm64.org");
@@ -34,7 +37,7 @@ void AnchorMainMenu(WidgetInfo& info) {
                                          ImVec2((ImGui::GetFontSize() * 5 + ImGui::GetStyle().ItemSpacing.x), 0))
                                    .Color(THEME_COLOR))) {
         CVarSetString(CVAR_REMOTE_ANCHOR("Host"), host.c_str());
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
 
     ImGui::SameLine();
@@ -42,7 +45,7 @@ void AnchorMainMenu(WidgetInfo& info) {
     ImGui::SetNextItemWidth(ImGui::GetFontSize() * 5);
     if (ImGui::InputScalar("##Port", ImGuiDataType_U16, &port)) {
         CVarSetInteger(CVAR_REMOTE_ANCHOR("Port"), port);
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
     UIWidgets::PopStyleInput();
 
@@ -53,20 +56,20 @@ void AnchorMainMenu(WidgetInfo& info) {
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     if (UIWidgets::InputString("##Name", &anchorName, UIWidgets::InputOptions().Color(THEME_COLOR))) {
         CVarSetString(CVAR_REMOTE_ANCHOR("Name"), anchorName.c_str());
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
     ImGui::Text("Room ID");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     if (UIWidgets::InputString("##RoomId", &anchorRoomId,
                                UIWidgets::InputOptions().IsSecret(anchor->isEnabled).Color(THEME_COLOR))) {
         CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), anchorRoomId.c_str());
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
     ImGui::Text("Team ID (Items & Flags Shared)");
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x);
     if (UIWidgets::InputString("##TeamId", &anchorTeamId, UIWidgets::InputOptions().Color(THEME_COLOR))) {
         CVarSetString(CVAR_REMOTE_ANCHOR("TeamId"), anchorTeamId.c_str());
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
     ImGui::Spacing();
 
@@ -78,7 +81,7 @@ void AnchorMainMenu(WidgetInfo& info) {
         CVarSetString(CVAR_REMOTE_ANCHOR("TeamId"), "default");
         CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), "");
         CVarSetString(CVAR_REMOTE_ANCHOR("Name"), "");
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
 
     ImGui::SameLine();
@@ -90,8 +93,8 @@ void AnchorMainMenu(WidgetInfo& info) {
         CVarSetString(CVAR_REMOTE_ANCHOR("Host"), "anchor.hm64.org");
         CVarSetInteger(CVAR_REMOTE_ANCHOR("Port"), 43383);
         CVarSetString(CVAR_REMOTE_ANCHOR("TeamId"), "default");
-        CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), "soh-global");
-        Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+        CVarSetString(CVAR_REMOTE_ANCHOR("RoomId"), Anchor::GLOBAL_ROOM_ID.c_str());
+        Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
     }
 
     ImGui::EndDisabled();
@@ -105,19 +108,27 @@ void AnchorMainMenu(WidgetInfo& info) {
     if (ImGui::Button(buttonLabel, ImVec2(-1.0f, 0.0f))) {
         if (anchor->isEnabled) {
             CVarClear(CVAR_REMOTE_ANCHOR("Enabled"));
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             anchor->Disable();
         } else {
             CVarSetInteger(CVAR_REMOTE_ANCHOR("Enabled"), 1);
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             anchor->Enable();
         }
     }
     UIWidgets::PopStyleButton();
     ImGui::EndDisabled();
     ImGui::Spacing();
+}
+
+void AnchorRoomMenu(WidgetInfo& info) {
+    auto anchor = Anchor::Instance;
 
     if (!anchor->isEnabled) {
+        // Fleet draws this room under its own heading, away from the Enable button.
+        if (FleetGame_IsHosted()) {
+            ImGui::TextDisabled("Off");
+        }
         return;
     }
 
@@ -139,6 +150,24 @@ void AnchorMainMenu(WidgetInfo& info) {
     ImGui::SameLine();
 
     UIWidgets::WindowButton("Toggle Anchor Room Window", CVAR_WINDOW("AnchorRoom"), SohGui::mAnchorRoomWindow);
+
+    ImGui::Spacing();
+
+    bool hideLocations = Anchor::Instance->roomState.showLocationsMode == 0;
+    ImGui::BeginDisabled(hideLocations);
+    UIWidgets::CVarCheckbox(
+        "Show Other Players on Minimap", CVAR_REMOTE_ANCHOR("ShowOtherPlayersOnMinimap"),
+        UIWidgets::CheckboxOptions()
+            .Color(THEME_COLOR)
+            .DefaultValue(true)
+            .Tooltip(!hideLocations
+                         ? "Other players will appear on the minimap in areas where you have the compass. "
+                           "Visibility is restricted according to the Show Locations mode for the room."
+                         : "Cannot show other players because the room's Show Locations mode is set to None."));
+    ImGui::EndDisabled();
+
+    ImGui::Spacing();
+
     if (!SohGui::mAnchorRoomWindow->IsVisible()) {
         SohGui::mAnchorRoomWindow->DrawElement();
     }
@@ -146,10 +175,9 @@ void AnchorMainMenu(WidgetInfo& info) {
 
 void AnchorAdminMenu(WidgetInfo& info) {
     auto anchor = Anchor::Instance;
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 
     if (!anchor->isEnabled || !anchor->isConnected || anchor->roomState.ownerClientId != anchor->ownClientId ||
-        isGlobalRoom) {
+        Anchor::IsGlobalRoom()) {
         return;
     }
 
@@ -225,11 +253,13 @@ void AnchorInstructionsMenu(WidgetInfo& info) {
         "the same randomizer seed, while players on different teams can use different seeds.");
 }
 
-#ifdef ENABLE_REMOTE_CONTROL
 void RegisterAnchorMenu() {
     WidgetPath path = { "Network", "Anchor", SECTION_COLUMN_1 };
-    SohGui::mSohMenu->AddWidget(path, "AnchorMainMenu", WIDGET_CUSTOM)
-        .CustomFunction(AnchorMainMenu)
+    SohGui::mSohMenu->AddWidget(path, "AnchorFormMenu", WIDGET_CUSTOM)
+        .CustomFunction(AnchorFormMenu)
+        .HideInSearch(true);
+    SohGui::mSohMenu->AddWidget(path, "AnchorRoomMenu", WIDGET_CUSTOM)
+        .CustomFunction(AnchorRoomMenu)
         .HideInSearch(true);
     path.column = SECTION_COLUMN_2;
     SohGui::mSohMenu->AddWidget(path, "AnchorAdminMenu", WIDGET_CUSTOM)
@@ -241,4 +271,3 @@ void RegisterAnchorMenu() {
 }
 
 static RegisterMenuInitFunc menuInitFunc(RegisterAnchorMenu);
-#endif

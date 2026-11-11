@@ -209,6 +209,17 @@ typedef struct {
 // Flag controlling the use of `Actor.sfx`. Do not use directly. See Actor_PlaySfx_FlaggedTimer
 #define ACTOR_FLAG_SFX_TIMER (1 << 28)
 
+#define BGCHECKFLAG_GROUND (1 << 0) // Standing on the ground
+#define BGCHECKFLAG_GROUND_TOUCH (1 << 1) // Has touched the ground (only active for 1 frame)
+#define BGCHECKFLAG_GROUND_LEAVE (1 << 2) // Has left the ground (only active for 1 frame)
+#define BGCHECKFLAG_WALL (1 << 3) // Touching a wall
+#define BGCHECKFLAG_CEILING (1 << 4) // Touching a ceiling
+#define BGCHECKFLAG_WATER (1 << 5) // In water
+#define BGCHECKFLAG_WATER_TOUCH (1 << 6) // Has touched water (reset when leaving water)
+#define BGCHECKFLAG_GROUND_STRICT (1 << 7) // Strictly on ground (BGCHECKFLAG_GROUND has some leeway)
+#define BGCHECKFLAG_CRUSHED (1 << 8) // Crushed between a floor and ceiling (triggers a void for player)
+#define BGCHECKFLAG_PLAYER_WALL_INTERACT (1 << 9) // Only set/used by player, related to interacting with walls
+
 typedef struct Actor {
     /* 0x000 */ s16 id; // Actor ID
     /* 0x002 */ u8 category; // Actor category. Refer to the corresponding enum for values
@@ -370,7 +381,8 @@ typedef enum {
     /* 0x1B */ ITEM00_SOH_DUMMY,
     /* 0x1C */ ITEM00_SOH_GIVE_ITEM_ENTRY,
     /* 0x1D */ ITEM00_SOH_GIVE_ITEM_ENTRY_GI,
-    /* 0x1E */ ITEM00_MAX,
+    /* 0x1E */ ITEM00_SOH_CUSTOM,
+    /* 0x1F */ ITEM00_MAX,
     /* 0xFF */ ITEM00_NONE = 0xFF
 } Item00Type;
 
@@ -481,5 +493,44 @@ typedef struct {
     /* 0x18 */ Vec3f trackPos;
     /* 0x24 */ char unk_24[0x4];
 } NpcInteractInfo; // size = 0x28
+
+// Converts a number of bits to a bitmask, helper for params macros
+// e.g. 3 becomes 0b111 (7)
+#define NBITS_TO_MASK(n) \
+    ((1 << (n)) - 1)
+
+// Extracts the `n`-bit value at position `s` in `p`, shifts then masks
+// Unsigned variant, no possibility of sign extension
+#define PARAMS_GET_U(p, s, n) \
+    (((p) >> (s)) & NBITS_TO_MASK(n))
+
+// Extracts the `n`-bit value at position `s` in `p`, masks then shifts
+// Signed variant, possibility of sign extension
+#define PARAMS_GET_S(p, s, n) \
+    (((p) & (NBITS_TO_MASK(n) << (s))) >> (s))
+
+// Extracts all bits past position `s` in `p`
+#define PARAMS_GET_NOMASK(p, s) \
+    ((p) >> (s))
+
+// Extracts the `n`-bit value at position `s` in `p` without shifting it from its current position
+#define PARAMS_GET_NOSHIFT(p, s, n) \
+    ((p) & (NBITS_TO_MASK(n) << (s)))
+
+// Moves the `n`-bit value `p` to bit position `s` for building actor parameters by OR-ing these together
+#define PARAMS_PACK(p, s, n) \
+    (((p) & NBITS_TO_MASK(n)) << (s))
+
+// Moves the value `p` to bit position `s` for building actor parameters by OR-ing these together.
+#define PARAMS_PACK_NOMASK(p, s) \
+    ((p) << (s))
+
+// Generates a bitmask for bit position `s` of length `n`
+#define PARAMS_MAKE_MASK(s, n) PARAMS_GET_NOSHIFT(~0, s, n)
+
+#define TRANSITION_ACTOR_PARAMS_INDEX_SHIFT 10
+// SOH [Unbound] Upstream reads the 6-bit index packed into params; Unbound keeps the list index on the actor
+// (TRANSITION_ACTOR_INDEX), so a scene may have more than 64 transition actors.
+#define GET_TRANSITION_ACTOR_INDEX(actor) TRANSITION_ACTOR_INDEX(actor)
 
 #endif

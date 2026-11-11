@@ -1,9 +1,11 @@
 #include "soh/Network/Anchor/Anchor.h"
 #include "soh/Network/Anchor/JsonConversions.hpp"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
+#include <ship/Context.h>
+#include <ship/window/Window.h>
 #include "soh/OTRGlobals.h"
 #include "soh/Notification/Notification.h"
+#include "soh/ModApi/Network/ModNetwork.h"
 
 /**
  * ALL_CLIENT_STATE
@@ -15,14 +17,14 @@
 
 void Anchor::HandlePacket_AllClientState(nlohmann::json payload) {
     std::vector<AnchorClient> newClients = payload["state"].get<std::vector<AnchorClient>>();
-    bool isGlobalRoom = (std::string("soh-global") == CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
+    const bool isGlobalRoom = IsGlobalRoom();
 
     // add new clients
     for (auto& client : newClients) {
         if (client.self) {
             ownClientId = client.clientId;
             CVarSetInteger(CVAR_REMOTE_ANCHOR("LastClientId"), ownClientId);
-            Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+            Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
             clients[client.clientId].self = true;
         } else {
             clients[client.clientId].self = false;
@@ -65,6 +67,13 @@ void Anchor::HandlePacket_AllClientState(nlohmann::json payload) {
     // (separate loop to avoid iterator invalidation)
     for (auto& clientId : clientsToRemove) {
         clients.erase(clientId);
+        ModNetwork_OnPeerOnlineChange(clientId, false);
+    }
+
+    for (auto& [clientId, client] : clients) {
+        if (!client.self) {
+            ModNetwork_OnPeerOnlineChange(clientId, client.online);
+        }
     }
 
     shouldRefreshActors = true;

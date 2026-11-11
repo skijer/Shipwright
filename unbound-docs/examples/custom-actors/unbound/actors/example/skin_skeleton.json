@@ -1,0 +1,7 @@
+{
+  "name": "Example: a skin-limb skeleton (does not spawn)",
+  "model": {
+    "skeleton": "objects/object_horse/gEponaSkel",
+    "animation": "objects/object_horse/gEponaIdleAnim"
+  }
+}

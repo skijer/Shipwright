@@ -1,8 +1,8 @@
-#include "soh/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
-#include "soh/Enhancements/game-interactor/GameInteractor.h"
-#include "soh/OTRGlobals.h"
+
+#include "soh/Network/Anchor/Anchor.h"
+#include "soh/unbound/SceneDB.h"
+#include "soh/Enhancements/game-interactor/GameInteractionEffect.h"
 
 extern "C" {
 #include "functions.h"
@@ -37,9 +37,17 @@ void Anchor::HandlePacket_UnsetFlag(nlohmann::json payload) {
         return;
     }
 
-    s16 sceneNum = payload["sceneNum"].get<s16>();
-    s16 flagType = payload["flagType"].get<s16>();
-    s16 flag = payload["flag"].get<s16>();
+    s16 sceneNum = payload.at("sceneNum").get<s16>();
+    s16 flagType = payload.at("flagType").get<s16>();
+    s16 flag = payload.at("flag").get<s16>();
+
+    // sceneNum == SCENE_ID_MAX is a sentinel meaning "global flag" (handled below); only larger
+    // values would index gSaveContext.sceneFlags out of bounds. SOH [Unbound] A registered custom scene (ids from
+    // 0x80) is valid too: its flags go through SceneFlags_Get.
+    if (sceneNum < 0 || (sceneNum != SCENE_ID_MAX && !SceneDB::Instance->RetrieveEntry(sceneNum).valid)) {
+        SPDLOG_ERROR("[Anchor] UNSET_FLAG: sceneNum {} out of range", sceneNum);
+        return;
+    }
 
     if (sceneNum == SCENE_ID_MAX) {
         auto effect = new GameInteractionEffect::UnsetFlag();

@@ -1,0 +1,11 @@
+{
+  "name": "Example: talking carpenter",
+  "model": {
+    "skeleton": "objects/object_toryo/object_toryo_Skel_007150",
+    "animation": "objects/object_toryo/object_toryo_Anim_000E50",
+    "shadow": 42
+  },
+  "collision": { "radius": 18, "height": 63 },
+  "talk": { "message": "0xA001" },
+  "look": { "limb": 15 }
+}

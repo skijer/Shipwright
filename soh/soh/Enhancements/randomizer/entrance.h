@@ -5,6 +5,7 @@
 #include "randomizerTypes.h"
 #include "location_access.h"
 
+#include <functional>
 #include <nlohmann/json.hpp>
 
 #define ENTRANCE_SHUFFLE_SUCCESS 0
@@ -124,6 +125,12 @@ typedef struct {
 // primary,          secondary
 using EntranceInfoPair = std::pair<EntranceLinkInfo, EntranceLinkInfo>;
 using EntrancePair = std::pair<Entrance*, Entrance*>;
+// Every shuffleable native entrance pair, mod dungeons included.
+std::vector<EntranceInfoPair> GetEntranceShuffleTable();
+void SetAllEntrancesData();
+// While set, logic sees each edge lead wherever this returns; a combined seed reroutes edges across games.
+using ConnectedRegionOverride = std::function<RandomizerRegion(const Entrance&, RandomizerRegion)>;
+void SetConnectedRegionOverride(ConnectedRegionOverride regionOverride);
 using EntrancePools = std::map<EntranceType, std::vector<Entrance*>>;
 
 class EntranceShuffler {
@@ -136,7 +143,7 @@ class EntranceShuffler {
     int ShuffleAllEntrances();
     void CreateEntranceOverrides();
     void UnshuffleAllEntrances();
-    void ParseJson(nlohmann::json spoilerFileJson);
+    void ParseJson(const nlohmann::json& spoilerFileJson);
     void ApplyEntranceOverrides();
 
     static const Entrance* GetEntranceByIndex(int16_t index);

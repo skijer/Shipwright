@@ -12,7 +12,7 @@ jobs:
     if: ${{ github.event.workflow_run.event == 'pull_request' }}
     steps:
       - id: 'pr-number'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           result-encoding: string
           script: |
@@ -37,26 +37,33 @@ jobs:
 
             return prNumber;
       - id: 'artifacts-text'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
-          result-encoding: string
           script: |
-            let allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: context.payload.workflow_run.id,
+            const {owner, repo} = context.repo;
+            const artifacts = await github.paginate(github.rest.actions.listWorkflowRunArtifacts, {
+              owner, repo, run_id: context.payload.workflow_run.id,
             });
-
-            return allArtifacts.data.artifacts.reduce((acc, item) => {
-              if (item.name === "soh.o2r") return acc;
-              acc += `
-              - [${item.name}.zip](https://nightly.link/${context.repo.owner}/${context.repo.repo}/actions/artifacts/${item.id}.zip)`;
-              return acc;
-            }, '### Build Artifacts');
+            const isUnsafe = (item) => item.name.startsWith('soh-unbound-unsafe-');
+            const links = (items) => items
+              .map((item) => `\n  - [${item.name}.zip](https://nightly.link/${owner}/${repo}/actions/artifacts/${item.id}.zip)`)
+              .join('');
+            const shown = artifacts.filter((item) => item.name !== 'soh.o2r');
+            core.setOutput('build', '### Build Artifacts' + links(shown.filter((item) => !isUnsafe(item))));
+            const unsafe = shown.filter(isUnsafe);
+            core.setOutput('unsafe', unsafe.length ? '## UNSAFE, MODDING ONLY' + links(unsafe) : '');
       - id: 'add-to-pr'
         uses: garrettjoecox/pr-section@4.0.0
         with:
           repo-token: '${{ secrets.GITHUB_TOKEN }}'
           pr-number: ${{ steps.pr-number.outputs.result }}
           section-name: 'artifacts'
-          section-value: '${{ steps.artifacts-text.outputs.result }}'
+          section-value: '${{ steps.artifacts-text.outputs.build }}'
+      - id: 'add-unsafe-to-pr'
+        if: steps.artifacts-text.outputs.unsafe != ''
+        uses: garrettjoecox/pr-section@4.0.0
+        with:
+          repo-token: '${{ secrets.GITHUB_TOKEN }}'
+          pr-number: ${{ steps.pr-number.outputs.result }}
+          section-name: 'unsafe-artifacts'
+          section-value: '${{ steps.artifacts-text.outputs.unsafe }}'

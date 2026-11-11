@@ -1,5 +1,6 @@
 #include "z_kaleido_scope.h"
 #include "textures/parameter_static/parameter_static.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 // Positions of each input section in the editor
 static u16 sSectionPositions[][2] = {
@@ -109,6 +110,12 @@ void KaleidoScope_DrawDebugEditor(PlayState* play) {
     s16 x;
     s16 y;
     s32 dBtnInput = input->cur.button & (BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT);
+    bool handled = false;
+
+    GameInteractor_ExecuteOnKaleidoDebugEditor(play, &handled);
+    if (handled) {
+        return;
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
 
