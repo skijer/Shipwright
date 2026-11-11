@@ -2,5 +2,6 @@
     "name": "turbo",
     "author": "Skijer",
     "version": "1.1",
-    "description": "Turbo: hold (or toggle) a button combo and the game logic runs several times per frame. Skip cutscenes, text crawls and walks in seconds."
+    "description": "Turbo: hold (or toggle) a button combo and the game logic runs several times per frame. Skip cutscenes, text crawls and walks in seconds.",
+    "display_name": "Turbo"
 }

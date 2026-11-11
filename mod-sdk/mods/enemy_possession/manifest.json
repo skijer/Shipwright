@@ -2,6 +2,9 @@
     "name": "enemy_possession",
     "author": "Skijer",
     "version": "1.0.0",
-    "dependencies": ["command_melody"],
-    "description": "Possession Cap: control native enemies with their own animations and attacks. The adapter service is ready for a future Ivan's Revenge controller."
+    "dependencies": [
+        "command_melody"
+    ],
+    "description": "Possession Cap: control native enemies with their own animations and attacks. The adapter service is ready for a future Ivan's Revenge controller.",
+    "display_name": "Possession Cap"
 }

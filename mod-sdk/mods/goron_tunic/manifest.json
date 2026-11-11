@@ -1,1 +1,7 @@
-{"name":"goron_tunic","author":"Skijer","version":"1.0.1","description":"Daruk's Protection on the vanilla Goron Tunic: hold R, three charges and three-minute recharge."}
+{
+    "name": "Daruk's Protection",
+    "author": "Skijer",
+    "version": "1.0.1",
+    "description": "Daruk's Protection on the vanilla Goron Tunic: hold R, three charges and three-minute recharge.",
+    "display_name": "Goron Tunic (Daruk's Protection)"
+}

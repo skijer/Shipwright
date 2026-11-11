@@ -18,5 +18,24 @@
     ],
     "permissions": [
         "network"
-    ]
+    ],
+    "options": [
+        {
+            "id": "mm_remains_odolwa",
+            "name": "Odolwa's Remains"
+        },
+        {
+            "id": "mm_remains_goht",
+            "name": "Goht's Remains"
+        },
+        {
+            "id": "mm_remains_gyorg",
+            "name": "Gyorg's Remains"
+        },
+        {
+            "id": "mm_remains_twinmold",
+            "name": "Twinmold's Remains"
+        }
+    ],
+    "display_name": "Majora's Mask: Boss Remains"
 }

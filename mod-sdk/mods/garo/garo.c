@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 #include "z64aiming.h"
 
 #include "align_asset_macro.h"
@@ -2295,13 +2296,17 @@ static void WearMask(PlayState* play, Player* player) {
 
 // A light ninja's body, the Zora's grip: bushes and bomb flowers, nothing heavier.
 static void ResolveGaroStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsGaro()) {
         return;
     }
-    *strength = PLAYER_STR_BRACELET;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_HUMAN);
+}
+
+static void ResolveGaroGrab(bool* should, va_list args) {
+    if (!IsGaro()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_HUMAN);
 }
 
 // The Gerudo guards took Garo's Mask for one of their own while it was only worn, and still do.
@@ -2462,4 +2467,5 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     sApi->RegisterVB(VB_GERUDOS_BE_FRIENDLY, PassAsGerudo);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveGaroStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveGaroGrab);
 }

@@ -93,7 +93,6 @@ static const char* const sRequiredHooks[] = {
     "OnOcarinaNote",
     "OnOcarinaPlaybackNote",
     "OnActorInit",
-    "OnActorUpdate",
     "OnActorDraw",
     "OnActorDrawEnd",
     "OnSceneInit",
@@ -680,6 +679,7 @@ static const LandminePiece sLandminePieces[] = {
 };
 
 static EnBomChuActionFunc sAwaitRelease;
+static ActorFunc sBombchuUpdate;
 
 static bool IsLandmineTriggered(EnBomChu* chu) {
     Collider* collider = &chu->collider.base;
@@ -733,6 +733,23 @@ static bool IsLandmine(EnBomChu* chu) {
     return chu->actionFunc == LandmineLie || chu->actionFunc == LandmineVanish;
 }
 
+// Convert the release inside the actor update, before OnActorUpdate observers can
+// mistake the mine's one-frame vanilla crawling action for a remote bombchu.
+static void UpdateLandmine(Actor* actor, PlayState* play) {
+    EnBomChu* chu = (EnBomChu*)actor;
+
+    sBombchuUpdate(actor, play);
+    if (actor->update == NULL || chu->actionFunc == sAwaitRelease) {
+        return;
+    }
+    actor->update = sBombchuUpdate;
+    if (actor->speedXZ > 0.0f && sApi->IsFormActive(KAFEI_FORM_KEY)) {
+        chu->actionFunc = LandmineLie;
+        actor->speedXZ = 0.0f;
+        chu->visualJitter = 0.0f;
+    }
+}
+
 // OnActorInit runs after the chu's own init, which set the 120-frame fuse and the hold-in-hand action.
 static void ArmLandmine(void* actorRef) {
     EnBomChu* chu = (EnBomChu*)actorRef;
@@ -740,20 +757,9 @@ static void ArmLandmine(void* actorRef) {
     sAwaitRelease = chu->actionFunc;
     if (sApi->IsFormActive(KAFEI_FORM_KEY)) {
         chu->timer = LANDMINE_FUSE;
+        sBombchuUpdate = chu->actor.update;
+        chu->actor.update = UpdateLandmine;
     }
-}
-
-// Released, a chu starts crawling at speed 8; the crawl steps itself by rewriting world.pos, so braking it
-// from outside is inert. Its action is swapped for the mine's on that very frame instead.
-static void LayLandmine(void* actorRef) {
-    EnBomChu* chu = (EnBomChu*)actorRef;
-
-    if (chu->actionFunc == sAwaitRelease || IsLandmine(chu) || chu->actor.speedXZ <= 0.0f ||
-        !sApi->IsFormActive(KAFEI_FORM_KEY)) {
-        return;
-    }
-    chu->actionFunc = LandmineLie;
-    chu->visualJitter = 0.0f;
 }
 
 static void DrawLandminePiece(PlayState* play, Actor* actor, const LandminePiece* piece, u8 fade) {
@@ -983,7 +989,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnOcarinaPlaybackNote, PlaybackNoteStruck);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawStaminaWheel);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorInit, ACTOR_EN_BOM_CHU, ArmLandmine);
-    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorUpdate, ACTOR_EN_BOM_CHU, LayLandmine);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_EN_BOM_CHU, DrawLandmine);
     SOH_REGISTER_HOOK(sApi, OnInterfaceResolveButtonIcon, ShowLandmineOnButton);
     SOH_REGISTER_HOOK(sApi, OnKaleidoResolveItemIcon, ShowLandmineInPause);

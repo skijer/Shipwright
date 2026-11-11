@@ -4128,8 +4128,11 @@ static const SOHModRandoOption sPiecesOption = {
 
 // One copy in the pool plus the option's index: the slider's "1" is index 0.
 static const SOHCustomItemRandomizer sUltrahandLogic = {
-    sizeof(SOHCustomItemRandomizer), SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, UH_DEFAULT_PIECES_INDEX+1, "", "", "",
-    "",
+    .structSize = sizeof(SOHCustomItemRandomizer),
+    .flags = SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
+    .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
+    .poolCount = 1,
+    .poolCountOption = UH_PIECES_OPTION,
 };
 
 static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDrawEnd", "OnLoadFile" };
@@ -4137,6 +4140,7 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static u8 sPieces;
+static bool sHasPiecesOption;
 static bool sIsInHand;
 static bool sIsWaitingForRelease;
 static bool sIsReachPoseHeld;
@@ -4155,7 +4159,10 @@ static u16 FindEquippedButtonMask(void) {
 }
 
 static u8 RequiredPieces(void) {
-    return CLAMP(CVarGetInteger("gMods.Ultrahand.RequiredPieces",UH_DEFAULT_PIECES_INDEX+1),1,UH_MAX_PIECES);
+    if (IS_RANDO && sHasPiecesOption) {
+        return CLAMP(sApi->GetRandoOption(UH_PIECES_OPTION) + 1, 1, UH_MAX_PIECES);
+    }
+    return CLAMP(CVarGetInteger("gMods.Ultrahand.RequiredPieces", UH_DEFAULT_PIECES_INDEX + 1), 1, UH_MAX_PIECES);
 }
 
 static bool IsAssembled(void) {
@@ -4349,14 +4356,21 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!SOH_MOD_API_HAS(sApi, GetActorId) || !SOH_MOD_API_HAS(sApi, SetCustomItemText)) {
         return;
     }
-    // The host currently throws when registering a second custom seed option.
-    // Register the item and hooks independently of that unsupported option.
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuWidget)) {
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Randomizer";w.sidebar="Mods";
-        w.type=SOH_MOD_MENU_INT_SLIDER;w.label="Ultrahand pieces required (gameplay)";
-        w.cvar="gMods.Ultrahand.RequiredPieces";w.defaultInt=UH_DEFAULT_PIECES_INDEX+1;w.minInt=1;w.maxInt=UH_MAX_PIECES;
-        w.tooltip="Pieces required to activate Ultrahand. Seeds currently contain 3 pieces; changing this setting does not change the seed.";
-        sApi->RegisterMenuWidget(&w);
+    sHasPiecesOption = SOH_MOD_API_HAS(sApi, RegisterRandoOption) && SOH_MOD_API_HAS(sApi, GetRandoOption) &&
+                      sApi->RegisterRandoOption(&sPiecesOption);
+    if (SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
+        SOHModMenuWidget widget = { 0 };
+        widget.structSize = sizeof(widget);
+        widget.section = "Randomizer";
+        widget.sidebar = "Mods";
+        widget.type = SOH_MOD_MENU_INT_SLIDER;
+        widget.label = "Ultrahand pieces required (gameplay)";
+        widget.cvar = "gMods.Ultrahand.RequiredPieces";
+        widget.defaultInt = UH_DEFAULT_PIECES_INDEX + 1;
+        widget.minInt = 1;
+        widget.maxInt = UH_MAX_PIECES;
+        widget.tooltip = "Pieces required to activate Ultrahand outside a randomized seed.";
+        sApi->RegisterMenuWidget(&widget);
     }
 
     SOHCustomItemDefinition hand = Z64Items_Define(UH_KEY, sIconTex, sNameTex);
@@ -4367,7 +4381,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetCanUse(&hand, CanUseUltrahand);
     Z64Items_SetAction(&hand, TakeOutUltrahand, HoldReachPose);
     Z64Items_SetHeldCallbacks(&hand, PressUltrahand, PutUltrahandAway, NULL);
-    Z64Items_SetLogic(&hand, &sUltrahandLogic);
+    SOHCustomItemRandomizer logic = sUltrahandLogic;
+    if (!sHasPiecesOption) {
+        logic.poolCount = UH_DEFAULT_PIECES_INDEX + 1;
+        logic.poolCountOption = NULL;
+    }
+    Z64Items_SetLogic(&hand, &logic);
     hand.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     hand.onReceive = ReceivePiece;
     hand.getItemEntry.drawFunc = DrawGetItem;

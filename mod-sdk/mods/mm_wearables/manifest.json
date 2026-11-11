@@ -2,7 +2,9 @@
     "name": "mm_wearables",
     "author": "Skijer",
     "version": "1.1",
-    "dependencies": ["mm_assets"],
+    "dependencies": [
+        "mm_assets"
+    ],
     "description": "Seventeen wearable Majora's Mask masks; the remaining seven masks have their own mods.",
     "requires": [
         "objects/object_mask_posthat/object_mask_posthat_DL_000290",
@@ -27,5 +29,78 @@
         "misc/link_animetion/gPlayerAnim_cl_setmaskend_Data",
         "objects/object_pst/gPostboxFrameDL"
     ],
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ],
+    "options": [
+        {
+            "id": "mask_postman",
+            "name": "Postman's Hat"
+        },
+        {
+            "id": "mask_all_night",
+            "name": "All-Night Mask"
+        },
+        {
+            "id": "mask_blast",
+            "name": "Blast Mask"
+        },
+        {
+            "id": "mask_stone",
+            "name": "Stone Mask"
+        },
+        {
+            "id": "mask_great_fairy",
+            "name": "Great Fairy's Mask"
+        },
+        {
+            "id": "mask_bremen",
+            "name": "Bremen Mask"
+        },
+        {
+            "id": "mask_bunny",
+            "name": "Bunny Hood"
+        },
+        {
+            "id": "mask_don_gero",
+            "name": "Don Gero's Mask"
+        },
+        {
+            "id": "mask_scents",
+            "name": "Mask of Scents"
+        },
+        {
+            "id": "mask_romani",
+            "name": "Romani's Mask"
+        },
+        {
+            "id": "mask_circus_leader",
+            "name": "Circus Leader's Mask"
+        },
+        {
+            "id": "mask_couple",
+            "name": "Couple's Mask"
+        },
+        {
+            "id": "mask_truth",
+            "name": "Mask of Truth"
+        },
+        {
+            "id": "mask_kamaro",
+            "name": "Kamaro's Mask"
+        },
+        {
+            "id": "mask_gibdo",
+            "name": "Gibdo Mask"
+        },
+        {
+            "id": "mask_captain",
+            "name": "Captain's Hat"
+        },
+        {
+            "id": "mask_giant",
+            "name": "Giant's Mask"
+        }
+    ],
+    "display_name": "Majora's Mask: Wearable Masks"
 }

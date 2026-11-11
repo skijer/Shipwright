@@ -2,5 +2,6 @@
     "name": "minish_cap",
     "author": "Skijer",
     "version": "1.0",
-    "description": "The Minish Cap: a warp map between pod soils, and the size to walk into a crawlspace."
+    "description": "The Minish Cap: a warp map between pod soils, and the size to walk into a crawlspace.",
+    "display_name": "Minish Cap"
 }

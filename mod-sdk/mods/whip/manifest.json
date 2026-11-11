@@ -3,5 +3,8 @@
     "author": "Skijer",
     "version": "1.0",
     "description": "Whip: lash enemies, reel in Keese and Bubbles, and swing from beams and torch stands.",
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ],
+    "display_name": "Whip"
 }

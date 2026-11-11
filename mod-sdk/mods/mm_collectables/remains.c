@@ -400,7 +400,7 @@ static void StopOdolwaSfx(void) {
 
 static void SetWornRemains(s32 remains) {
     static const char* const keys[REMAINS_COUNT] = {
-        "nei.mm_remains_odolwa", "nei.mm_remains_goht", "nei.mm_remains_gyorg", "nei.mm_remains_twinmold",
+        "mm.remains.odolwa", "mm.remains.goht", "mm.remains.gyorg", "mm.remains.twinmold",
     };
 
     if (SOH_MOD_API_HAS(sApi, SetCustomItemWorn) && sWornRemains >= 0 && sWornRemains < REMAINS_COUNT) {

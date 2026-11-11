@@ -3,5 +3,8 @@
     "author": "Skijer",
     "version": "1.0.1",
     "description": "Kite Shield: shield-slot equipment Link can surf on, with grind rails, hops and spins.",
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ],
+    "display_name": "Kite Shield"
 }

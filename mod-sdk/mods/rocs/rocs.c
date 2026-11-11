@@ -241,8 +241,9 @@ SOH_MOD_EXPORT void ModInit(void) {
                                "in midair to ride the wind a&%gsecond time%w, even as you fall.");
     Z64Items_SetPauseText(&cape, "%rRoc's Cape&%wPress %y\xA1%w to jump, again in midair&for a second jump.");
 
-    SOHCustomItemDefinition progressive = Z64Items_Define(ROCS_PROGRESSIVE_KEY, NULL, NULL);
-    progressive.presentationFlags |= SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
+    SOHCustomItemDefinition progressive = Z64Items_Define(ROCS_PROGRESSIVE_KEY, sFeatherIconTex, sFeatherNameTex);
+    progressive.displayName = "Progressive Roc's Feather";
+    progressive.presentationFlags |= SOH_ITEM_HIDE_FROM_SAVE_EDITOR | SOH_ITEM_HIDE_FROM_KALEIDO;
     progressive.getItemEntry.drawFunc = DrawProgressive;
     Z64Items_SetLogic(&progressive, &sProgressiveRandomizer);
 

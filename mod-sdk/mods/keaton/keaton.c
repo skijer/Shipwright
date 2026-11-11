@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -1591,13 +1592,17 @@ static void DrawKeatonParts(PlayState* play, Player* player, int32_t limbIndex) 
 
 // Un zorro ágil pero pequeño: arbustos y flores bomba, como el Zora; nada de rocas plateadas.
 static void ResolveKeatonStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!sApi->IsFormActive(KEATON_FORM_KEY)) {
         return;
     }
-    *strength = PLAYER_STR_BRACELET;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_DEKU);
+}
+
+static void ResolveKeatonGrab(bool* should, va_list args) {
+    if (!sApi->IsFormActive(KEATON_FORM_KEY)) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_DEKU);
 }
 
 // ---- flauta ----
@@ -1839,6 +1844,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, CaptureFistBlock);
     SOH_REGISTER_HOOK(sApi, OnBgCheckResolveWallFlags, AllowKeatonWall);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveKeatonStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveKeatonGrab);
     sApi->RegisterVB(VB_DRAW_PLAYER_MASK, KeepBorrowedMask);
     sApi->RegisterVB(VB_PLAYER_UNEQUIP_MASK_WITHOUT_BUTTON, KeepBorrowedMask);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, OfferKeatonToGuard);

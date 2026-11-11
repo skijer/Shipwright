@@ -2,6 +2,9 @@
     "name": "cojiro_companion",
     "author": "Skijer",
     "version": "1.0.3",
-    "dependencies": ["command_melody"],
-    "description": "Grog's Cojiro trade unlocks a summonable blue cucco partner. Three hits send him away temporarily; Command Melody can control him."
+    "dependencies": [
+        "command_melody"
+    ],
+    "description": "Grog's Cojiro trade unlocks a summonable blue cucco partner. Three hits send him away temporarily; Command Melody can control him.",
+    "display_name": "Cojiro Companion"
 }

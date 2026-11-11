@@ -3,7 +3,9 @@
     "author": "Skijer",
     "version": "2.1",
     "description": "Majora's Mask assets for Unbound: extracts mm.o2r out of your own ROM with 2ship's paths; Unbound mounts it under Ocarina of Time's so it never covers them.",
-    "permissions": ["files"],
+    "permissions": [
+        "files"
+    ],
     "build": {
         "includeDirectories": [
             "extractor/ZAPD",
@@ -11,6 +13,9 @@
             "extractor/lib/tinyxml2",
             "extractor/lib/libgfxd"
         ],
-        "definitions": ["GAME_OOT"]
-    }
+        "definitions": [
+            "GAME_OOT"
+        ]
+    },
+    "dependency_only": true
 }

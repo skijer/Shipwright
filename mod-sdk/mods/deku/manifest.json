@@ -2,7 +2,9 @@
     "name": "deku",
     "author": "Skijer",
     "version": "1.0",
-    "dependencies": ["mm_assets"],
+    "dependencies": [
+        "mm_assets"
+    ],
     "description": "The Deku Mask turns Link into Deku Link, with his spin, bubbles, water hops and flower flight.",
     "requires": [
         "icon_item_static_yar/gItemIconDekuMaskTex",
@@ -43,5 +45,6 @@
         "objects/gameplay_keep/gameplay_keep_DL_06F380",
         "objects/gameplay_keep/gameplay_keep_DL_06F9F0",
         "objects/gameplay_keep/gameplay_keep_DL_06FAE0"
-    ]
+    ],
+    "display_name": "Deku Mask"
 }

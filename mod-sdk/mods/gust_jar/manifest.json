@@ -3,5 +3,8 @@
     "author": "Skijer",
     "version": "1.0",
     "description": "Gust Jar: suck in grass, pots and small foes, and turn the wheel to blow back the breath of every medallion you carry.",
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ],
+    "display_name": "Gust Jar"
 }

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 #include "z64aiming.h"
 
 #include "align_asset_macro.h"
@@ -589,13 +590,17 @@ static void ResolveZoraFace(const char** eyes, const char** mouth) {
 }
 
 static void ResolveZoraStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsZora()) {
         return;
     }
-    *strength = PLAYER_STR_BRACELET;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_ZORA);
+}
+
+static void ResolveZoraGrab(bool* should, va_list args) {
+    if (!IsZora()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_ZORA);
 }
 
 static void GrantZoraSwim(bool* should, va_list args) {
@@ -2084,7 +2089,7 @@ static bool HasHumanSwimProvider(bool requested) {
     SwimCapability tunic=SOH_MOD_API_HAS(sApi,FindService)?
         (SwimCapability)sApi->FindService("nei.zora_tunic.swim_enabled"):NULL;
     return requested || (SOH_MOD_API_HAS(sApi,IsCustomItemWorn) &&
-        sApi->IsCustomItemWorn("nei.mm_remains_gyorg")) || (tunic && tunic());
+        sApi->IsCustomItemWorn("mm.remains.gyorg")) || (tunic && tunic());
 }
 
 static void HumanGyorgSwim(PlayState* play,Player* player,bool enabled) {
@@ -2450,6 +2455,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateHumanSwim);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawHumanSwim);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveZoraStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveZoraGrab);
     sApi->RegisterVB(VB_SWIM, GrantZoraSwim);
     sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC, DriveSwimMove);
 }

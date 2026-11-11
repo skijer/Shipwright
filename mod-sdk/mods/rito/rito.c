@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64itemdraw.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -322,6 +324,21 @@ static bool TryAirBow(PlayState* play, Player* player);
 
 static bool IsRito(void) {
     return sApi != NULL && sApi->IsFormActive(RITO_FORM_KEY);
+}
+
+// A Rito's light frame lifts like a Deku: one level below Link's own strength.
+static void ResolveRitoStrength(bool* should, va_list args) {
+    if (!IsRito()) {
+        return;
+    }
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_DEKU);
+}
+
+static void ResolveRitoGrab(bool* should, va_list args) {
+    if (!IsRito()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_DEKU);
 }
 
 static bool IsGrounded(Player* player) {
@@ -1910,8 +1927,15 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, RITO_MASK_KEY, RITO_MASK_KEY, "",
 };
 
+static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
+    (void)entry;
+    Z64Items_DrawIconBillboard(play, sIconTex);
+}
+
 static void RegisterMask(void) {
     SOHCustomItemDefinition mask = Z64Items_Define(RITO_MASK_KEY, sIconTex, sNameTex);
+    mask.displayName = "Rito Mask";
+    mask.getItemEntry.drawFunc = DrawMaskGetItem;
 
     Z64Items_SetButtons(&mask, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     mask.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
@@ -1947,4 +1971,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC, DriveSink);
     sApi->RegisterVB(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, NoteAirThrow);
+    sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveRitoStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveRitoGrab);
 }

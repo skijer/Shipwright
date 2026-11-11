@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -1001,15 +1002,19 @@ static void ResolveFdAgeProperties(Player* player, PlayerAgeProperties** propert
     *properties = &sFdBody;
 }
 
-// NEI's Deity lifts like a Goron wearing the Golden Gauntlets.
+// The Deity lifts like a Goron: the same offset on Link's own strength level.
 static void ResolveFdStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsFierceDeity()) {
         return;
     }
-    *strength = PLAYER_STR_GOLD_G;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_GORON);
+}
+
+static void ResolveFdGrab(bool* should, va_list args) {
+    if (!IsFierceDeity()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_GORON);
 }
 
 // B always swings the Deity's blade, whatever it holds, so MM's icon replaces it.
@@ -1379,6 +1384,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorPlaySfx, ACTOR_PLAYER, SpeakWithFdVoice);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveMotionScale, ResolveFdSpeedCap);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveFdStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveFdGrab);
     sApi->RegisterVB(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, KeepBForBlade);
     sApi->RegisterVB(VB_USE_HELD_ITEM_AFTER_CHANGE, SwingOutOfDraw);
 }

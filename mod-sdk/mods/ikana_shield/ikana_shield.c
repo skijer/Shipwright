@@ -18,7 +18,9 @@
 #include "objects/object_link_child/object_link_child.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 
-#define IKANA_SHIELD_KEY "nei.equip.ikana_shield"
+// Majora's Mask's Mirror Shield: Fleet pairs it with MM's own by this key.
+#define IKANA_SHIELD_KEY "mm.mirror_shield"
+#define LEGACY_IKANA_SHIELD_KEY "nei.equip.ikana_shield"
 #define GUARD_WINDOW 12
 #define SOUL_DRAIN 4
 #define SOUL_HEAL 8
@@ -355,7 +357,8 @@ static void ForgetGuard(const char* key) {
 
 static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",          "OnPlayerShieldBlocked",
                                               "OnPlayerHealthChange", "OnCollisionResolveDamage", "OnActorDestroy",    "OnPlayerResolveLimbDraw",
-                                              "OnPlayerPostLimbDraw",    "OnSceneInit" };
+                                              "OnPlayerPostLimbDraw",    "OnSceneInit",           "OnLoadGame",
+                                              "OnCustomItemOwnedChange" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -441,6 +444,33 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+// A save keeps unknown equipment keys, so one from before the rename still names the shield by its old key.
+static void MigrateLegacyKey(int32_t fileNum) {
+    if (!CustomEquipRegistry_IsOwned(LEGACY_IKANA_SHIELD_KEY) && !sApi->IsCustomItemOwned(LEGACY_IKANA_SHIELD_KEY)) {
+        return;
+    }
+    CustomEquipRegistry_SetOwned(IKANA_SHIELD_KEY, true);
+    if (CustomEquipRegistry_IsWorn(LEGACY_IKANA_SHIELD_KEY)) {
+        CustomEquipRegistry_Wear(IKANA_SHIELD_KEY);
+    }
+    sApi->SetCustomItemOwned(LEGACY_IKANA_SHIELD_KEY, false);
+}
+
+static void ForwardLegacyKey(const char* key, bool owned) {
+    if (owned && strcmp(key, LEGACY_IKANA_SHIELD_KEY) == 0) {
+        MigrateLegacyKey(0);
+    }
+}
+
+// An older seed places the shield by its old key; that item only hands the shield over.
+static void RegisterLegacyItem(const SOHCustomItemRandomizer* randomizer) {
+    SOHCustomItemDefinition legacy = Z64Items_Define(IKANA_SHIELD_KEY, sIcon, sName);
+    legacy.displayName = "Shield of Ikana";
+    legacy.getItemEntry.drawFunc = DrawGetItem;
+    legacy.randomizer = randomizer;
+    Z64Items_RegisterLegacyKey(sApi, &legacy, LEGACY_IKANA_SHIELD_KEY);
+}
+
 SOH_MOD_EXPORT void ModInit(void) {
     InitRemoteVisuals();
     SOHCustomEquipDefinition definition = { 0 };
@@ -472,12 +502,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!CustomEquipRegistry_Register(&definition)) {
         return;
     }
+    RegisterLegacyItem(&randomizer);
 
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickShield);
     SOH_REGISTER_HOOK(sApi, OnPlayerShieldBlocked, DrainOnGuard);
     SOH_REGISTER_HOOK(sApi, OnPlayerShieldBlocked, AbsorbShieldElement);
     SOH_REGISTER_HOOK(sApi, OnCollisionResolveDamage, ResolveSoulDamage);
     SOH_REGISTER_HOOK(sApi, OnActorDestroy, ForgetSoulActor);
+    SOH_REGISTER_HOOK(sApi, OnLoadGame, MigrateLegacyKey);
+    SOH_REGISTER_HOOK(sApi, OnCustomItemOwnedChange, ForwardLegacyKey);
     sApi->RegisterVB(VB_MIRRAY_DRAW_REFLECTION, DrawMmReflection);
     SOHModMenuWidget separate = {0};
     separate.structSize=sizeof(separate); separate.section="Mods"; separate.sidebar="Ikana Shield";

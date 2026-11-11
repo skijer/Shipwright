@@ -80,7 +80,17 @@ static GetItemEntry sOriginalMasterEntry;
 static uint16_t sOriginalMasterMessage;
 static const int sStart[CH_COUNT]={0,2,5,7,10};
 static const int sLength[CH_COUNT]={2,3,2,3,3};
-static u16 Level(int c){return sApi->GetProgressiveLevel(sChain[c],SOH_RANDO_INF_SAVE);}
+// Disabled chains retain their save counters but publish no vanilla aliases or randomizer pickups.
+static bool sChainEnabled[CH_COUNT];
+static void ReadChainOptions(void) {
+ static const char* const ids[]={"hammer","kokiri","master","bgs","hookshot"};
+ char option[128];
+ for(int c=0;c<CH_COUNT;c++) {
+  snprintf(option,sizeof(option),"gMods.Store.oot_item_upgrades.%s",ids[c]);
+  sChainEnabled[c]=CVarGetInteger(option,1)!=0;
+ }
+}
+static u16 Level(int c){return sChainEnabled[c]?sApi->GetProgressiveLevel(sChain[c],SOH_RANDO_INF_SAVE):0;}
 static bool OwnSword(const SaveContext* s,int sword){return (s->inventory.equipment&OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD,sword))!=0;}
 static void SwordOwned(SaveContext* s,int sword,bool owned){u16 flag=OWNED_EQUIP_FLAG(EQUIP_TYPE_SWORD,sword);if(owned)s->inventory.equipment|=flag;else s->inventory.equipment&=~flag;}
 static u16 ReadHammer(const SaveContext* s){return s->inventory.items[SLOT_HAMMER]==ITEM_HAMMER?1:0;}
@@ -214,7 +224,7 @@ static const Stage* PreviewStage(const GetItemEntry* entry, bool receiving) {
    case ITEM_LONGSHOT:chain=CH_HOOK;minimum=2;break;
   }
  }
- if(chain<0)return NULL;
+ if(chain<0||!sChainEnabled[chain])return NULL;
  const char* next=sApi->GetNextProgressiveItem(sChain[chain],SOH_RANDO_INF_SAVE);
  for(int i=sStart[chain];i<sStart[chain]+sLength[chain];i++){
   if(next&&!strcmp(next,sStages[i].key)){
@@ -384,7 +394,7 @@ static bool RegisterItems(void){
   SOHCustomItemDefinition d=Z64Items_Define(sPickup[c],sStages[sStart[c]].icon,NULL);
   const SOHCustomItemDefinition* first=sApi->FindCustomItem(sStages[sStart[c]].key);
   if(first)d.getItemEntry=first->getItemEntry;
-  d.presentationFlags=SOH_ITEM_HIDE_FROM_KALEIDO|SOH_ITEM_HIDE_FROM_SAVE_EDITOR;d.getItemText=NULL;d.displayName=sStages[sStart[c]].name;d.getItemEntry.drawFunc=DrawStage;d.randomizer=&sPools[c];
+  d.presentationFlags=SOH_ITEM_HIDE_FROM_KALEIDO|SOH_ITEM_HIDE_FROM_SAVE_EDITOR;d.getItemText=NULL;d.displayName=sStages[sStart[c]].name;d.getItemEntry.drawFunc=DrawStage;d.randomizer=sChainEnabled[c]?&sPools[c]:NULL;
   if(!sApi->RegisterCustomItem(&d))return false;
  }
  return true;
@@ -408,7 +418,7 @@ static bool RegisterChains(void){
  for(int c=0;c<CH_COUNT;c++){
   SOHProgressiveLevel levels[3];for(int l=0;l<sLength[c];l++)levels[l].itemKey=sStages[sStart[c]+l].key;
   SOHProgressiveChain d={0};d.structSize=sizeof(d);d.key=sChain[c];d.pickupKey=sPickup[c];d.levels=levels;
-  d.levelCount=sLength[c];d.firstLevel=c==CH_BGS?2:1;d.aliases=aliases[c];d.aliasCount=aliasCount[c];d.readLevel=reads[c];d.applyLevel=applies[c];d.readFirstLevel=c==CH_BGS?BgsFirstLevel:NULL;
+  d.levelCount=sLength[c];d.firstLevel=c==CH_BGS?2:1;d.aliases=aliases[c];d.aliasCount=sChainEnabled[c]?aliasCount[c]:0;d.readLevel=reads[c];d.applyLevel=applies[c];d.readFirstLevel=c==CH_BGS?BgsFirstLevel:NULL;
   if(!sApi->RegisterProgressiveChain(&d))return false;
  }
  return true;
@@ -432,9 +442,10 @@ static void EasyGive(SaveContext* save){
  const char* next=sApi->GetNextProgressiveItem(sChain[chain],SOH_RANDO_INF_SAVE);
  const Stage* stage=NULL;
  for(int i=0;i<ARRAY_COUNT(sStages);i++)if(next&&!strcmp(next,sStages[i].key)){stage=&sStages[i];break;}
- bool maxed=Level(chain)>=sLength[chain];
+ bool maxed=!sChainEnabled[chain]||Level(chain)>=sLength[chain];
  char label[128];snprintf(label,sizeof(label),"Give %s##nei_upgrade_give",stage?stage->name:"item");
- if(maxed)ModUI_Text("Fully upgraded.");
+ if(!sChainEnabled[chain])ModUI_Text("This chain is disabled in the store configuration.");
+ else if(maxed)ModUI_Text("Fully upgraded.");
  ModUI_BeginDisabled(!gPlayState||!stage||maxed||sPendingGiveChain>=0);
  if(ModUI_Button(label,0,0)){sPendingGiveChain=chain;sGiveStatus="Queued; resume the game to receive the item.";}
  ModUI_EndDisabled();
@@ -452,6 +463,7 @@ static void Menu(void){
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api){sApi=api;}
 SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void){return &sRequirements;}
 SOH_MOD_EXPORT void ModInit(void){
+ ReadChainOptions();
  if(!SOH_MOD_API_HAS(sApi,RegisterProgressiveChain)||!SOH_MOD_API_HAS(sApi,GetProgressiveLevel)||!SOH_MOD_API_HAS(sApi,GetNextProgressiveItem)||!SOH_MOD_API_HAS(sApi,HasResource))return;
  if(!sApi->HasResource(sRazorBlade)||!sApi->HasResource(sGildedBlade)||!sApi->HasResource(sGfs))return;
  // Parse the packaged NEI mesh now, before its first world/hand draw.

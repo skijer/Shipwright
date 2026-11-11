@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -537,13 +538,17 @@ static void ResolveGoronHeight(Player* player, float* height) {
 }
 
 static void ResolveGoronStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsGoron()) {
         return;
     }
-    *strength = PLAYER_STR_SILVER_G;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_GORON);
+}
+
+static void ResolveGoronGrab(bool* should, va_list args) {
+    if (!IsGoron()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_GORON);
 }
 
 // Runs before Player_UpdateCommon consumes the hit, after CollisionCheck_Damage wrote it.
@@ -1977,5 +1982,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnOcarinaPlaybackNote, PlaybackNoteStruck);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveGoronStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveGoronGrab);
     sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC, DriveSink);
 }

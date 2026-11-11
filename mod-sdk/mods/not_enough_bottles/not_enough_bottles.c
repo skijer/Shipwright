@@ -441,8 +441,10 @@ static void GiveIntoBottles(PlayState* play, uint8_t* item, bool* handled) {
     if (*handled) {
         return;
     }
-    if (given == ITEM_BOTTLE || *item == ITEM_MILK_BOTTLE ||
-        (IsBottleContent(given) && (GET_PLAYER(play)->stateFlags1&PLAYER_STATE1_GETTING_ITEM))) {
+    // Remote grants (Fleet deliveries) can arrive with no play state or no spawned player.
+    const Player* player = play != NULL ? GET_PLAYER(play) : NULL;
+    const bool isGettingItem = player != NULL && (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM);
+    if (given == ITEM_BOTTLE || *item == ITEM_MILK_BOTTLE || (IsBottleContent(given) && isGettingItem)) {
         bottle = FindVanillaSlot(ITEM_NONE) == NEB_NONE ? FindUnownedExtra() : NEB_NONE;
         if (bottle != NEB_NONE) {
             Acquire(bottle, given);

@@ -2,7 +2,9 @@
     "name": "garo",
     "author": "Skijer",
     "version": "1.0.1",
-    "dependencies": ["mm_assets"],
+    "dependencies": [
+        "mm_assets"
+    ],
     "description": "Garo's Mask turns Link into a Garo: a spinning dual-blade fighter with a counter guard, a vanishing shadow strike and a rod of elemental magic, who runs across water and sees through illusions.",
     "requires": [
         "objects/object_jso/gGaroSkel",
@@ -12,5 +14,6 @@
         "icon_item_static_yar/gItemIconGaroMaskTex",
         "item_name_static/gItemNameGarosMaskENGTex",
         "misc/link_animetion/gPlayerAnim_cl_setmask_Data"
-    ]
+    ],
+    "display_name": "Garo's Mask"
 }

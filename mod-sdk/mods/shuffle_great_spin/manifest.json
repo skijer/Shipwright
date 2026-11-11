@@ -1,0 +1,8 @@
+{
+    "name": "shuffle_great_spin",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Shuffle Great Spin Attack",
+    "game": "oot",
+    "description": "Optional Great Spin Attack shuffle. Magical spin attacks require the reward; disabled by default."
+}

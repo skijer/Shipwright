@@ -124,6 +124,8 @@ extern void MmTax_Init(const SOHModApi* api);
 
 typedef struct {
     const char* key;
+    // The key a save made before the mm. names owns this mask under; NULL when it never changed.
+    const char* legacyKey;
     const char* iconPath;
     const char* namePath;
     // NULL for a mask that wears Ocarina's own model instead (see vanillaMask).
@@ -136,31 +138,31 @@ typedef struct {
 } WearableMask;
 
 static const WearableMask sMasks[MASK_GRID_SIZE] = {
-    [MASK_POSTMAN] = { "nei.mask_postman", MM_ICON_DIR "gItemIconPostmansHatTex",
+    [MASK_POSTMAN] = { "mm.mask.postman", "nei.mask_postman", MM_ICON_DIR "gItemIconPostmansHatTex",
                        MM_NAME_DIR "gItemNamePostmansHatENGTex",
                        MM_OBJECT_DIR "mask_posthat/object_mask_posthat_DL_000290",
                        MM_OBJECT_DIR "gi_mask12/gGiPostmanHatCapDL", PLAYER_MASK_NONE,
                        "You got the %rPostman's Hat%w!&The cap of a man who has&never been late in his life.",
                        "%rPostman's Hat&%wPress %y\xA1%w to wear it. %y\xA0%w opens the&mailbox map." },
-    [MASK_ALL_NIGHT] = { "nei.mask_all_night", MM_ICON_DIR "gItemIconAllNightMaskTex",
+    [MASK_ALL_NIGHT] = { "mm.mask.all_night", "nei.mask_all_night", MM_ICON_DIR "gItemIconAllNightMaskTex",
                          MM_NAME_DIR "gItemNameAllNightMaskENGTex",
                          MM_OBJECT_DIR "mask_yofukasi/object_mask_yofukasi_DL_000490",
                          MM_OBJECT_DIR "gi_mask06/gGiAllNightMaskFaceDL", PLAYER_MASK_NONE,
                          "You got the %rAll-Night Mask%w!&Nothing sleeps while you wear&"
                          "it, not even what only comes&out at night.",
                          "%rAll-Night Mask&%wPress %y\xA1%w to wear it. Night skulltulas&come out by day." },
-    [MASK_BLAST] = { "nei.mask_blast", MM_ICON_DIR "gItemIconBlastMaskTex",
+    [MASK_BLAST] = { "mm.mask.blast", "nei.mask_blast", MM_ICON_DIR "gItemIconBlastMaskTex",
                      MM_NAME_DIR "gItemNameBlastMaskENGTex",
                      MM_OBJECT_DIR "mask_bakuretu/object_mask_bakuretu_DL_0005C0",
                      MM_OBJECT_DIR "gi_mask21/gGiBlastMaskDL", PLAYER_MASK_NONE,
                      "You got the %rBlast Mask%w! A&bomb you can wear. Press %y\xA0%w and&stand well back.",
                      "%rBlast Mask&%wPress %y\xA1%w to wear it. Then %y\xA0%w&detonates it." },
-    [MASK_STONE] = { "nei.mask_stone", MM_ICON_DIR "gItemIconStoneMaskTex",
+    [MASK_STONE] = { "mm.mask.stone", "nei.mask_stone", MM_ICON_DIR "gItemIconStoneMaskTex",
                      MM_NAME_DIR "gItemNameStoneMaskENGTex", MM_OBJECT_DIR "mask_stone/object_mask_stone_DL_000820",
                      MM_OBJECT_DIR "gi_stonemask/gGiStoneMaskDL", PLAYER_MASK_NONE,
                      "You got the %rStone Mask%w! It&makes you as dull as a rock:&nobody will look twice at you.",
                      "%rStone Mask&%wPress %y\xA1%w to wear it. Nothing can&see or hear you." },
-    [MASK_GREAT_FAIRY] = { "nei.mask_great_fairy", MM_ICON_DIR "gItemIconGreatFairyMaskTex",
+    [MASK_GREAT_FAIRY] = { "mm.mask.great_fairy", "nei.mask_great_fairy", MM_ICON_DIR "gItemIconGreatFairyMaskTex",
                            MM_NAME_DIR "gItemNameGreatFairysMaskENGTex",
                            MM_OBJECT_DIR "mask_bigelf/object_mask_bigelf_DL_0016F0",
                            MM_OBJECT_DIR "gi_mask14/gGiGreatFairyMaskFaceDL", PLAYER_MASK_NONE,
@@ -168,69 +170,69 @@ static const WearableMask sMasks[MASK_GRID_SIZE] = {
                            "and the Great Fairies answer&it.",
                            "%rGreat Fairy's Mask&%wPress %y\xA1%w to wear it. %y\xA0%w opens the&"
                            "fountain map; in a fountain, %y\x9F%w&claims her gift." },
-    [MASK_BREMEN] = { "nei.mask_bremen", MM_ICON_DIR "gItemIconBremenMaskTex",
+    [MASK_BREMEN] = { "mm.mask.bremen", "nei.mask_bremen", MM_ICON_DIR "gItemIconBremenMaskTex",
                       MM_NAME_DIR "gItemNameBremenMaskENGTex", MM_OBJECT_DIR "mask_bree/object_mask_bree_DL_0003C0",
                       MM_OBJECT_DIR "gi_mask20/gGiBremenMaskDL", PLAYER_MASK_NONE,
                       "You got the %rBremen Mask%w!&Hold %y\xA0%w and march. Whatever&"
                       "falls in behind you is yours.",
                       "%rBremen Mask&%wPress %y\xA1%w to wear it. Hold %y\xA0%w to&march." },
-    [MASK_BUNNY] = { "nei.mask_bunny", "__OTR__textures/icon_item_static/gItemIconMaskBunnyHoodTex",
+    [MASK_BUNNY] = { "nei.mask_bunny", NULL, "__OTR__textures/icon_item_static/gItemIconMaskBunnyHoodTex",
                      "__OTR__textures/item_name_static/gBunnyHoodItemNameENGTex", NULL,
                      "__OTR__objects/object_gi_rabit_mask/gGiBunnyHoodDL", PLAYER_MASK_BUNNY,
                      "You got the %rBunny Hood%w! In&Termina its ears do more than&flap: you run like a rabbit.",
                      "%rBunny Hood&%wPress %y\xA1%w to wear it. Link runs half&again as fast." },
-    [MASK_DON_GERO] = { "nei.mask_don_gero", MM_ICON_DIR "gItemIconDonGeroMaskTex",
+    [MASK_DON_GERO] = { "mm.mask.don_gero", "nei.mask_don_gero", MM_ICON_DIR "gItemIconDonGeroMaskTex",
                         MM_NAME_DIR "gItemNameDonGerosMaskENGTex", MM_OBJECT_DIR "mask_gero/gDonGeroMaskDL",
                         MM_OBJECT_DIR "gi_mask16/gGiDonGeroMaskFaceDL", PLAYER_MASK_NONE,
                         "You got %rDon Gero's Mask%w! The&frogs take their conductor&seriously. Find their log.",
                         "%rDon Gero's Mask&%wPress %y\xA1%w to wear it. At the frogs'&log, %y\xA1%w conducts." },
-    [MASK_SCENTS] = { "nei.mask_scents", MM_ICON_DIR "gItemIconMaskOfScentsTex",
+    [MASK_SCENTS] = { "mm.mask.scents", "nei.mask_scents", MM_ICON_DIR "gItemIconMaskOfScentsTex",
                       MM_NAME_DIR "gItemNameMaskOfScentsENGTex",
                       MM_OBJECT_DIR "mask_bu_san/object_mask_bu_san_DL_000710",
                       MM_OBJECT_DIR "gi_mask22/gGiMaskOfScentsFaceDL", PLAYER_MASK_NONE,
                       "You got the %rMask of Scents%w!&A pig's nose, and a pig's nose&misses nothing.",
                       "%rMask of Scents&%wPress %y\xA1%w to wear it. Stand still and&Link sniffs the air." },
-    [MASK_ROMANI] = { "nei.mask_romani", MM_ICON_DIR "gItemIconRomaniMaskTex",
+    [MASK_ROMANI] = { "mm.mask.romani", "nei.mask_romani", MM_ICON_DIR "gItemIconRomaniMaskTex",
                       MM_NAME_DIR "gItemNameRomanisMaskENGTex",
                       MM_OBJECT_DIR "mask_romerny/object_mask_romerny_DL_0007A0",
                       MM_OBJECT_DIR "gi_mask10/gGiRomaniMaskCapDL", PLAYER_MASK_NONE,
                       "You got %rRomani's Mask%w! Every&cow in the land knows the&ranch it came from.",
                       "%rRomani's Mask&%wPress %y\xA1%w to wear it. Cows give milk&to %y\xA0%w, no song." },
-    [MASK_CIRCUS_LEADER] = { "nei.mask_circus_leader", MM_ICON_DIR "gItemIconCircusLeaderMaskTex",
+    [MASK_CIRCUS_LEADER] = { "mm.mask.circus_leader", "nei.mask_circus_leader", MM_ICON_DIR "gItemIconCircusLeaderMaskTex",
                              MM_NAME_DIR "gItemNameCircusLeadersMaskENGTex",
                              MM_OBJECT_DIR "mask_zacho/object_mask_zacho_DL_000700",
                              MM_OBJECT_DIR "gi_mask11/gGiCircusLeaderMaskFaceDL", PLAYER_MASK_NONE,
                              "You got the %rCircus Leader's&Mask%w! A face so sad that&"
                              "everyone who sees it weeps.",
                              "%rCircus Leader's Mask&%wPress %y\xA1%w to wear it." },
-    [MASK_COUPLE] = { "nei.mask_couple", MM_ICON_DIR "gItemIconCouplesMaskTex",
+    [MASK_COUPLE] = { "mm.mask.couple", "nei.mask_couple", MM_ICON_DIR "gItemIconCouplesMaskTex",
                       MM_NAME_DIR "gItemNameCouplesMaskENGTex",
                       MM_OBJECT_DIR "mask_meoto/object_mask_meoto_DL_0005A0",
                       MM_OBJECT_DIR "gi_mask13/gGiCouplesMaskFullDL", PLAYER_MASK_NONE,
                       "You got the %rCouple's Mask%w!&Two halves made whole.&Wearing it mends you as you&walk.",
                       "%rCouple's Mask&%wPress %y\xA1%w to wear it. Heals by day,&restores magic by night." },
-    [MASK_TRUTH] = { "nei.mask_truth", "__OTR__textures/icon_item_static/gItemIconMaskTruthTex",
+    [MASK_TRUTH] = { "nei.mask_truth", NULL, "__OTR__textures/icon_item_static/gItemIconMaskTruthTex",
                      "__OTR__textures/item_name_static/gMaskofTruthItemNameENGTex", NULL,
                      "__OTR__objects/object_gi_truth_mask/gGiMaskOfTruthDL", PLAYER_MASK_TRUTH,
                      "You got the %rMask of Truth%w!&Stone and beast alike will tell&you what they know.",
                      "%rMask of Truth&%wPress %y\xA1%w to wear it. Gossip Stones&will speak." },
-    [MASK_KAMARO] = { "nei.mask_kamaro", MM_ICON_DIR "gItemIconKamaroMaskTex",
+    [MASK_KAMARO] = { "mm.mask.kamaro", "nei.mask_kamaro", MM_ICON_DIR "gItemIconKamaroMaskTex",
                       MM_NAME_DIR "gItemNameKamarosMaskENGTex",
                       MM_OBJECT_DIR "mask_dancer/object_mask_dancer_DL_000EF0",
                       MM_OBJECT_DIR "gi_mask17/gGiKamaroMaskDL", PLAYER_MASK_NONE,
                       "You got %rKamaro's Mask%w! A&dancer's last lesson. Hold %y\xA0%w and&pass it on.",
                       "%rKamaro's Mask&%wPress %y\xA1%w to wear it. Hold %y\xA0%w to&dance." },
-    [MASK_GIBDO] = { "nei.mask_gibdo", MM_ICON_DIR "gItemIconGibdoMaskTex",
+    [MASK_GIBDO] = { "mm.mask.gibdo", "nei.mask_gibdo", MM_ICON_DIR "gItemIconGibdoMaskTex",
                      MM_NAME_DIR "gItemNameGibdoMaskENGTex", MM_OBJECT_DIR "mask_gibudo/object_mask_gibudo_DL_000250",
                      MM_OBJECT_DIR "gi_mask15/gGiGibdoMaskDL", PLAYER_MASK_NONE,
                      "You got the %rGibdo Mask%w! The&dead take you for one of their&own and let you pass.",
                      "%rGibdo Mask&%wPress %y\xA1%w to wear it. Redeads and&Gibdos ignore you." },
-    [MASK_CAPTAIN] = { "nei.mask_captain", MM_ICON_DIR "gItemIconCaptainsHatTex",
+    [MASK_CAPTAIN] = { "mm.mask.captain", "nei.mask_captain", MM_ICON_DIR "gItemIconCaptainsHatTex",
                        MM_NAME_DIR "gItemNameCaptainsHatENGTex", MM_OBJECT_DIR "mask_skj/object_mask_skj_DL_0009F0",
                        MM_OBJECT_DIR "gi_mask18/gGiCaptainsHatBodyDL", PLAYER_MASK_NONE,
                        "You got the %rCaptain's Hat%w! The&bones of the field answer to&whoever wears it.",
                        "%rCaptain's Hat&%wPress %y\xA1%w to wear it. Stalchildren&serve instead of attack." },
-    [MASK_GIANT] = { "nei.mask_giant", MM_ICON_DIR "gItemIconGiantsMaskTex",
+    [MASK_GIANT] = { "mm.mask.giant", "nei.mask_giant", MM_ICON_DIR "gItemIconGiantsMaskTex",
                      MM_NAME_DIR "gItemNameGiantsMaskENGTex",
                      MM_OBJECT_DIR "mask_kyojin/object_mask_kyojin_DL_000380",
                      MM_OBJECT_DIR "gi_mask23/gGiGiantMaskDL", PLAYER_MASK_NONE,
@@ -305,6 +307,7 @@ static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
     "OnLoadGame",
     "OnOpenText",
     "OnInterfaceDrawEnd",
+    "OnCustomItemOwnedChange",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -1322,8 +1325,18 @@ static void DrawCircusItem(PlayState* play,GetItemEntry* entry) {
 
 #include "romani_chateau.inc.c"
 
+// The store toggles and the oldest saves name a mask by its "nei." suffix, which the mm. rename kept.
+static const char* MaskStoreName(const WearableMask* mask) {
+    return (mask->legacyKey != NULL ? mask->legacyKey : mask->key) + sizeof("nei.") - 1;
+}
+
 static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     const WearableMask* mask = &sMasks[index];
+    char option[128];
+    snprintf(option, sizeof(option), "gMods.Store.mm_wearables.%s", MaskStoreName(mask));
+    if (!CVarGetInteger(option, 1)) {
+        return;
+    }
     SOHCustomItemDefinition definition = Z64Items_Define(mask->key, mask->iconPath, mask->namePath);
 
     Z64Items_SetButtons(&definition, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
@@ -1340,19 +1353,29 @@ static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     };
     Z64Items_SetLogic(&definition, &randomizer);
     Z64Items_Register(sApi, &definition);
-    static char legacyKeys[MASK_GRID_SIZE][64];
-    snprintf(legacyKeys[index],sizeof(legacyKeys[index]),"skijer.%s",mask->key+4);
-    definition.key=legacyKeys[index];
-    definition.presentationFlags|=SOH_ITEM_HIDE_FROM_KALEIDO|SOH_ITEM_HIDE_FROM_SAVE_EDITOR;
-    definition.randomizer=NULL;
-    Z64Items_Register(sApi,&definition);
+    static char skijerKeys[MASK_GRID_SIZE][64];
+    snprintf(skijerKeys[index], sizeof(skijerKeys[index]), "skijer.%s", MaskStoreName(mask));
+    Z64Items_RegisterLegacyKey(sApi, &definition, skijerKeys[index]);
+    if (mask->legacyKey != NULL) {
+        Z64Items_RegisterLegacyKey(sApi, &definition, mask->legacyKey);
+    }
 }
 
 static void MigrateMaskKeys(int32_t file) {
-    char legacy[64];
-    for(int i=0;i<MASK_GRID_SIZE;++i)if(sMasks[i].key!=NULL) {
-        snprintf(legacy,sizeof(legacy),"skijer.%s",sMasks[i].key+4);
-        if(sApi->IsCustomItemOwned(legacy))sApi->SetCustomItemOwned(sMasks[i].key,true);
+    char skijerKey[64];
+    for (int i = 0; i < MASK_GRID_SIZE; ++i) {
+        if (sMasks[i].key == NULL) {
+            continue;
+        }
+        snprintf(skijerKey, sizeof(skijerKey), "skijer.%s", MaskStoreName(&sMasks[i]));
+        Z64Items_MigrateLegacyKey(sApi, skijerKey, sMasks[i].key);
+        Z64Items_MigrateLegacyKey(sApi, sMasks[i].legacyKey, sMasks[i].key);
+    }
+}
+
+static void ForwardLegacyMask(const char* key, bool owned) {
+    for (int i = 0; i < MASK_GRID_SIZE; ++i) {
+        Z64Items_ForwardLegacyKey(sApi, key, owned, sMasks[i].legacyKey, sMasks[i].key);
     }
 }
 static void HideNativeWearables(bool* draw,va_list args) {
@@ -1542,6 +1565,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi,OnPlayerResolveLimbDraw,BlastSwordHand);
     RegisterChateau();
     SOH_REGISTER_HOOK(sApi,OnLoadFile,MigrateMaskKeys);
+    SOH_REGISTER_HOOK(sApi, OnCustomItemOwnedChange, ForwardLegacyMask);
     sApi->RegisterVB(VB_DRAW_PLAYER_MASK,HideNativeWearables);
     LoadAnims();
     MmTax_Init(sApi);

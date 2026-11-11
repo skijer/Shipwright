@@ -46,8 +46,9 @@ static const ALIGN_ASSET(2) char sKegSkullDL[] = "__OTR__objects/object_gi_bigbo
 static const ALIGN_ASSET(2) char sPictoBodyDL[] = "__OTR__objects/object_gi_camera/gGiPictoBoxBodyAndLensDL";
 static const ALIGN_ASSET(2) char sPictoFrameDL[] = "__OTR__objects/object_gi_camera/gGiPictoBoxFrameDL";
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDraw",        "OnItemReceive", "OnLoadFile",
-                                              "OnSceneInit",    "OnInterfaceDrawEnd", "OnPlayDrawEnd" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate",     "OnActorDraw",   "OnItemReceive", "OnLoadFile",
+                                              "OnSceneInit",        "OnInterfaceDrawEnd", "OnPlayDrawEnd",
+                                              "OnActorUpdate",      "ShouldActorUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -946,8 +947,11 @@ static void RunMmItems(void) {
     RunPhotoPrompt(player, play);
 }
 
+#include "mm_ice.inc.c"
+
 static void ForgetSceneState(int16_t sceneNum) {
     sKeg = NULL;
+    ForgetIcePlatforms();
     Z64Aiming_Drop();
     sPictoState = PICTO_OFF;
     sPictoCapture = PICTO_CAPTURE_IDLE;
@@ -1025,7 +1029,13 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetLogic(&keg, &sKegRandomizer);
     Z64Items_SetLogic(&picto, &sPictoRandomizer);
-    if (!Z64Items_Register(sApi, &keg) || !Z64Items_Register(sApi, &picto)) {
+    const bool enableKeg = CVarGetInteger("gMods.Store.mm_items.power_keg", 1) != 0;
+    const bool enablePicto = CVarGetInteger("gMods.Store.mm_items.picto_box", 1) != 0;
+    if (CVarGetInteger("gMods.Store.mm_items.ice_magic", 1) != 0) {
+        RegisterMmIce();
+    }
+    if ((enableKeg && !Z64Items_Register(sApi, &keg)) ||
+        (enablePicto && !Z64Items_Register(sApi, &picto))) {
         return;
     }
     LoadKegCount();

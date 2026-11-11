@@ -1,55 +1,145 @@
 {
     "packs": [
         {
-            "id": "skijer-items",
-            "name": "Skijer Items",
-            "mods": [
-                "ball_and_chain", "beetle", "bomb_arrows", "byrna", "cane_pacci", "deku_leaf", "demise_destruction",
-                "dominion_rod", "elemental_rods", "elemental_wand", "four_sword", "gust_jar", "lantern",
-                "mogma_mitts", "not_enough_bottles", "oot_item_upgrades", "pendant", "phantom_hourglass", "rocs",
-                "rod_of_seasons", "sheikah_slate", "shovel", "somaria", "spinner", "spiritual_stones",
-                "switch_hook", "time_gate", "trident", "ultrahand", "useful_medallions", "whip", "zonai_permafrost",
-                "ravio_bracelet", "ray_gun"
-            ]
-        },
-        {
-            "id": "mm-item-pack",
-            "name": "MM Item Pack",
-            "mods": ["mm_assets", "mm_items", "mm_wearables", "mm_collectables"]
-        },
-        {
-            "id": "skijer-transformations",
-            "name": "Skijer Transformations Pack",
-            "mods": ["deku", "fierce_deity", "garo", "gerudo", "goron", "kafei", "keaton", "rito", "wolf_link", "zora"]
-        },
-        {
-            "id": "skijer-equipment",
-            "name": "Skijer Equipment Pack",
-            "mods": [
-                "champion_tunic", "climb_boots", "divine_shield", "easy_equipment", "elemental_mirror_shield",
-                "goron_tunic", "ikana_shield", "kite_shield", "magic_cape", "magic_tunic", "minish_cap",
-                "pegasus_boots", "roc_boots", "sages_tunic", "zora_tunic"
-            ]
-        },
-        {
-            "id": "skijer-visuals",
-            "name": "Skijer Visuals",
-            "mods": ["cel_shading", "pak_loader"]
-        },
-        {
-            "id": "enemies-bosses",
-            "name": "Enemies & Bosses",
-            "mods": ["cucui-ganon", "lynel_miniboss", "trutefel_miniblin", "trutefel_molmauk", "trutefel_sbeetle"]
-        },
-        {
             "id": "skijer-devtools",
-            "name": "Skijer DevTools",
-            "mods": ["anim_viewer", "turbo", "item_drop_tester"]
+            "name": "Skijer Dev Tools",
+            "icon": "ITEM_LENS",
+            "mods": [
+                "anim_viewer",
+                "item_drop_tester",
+                "turbo"
+            ],
+            "description": "Tools for testing animations, item drops and gameplay while developing mods."
         },
         {
-            "id": "skijer-partners",
-            "name": "Skijer Partners",
-            "mods": ["command_melody", "cojiro_companion", "malon_companion", "enemy_possession"]
+            "id": "nei-items",
+            "name": "NEI Items",
+            "icon": "ITEM_BOW",
+            "mods": [
+                "byrna",
+                "dominion_rod",
+                "elemental_wand",
+                "gust_jar",
+                "minish_cap",
+                "rocs",
+                "shovel",
+                "switch_hook",
+                "ball_and_chain",
+                "beetle",
+                "bomb_arrows",
+                "cane_pacci",
+                "deku_leaf",
+                "demise_destruction",
+                "elemental_rods",
+                "lantern",
+                "mogma_mitts",
+                "not_enough_bottles",
+                "phantom_hourglass",
+                "rod_of_seasons",
+                "sheikah_slate",
+                "time_gate",
+                "somaria",
+                "spinner",
+                "ultrahand",
+                "whip",
+                "wolf_link",
+                "zonai_permafrost"
+            ],
+            "description": "Expand your inventory with new tools, weapons and abilities from across the Zelda series."
+        },
+        {
+            "id": "nei-equipment",
+            "name": "NEI Equipment",
+            "icon": "ITEM_SHIELD_HYLIAN",
+            "mods": [
+                "climb_boots",
+                "magic_cape",
+                "ravio_bracelet",
+                "cojiro_companion",
+                "command_melody",
+                "divine_shield",
+                "elemental_mirror_shield",
+                "four_sword",
+                "goron_tunic",
+                "ikana_shield",
+                "kite_shield",
+                "magic_tunic",
+                "champion_tunic",
+                "oot_item_upgrades",
+                "pegasus_boots",
+                "pendant",
+                "roc_boots",
+                "sages_tunic",
+                "trident",
+                "zora_tunic"
+            ],
+            "description": "Discover new shields, tunics, companions and equipment for your adventure."
+        },
+        {
+            "id": "mm-items",
+            "name": "MM Items",
+            "icon": "ITEM_OCARINA_TIME",
+            "mods": [
+                "mm_wearables",
+                "mm_collectables",
+                "mm_items"
+            ],
+            "description": "Customize Majora's Mask masks, boss remains and items. Configure each feature separately."
+        },
+        {
+            "id": "nei-forms",
+            "name": "NEI Forms",
+            "icon": "ITEM_MASK_KEATON",
+            "mods": [
+                "deku",
+                "zora",
+                "fierce_deity",
+                "goron",
+                "garo",
+                "keaton",
+                "gerudo",
+                "kafei",
+                "rito"
+            ],
+            "description": "Explore new character forms and their unique abilities."
+        },
+        {
+            "id": "nei-enemies",
+            "name": "NEI Enemies",
+            "icon": "ITEM_SKULL_TOKEN",
+            "mods": [
+                "trutefel_molmauk",
+                "cucui-ganon",
+                "lynel_miniboss",
+                "trutefel_miniblin",
+                "trutefel_sbeetle"
+            ],
+            "description": "Add new enemies and minibosses to challenge your adventure."
+        },
+        {
+            "id": "nei-others",
+            "name": "NEI Others",
+            "icon": "ITEM_MEDALLION_SPIRIT",
+            "mods": [
+                "pak_loader",
+                "useful_medallions",
+                "easy_equipment",
+                "spiritual_stones",
+                "cel_shading",
+                "mic_ocarina"
+            ],
+            "description": "Utility, visual and gameplay additions for your NEI collection."
+        },
+        {
+            "id": "other-skijer-mods",
+            "name": "Other Skijer Mods",
+            "icon": "ITEM_CHICKEN",
+            "mods": [
+                "enemy_possession",
+                "ray_gun",
+                "malon_companion"
+            ],
+            "description": "More standalone gameplay experiments and companions by Skijer."
         }
     ]
 }

@@ -56,7 +56,7 @@ static void TwinThrownAction(Player* player, PlayState* play) {
     }
 }
 
-#define TWIN_KEY "nei.mm_remains_twinmold"
+#define TWIN_KEY "mm.remains.twinmold"
 #define TWIN_COST 24
 #define TWIN_FOLLOW_DISTANCE 75.0f
 #define TWIN_HELP_DISTANCE 95.0f

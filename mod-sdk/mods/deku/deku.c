@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -2069,13 +2070,17 @@ static bool AllowsDekuItem(uint16_t item, const char* customKey) {
 }
 
 static void ResolveDekuStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsDeku()) {
         return;
     }
-    *strength = PLAYER_STR_NONE;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_DEKU);
+}
+
+static void ResolveDekuGrab(bool* should, va_list args) {
+    if (!IsDeku()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_DEKU);
 }
 
 // OoT's foot IK measures a human leg; on Deku's short rig it lifts the legs to plant a foot that isn't there.
@@ -2155,6 +2160,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK(sApi, OnSaveEditorTabs, DrawSaveEditorTab);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveDekuStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveDekuGrab);
     sApi->RegisterVB(VB_PLAYER_ADJUST_LEGS_TO_FLOOR, BlockLegPlanting);
 }
 

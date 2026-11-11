@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include "z64strength.h"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -1904,15 +1905,19 @@ static void TickDesertOffer(PlayState* play, Player* player) {
     }
 }
 
-// Nabooru's Silver Gauntlets are a Gerudo's grip: silver rocks and huge blocks, not the golden pillars.
+// A Gerudo grips like a Zora: one level above Link's own strength.
 static void ResolveGerudoStrength(bool* should, va_list args) {
-    int32_t* strength = va_arg(args, int32_t*);
-
     if (!IsGerudo()) {
         return;
     }
-    *strength = PLAYER_STR_SILVER_G;
-    *should = false;
+    Z64Strength_ResolveUpgrade(should, args, Z64STRENGTH_OFFSET_ZORA);
+}
+
+static void ResolveGerudoGrab(bool* should, va_list args) {
+    if (!IsGerudo()) {
+        return;
+    }
+    Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_ZORA);
 }
 
 static void BefriendGerudos(bool* should, va_list args) {
@@ -2346,6 +2351,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     sApi->RegisterVB(VB_CHANGE_HELD_ITEM_AND_USE_ITEM, InterceptDraw);
     sApi->RegisterVB(VB_GERUDOS_BE_FRIENDLY, BefriendGerudos);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveGerudoStrength);
+    sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveGerudoGrab);
     sApi->RegisterVB(VB_GIVE_ITEM_GERUDO_MEMBERSHIP_CARD, WithholdMembershipCard);
     sApi->RegisterVB(VB_GERUDO_FIGHTER_THROW_LINK_TO_JAIL, SpareFromJail);
     if (SOH_MOD_API_HAS(sApi, RegisterAudioMix)) {

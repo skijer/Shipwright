@@ -2,6 +2,23 @@
     "name": "mm_items",
     "author": "Skijer",
     "version": "1.1",
-    "dependencies": ["mm_assets"],
-    "description": "Majora's Mask items: the Gorons' Powder Keg, which flattens boulders and heavy blocks, and the Pictograph Box, which keeps one picture behind glass."
+    "dependencies": [
+        "mm_assets"
+    ],
+    "description": "Majora's Mask items: the Gorons' Powder Keg, which flattens boulders and heavy blocks, and the Pictograph Box, which keeps one picture behind glass. Ice arrows, Water Medallion shots and the Ice Rod freeze water into MM's ice platforms and Octoroks into floating icebergs.",
+    "options": [
+        {
+            "id": "power_keg",
+            "name": "Powder Keg"
+        },
+        {
+            "id": "picto_box",
+            "name": "Pictograph Box"
+        },
+        {
+            "id": "ice_magic",
+            "name": "Ice Arrow Platforms"
+        }
+    ],
+    "display_name": "Majora's Mask: Items"
 }

@@ -1,0 +1,8 @@
+{
+  "name": "golden_hearts",
+  "author": "Skijer",
+  "version": "1.0",
+  "display_name": "Golden Hearts",
+  "description": "Up to 20 golden hearts over the red ones, 40 in all: shuffled Golden Heart Containers and a starting amount. Golden hearts take damage first.",
+  "game": "oot"
+}

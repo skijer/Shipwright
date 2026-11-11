@@ -1,6 +1,7 @@
 // Majora's Mask Collectables: the four boss remains as wearable pieces, and the ten songs the
 // ocarina of Ocarina of Time can be taught to answer.
 #include <string.h>
+#include <stdio.h>
 
 #include "z64items.h"
 #include "remains.h"
@@ -9,6 +10,7 @@
 #include "functions.h"
 #include "macros.h"
 #include "variables.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "soh/ResourceManagerHelpers.h"
 
 #define MM_COLLECTABLES_PAGE (SOH_ITEM_PAGE_QUEST_VANILLA + 1)
@@ -26,6 +28,8 @@
 
 typedef struct {
     const char* key;
+    // The key a save made before the mm. names owns this item under; NULL when it never changed.
+    const char* legacyKey;
     const char* iconPath;
     const char* namePath;
     const char* getItemModelPath;
@@ -35,6 +39,7 @@ typedef struct {
 
 typedef struct {
     const char* key;
+    const char* legacyKey;
     const char* iconPath;
     const char* namePath;
     u8 noteCount;
@@ -45,6 +50,7 @@ typedef struct {
 
 static const RemainsDefinition sRemains[REMAINS_COUNT] = {
     {
+        "mm.remains.odolwa",
         "nei.mm_remains_odolwa",
         "__OTR__icon_item_static_yar/gItemIconOdolwasRemainsTex",
         "__OTR__item_name_static/gItemNameOdolwasRemainsENGTex",
@@ -54,6 +60,7 @@ static const RemainsDefinition sRemains[REMAINS_COUNT] = {
         "%rOdolwa's Remains&%wPress %y\xA1%w to wear it. Worn: %y\x9F%w runs,&%y\xA3%w+%y\xA0%w calls beetles.",
     },
     {
+        "mm.remains.goht",
         "nei.mm_remains_goht",
         "__OTR__icon_item_static_yar/gItemIconGohtsRemainsTex",
         "__OTR__item_name_static/gItemNameGohtsRemainsENGTex",
@@ -63,6 +70,7 @@ static const RemainsDefinition sRemains[REMAINS_COUNT] = {
         "%rGoht's Remains&%wPress %y\xA1%w to wear it. Worn: %y\x9F%w&charges, %y\xA0%w calls thunder.",
     },
     {
+        "mm.remains.gyorg",
         "nei.mm_remains_gyorg",
         "__OTR__icon_item_static_yar/gItemIconGyorgsRemainsTex",
         "__OTR__item_name_static/gItemNameGyorgsRemainsENGTex",
@@ -72,6 +80,7 @@ static const RemainsDefinition sRemains[REMAINS_COUNT] = {
         "%rGyorg's Remains&%wPress %y\xA1%w to wear it. Worn: endless&breath, fish and a whirlpool.",
     },
     {
+        "mm.remains.twinmold",
         "nei.mm_remains_twinmold",
         "__OTR__icon_item_static_yar/gItemIconTwinmoldsRemainsTex",
         "__OTR__item_name_static/gItemNameTwinmoldsRemainsENGTex",
@@ -113,6 +122,7 @@ static const ALIGN_ASSET(2) char sCommandName[] = "__OTR__textures/item_name_cus
 // Time's pitches. The last three use the NEI branch's authoritative fingering.
 static const SongDefinition sSongs[] = {
     {
+        "mm.song.sonata",
         "nei.mm_song_sonata",
         sSonataIcon,
         sSonataName,
@@ -122,6 +132,7 @@ static const SongDefinition sSongs[] = {
         "%rSonata of Awakening&%w\xA2\xA1\xA2\xA1\x9F\xA1\x9F The ocarina answers&it.",
     },
     {
+        "mm.song.goron_lullaby",
         "nei.mm_song_goron_lullaby",
         sLullabyIcon,
         sLullabyName,
@@ -131,6 +142,7 @@ static const SongDefinition sSongs[] = {
         "%rGoron Lullaby&%w\x9F\xA1\xA1\x9F\xA1\xA1\xA1\x9F The ocarina answers&it.",
     },
     {
+        "mm.song.new_wave",
         "nei.mm_song_new_wave",
         sBossaNovaIcon,
         sBossaNovaName,
@@ -141,6 +153,7 @@ static const SongDefinition sSongs[] = {
         "%rNew Wave Bossa Nova&%w\xA1\xA2\xA1\xA1\xA1\xA1\xA1 The ocarina answers&it.",
     },
     {
+        "mm.song.elegy",
         "nei.mm_song_elegy",
         sElegyIcon,
         sElegyName,
@@ -150,6 +163,7 @@ static const SongDefinition sSongs[] = {
         "%rElegy of Emptiness&%w\xA1\xA1\xA1\xA1\xA1\xA2\xA1 The ocarina answers&it.",
     },
     {
+        "mm.song.oath",
         "nei.mm_song_oath",
         sOathIcon,
         sOathName,
@@ -160,6 +174,7 @@ static const SongDefinition sSongs[] = {
         "%rOath to Order&%w\xA1\xA1\x9F\xA1\xA1\xA2 The ocarina answers it.",
     },
     {
+        "mm.song.healing",
         "nei.mm_song_healing",
         sHealingIcon,
         sHealingName,
@@ -169,6 +184,7 @@ static const SongDefinition sSongs[] = {
         "%rSong of Healing&%w\xA1\xA1\xA1\xA1\xA1\xA1 The ocarina answers it.",
     },
     {
+        "mm.song.soaring",
         "nei.mm_song_soaring",
         sSoaringIcon,
         sSoaringName,
@@ -179,6 +195,7 @@ static const SongDefinition sSongs[] = {
     },
     {
         "nei.mm_song_fugue_of_home",
+        NULL,
         sFugueIcon,
         sFugueName,
         6,
@@ -188,6 +205,7 @@ static const SongDefinition sSongs[] = {
     },
     {
         "nei.mm_song_ballad_of_hero",
+        NULL,
         sBalladIcon,
         sBalladName,
         7,
@@ -197,6 +215,7 @@ static const SongDefinition sSongs[] = {
     },
     {
         "nei.mm_song_command_melody",
+        NULL,
         sCommandIcon,
         sCommandName,
         8,
@@ -212,7 +231,7 @@ static const char* const sRequiredHooks[] = {
     "OnPlayerUpdate",        "OnPlayerPostLimbDraw",       "OnPlayerResolveLimbDraw",
     "OnPlayerResolveAnim",   "OnPlayerResolveMotionScale", "OnPlayerActionHandler",
     "OnPlayerShieldBlocked", "OnActorDrawEnd", "OnActorUpdate",
-    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnOcarinaNote", "OnLoadGame",
+    "OnPlayerFilterInput", "OnInterfaceDrawEnd", "OnGameFrameUpdate", "OnSceneInit", "OnOcarinaNote", "OnLoadGame", "OnCustomItemOwnedChange",
     "OnKaleidoInput", "OnExitGame",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
@@ -227,6 +246,17 @@ static u8 sLastPlayedPitch = OCARINA_PITCH_NONE;
 static s32 RemainsIndexForKey(const char* key) {
     for (s32 i = 0; i < REMAINS_COUNT; i++) {
         if (strcmp(sRemains[i].key, key) == 0) {
+            return i;
+        }
+    }
+    return REMAINS_NONE;
+}
+
+// An old seed's legacy key draws the same remains; ownership stays strict to the current key.
+static s32 RemainsIndexForShownKey(const char* key) {
+    for (s32 i = 0; i < REMAINS_COUNT; i++) {
+        const char* legacyKey = sRemains[i].legacyKey;
+        if (strcmp(sRemains[i].key, key) == 0 || (legacyKey != NULL && strcmp(legacyKey, key) == 0)) {
             return i;
         }
     }
@@ -314,7 +344,10 @@ static void RecognizeSong(u8 note, f32 modulator, s8 bend) {
     }
 }
 
+static void MigrateLegacyKeys(void);
+
 static void StartFile(int32_t fileNum) {
+    MigrateLegacyKeys();
     TwinLoad();
     Remains_ResetFile();
     ForgetPlayedNotes();
@@ -328,7 +361,7 @@ static const ALIGN_ASSET(2) char sSongColorDL[6][80]={
 };
 static void DrawSongGetItem(PlayState* play,GetItemEntry* entry) {
  const SOHCustomItemDefinition* item=sApi->FindCustomItemByRuntimeId(entry->tableId);int song=0;
- if(item!=NULL)for(int i=0;i<SONG_COUNT;++i)if(strcmp(item->key,sSongs[i].key)==0)song=i;
+ if(item!=NULL)for(int i=0;i<SONG_COUNT;++i)if(strcmp(item->key,sSongs[i].key)==0||(sSongs[i].legacyKey!=NULL&&strcmp(item->key,sSongs[i].legacyKey)==0))song=i;
  OPEN_DISPS(play->state.gfxCtx);
  Gfx_SetupDL_25Xlu(play->state.gfxCtx);
  gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
@@ -338,7 +371,7 @@ static void DrawSongGetItem(PlayState* play,GetItemEntry* entry) {
 }
 static void DrawRemainsGetItem(PlayState* play,GetItemEntry* entry) {
  const SOHCustomItemDefinition* item=sApi->FindCustomItemByRuntimeId(entry->tableId);
- int remains=item!=NULL?RemainsIndexForKey(item->key):-1;if(remains<0)return;
+ int remains=item!=NULL?RemainsIndexForShownKey(item->key):-1;if(remains<0)return;
  OPEN_DISPS(play->state.gfxCtx);
  Gfx_SetupDL_25Opa(play->state.gfxCtx);
  Matrix_Scale(.016f,.016f,.016f,MTXMODE_APPLY);
@@ -349,6 +382,12 @@ static void DrawRemainsGetItem(PlayState* play,GetItemEntry* entry) {
 static void RegisterRemains(void) {
     for (s32 i = 0; i < REMAINS_COUNT; i++) {
         const RemainsDefinition* source = &sRemains[i];
+        char option[128];
+        // The store toggle keeps the "nei." name it had before the mm. rename.
+        snprintf(option, sizeof(option), "gMods.Store.mm_collectables.%s", source->legacyKey + sizeof("nei.") - 1);
+        if (!CVarGetInteger(option, 1)) {
+            continue;
+        }
         SOHCustomItemDefinition definition = Z64Items_Define(source->key, source->iconPath, source->namePath);
 
         Z64Items_SetButtons(&definition, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
@@ -366,6 +405,7 @@ static void RegisterRemains(void) {
         Z64Items_SetLogic(&definition, &randomizer);
 
         Z64Items_Register(sApi, &definition);
+        Z64Items_RegisterLegacyKey(sApi, &definition, source->legacyKey);
     }
 }
 
@@ -387,6 +427,27 @@ static void RegisterSongs(void) {
         Z64Items_SetLogic(&definition, &randomizer);
 
         Z64Items_Register(sApi, &definition);
+        if (source->legacyKey != NULL) {
+            Z64Items_RegisterLegacyKey(sApi, &definition, source->legacyKey);
+        }
+    }
+}
+
+static void MigrateLegacyKeys(void) {
+    for (s32 i = 0; i < REMAINS_COUNT; i++) {
+        Z64Items_MigrateLegacyKey(sApi, sRemains[i].legacyKey, sRemains[i].key);
+    }
+    for (s32 i = 0; i < SONG_COUNT; i++) {
+        Z64Items_MigrateLegacyKey(sApi, sSongs[i].legacyKey, sSongs[i].key);
+    }
+}
+
+static void ForwardLegacyKey(const char* key, bool owned) {
+    for (s32 i = 0; i < REMAINS_COUNT; i++) {
+        Z64Items_ForwardLegacyKey(sApi, key, owned, sRemains[i].legacyKey, sRemains[i].key);
+    }
+    for (s32 i = 0; i < SONG_COUNT; i++) {
+        Z64Items_ForwardLegacyKey(sApi, key, owned, sSongs[i].legacyKey, sSongs[i].key);
     }
 }
 
@@ -436,7 +497,28 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+static void RegisterNotebook(void) {
+    static const SOHCustomItemRandomizer randomizer = {
+        .structSize = sizeof(SOHCustomItemRandomizer),
+        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
+        .poolCount = 0,
+        .logicKey = "nei.combo.bombers_notebook",
+        .hintKey = "nei.combo.bombers_notebook",
+    };
+    SOHCustomItemDefinition item = Z64Items_Define("nei.combo.bombers_notebook",
+        "__OTR__icon_item_static_yar/gItemIconBombersNotebookTex", NULL);
+    item.displayName = "Bomber's Notebook";
+    item.pauseText = "%rBomber's Notebook&%wA record of promises in Termina. No controls in this world.";
+    item.getItemText = "You got %rBomber's Notebook%w!&It records promises in Termina and unlocks no ability here.";
+    item.preferredPage = SOH_ITEM_PAGE_QUEST_VANILLA + 6;
+    item.preferredSlot = 0;
+    item.randomizer = &randomizer;
+    Z64Items_SetGetItemModel(&item, "__OTR__objects/object_gi_schedule/gGiBombersNotebookDL");
+    Z64Items_Register(sApi, &item);
+}
+
 SOH_MOD_EXPORT void ModInit(void) {
+    RegisterNotebook();
     ForgetPlayedNotes();
     RegisterRemains();
     RegisterSongs();
@@ -449,4 +531,5 @@ SOH_MOD_EXPORT void ModInit(void) {
     RegisterCollectPause();
     SOH_REGISTER_HOOK(sApi, OnOcarinaNote, RecognizeSong);
     SOH_REGISTER_HOOK(sApi, OnLoadGame, StartFile);
+    SOH_REGISTER_HOOK(sApi, OnCustomItemOwnedChange, ForwardLegacyKey);
 }

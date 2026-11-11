@@ -3,5 +3,8 @@
     "author": "Skijer",
     "version": "1.0.1",
     "description": "Sage's Tunic: tunic-slot equipment that turns every medallion carried into a resistance.",
-    "permissions": ["network"]
+    "permissions": [
+        "network"
+    ],
+    "display_name": "Sage's Tunic"
 }

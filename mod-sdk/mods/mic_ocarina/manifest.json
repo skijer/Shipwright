@@ -5,5 +5,6 @@
     "description": "Mic Ocarina: hum, sing or whistle a song into the microphone and the ocarina plays it.",
     "permissions": [
         "microphone"
-    ]
+    ],
+    "display_name": "Microphone Ocarina"
 }

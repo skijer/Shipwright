@@ -2,7 +2,9 @@
     "name": "goron",
     "author": "Skijer",
     "version": "1.0.1",
-    "dependencies": ["mm_assets"],
+    "dependencies": [
+        "mm_assets"
+    ],
     "description": "The Goron Mask takes the place of OoT's: wearing it turns Link into a Goron that punches, rolls, pounds and guards like in Majora's Mask.",
     "requires": [
         "objects/object_link_goron/gLinkGoronWaistDL",
@@ -44,5 +46,6 @@
         "misc/link_animetion/gPlayerAnim_pg_gakkiplay_Data",
         "misc/link_animetion/gPlayerAnim_pg_wait_Data",
         "misc/link_animetion/gPlayerAnim_cl_setmask_Data"
-    ]
+    ],
+    "display_name": "Goron Mask"
 }

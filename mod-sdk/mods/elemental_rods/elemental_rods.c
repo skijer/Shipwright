@@ -24,6 +24,8 @@
 
 #define FIRE_ROD_KEY "nei.rod_fire"
 #define ICE_ROD_KEY "nei.rod_ice"
+#define MM_ICE_PLATFORM_KEY "mm.icefloe"
+#define MM_ICE_BERG_KEY "mm.frozen_octorok"
 #define LIGHT_ROD_KEY "nei.rod_light"
 
 #define ROD_MAX_SETS 5
@@ -294,11 +296,41 @@ static void HitFire(PlayState* play, Player* player, Actor* hitActor, Vec3f* pos
     EffectSsBomb2_SpawnLayered(play, pos, &zero, &zero, 10, 5);
 }
 
+// mm_items owns Majora's Mask's ice: the platform an ice arrow raises from water and the iceberg it locks an
+// Octorok in. Without it the bolts only splash and freeze.
+static s16 FindMmIceActor(const char* key) {
+    return SOH_MOD_API_HAS(sApi, GetActorId) ? sApi->GetActorId(key) : -1;
+}
+
+static bool FreezeWaterUnderBolt(PlayState* play, Vec3f* previous, Vec3f* current) {
+    WaterBox* waterBox;
+    f32 surface;
+
+    if (current->y >= previous->y ||
+        !WaterBox_GetSurface1(play, &play->colCtx, current->x, current->z, &surface, &waterBox) ||
+        previous->y < surface || current->y >= surface) {
+        return false;
+    }
+    s16 platformId = FindMmIceActor(MM_ICE_PLATFORM_KEY);
+    if (platformId < 0) {
+        return false;
+    }
+    f32 t = (surface - previous->y) / (current->y - previous->y);
+
+    return Actor_Spawn(&play->actorCtx, play, platformId, previous->x + t * (current->x - previous->x), surface,
+                       previous->z + t * (current->z - previous->z), 0, 0, 0, 0) != NULL;
+}
+
 static void HitIce(PlayState* play, Player* player, Actor* hitActor, Vec3f* pos) {
     EffectSsIcePiece_SpawnBurst(play, pos, 1.0f);
-    if (hitActor != NULL) {
-        FreezeActor(play, hitActor);
+    if (hitActor == NULL) {
+        return;
     }
+    // The generic freeze would stop the Octorok's update before mm_items reads the ice hit and encases it.
+    if (hitActor->id == ACTOR_EN_OKUTA && FindMmIceActor(MM_ICE_BERG_KEY) >= 0) {
+        return;
+    }
+    FreezeActor(play, hitActor);
 }
 
 static void HitLight(PlayState* play, Player* player, Actor* hitActor, Vec3f* pos) {
@@ -815,9 +847,15 @@ static void UpdateBoltSet(const RodConfig* cfg, RodBoltSet* set, Player* player,
     }
 
     for (s32 i = 0; i < set->count; i++) {
+        Vec3f previous = set->pos[i];
+
         set->pos[i].x += set->vel[i].x;
         set->pos[i].y += set->vel[i].y;
         set->pos[i].z += set->vel[i].z;
+        if (cfg == &sIceRod && FreezeWaterUnderBolt(play, &previous, &set->pos[i])) {
+            set->vel[i].x = set->vel[i].y = set->vel[i].z = 0.0f;
+            set->timer = 0;
+        }
     }
     for (s32 i = ROD_TRAIL_POINTS - 2; i >= 0; i--) {
         set->trail[i + 1] = set->trail[i];
