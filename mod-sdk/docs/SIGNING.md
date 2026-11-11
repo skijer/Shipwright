@@ -37,7 +37,7 @@ Requests are signed one at a time, oldest first. Your first request waits until 
 
 After the first approval, a new version needs no new issue:
 
-- publish a GitHub release in your repository (the workflow checks every two hours), or
+- publish a GitHub release in your repository (the workflow checks once a week, on Mondays), or
 - comment `/sign <tag, branch or commit>` on your issue.
 
 Only mods whose sources changed are signed again; the rest keep their published build. A new version that asks
@@ -146,7 +146,8 @@ The in-game updater has a key of its own, so a leaked mod key cannot ship an Unb
   `soh/soh/ModApi/ModTrust/RevokedMods.h`. The workflow refuses their requests at once, and their signed mods
   stop loading in the next release.
 - **Revoke one package:** add its `content_hash` (from its `unbound-signature.json`) to `kRevokedModPackages`.
-- A request whose run was cancelled stays queued; the workflow also runs every two hours and picks it up.
+- A request whose run was cancelled stays queued; the workflow also runs once a week (Mondays) and picks it up.
+  Comment `/sign` again on the issue to retry at once.
 - **Store links:** `.github/mod-signing/store-links.json` lists the links the store's Links tab shows; they
   reach the catalog on the next signature.
 

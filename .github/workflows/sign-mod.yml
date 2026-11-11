@@ -10,7 +10,7 @@ on:
   issue_comment:
     types: [created]
   schedule:
-    - cron: '23 */2 * * *'
+    - cron: '23 5 * * 1'
   workflow_dispatch:
     inputs:
       resign_all:

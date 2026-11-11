@@ -2,7 +2,8 @@ name: generate-builds
 # SOH [fork] This repo ships two products from one workflow:
 #   - "SoH (cel-shading fork)"  branch wind-waker-style-cel-shading, tags <SoH-version>-celshade<X.Y>
 #   - "SoH: Unbound"            branch unbound,                      tags <SoH-version>-unbound<X.Y>
-# Pushes to a release branch build all three platforms and save the ccache/deps/vcpkg caches.
+# Builds run by hand (Actions > generate-builds > Run workflow) or from a release tag, never on a push or a
+# pull request: a run on a branch saves the ccache/deps/vcpkg caches.
 # Pushing a release tag builds nothing itself: a run on a tag ref cannot read caches saved by a branch
 # (only its own ref's and the default branch's), so it would build cold. It starts this workflow on
 # the tag's product branch instead (workflow_dispatch with the tag as input), which reads that
@@ -12,16 +13,9 @@ name: generate-builds
 # file differ in their build steps until that branch moves too; keep the release logic the same in both.
 on:
   push:
-    branches:
-      - wind-waker-style-cel-shading
-      - unbound
     tags:
       - '*celshade*'
       - '*unbound*'
-  pull_request:
-    branches:
-      - wind-waker-style-cel-shading
-      - unbound
   workflow_dispatch:
     inputs:
       tag:
