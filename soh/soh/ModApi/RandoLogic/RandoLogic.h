@@ -98,9 +98,6 @@ typedef enum {
     SOH_LOGIC_GRANT_ENEMY_KILL,
 } SOHLogicGrantKind;
 
-// While condition holds, a capability, a vanilla item (value = RandomizerGet, for HasItem and CanUse) or the kill
-// of an enemy (value = RandomizerEnemy) counts as had. include/exclude scope it like a rule's selectors; no
-// include means everywhere. A check's scope knows its scene and type, not its region.
 typedef struct {
     uint32_t structSize;
     const char* owner;
@@ -146,8 +143,6 @@ bool RandoLogic_IsEnemyKillGranted(int32_t enemy);
 #include <string>
 
 void RandoLogic_IndexWorld();
-// Each evaluates the vanilla condition with that check, entrance or event as the scope of the grants, then
-// applies the rules registered for it.
 bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate);
 bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
                                  const std::function<bool()>& evaluate);
@@ -156,7 +151,6 @@ bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, 
 namespace Rando {
 class Logic;
 }
-// Whether the Link that state describes can meet a mod item's age requirement and reach one of its forms.
 bool RandoLogic_CanMeetItemRestriction(Rando::Logic& state, int32_t randoGet);
 #endif
 

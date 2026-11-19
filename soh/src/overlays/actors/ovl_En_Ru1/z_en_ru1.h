@@ -29,9 +29,9 @@ typedef struct EnRu1 {
     /* 0x0278 */ DoorWarp1* blueWarp;
     /* 0x027C */ f32 xzDistToPlayerInBlueWarp;
     /* 0x0280 */ s32 isFalling;
-    /*        */ s16 roomNum1; // SOH [Unbound] s8 -> s16
-    /*        */ s16 roomNum2; // SOH [Unbound] s8 -> s16
-    /*        */ s16 roomNum3; // SOH [Unbound] s8 -> s16
+    /*        */ s16 roomNum1;
+    /*        */ s16 roomNum2;
+    /*        */ s16 roomNum3;
     /* 0x0288 */ f32 unk_288;
     /* 0x028C */ BgBdanObjects* unk_28C;
     /* 0x0290 */ s32 preLimbDrawIndex;

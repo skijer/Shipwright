@@ -18,7 +18,6 @@ const char* ModUI_GetImGuiVersion(void) {
     return IMGUI_VERSION;
 }
 
-// The common controls wear the menu theme so a mod's page matches the rest of the menu.
 bool ModUI_Button(const char* label, float width, float height) {
     if (label == nullptr) {
         return false;

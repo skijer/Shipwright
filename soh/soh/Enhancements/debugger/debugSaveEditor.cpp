@@ -3,8 +3,11 @@
 #include <bit>
 #include <map>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
 #include <fast/Fast3dGui.h>
+#include <fast/resource/type/Texture.h>
 #include <ship/Context.h>
 
 #include "debugSaveEditor.h"
@@ -967,18 +970,61 @@ static void SyncButtonItemsForSlot(uint8_t slot) {
     }
 }
 
-static void DrawCustomSaveEditorIcon(const char* category, const char* key, const char* iconPath) {
-    if (iconPath == nullptr || !ResourceMgr_FileExists(iconPath)) {
-        return;
+constexpr float CustomIconSize = 40.0f;
+constexpr float CustomCellWidth = 210.0f;
+constexpr float CustomListHeight = 300.0f;
+
+// An icon from an archive added after startup is missing from the cache ResourceMgr_FileExists reads.
+static ImTextureID LoadCustomIcon(const char* path) {
+    if (path == nullptr || path[0] == '\0') {
+        return 0;
     }
-    static std::unordered_set<std::string> loadedIcons;
-    const std::string textureKey = "ModAPI.SaveEditor." + std::string(category) + "." + key;
+    static std::unordered_map<std::string, bool> loadedIcons;
+    const std::string textureKey = std::string("ModAPI.SaveEditor.") + path;
     auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
-    if (loadedIcons.insert(textureKey).second) {
-        gui->LoadGuiTexture(textureKey, iconPath, "", ImVec4(1, 1, 1, 1));
+    auto loaded = loadedIcons.find(textureKey);
+    if (loaded == loadedIcons.end()) {
+        auto texture = std::dynamic_pointer_cast<Fast::Texture>(
+            Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path, true));
+        if (texture != nullptr) {
+            gui->LoadGuiTexture(textureKey, *texture, "", ImVec4(1, 1, 1, 1));
+        }
+        loaded = loadedIcons.emplace(textureKey, texture != nullptr).first;
     }
-    ImGui::Image(gui->GetTextureByName(textureKey), ImVec2(32, 32));
+    return loaded->second ? gui->GetTextureByName(textureKey) : 0;
+}
+
+static ImTextureID LoadCustomItemIcon(const SOHCustomItemDefinition* definition) {
+    const char* path = CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_SAVE_EDITOR);
+    return LoadCustomIcon(path != nullptr ? path : definition->iconPath);
+}
+
+static void BeginCustomCell(ImTextureID icon, const std::string& label, const char* key) {
+    if (icon != 0) {
+        ImGui::Image(icon, ImVec2(CustomIconSize, CustomIconSize));
+    } else {
+        ImGui::Dummy(ImVec2(CustomIconSize, CustomIconSize));
+    }
     ImGui::SameLine();
+    ImGui::BeginGroup();
+    ImGui::TextUnformatted(label.c_str());
+    UIWidgets::Tooltip(key);
+}
+
+static bool BeginCustomGrid(const char* id) {
+    if (ImGui::BeginChild(id, ImVec2(0, CustomListHeight), true)) {
+        const int columns = std::clamp(static_cast<int>(ImGui::GetContentRegionAvail().x / CustomCellWidth), 1, 4);
+        if (ImGui::BeginTable("Grid", columns, ImGuiTableFlags_SizingStretchSame | ImGuiTableFlags_BordersInnerV)) {
+            return true;
+        }
+    }
+    ImGui::EndChild();
+    return false;
+}
+
+static void EndCustomGrid() {
+    ImGui::EndTable();
+    ImGui::EndChild();
 }
 
 static bool CustomItemMatchesLayout(const SOHCustomItemDefinition* definition, SOHLayoutKind kind) {
@@ -989,24 +1035,127 @@ static bool CustomItemMatchesLayout(const SOHCustomItemDefinition* definition, S
     return kind == (CustomItemRegistry_IsQuestPage(placement.page) ? SOH_LAYOUT_COLLECTABLES : SOH_LAYOUT_ITEMS);
 }
 
+static std::string ReadCustomEntryLabel(const char* key) {
+    const std::string name = CustomItemRegistry_GetDisplayName(key);
+    return name.empty() ? key : name;
+}
+
+static std::string ReadVariantLabel(const SOHCustomPickupVariant* variant) {
+    const std::string name = CustomItemRegistry_GetDisplayName(variant->key);
+    const bool isOwnName = !name.empty() && name != CustomItemRegistry_GetDisplayName(variant->itemKey);
+    return isOwnName ? name : variant->variantKey;
+}
+
+static void DrawCustomItemVariantPicker(const SOHCustomItemDefinition* definition) {
+    const std::vector<const SOHCustomPickupVariant*> variants = CustomItemRegistry_ListPickupVariants(definition->key);
+    if (variants.empty()) {
+        return;
+    }
+    static std::unordered_map<std::string, const SOHCustomPickupVariant*> chosenVariants;
+    const SOHCustomPickupVariant*& chosen = chosenVariants.try_emplace(definition->key, variants.front()).first->second;
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(110.0f);
+    if (ImGui::BeginCombo("##Variant", ReadVariantLabel(chosen).c_str())) {
+        for (const SOHCustomPickupVariant* variant : variants) {
+            ImGui::PushID(variant->key);
+            if (ImGui::Selectable(ReadVariantLabel(variant).c_str(), chosen == variant)) {
+                chosen = variant;
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
+    }
+    ImGui::SameLine();
+    ImGui::BeginDisabled(gPlayState == nullptr);
+    if (ImGui::Button("+")) {
+        CustomItemRegistry_ReceiveGetItem(chosen->key);
+    }
+    ImGui::EndDisabled();
+    UIWidgets::Tooltip(("Give " + std::string(chosen->key)).c_str());
+}
+
+static bool IsListedCustomItem(const SOHCustomItemDefinition* definition) {
+    return definition != nullptr && CustomItemRegistry_IsEditorVisible(definition->key) &&
+           !CustomItemRegistry_IsVanillaUpgrade(definition);
+}
+
+static void GiveAllCustomItems() {
+    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetAt(index);
+        if (!IsListedCustomItem(definition)) {
+            continue;
+        }
+        CustomItemRegistry_SetOwned(definition->key, true);
+        for (const SOHCustomPickupVariant* variant : CustomItemRegistry_ListPickupVariants(definition->key)) {
+            CustomItemRegistry_ReceiveGetItem(variant->key);
+        }
+    }
+    for (uint32_t index = 0; index < CustomEquipRegistry_GetCount(); ++index) {
+        const SOHCustomEquipDefinition* definition = CustomEquipRegistry_GetAt(index);
+        if (definition != nullptr) {
+            CustomEquipRegistry_SetOwned(definition->key, true);
+        }
+    }
+}
+
+static void RemoveAllCustomItems() {
+    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetAt(index);
+        if (IsListedCustomItem(definition)) {
+            CustomItemRegistry_SetOwned(definition->key, false);
+        }
+    }
+    for (uint32_t index = 0; index < CustomEquipRegistry_GetCount(); ++index) {
+        const SOHCustomEquipDefinition* definition = CustomEquipRegistry_GetAt(index);
+        if (definition != nullptr) {
+            CustomEquipRegistry_SetOwned(definition->key, false);
+        }
+    }
+}
+
+static void DrawCustomItemBulkButtons() {
+    ImGui::BeginDisabled(gPlayState == nullptr);
+    if (ImGui::Button("Give All Custom Items")) {
+        GiveAllCustomItems();
+    }
+    UIWidgets::Tooltip("Every mod item, every pickup of each one and every mod equipment piece.");
+    ImGui::SameLine();
+    if (ImGui::Button("Remove All")) {
+        RemoveAllCustomItems();
+    }
+    ImGui::EndDisabled();
+}
+
 static void DrawCustomItemFlags(const char* label, SOHLayoutKind kind) {
     if (!ImGui::TreeNode(label)) {
         return;
     }
-    for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
-        const SOHCustomItemDefinition* definition = CustomItemRegistry_GetAt(index);
-        if (definition == nullptr || !CustomItemRegistry_IsEditorVisible(definition->key) ||
-            CustomItemRegistry_IsVanillaUpgrade(definition) || !CustomItemMatchesLayout(definition, kind)) {
-            continue;
+    static std::unordered_map<int, ImGuiTextFilter> filters;
+    ImGuiTextFilter& filter = filters[kind];
+    filter.Draw("Find");
+    DrawCustomItemBulkButtons();
+    if (BeginCustomGrid("CustomItemGrid")) {
+        for (uint32_t index = 0; index < CustomItemRegistry_GetCount(); ++index) {
+            const SOHCustomItemDefinition* definition = CustomItemRegistry_GetAt(index);
+            if (!IsListedCustomItem(definition) || !CustomItemMatchesLayout(definition, kind)) {
+                continue;
+            }
+            const std::string name = ReadCustomEntryLabel(definition->key);
+            if (!filter.PassFilter((name + ' ' + definition->key).c_str())) {
+                continue;
+            }
+            ImGui::TableNextColumn();
+            ImGui::PushID(definition->key);
+            BeginCustomCell(LoadCustomItemIcon(definition), name, definition->key);
+            const bool owned = CustomItemRegistry_IsOwned(definition->key);
+            if (ImGui::Button(owned ? "Remove" : "Give")) {
+                CustomItemRegistry_SetOwned(definition->key, !owned);
+            }
+            DrawCustomItemVariantPicker(definition);
+            ImGui::EndGroup();
+            ImGui::PopID();
         }
-        bool owned = CustomItemRegistry_IsOwned(definition->key);
-        ImGui::PushID((int)index);
-        DrawCustomSaveEditorIcon("Item", definition->key,
-                                 CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_SAVE_EDITOR));
-        if (ImGui::Checkbox(definition->key, &owned)) {
-            CustomItemRegistry_SetOwned(definition->key, owned);
-        }
-        ImGui::PopID();
+        EndCustomGrid();
     }
     ImGui::TreePop();
 }
@@ -1015,18 +1164,24 @@ static void DrawCustomEquipmentFlags() {
     if (!ImGui::TreeNode("Custom Equipment")) {
         return;
     }
-    for (uint32_t index = 0; index < CustomEquipRegistry_GetCount(); ++index) {
-        const SOHCustomEquipDefinition* definition = CustomEquipRegistry_GetAt(index);
-        if (definition == nullptr) {
-            continue;
+    if (BeginCustomGrid("CustomEquipmentGrid")) {
+        for (uint32_t index = 0; index < CustomEquipRegistry_GetCount(); ++index) {
+            const SOHCustomEquipDefinition* definition = CustomEquipRegistry_GetAt(index);
+            if (definition == nullptr) {
+                continue;
+            }
+            ImGui::TableNextColumn();
+            ImGui::PushID(definition->key);
+            BeginCustomCell(LoadCustomIcon(definition->iconPath), ReadCustomEntryLabel(definition->key),
+                            definition->key);
+            const bool owned = CustomEquipRegistry_IsOwned(definition->key);
+            if (ImGui::Button(owned ? "Remove" : "Give")) {
+                CustomEquipRegistry_SetOwned(definition->key, !owned);
+            }
+            ImGui::EndGroup();
+            ImGui::PopID();
         }
-        bool owned = CustomEquipRegistry_IsOwned(definition->key);
-        ImGui::PushID((int)index);
-        DrawCustomSaveEditorIcon("Equipment", definition->key, definition->iconPath);
-        if (ImGui::Checkbox(definition->key, &owned)) {
-            CustomEquipRegistry_SetOwned(definition->key, owned);
-        }
-        ImGui::PopID();
+        EndCustomGrid();
     }
     ImGui::TreePop();
 }
@@ -1786,7 +1941,7 @@ void DrawFlagsTab() {
         if (Button(
                 "Reload Flags",
                 ButtonOptions().Size(ImVec2(0, 0)).Color(THEME_COLOR).Tooltip("Load flags from saved scene flags"))) {
-            SavedSceneFlags* saved = SceneFlags_Get(gPlayState->sceneNum); // SOH [Unbound]
+            SavedSceneFlags* saved = SceneFlags_Get(gPlayState->sceneNum);
             act->flags.swch = saved->swch;
             act->flags.clear = saved->clear;
             act->flags.collect = saved->collect;
@@ -1795,7 +1950,7 @@ void DrawFlagsTab() {
 
         if (Button("Save Flags",
                    ButtonOptions().Size(ImVec2(0, 0)).Color(THEME_COLOR).Tooltip("Save current scene flags"))) {
-            SavedSceneFlags* saved = SceneFlags_Get(gPlayState->sceneNum); // SOH [Unbound]
+            SavedSceneFlags* saved = SceneFlags_Get(gPlayState->sceneNum);
             saved->swch = act->flags.swch;
             saved->clear = act->flags.clear;
             saved->collect = act->flags.collect;

@@ -4,12 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// Mod dungeons come from the layer-merged unbound/dungeons.json; see mod-sdk/docs/DUNGEONS.md.
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// The scene the HUD's small-key switch should see: a mod dungeon scene reads as a keyed vanilla dungeon.
 int32_t DungeonRegistry_ResolveKeyScene(int32_t sceneNum);
 
 #ifdef __cplusplus
@@ -64,7 +62,6 @@ void DungeonRegistry_AddToPool();
 std::vector<ModDungeonFillInfo> DungeonRegistry_GetFillInfo();
 
 bool DungeonRegistry_IsModCheck(int32_t check);
-// SOH [Unbound] A vanilla-region check's own flag, above RAND_INF_MAX (RandoInfCustom); RAND_INF_MAX when it has none.
 int32_t DungeonRegistry_GetCheckRandomizerInf(int32_t check);
 Rando::Location* DungeonRegistry_GetLocation(int32_t check);
 Rando::ItemLocation* DungeonRegistry_GetItemLocation(int32_t check);

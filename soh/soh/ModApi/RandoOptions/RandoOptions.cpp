@@ -25,6 +25,7 @@ struct RegisteredOption {
     std::string cvar;
     RandomizerSettingKey settingKey;
     uint8_t defaultValue;
+    bool isHiddenFromRandoMenu = false;
 };
 
 std::deque<RegisteredOption> sOptions;
@@ -55,6 +56,9 @@ bool IsMenuBuilt() {
 }
 
 void AddWidget(const RegisteredOption& option) {
+    if (option.isHiddenFromRandoMenu) {
+        return;
+    }
     WidgetPath path = { kSection, kSidebar, SECTION_COLUMN_1 };
 
     SohGui::mSohMenu->EnsureModSidebar(kSection, kSidebar, nullptr, 1);
@@ -89,6 +93,8 @@ bool RandoOptions_Register(const SOHModRandoOption* option) {
 
     RegisteredOption registered = { option->key, std::string("gRandoSettings.Mods.") + option->key,
                                     static_cast<RandomizerSettingKey>(0), option->defaultValue };
+    const bool hasFlagsField = option->structSize >= offsetof(SOHModRandoOption, flags) + sizeof(option->flags);
+    registered.isHiddenFromRandoMenu = hasFlagsField && (option->flags & SOH_MOD_RANDO_OPTION_HIDDEN_FROM_RANDO_MENU);
     auto settings = Rando::Settings::GetInstance();
     size_t nextKey = settings->GetAllOptions().size();
     const bool isSlider = option->structSize >= offsetof(SOHModRandoOption, widget) + sizeof(option->widget) &&

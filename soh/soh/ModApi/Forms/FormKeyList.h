@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 
-// Host-owned copy of a definition's allowedForms: the array a mod registers with may be a temporary.
 class FormKeyList {
   public:
     FormKeyList() = default;

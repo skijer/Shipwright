@@ -99,6 +99,7 @@ bool showDungeonWonderItems;
 bool showBeggar;
 bool showIcicles;
 bool showRedIce;
+bool showEnemyDrops;
 bool showFrogSongRupees;
 bool showFountainFairies;
 bool showStoneFairies;
@@ -372,7 +373,6 @@ std::map<RandomizerGet, RandomizerCheckArea> MapRGtoRandomizerCheckArea = {
 void SpoilAreaFromCheck(RandomizerCheck rc) {
     Rando::Location* loc = Rando::StaticData::GetLocation(rc);
     Rando::ItemLocation* itemLoc = Rando::Context::GetInstance()->GetItemLocation(rc);
-    // SOH [Unbound] a mod dungeon's map and checks belong to no tracker area.
     auto mapArea = MapRGtoRandomizerCheckArea.find(itemLoc->GetPlacedRandomizerGet());
     if (itemLoc->GetPlacedItem().GetItemType() == ItemType::ITEMTYPE_MAP &&
         mapArea != MapRGtoRandomizerCheckArea.end()) {
@@ -1803,6 +1803,7 @@ void LoadSettings() {
         showBeggar = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_BEGGAR);
         showIcicles = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_ICICLES);
         showRedIce = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_RED_ICE);
+        showEnemyDrops = OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(RSK_SHUFFLE_ENEMY_DROPS);
     } else { // Vanilla
         showOverworldTokens = true;
         showDungeonTokens = true;
@@ -1824,6 +1825,7 @@ void LoadSettings() {
         showBeggar = false;
         showIcicles = false;
         showRedIce = false;
+        showEnemyDrops = false;
     }
 
     fortressFast = false;
@@ -1952,6 +1954,7 @@ bool IsCheckShuffled(RandomizerCheck rc) {
                 (showDungeonWonderItems && RandomizerCheckObjects::AreaIsDungeon(loc->GetArea()))) &&
                (loc->GetRCType() != RCTYPE_ICICLE || showIcicles) &&
                (loc->GetRCType() != RCTYPE_RED_ICE || showRedIce) &&
+               (loc->GetRCType() != RCTYPE_ENEMY_DROP || showEnemyDrops) &&
                (loc->GetRCType() != RCTYPE_FISH || Rando::Fishsanity::GetFishLocationIncluded(loc)) &&
                (loc->GetRCType() != RCTYPE_FREESTANDING ||
                 (showOverworldFreestanding && RandomizerCheckObjects::AreaIsOverworld(loc->GetArea())) ||
@@ -2448,7 +2451,7 @@ void InternalRecalculateAvailableChecks(RandomizerRegion startingRegion, RandoAg
     if (startingRegion == RR_ROOT && entranceIndex >= 0 && entranceIndex < ENTR_MAX) {
         // Try to find a mapped entrance
         // e.g. ENTR_DEKU_TREE_0_1 (index 1) is not mapped, but ENTR_DEKU_TREE_ENTRANCE (index 0) is mapped
-        const int16_t scene = gEntranceTable[entranceIndex].scene; // SOH [Unbound] int8_t -> int16_t
+        const int16_t scene = gEntranceTable[entranceIndex].scene;
         for (; entranceIndex >= 0 && gEntranceTable[entranceIndex].scene == scene; entranceIndex--) {
             const auto entrance = Rando::EntranceShuffler::GetEntranceByIndex(entranceIndex);
             if (entrance != nullptr) {

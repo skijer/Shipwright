@@ -124,9 +124,6 @@ static OggType GetOggType(OggFileData* data) {
     return type;
 }
 
-// SOH [WASM] Streamed samples are decoded on a detached worker so the load does not stall.
-// A wasm build has no threads to detach to, so it decodes inline instead: the sample is
-// ready when this returns rather than shortly after, at the cost of a longer load.
 template <typename Worker, typename... Args> static void DecodeSampleAsync(Worker&& worker, Args&&... args) {
 #ifdef __EMSCRIPTEN__
     std::invoke(std::forward<Worker>(worker), std::forward<Args>(args)...);

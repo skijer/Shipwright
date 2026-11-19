@@ -8,7 +8,6 @@
 #define ENTRANCE_TABLE_SIZE ENTR_MAX
 
 #define MAX_ENTRANCE_RANDO_USED_INDEX 0x0820
-// 20 one-way entrances + 125 two-way entrances (x2) + 26 Thieves' Hideout, plus two per mod dungeon (64 of them)
 #define ENTRANCE_OVERRIDES_MAX_COUNT (296 + 128)
 #define SHUFFLEABLE_BOSS_COUNT 8
 

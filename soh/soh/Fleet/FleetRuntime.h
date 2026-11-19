@@ -9,6 +9,7 @@ const nlohmann::json& FleetRuntime_Seed();
 int FleetRuntime_Slot();
 void FleetRuntime_Initialize();
 void FleetRuntime_FrameEnd();
+void FleetRuntime_CatchUpParked();
 nlohmann::json FleetRuntime_Status();
 bool FleetRuntime_CollectForSmoke(const std::string& check);
 void FleetRuntime_Save();

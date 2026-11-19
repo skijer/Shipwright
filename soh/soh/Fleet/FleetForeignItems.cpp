@@ -21,8 +21,17 @@ struct ForeignItem {
 };
 
 std::unordered_map<std::string, ForeignItem> sItems;
+// Entries are never erased: the registry and the frame's display list point into them.
+std::unordered_map<std::string, std::string> sIconOwners;
 
-// Traps keep the disguise they were given; the drawing and the text never give the trap away.
+const char* RecordTextboxIcon(const ForeignItem& foreign) {
+    const std::string path = FleetItemDraw_ForeignTextboxIconPath(foreign.owner.c_str(), foreign.item.c_str());
+    if (path.empty()) {
+        return nullptr;
+    }
+    return sIconOwners.emplace(path, foreign.owner).first->first.c_str();
+}
+
 std::string PresentedName(const nlohmann::json& foreign) {
     const std::string fake = foreign.value("fakeItemName", "");
     return fake.empty() ? foreign.at("itemName").get<std::string>() : fake;
@@ -50,7 +59,6 @@ void DrawForeignItem(PlayState* play, GetItemEntry* entry) {
 
 void Register(const std::string& key, const ForeignItem& foreign, const nlohmann::json& reward) {
     const bool shared = reward.value("shared", false);
-    // The tag in the name is the player's confirmation of where the item goes.
     const bool disguised = !reward.value("fakeItemName", std::string{}).empty();
     const std::string shown = disguised ? foreign.item : reward.value("label", foreign.item);
     const std::string text = "You found %y" + shown + (shared ? " (Shared)" : " (MM)") + "%w!&" +
@@ -65,6 +73,8 @@ void Register(const std::string& key, const ForeignItem& foreign, const nlohmann
     definition.presentationFlags = SOH_ITEM_HIDE_FROM_SAVE_EDITOR | SOH_ITEM_HIDE_FROM_KALEIDO;
     definition.getItemText = text.c_str();
     definition.displayName = foreign.item.c_str();
+    definition.iconPath = RecordTextboxIcon(foreign);
+    definition.disabledIconSurfaces = ~static_cast<uint32_t>(SOH_ITEM_ICON_TEXTBOX);
     definition.getItemEntry.getItemCategory = ChestCategory(reward.value("category", ""));
     definition.getItemEntry.drawFunc = DrawForeignItem;
     if (!CustomItemRegistry_Register(&definition)) {
@@ -100,4 +110,12 @@ void FleetForeignItems_Register(const nlohmann::json& seed) {
         Register(key, item, foreign);
         sItems.emplace(key, item);
     }
+}
+
+const char* FleetForeignItems_FindIconOwner(const char* iconPath) {
+    if (iconPath == nullptr || sIconOwners.empty()) {
+        return nullptr;
+    }
+    const auto found = sIconOwners.find(iconPath);
+    return found != sIconOwners.end() ? found->second.c_str() : nullptr;
 }

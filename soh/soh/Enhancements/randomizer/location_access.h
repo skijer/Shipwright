@@ -71,6 +71,8 @@ class EventAccess {
 
 std::string CleanConditionString(std::string condition);
 
+bool HasCheckEnemySoul(RandomizerCheck check);
+
 #define LOCATION(check, condition) \
     LocationAccess(                \
         check, [] { return condition; }, CleanConditionString(#condition))
@@ -90,7 +92,8 @@ class LocationAccess {
     bool GetConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return RandoLogic_EvaluateLocation(location, condition_str, condition_function);
+            return HasCheckEnemySoul(location) &&
+                   RandoLogic_EvaluateLocation(location, condition_str, condition_function);
         }
         return true;
     }
@@ -255,7 +258,6 @@ class Region {
     static std::map<RandomizerRegion, SpiritLogicData> spiritLogicData;
 };
 
-// RR_MAX vanilla regions, then the mod dungeons' (DungeonRegistry).
 extern std::vector<Region> areaTable;
 extern std::vector<EventAccess> grottoEvents;
 

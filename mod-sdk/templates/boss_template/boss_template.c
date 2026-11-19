@@ -112,7 +112,6 @@ static void Golem_Draw(Actor* thisx, PlayState* play) {
     GetItem_Draw(play, GID_RUPEE_RED);
 }
 
-// The vanilla boss still spawns in its own room: it hands its spot over to the golem.
 static void OnVanillaBossInit(void* actorPtr) {
     Actor* vanillaBoss = (Actor*)actorPtr;
 

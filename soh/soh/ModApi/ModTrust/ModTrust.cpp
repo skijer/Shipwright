@@ -32,7 +32,6 @@ constexpr size_t SignatureSize = 64;
 constexpr size_t MaxImportedLibraries = 256;
 constexpr size_t MaxImportsPerLibrary = 4096;
 
-// Same lists as mod-sdk/tools/check_mod_binary.py, which enforces them before signing.
 constexpr std::string_view RuntimeLibraryPrefixes[] = { "vcruntime140", "msvcp140", "ucrtbase", "api-ms-win-crt-" };
 constexpr std::string_view StartupKernelImports[] = {
     "DisableThreadLibraryCalls",   "GetCurrentProcess",   "GetCurrentProcessId",      "GetCurrentThreadId",
@@ -109,7 +108,6 @@ void HashLittleEndian(crypto_blake2b_ctx& context, uint64_t value, size_t byteCo
     crypto_blake2b_update(&context, encoded, byteCount);
 }
 
-// Each file is hashed as u32 path length, path, u64 data length, data, in byte order of the paths.
 std::optional<std::string> ComputeContentHash(Ship::Archive& archive) {
     std::vector<std::string> paths;
     for (const auto& [hash, path] : *archive.ListFiles()) {

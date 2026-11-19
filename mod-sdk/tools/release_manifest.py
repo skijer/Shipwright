@@ -5,8 +5,6 @@ import re
 import sys
 from pathlib import Path
 
-# The game's updater reads unbound-release.json from the newest release, after checking the release key's
-# signature, and compares "version" with the gBuildForkVersion it was built with.
 RELEASE_FORMAT = 1
 PLATFORMS = ("windows_x64", "linux_x64", "darwin")
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -29,7 +27,6 @@ def build_manifest(version, page, release_base, assets):
             raise ValueError(f"'{platform}' is not one of {', '.join(PLATFORMS)}")
         entries[platform] = {"file": path.name, "url": f"{release_base}/{path.name}", "size": path.stat().st_size,
                              "hash": hashlib.blake2b(path.read_bytes(), digest_size=64).hexdigest()}
-    # Updaters up to unbound0.11 ignore a release without "modapi" and skip the mod rebuild only when it reads 2.
     return {"format": RELEASE_FORMAT, "version": version, "modapi": 2, "page": page, "assets": entries}
 
 

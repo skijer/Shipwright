@@ -64,7 +64,6 @@ class OTRGlobals {
 
     OTRGlobals();
     ~OTRGlobals();
-    // SOH [Fleet] Only the randomizer tables, for Fleet's seed generator: no window, audio, menu or game loop.
     static void InitRandoHeadless();
 
     void ScaleImGui();
@@ -87,7 +86,6 @@ namespace Ship {
 class ResourceLoader;
 }
 
-// Registers every resource factory the game reads with. Also used by the wasm Unbound converter.
 void SOH_RegisterResourceFactories(std::shared_ptr<Ship::ResourceLoader> loader);
 #endif
 
@@ -140,7 +138,6 @@ void Randomizer_ShowRandomizerMenu();
 GetItemEntry ItemTable_Retrieve(int16_t getItemID);
 GetItemEntry ItemTable_RetrieveEntry(s16 modIndex, s16 getItemID);
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] Runs one frame, logging the message of any exception that escapes it.
 void Soh_RunFrameGuarded(void (*runFrame)(void));
 #endif
 void EntranceTracker_SetCurrentGrottoID(s16 entranceIndex);

@@ -165,7 +165,6 @@ void Load() {
             }
             it->second.counters[SOH_RANDO_INF_SAVE] = { copies, baseline, true };
             it->second.seedFirst = std::clamp<uint16_t>(first, 1, static_cast<uint16_t>(it->second.levels.size()));
-            // Vanilla save data is already loaded by the parent section.
         });
     });
 }
@@ -313,7 +312,6 @@ bool ProgressiveItems_ApplyLogic(int32_t item, Rando::Logic* logic, bool state) 
     return true;
 }
 bool ProgressiveItems_HasLogicItem(int32_t item, Rando::Logic* logic, bool* result) {
-    // Native aliases use their real inventory/equipment checks, populated by applyLevel.
     if (!RandoItems_IsModItem(item)) {
         return false;
     }
@@ -360,9 +358,8 @@ void ProgressiveItems_ResetLogic() {
 void ProgressiveItems_Init() {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadFile>([](int32_t) {
         auto ctx = Rando::Context::GetInstance();
-        // Loaded spoilers may never have run AddToPool in this process. Reconstruct
-        // the seed's first level from its actual placed native aliases, independently
-        // of whichever file or generated pool was active previously.
+        // Loaded spoilers may never have run AddToPool in this process: rebuild the first level from the placed
+        // aliases.
         for (auto& [_, c] : chains) {
             c.seedFirst = c.first;
             if (!IS_RANDO || !ctx) {

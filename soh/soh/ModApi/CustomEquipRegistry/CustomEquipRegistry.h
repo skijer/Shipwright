@@ -44,7 +44,6 @@ typedef struct {
     GetItemEntry getItemEntry;
     const char* getItemModelPath;
     const SOHCustomItemRandomizer* randomizer;
-    // Optional form keys that may wear the piece, as in SOHCustomItemDefinition; none means every form.
     const char* const* allowedForms;
     uint32_t allowedFormCount;
 } SOHCustomEquipDefinition;

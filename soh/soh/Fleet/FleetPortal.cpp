@@ -4,14 +4,17 @@
 #include "FleetRuntime.h"
 #include "FleetRando.h"
 
-#include <optional>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
+#include <optional>
 #include <string>
 #include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
+#include "soh/ModApi/ModApi.h"
 #include "soh/ShipInit.hpp"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
@@ -21,6 +24,7 @@ extern "C" {
 #include "global.h"
 #include "variables.h"
 #include "functions.h"
+#include "soh/Enhancements/randomizer/randomizer_entrance.h"
 extern PlayState* gPlayState;
 void FileChoose_PrepareLoadedSave(GameState* state);
 void Opening_Main(GameState* state);
@@ -32,19 +36,56 @@ namespace {
 
 constexpr const char* kMarketPortal = "market";
 
+struct WarpSongPortal {
+    const char* portal;
+    int16_t warpPad;
+};
+
+constexpr WarpSongPortal kWarpSongPortals[] = {
+    { "song.minuet", ENTR_SACRED_FOREST_MEADOW_WARP_PAD }, { "song.bolero", ENTR_DEATH_MOUNTAIN_CRATER_WARP_PAD },
+    { "song.serenade", ENTR_LAKE_HYLIA_WARP_PAD },         { "song.requiem", ENTR_DESERT_COLOSSUS_WARP_PAD },
+    { "song.nocturne", ENTR_GRAVEYARD_WARP_PAD },          { "song.prelude", ENTR_TEMPLE_OF_TIME_WARP_PAD },
+};
+
 std::optional<std::string> sDeparture;
 struct Arrival {
     int32_t entrance;
     int32_t slot;
     bool cross = false;
+    bool warpSong = false;
 };
 std::optional<Arrival> sArrival;
 
-std::optional<int32_t> EntranceForPortal(const std::string& portal) {
-    if (portal == kMarketPortal) {
-        return ENTR_MARKET_DAY_OUTSIDE_HAPPY_MASK_SHOP;
+std::optional<int16_t> WarpPadForPortal(const std::string& portal) {
+    for (const WarpSongPortal& song : kWarpSongPortals) {
+        if (portal == song.portal) {
+            return song.warpPad;
+        }
     }
-    return FleetPassages_Entrance(portal);
+    return std::nullopt;
+}
+
+std::optional<Arrival> ArrivalForPortal(const std::string& portal, int32_t slot) {
+    if (portal == kMarketPortal) {
+        return Arrival{ ENTR_MARKET_DAY_OUTSIDE_HAPPY_MASK_SHOP, slot };
+    }
+    if (const auto warpPad = WarpPadForPortal(portal)) {
+        return Arrival{ .entrance = *warpPad, .slot = slot, .warpSong = true };
+    }
+    if (const auto entrance = FleetPassages_Entrance(portal)) {
+        return Arrival{ *entrance, slot };
+    }
+    return std::nullopt;
+}
+
+int32_t ArrivalEntrance(const Arrival& arrival) {
+    if (arrival.cross) {
+        return FleetRuntime_ConsumeArrival();
+    }
+    if (arrival.warpSong && IS_RANDO) {
+        return Entrance_OverrideNextIndex(static_cast<int16_t>(arrival.entrance));
+    }
+    return FleetRuntime_Materialize(arrival.entrance);
 }
 
 bool IsPlaying() {
@@ -93,19 +134,35 @@ void BootIntoPlay(const Arrival& arrival) {
         if (arrival.cross && !FleetRuntime_QueueArrival(arrival.entrance)) {
             throw std::runtime_error("OoT rejected an arrival absent from this seed");
         }
-        gSaveContext.entranceIndex =
-            arrival.cross ? FleetRuntime_ConsumeArrival() : FleetRuntime_Materialize(arrival.entrance);
+        gSaveContext.entranceIndex = ArrivalEntrance(arrival);
         gSaveContext.cutsceneIndex = 0;
-        gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK;
+        gSaveContext.nextTransitionType = arrival.warpSong ? TRANS_TYPE_FADE_WHITE : TRANS_TYPE_FADE_BLACK;
     }
 }
 
 void EnterArrival() {
     if (gGameState != nullptr && gGameState->running) {
-        // Going through TitleSetup destroys the parked scene before its destination loads.
         gGameState->running = false;
         SET_NEXT_GAMESTATE(gGameState, TitleSetup_Init, GameState);
     }
+}
+
+bool ReadMmWorldMap(uint16_t* owlStatues, uint32_t* visibleClouds) {
+    using GetDirectory = const char* (*)(const char*);
+    const auto getDirectory = reinterpret_cast<GetDirectory>(FleetGame_GetHostFunction("GetSaveDirectory"));
+    const int slot = FleetRuntime_Slot();
+    const char* directory = getDirectory != nullptr ? getDirectory("mm") : nullptr;
+    if (directory == nullptr || slot < 0 || owlStatues == nullptr || visibleClouds == nullptr) {
+        return false;
+    }
+    std::ifstream file(std::filesystem::path(directory) / "saves" / ("file" + std::to_string(slot + 1) + ".json"));
+    const nlohmann::json saveFile = nlohmann::json::parse(file, nullptr, false);
+    const char* sectionName = saveFile.is_object() && saveFile.contains("owlSave") ? "owlSave" : "newCycleSave";
+    const nlohmann::json section =
+        saveFile.is_object() ? saveFile.value(sectionName, nlohmann::json::object()) : nlohmann::json::object();
+    *owlStatues = section.value("/save/saveInfo/playerData/owlActivationFlags"_json_pointer, 0);
+    *visibleClouds = section.value("/save/saveInfo/worldMapCloudVisibility"_json_pointer, 0u);
+    return true;
 }
 
 void RegisterPortalHooks() {
@@ -116,6 +173,8 @@ void RegisterPortalHooks() {
     if (FleetRuntime_HasSession() && !sArrival) {
         sArrival = Arrival{ -1, FleetRuntime_Slot() };
     }
+    ModApi_PublishHostService("fleet.depart", reinterpret_cast<void*>(FleetPortal_RequestDeparture));
+    ModApi_PublishHostService("fleet.mm_world_map", reinterpret_cast<void*>(ReadMmWorldMap));
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>([](int16_t sceneNum) {
         FleetRuntime_ObserveScene(sceneNum);
         if (sceneNum == SCENE_HAPPY_MASK_SHOP && gSaveContext.gameMode == GAMEMODE_NORMAL) {
@@ -155,8 +214,8 @@ extern "C" void FleetPortal_Arrive(const FleetDestination* arrival) {
             sArrival = Arrival{ -1, slot };
         } else if (payload.value("cross", false)) {
             sArrival = Arrival{ payload.at("entrance").get<int32_t>(), slot, true };
-        } else if (const auto entrance = EntranceForPortal(payload.value("portal", ""))) {
-            sArrival = Arrival{ *entrance, slot };
+        } else {
+            sArrival = ArrivalForPortal(payload.value("portal", ""), slot);
         }
         if (sArrival) {
             EnterArrival();

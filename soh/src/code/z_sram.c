@@ -263,7 +263,8 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
     u8 currentQuest = fileChooseCtx->questType[fileChooseCtx->buttonIndex];
 
     if (currentQuest == QUEST_RANDOMIZER &&
-        FleetGame_CreateNamedSave(fileChooseCtx->buttonIndex, gSaveContext.playerName, gSaveContext.ship.filenameLanguage)) {
+        FleetGame_CreateNamedSave(fileChooseCtx->buttonIndex, gSaveContext.playerName,
+                                  gSaveContext.ship.filenameLanguage)) {
         return;
     }
 

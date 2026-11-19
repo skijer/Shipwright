@@ -2,6 +2,7 @@
 #include "static_data.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/item-tables/ItemTableManager.h"
+#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "dungeon.h"
 #include "logic.h"
 #include "entrance.h"
@@ -213,6 +214,7 @@ void Context::GenerateLocationPool() {
             (location.GetRCType() == RCTYPE_BUSH && !mOptions[RSK_SHUFFLE_BUSHES]) ||
             (location.GetRCType() == RCTYPE_ICICLE && !mOptions[RSK_SHUFFLE_ICICLES]) ||
             (location.GetRCType() == RCTYPE_RED_ICE && !mOptions[RSK_SHUFFLE_RED_ICE]) ||
+            (location.GetRCType() == RCTYPE_ENEMY_DROP && !mOptions[RSK_SHUFFLE_ENEMY_DROPS]) ||
             (location.GetRCType() == RCTYPE_SIGN && mOptions[RSK_SHUFFLE_SIGNS].Is(RO_SHUFFLE_SIGNS_OFF)) ||
             (location.GetRCType() == RCTYPE_WONDER_ITEM &&
              mOptions[RSK_SHUFFLE_WONDER_ITEMS].Is(RO_SHUFFLE_WONDER_ITEMS_OFF)) ||
@@ -391,14 +393,16 @@ GetItemEntry Context::GetFinalGIEntry(const RandomizerCheck rc, const bool check
         return ItemTableManager::Instance->RetrieveItemEntry(
             MOD_NONE, StaticData::RetrieveItem(StaticData::GetLocation(rc)->GetVanillaItem()).GetItemID());
     }
-    if (checkObtainability && OTRGlobals::Instance->gRandomizer->GetItemObtainabilityFromRandomizerGet(
-                                  itemLoc->GetPlacedRandomizerGet()) != CAN_OBTAIN) {
+    RandomizerGet item = itemLoc->GetPlacedRandomizerGet();
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnRandoResolveCheckItem>(rc, &item);
+    if (checkObtainability &&
+        OTRGlobals::Instance->gRandomizer->GetItemObtainabilityFromRandomizerGet(item) != CAN_OBTAIN) {
         if (spoilAreas) {
-            CheckTracker::SpoilAreaFromCantObtain(itemLoc->GetPlacedRandomizerGet());
+            CheckTracker::SpoilAreaFromCantObtain(item);
         }
         return ItemTableManager::Instance->RetrieveItemEntry(MOD_NONE, GI_RUPEE_BLUE);
     }
-    GetItemEntry giEntry = itemLoc->GetPlacedItem().GetGIEntry_Copy();
+    GetItemEntry giEntry = StaticData::RetrieveItem(item).GetGIEntry_Copy();
     if (overrides.contains(rc)) {
         const auto fakeGiEntry = StaticData::RetrieveItem(overrides[rc].LooksLike()).GetGIEntry();
         giEntry.gid = fakeGiEntry->gid;

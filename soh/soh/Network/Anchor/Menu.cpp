@@ -125,7 +125,6 @@ void AnchorRoomMenu(WidgetInfo& info) {
     auto anchor = Anchor::Instance;
 
     if (!anchor->isEnabled) {
-        // Fleet draws this room under its own heading, away from the Enable button.
         if (FleetGame_IsHosted()) {
             ImGui::TextDisabled("Off");
         }

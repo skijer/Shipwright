@@ -24,7 +24,6 @@ using namespace ComboRando::CrossDungeon;
 constexpr int kShip = 0;
 
 HostState sState(kShip);
-// Region each native entrance index lands in, and the native shuffle's own overrides.
 std::map<int32_t, RandomizerRegion> sRegions;
 std::map<int32_t, int32_t> sNativeOverrides;
 bool sSearching = false;
@@ -40,7 +39,6 @@ std::map<int32_t, int32_t> ActiveNativeOverrides() {
     return overrides;
 }
 
-// The immutable table also covers boss doors and grotto indices without re-initializing a shuffled graph.
 void IndexRegions() {
     auto edges = GetShuffleableEntrances(Rando::EntranceType::All, false);
     if (edges.empty()) {
@@ -69,7 +67,6 @@ int32_t ResolvedIndex(const Rando::Entrance& entrance) {
     return ResolveNativeIndex(index, replacement != nullptr ? replacement->GetIndex() : index, sNativeOverrides);
 }
 
-// A route into the other game leaves Ship's graph: the edge leads nowhere for Ship's own logic.
 RandomizerRegion RerouteDuringSearch(const Rando::Entrance& entrance, RandomizerRegion native) {
     if (!sSearching) {
         return native;
@@ -85,8 +82,7 @@ RandomizerRegion RerouteDuringSearch(const Rando::Entrance& entrance, Randomizer
     return region == sRegions.end() ? RR_NONE : region->second;
 }
 
-// Cross routing moves dungeon mouths even with native dungeon shuffle off; native age and door rules must
-// then apply as if it were on. Returns the setting to restore, if it changed.
+// Returns the setting to restore, if it changed.
 std::optional<uint8_t> WidenDungeonRules() {
     auto& option = Rando::Context::GetInstance()->GetOption(RSK_SHUFFLE_DUNGEON_ENTRANCES);
     if (!sState.HasPool(Pool::Dungeon) || option.Get() != RO_DUNGEON_ENTRANCE_SHUFFLE_OFF) {
@@ -120,8 +116,6 @@ bool IsRetailShopEntrance(int32_t entrance) {
     }
 }
 
-// Native ingress identities, not destination scenes: alternate doors stay separate. Open houses, tents, fairy
-// caves and the Temple of Time are passages; the Mask Shop stays the portal between games.
 InteriorKind InteriorKindForEntrance(int32_t entrance) {
     switch (entrance) {
         case ENTR_KOKIRI_SHOP_0:
@@ -155,8 +149,6 @@ bool IsInteriorEntrance(const Rando::EntranceLinkInfo& link) {
     return link.type == Rando::EntranceType::Interior || link.type == Rando::EntranceType::SpecialInterior;
 }
 
-// After native ER an interior may be reached through any physical source; an open or ambiguous source never
-// grants the narrower door or shop kind.
 std::map<int32_t, InteriorKind> PhysicalInteriorKinds(const PoolOptions& options,
                                                       const std::map<int32_t, int32_t>& overrides) {
     std::map<int32_t, InteriorKind> kinds;
@@ -181,8 +173,6 @@ std::map<int32_t, InteriorKind> PhysicalInteriorKinds(const PoolOptions& options
     return kinds;
 }
 
-// Link spawns inside these. Routed into the other game, whose logic stays closed until the portal opens, the
-// start would hold a handful of checks and need an ocarina warp to leave; the fill dead-ends on the buttons.
 bool IsSpawnInterior(int32_t entrance) {
     return entrance == ENTR_LINKS_HOUSE_1 || entrance == ENTR_TEMPLE_OF_TIME_ENTRANCE;
 }
@@ -263,7 +253,6 @@ struct BossRoom {
     const char* owner;
 };
 
-// Boss ids 0-7 are Ship's in Fleet's shared numbering; MM owns 8-11.
 constexpr std::array<BossRoom, 8> kBossRooms = { {
     { ENTR_DEKU_TREE_BOSS_ENTRANCE, ENTR_KOKIRI_FOREST_DEKU_TREE_BLUE_WARP, LOGIC_DEKU_TREE_CLEAR, "oot:deku-tree" },
     { ENTR_DODONGOS_CAVERN_BOSS_ENTRANCE, ENTR_DEATH_MOUNTAIN_TRAIL_DODONGO_BLUE_WARP, LOGIC_DODONGOS_CAVERN_CLEAR,
@@ -291,7 +280,6 @@ int32_t BossDoorExit(int32_t entrance) {
     throw std::logic_error("boss entrance missing from Ship's entrance table");
 }
 
-// The arena's blue warp leaves to wherever native ER already sends this boss door's dungeon.
 void AppendBossRooms(std::vector<Dungeon>& catalogue, const std::map<int32_t, int32_t>& overrides) {
     for (size_t boss = 0; boss < kBossRooms.size(); boss++) {
         const BossRoom& room = kBossRooms[boss];
@@ -309,7 +297,6 @@ void AppendBossRooms(std::vector<Dungeon>& catalogue, const std::map<int32_t, in
     }
 }
 
-// Dungeons compose with their blue warps first; every other portal returns where native ER sends its exit.
 nlohmann::json Catalogue(bool includeGanon, const std::map<int32_t, int32_t>& overrides, const PoolOptions& options) {
     std::vector<Dungeon> catalogue = BaseCatalogue(includeGanon, options, overrides);
     std::vector<Dungeon> dungeons;
@@ -350,7 +337,6 @@ nlohmann::json FleetCrossDungeon_DumpCatalogue(const nlohmann::json& options) {
     return Catalogue(IncludesGanonsCastle(dungeonSetting), sNativeOverrides, ParseOptions(options));
 }
 
-// A saved seed's catalogue comes from its recorded native layout, never from the live graph.
 nlohmann::json FleetCrossDungeon_DumpCatalogueForSeed(const nlohmann::json& spoiler) {
     const int dungeonSetting =
         spoiler.at("oot").at("settings").value(CVAR_RANDOMIZER_SETTING("ShuffleDungeonsEntrances"), 0);
@@ -399,7 +385,14 @@ void FleetCrossDungeon_SetAccess(const nlohmann::json& access) {
     sState.SetAccess(access);
 }
 
-// Which routes into the other game Ship's current search can take, evaluated on their native source edge.
+void FleetCrossDungeon_Reset() {
+    sState = HostState(kShip);
+    sRegions.clear();
+    sNativeOverrides.clear();
+    sSearching = false;
+    Rando::SetConnectedRegionOverride(nullptr);
+}
+
 nlohmann::json FleetCrossDungeon_GetExits() {
     const std::optional<uint8_t> dungeonRule = WidenDungeonRules();
     const bool previousSearching = sSearching;
@@ -433,7 +426,6 @@ nlohmann::json FleetCrossDungeon_GetExits() {
     return exits;
 }
 
-// Physical kills in Ship's arenas, read from the last search; Fleet maps them to the doors that led there.
 uint16_t FleetCrossDungeon_GetBossDefeated() {
     const auto logic = Rando::Context::GetInstance()->GetLogic();
     uint16_t defeated = 0;
@@ -445,7 +437,6 @@ uint16_t FleetCrossDungeon_GetBossDefeated() {
     return defeated;
 }
 
-// Without routes this only marks the search, so native baseline probes ignore the playing slot as well.
 FleetCrossDungeonSearch::FleetCrossDungeonSearch() : mPreviousSearching(sSearching) {
     if (sState.HasLinks()) {
         IndexRegions();
@@ -460,7 +451,8 @@ FleetCrossDungeonSearch::FleetCrossDungeonSearch() : mPreviousSearching(sSearchi
             mDetachedRootExits.splice(mDetachedRootExits.end(), root->exits);
         }
         for (int32_t index : sState.arrivals) {
-            root->exits.emplace_back(sRegions.at(index), [] { return true; }, "cross-dungeon arrival");
+            root->exits.emplace_back(
+                sRegions.at(index), [] { return true; }, "cross-dungeon arrival");
             root->exits.back().SetParentRegion(RR_ROOT);
             mAddedArrivals++;
         }

@@ -4,6 +4,7 @@
 #include "FleetRando.h"
 #include "FleetItemDraw.h"
 #include "soh/Enhancements/controls/SohInputEditorWindow.h"
+#include "soh/Notification/Notification.h"
 #include "soh/cvar_prefixes.h"
 #include <ship/window/Window.h>
 #include <ship/window/gui/Gui.h>
@@ -125,6 +126,12 @@ extern "C" const char* FleetGame_GetSaveDirectory(void) {
     return getDirectory != nullptr ? getDirectory(GameName) : nullptr;
 }
 
+extern "C" const char* FleetGame_GetModsDirectory(void) {
+    using GetDirectory = const char* (*)(const char*);
+    const auto getDirectory = reinterpret_cast<GetDirectory>(FleetGame_GetHostFunction("GetModsDirectory"));
+    return getDirectory != nullptr ? getDirectory(GameName) : nullptr;
+}
+
 extern "C" bool FleetGame_FileSelect(void) {
     const auto show = reinterpret_cast<bool (*)()>(FleetGame_GetHostFunction("FileSelect"));
     return show != nullptr && show();
@@ -196,10 +203,8 @@ extern "C" void FleetGame_JoinHostContext(void) {
 std::shared_ptr<Ship::ResourceManager> FleetGame_CreateResources(const std::string& archivePath) {
     std::shared_ptr<Ship::GameServices> game = Ship::GameRegistry::Get(GameName);
     assert(game != nullptr);
-    // Assigned before Init so the manager's own workers already run as this game.
     game->Resources = std::make_shared<Ship::ResourceManager>();
-    game->Resources->Init({ archivePath, Ship::Context::GetPathRelativeToAppDirectory("mods") }, {},
-                          ResourceThreadReserve);
+    game->Resources->Init({ archivePath }, {}, ResourceThreadReserve);
     return game->Resources;
 }
 
@@ -238,6 +243,15 @@ extern "C" void FleetGame_CommitSave(void) {
     if (commit != nullptr && sAutomaticSaves == 0) {
         commit();
     }
+}
+
+extern "C" bool FleetGame_ShouldRollCredits(void) {
+    const auto goalReached = reinterpret_cast<int (*)(const char*)>(FleetGame_GetHostFunction("GoalReached"));
+    if (goalReached == nullptr || goalReached(GameName) != 0) {
+        return true;
+    }
+    Notification::Emit({ .message = "Ocarina of Time cleared! Finish Majora's Mask to win." });
+    return false;
 }
 
 extern "C" bool FleetGame_ResetActiveGame(void) {

@@ -131,7 +131,6 @@ bool ModPermissions_HasDeclared(const ModIdentity& mod, ModPermission permission
     return false;
 }
 
-// Answers from the saved decisions; otherwise queues one in-game question and reports Pending until it is answered.
 PermissionAnswer ModPermissions_AskOnce(const ModIdentity& mod, ModPermission permission, const std::string& purpose) {
     const char* key = GetPermissionKey(permission);
     const Json& decisions = GetDecisions();

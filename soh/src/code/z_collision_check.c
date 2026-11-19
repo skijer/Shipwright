@@ -965,7 +965,7 @@ s32 Collider_QuadSetNearestAC(PlayState* play, ColliderQuad* quad, Vec3f* hitPos
     if (!(quad->info.toucherFlags & TOUCH_NEAREST)) {
         return true;
     }
-    dcMid = quad->dim.dcMid; // SOH [Unbound] f32 shape
+    dcMid = quad->dim.dcMid;
     acDist = Math3D_Vec3fDistSq(&dcMid, hitPos);
     if (acDist < quad->dim.acDist) {
         quad->dim.acDist = acDist;
@@ -1726,6 +1726,9 @@ void CollisionCheck_SetBounce(Collider* at, Collider* ac) {
  */
 s32 CollisionCheck_SetATvsAC(PlayState* play, Collider* at, ColliderInfo* atInfo, Vec3f* atPos, Collider* ac,
                              ColliderInfo* acInfo, Vec3f* acPos, Vec3f* hitPos) {
+    if (!GameInteractor_Should(VB_PERFORM_AC_COLLISION, true, at, ac)) {
+        return 0;
+    }
     if (ac->acFlags & AC_HARD && at->actor != NULL && ac->actor != NULL) {
         CollisionCheck_SetBounce(at, ac);
     }
@@ -1993,7 +1996,7 @@ void CollisionCheck_AC_TrisVsJntSph(PlayState* play, CollisionCheckContext* colC
                     Vec3f atPos;
                     Vec3f acPos;
 
-                    acPos = acElem->dim.worldSphere.center; // SOH [Unbound] f32 shape
+                    acPos = acElem->dim.worldSphere.center;
                     atPos.x = (atItem->dim.vtx[0].x + atItem->dim.vtx[1].x + atItem->dim.vtx[2].x) * (1.0f / 3);
                     atPos.y = (atItem->dim.vtx[0].y + atItem->dim.vtx[1].y + atItem->dim.vtx[2].y) * (1.0f / 3);
                     atPos.z = (atItem->dim.vtx[0].z + atItem->dim.vtx[1].z + atItem->dim.vtx[2].z) * (1.0f / 3);
@@ -2038,8 +2041,7 @@ void CollisionCheck_AC_JntSphVsQuad(PlayState* play, CollisionCheckContext* colC
                 Vec3f atPos;
                 Vec3f acPos;
 
-                atPos = atItem->dim.worldSphere.center; // SOH [Unbound] f32 shape
-
+                atPos = atItem->dim.worldSphere.center;
                 acPos.x = (ac->dim.quad[0].x + (ac->dim.quad[1].x + (ac->dim.quad[3].x + ac->dim.quad[2].x))) / 4.0f;
                 acPos.y = (ac->dim.quad[0].y + (ac->dim.quad[1].y + (ac->dim.quad[3].y + ac->dim.quad[2].y))) / 4.0f;
                 acPos.z = (ac->dim.quad[0].z + (ac->dim.quad[1].z + (ac->dim.quad[3].z + ac->dim.quad[2].z))) / 4.0f;
@@ -2128,15 +2130,15 @@ void CollisionCheck_AC_CylVsCyl(PlayState* play, CollisionCheckContext* colChkCt
             Vec3f acPos;
             f32 acToHit;
 
-            atPos = at->dim.pos; // SOH [Unbound] f32 shape
-            acPos = ac->dim.pos; // SOH [Unbound] f32 shape
+            atPos = at->dim.pos;
+            acPos = ac->dim.pos;
             if (!IS_ZERO(centerDistXZ)) {
                 acToHit = ac->dim.radius / centerDistXZ;
                 hitPos.y = (f32)ac->dim.pos.y + ac->dim.yShift + ac->dim.height * 0.5f;
                 hitPos.x = ((f32)at->dim.pos.x - ac->dim.pos.x) * acToHit + ac->dim.pos.x;
                 hitPos.z = ((f32)at->dim.pos.z - ac->dim.pos.z) * acToHit + ac->dim.pos.z;
             } else {
-                hitPos = ac->dim.pos; // SOH [Unbound] f32 shape
+                hitPos = ac->dim.pos;
             }
             CollisionCheck_SetATvsAC(play, &at->base, &at->info, &atPos, &ac->base, &ac->info, &acPos, &hitPos);
         }
@@ -2167,8 +2169,7 @@ void CollisionCheck_AC_CylVsTris(PlayState* play, CollisionCheckContext* colChkC
                 Vec3f atpos;
                 Vec3f acPos;
 
-                atpos = at->dim.pos; // SOH [Unbound] f32 shape
-
+                atpos = at->dim.pos;
                 acPos.x = (acElem->dim.vtx[0].x + acElem->dim.vtx[1].x + acElem->dim.vtx[2].x) * (1.0f / 3);
                 acPos.y = (acElem->dim.vtx[0].y + acElem->dim.vtx[1].y + acElem->dim.vtx[2].y) * (1.0f / 3);
                 acPos.z = (acElem->dim.vtx[0].z + acElem->dim.vtx[1].z + acElem->dim.vtx[2].z) * (1.0f / 3);
@@ -2206,7 +2207,7 @@ void CollisionCheck_AC_TrisVsCyl(PlayState* play, CollisionCheckContext* colChkC
                 atPos.x = (atItem->dim.vtx[0].x + atItem->dim.vtx[1].x + atItem->dim.vtx[2].x) * (1.0f / 3);
                 atPos.y = (atItem->dim.vtx[0].y + atItem->dim.vtx[1].y + atItem->dim.vtx[2].y) * (1.0f / 3);
                 atPos.z = (atItem->dim.vtx[0].z + atItem->dim.vtx[1].z + atItem->dim.vtx[2].z) * (1.0f / 3);
-                acPos = ac->dim.pos; // SOH [Unbound] f32 shape
+                acPos = ac->dim.pos;
                 CollisionCheck_SetATvsAC(play, &at->base, &atItem->info, &atPos, &ac->base, &ac->info, &acPos,
                                          &D_8015E310);
                 return;
@@ -2238,7 +2239,7 @@ void CollisionCheck_AC_CylVsQuad(PlayState* play, CollisionCheckContext* colChkC
             Vec3f atPos1;
             Vec3f acPos1;
 
-            atPos1 = at->dim.pos; // SOH [Unbound] f32 shape
+            atPos1 = at->dim.pos;
             acPos1.x = (ac->dim.quad[0].x + (ac->dim.quad[1].x + (ac->dim.quad[3].x + ac->dim.quad[2].x))) / 4.0f;
             acPos1.y = (ac->dim.quad[0].y + (ac->dim.quad[1].y + (ac->dim.quad[3].y + ac->dim.quad[2].y))) / 4.0f;
             acPos1.z = (ac->dim.quad[0].z + (ac->dim.quad[1].z + (ac->dim.quad[3].z + ac->dim.quad[2].z))) / 4.0f;
@@ -2247,7 +2248,7 @@ void CollisionCheck_AC_CylVsQuad(PlayState* play, CollisionCheckContext* colChkC
             Vec3f atPos2;
             Vec3f acPos2;
 
-            atPos2 = at->dim.pos; // SOH [Unbound] f32 shape
+            atPos2 = at->dim.pos;
             acPos2.x = (ac->dim.quad[0].x + (ac->dim.quad[1].x + (ac->dim.quad[3].x + ac->dim.quad[2].x))) / 4.0f;
             acPos2.y = (ac->dim.quad[0].y + (ac->dim.quad[1].y + (ac->dim.quad[3].y + ac->dim.quad[2].y))) / 4.0f;
             acPos2.z = (ac->dim.quad[0].z + (ac->dim.quad[1].z + (ac->dim.quad[3].z + ac->dim.quad[2].z))) / 4.0f;
@@ -2286,7 +2287,7 @@ void CollisionCheck_AC_QuadVsCyl(PlayState* play, CollisionCheckContext* colChkC
                 atPos1.x = (at->dim.quad[0].x + (at->dim.quad[1].x + (at->dim.quad[3].x + at->dim.quad[2].x))) / 4.0f;
                 atPos1.y = (at->dim.quad[0].y + (at->dim.quad[1].y + (at->dim.quad[3].y + at->dim.quad[2].y))) / 4.0f;
                 atPos1.z = (at->dim.quad[0].z + (at->dim.quad[1].z + (at->dim.quad[3].z + at->dim.quad[2].z))) / 4.0f;
-                acPos1 = ac->dim.pos; // SOH [Unbound] f32 shape
+                acPos1 = ac->dim.pos;
                 CollisionCheck_SetATvsAC(play, &at->base, &at->info, &atPos1, &ac->base, &ac->info, &acPos1,
                                          &D_8015E410);
                 return;
@@ -2300,7 +2301,7 @@ void CollisionCheck_AC_QuadVsCyl(PlayState* play, CollisionCheckContext* colChkC
                 atPos2.x = (at->dim.quad[0].x + (at->dim.quad[1].x + (at->dim.quad[3].x + at->dim.quad[2].x))) / 4.0f;
                 atPos2.y = (at->dim.quad[0].y + (at->dim.quad[1].y + (at->dim.quad[3].y + at->dim.quad[2].y))) / 4.0f;
                 atPos2.z = (at->dim.quad[0].z + (at->dim.quad[1].z + (at->dim.quad[3].z + at->dim.quad[2].z))) / 4.0f;
-                acPos2 = ac->dim.pos; // SOH [Unbound] f32 shape
+                acPos2 = ac->dim.pos;
                 CollisionCheck_SetATvsAC(play, &at->base, &at->info, &atPos2, &ac->base, &ac->info, &acPos2,
                                          &D_8015E410);
             }
@@ -2791,8 +2792,8 @@ void CollisionCheck_OC_JntSphVsJntSph(PlayState* play, CollisionCheckContext* co
                     Vec3f leftPos;
                     Vec3f rightPos;
 
-                    leftPos = leftElem->dim.worldSphere.center;   // SOH [Unbound] f32 shape
-                    rightPos = rightElem->dim.worldSphere.center; // SOH [Unbound] f32 shape
+                    leftPos = leftElem->dim.worldSphere.center;
+                    rightPos = rightElem->dim.worldSphere.center;
                     CollisionCheck_SetOCvsOC(&left->base, &leftElem->info, &leftPos, &right->base, &rightElem->info,
                                              &rightPos, overlap);
                 }
@@ -2820,8 +2821,8 @@ void CollisionCheck_OC_JntSphVsCyl(PlayState* play, CollisionCheckContext* colCh
                     Vec3f leftPos;
                     Vec3f rightPos;
 
-                    leftPos = leftElem->dim.worldSphere.center; // SOH [Unbound] f32 shape
-                    rightPos = right->dim.pos;                  // SOH [Unbound] f32 shape
+                    leftPos = leftElem->dim.worldSphere.center;
+                    rightPos = right->dim.pos;
                     CollisionCheck_SetOCvsOC(&left->base, &leftElem->info, &leftPos, &right->base, &right->info,
                                              &rightPos, overlap);
                 }
@@ -2851,8 +2852,8 @@ void CollisionCheck_OC_CylVsCyl(PlayState* play, CollisionCheckContext* colChkCt
                 Vec3f leftPos;
                 Vec3f rightPos;
 
-                leftPos = left->dim.pos;   // SOH [Unbound] f32 shape
-                rightPos = right->dim.pos; // SOH [Unbound] f32 shape
+                leftPos = left->dim.pos;
+                rightPos = right->dim.pos;
                 CollisionCheck_SetOCvsOC(&left->base, &left->info, &leftPos, &right->base, &right->info, &rightPos,
                                          deadSpace);
             }

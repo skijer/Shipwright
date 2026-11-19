@@ -113,7 +113,7 @@ extern "C"
 	extern HOST_DATA s16 gLinkObjectIds[2];
 	extern HOST_DATA u32 gObjectTableSize;
 	extern HOST_DATA RomFile gObjectTable[OBJECT_ID_MAX];
-	extern HOST_DATA EntranceInfo* gEntranceTable; // SOH [Unbound] backed by SceneDB; ENTR_MAX is the vanilla count only
+	extern HOST_DATA EntranceInfo* gEntranceTable;
 	extern HOST_DATA u16 gSramSlotOffsets[];
 	// 4 16-colors palettes
 	extern HOST_DATA u64 gMojiFontTLUTs[4][4]; // original name: "moji_tlut"

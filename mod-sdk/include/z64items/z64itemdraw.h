@@ -4,7 +4,6 @@
 #include "functions.h"
 #include "macros.h"
 
-// For an item without a 3D model: its 32x32 RGBA32 icon on a camera-facing quad.
 static inline void Z64Items_DrawIconBillboard(PlayState* play, const char* iconPath) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);

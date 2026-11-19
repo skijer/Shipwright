@@ -15,7 +15,7 @@ Path* Path_GetByIndex(PlayState* play, s16 index, s16 max) {
 f32 Path_OrientAndGetDistSq(Actor* actor, Path* path, s16 waypoint, s16* yaw) {
     f32 dx;
     f32 dz;
-    Vec3f* pointPos; // SOH [Unbound] path points are f32
+    Vec3f* pointPos;
 
     if (path == NULL) {
         return -1.0;
@@ -33,7 +33,7 @@ f32 Path_OrientAndGetDistSq(Actor* actor, Path* path, s16 waypoint, s16* yaw) {
 }
 
 void Path_CopyLastPoint(Path* path, Vec3f* dest) {
-    Vec3f* pointPos; // SOH [Unbound] path points are f32
+    Vec3f* pointPos;
 
     if (path != NULL) {
         pointPos = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[path->count - 1];

@@ -108,7 +108,7 @@ void HandleCUpOnItem(PlayState* play, Input* input, bool* handled) {
     if (definition == nullptr) {
         return;
     }
-    if (definition->pauseText != nullptr) {
+    if (definition->pauseText != nullptr || definition->getItemText != nullptr) {
         sDescribedItem = definition->key;
         OpenPauseTextbox(play, TEXT_MOD_ITEM_PAUSE_DESCRIPTION);
         *handled = true;
@@ -125,10 +125,14 @@ void HandleCUpOnItem(PlayState* play, Input* input, bool* handled) {
 void BuildPauseDescription(uint16_t* textId, bool* loadFromMessageTable) {
     const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(sDescribedItem.c_str());
     sDescribedItem.clear();
-    if (definition == nullptr || definition->pauseText == nullptr) {
+    const char* text = nullptr;
+    if (definition != nullptr) {
+        text = definition->pauseText != nullptr ? definition->pauseText : definition->getItemText;
+    }
+    if (text == nullptr) {
         return;
     }
-    CustomMessage message(definition->pauseText);
+    CustomMessage message(text);
     message.AutoFormat();
     message.LoadIntoFont();
     *loadFromMessageTable = false;

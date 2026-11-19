@@ -156,7 +156,7 @@ void EnMu_Update(Actor* thisx, PlayState* play) {
     EnMu* this = (EnMu*)thisx;
     s32 pad;
     f32 talkDist;
-    Vec3f pos; // SOH [Unbound] collider dims are f32
+    Vec3f pos;
 
     pos.x = this->actor.world.pos.x;
     pos.y = this->actor.world.pos.y;

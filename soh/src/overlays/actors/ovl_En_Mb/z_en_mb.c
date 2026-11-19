@@ -349,7 +349,7 @@ void EnMb_FaceWaypoint(EnMb* this, PlayState* play) {
 
 void EnMb_NextWaypoint(EnMb* this, PlayState* play) {
     Path* path;
-    Vec3f* waypointPos; // SOH [Unbound] path points are f32
+    Vec3f* waypointPos;
 
     path = &play->setupPathList[this->path];
 
@@ -408,7 +408,7 @@ void EnMb_FindWaypointTowardsPlayer(EnMb* this, PlayState* play) {
     Path* path = &play->setupPathList[this->path];
     s16 yawToWaypoint;
     Vec3f waypointPosF;
-    Vec3f* waypointPosS; // SOH [Unbound] path points are f32
+    Vec3f* waypointPosS;
     s16 yawPlayerToWaypoint;
     s32 i;
     s32 waypoint;

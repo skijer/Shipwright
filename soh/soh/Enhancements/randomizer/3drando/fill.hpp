@@ -57,8 +57,6 @@ struct GetAccessibleLocationsStruct {
 void ClearProgress();
 void VanillaFill();
 int Fill();
-// Fill() up to its confined placements, entrances included, for a generator that places the free pool itself.
-// Leaves that pool in itemPool. False when no entrance layout or confined placement succeeded.
 bool FillConfinedItems();
 void SetAreas();
 

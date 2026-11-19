@@ -18,6 +18,14 @@ extern PlayState* gPlayState;
 // generic grotto event list
 std::vector<EventAccess> grottoEvents;
 
+bool HasCheckEnemySoul(RandomizerCheck check) {
+    const Rando::Location* location = Rando::StaticData::GetLocation(check);
+    if (location == nullptr || location->GetRCType() != RCTYPE_SKULL_TOKEN) {
+        return true;
+    }
+    return logic->HasEnemySoul(RE_GOLD_SKULLTULA);
+}
+
 bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time) {
     logic->IsChild = false;
     logic->IsAdult = false;
@@ -869,6 +877,86 @@ bool CanPlantBean(const RandomizerGet bean) {
 Rando::Context* ctx;
 std::shared_ptr<Rando::Logic> logic;
 
+static void RegionTable_AddEnemyDrops() {
+    const std::pair<RandomizerRegion, LocationAccess> drops[] = {
+        { RR_SPIRIT_TEMPLE_1F_ANUBIS, LOCATION(RC_ENEMY_DROP_ANUBIS, logic->CanKillEnemy(RE_ANUBIS)) },
+        { RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, LOCATION(RC_ENEMY_DROP_ANUBIS, logic->CanKillEnemy(RE_ANUBIS)) },
+        { RR_DODONGOS_CAVERN_ARMOS_ROOM, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
+        { RR_DODONGOS_CAVERN_MQ_BEHIND_MOUTH, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
+        { RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
+        { RR_SPIRIT_TEMPLE_BEAMOS_PITS, LOCATION(RC_ENEMY_DROP_BEAMOS, logic->CanKillEnemy(RE_BEAMOS)) },
+        { RR_SPIRIT_TEMPLE_MQ_BEAMOS_PITS, LOCATION(RC_ENEMY_DROP_BEAMOS, logic->CanKillEnemy(RE_BEAMOS)) },
+        { RR_JABU_JABUS_BELLY_BIGOCTO, LOCATION(RC_ENEMY_DROP_BIG_OCTO, logic->CanKillEnemy(RE_BIG_OCTO)) },
+        { RR_JABU_JABUS_BELLY_MQ_BIGOCTO, LOCATION(RC_ENEMY_DROP_BIG_OCTO, logic->CanKillEnemy(RE_BIG_OCTO)) },
+        { RR_WATER_TEMPLE_DARK_LINK_ROOM, LOCATION(RC_ENEMY_DROP_DARK_LINK, logic->CanKillEnemy(RE_DARK_LINK)) },
+        { RR_WATER_TEMPLE_MQ_DARK_LINK_ROOM, LOCATION(RC_ENEMY_DROP_DARK_LINK, logic->CanKillEnemy(RE_DARK_LINK)) },
+        { RR_BOTW_DEAD_HAND_ROOM, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
+        { RR_BOTW_MQ_DEAD_HAND_ROOM, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
+        { RR_SHADOW_TEMPLE_DEAD_HAND, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
+        { RR_DEKU_TREE_LOBBY, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_DEKU_BABA)) },
+        { RR_DEKU_TREE_MQ_1F, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_WITHERED_DEKU_BABA)) },
+        { RR_DEKU_TREE_MQ_SLINGSHOT_ROOM, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_DEKU_BABA)) },
+        { RR_DODONGOS_CAVERN_DODONGO_ROOM, LOCATION(RC_ENEMY_DROP_DODONGO, logic->CanKillEnemy(RE_DODONGO)) },
+        { RR_DODONGOS_CAVERN_MQ_DODONGO_ROOM, LOCATION(RC_ENEMY_DROP_DODONGO, logic->CanKillEnemy(RE_DODONGO)) },
+        { RR_FIRE_TEMPLE_LOOP_FLARE_DANCER,
+          LOCATION(RC_ENEMY_DROP_FLARE_DANCER, logic->CanKillEnemy(RE_FLARE_DANCER)) },
+        { RR_FIRE_TEMPLE_MQ_LOOP_FLARE_DANCER,
+          LOCATION(RC_ENEMY_DROP_FLARE_DANCER, logic->CanKillEnemy(RE_FLARE_DANCER)) },
+        { RR_ICE_CAVERN_BEGINNING, LOCATION(RC_ENEMY_DROP_FREEZARD, logic->CanKillEnemy(RE_FREEZARD)) },
+        { RR_ICE_CAVERN_MQ_HUB, LOCATION(RC_ENEMY_DROP_FREEZARD, logic->CanKillEnemy(RE_FREEZARD)) },
+        { RR_LAKE_HYLIA, LOCATION(RC_ENEMY_DROP_GUAY, logic->CanKillEnemy(RE_GUAY)) },
+        { RR_SPIRIT_TEMPLE_CHILD_THRONE, LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
+        { RR_SPIRIT_TEMPLE_ADULT_THRONE, LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
+        { RR_SPIRIT_TEMPLE_MQ_CHILD_THRONE,
+          LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
+        { RR_SPIRIT_TEMPLE_MQ_ADULT_THRONE,
+          LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
+        { RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
+        { RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
+        { RR_SHADOW_TEMPLE_SKULL_JAR, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
+        { RR_DESERT_COLOSSUS, LOCATION(RC_ENEMY_DROP_LEEVER, logic->IsAdult && logic->CanKillEnemy(RE_LEEVER)) },
+        { RR_DODONGOS_CAVERN_LOWER_LIZALFOS, LOCATION(RC_ENEMY_DROP_LIZALFOS, logic->CanKillEnemy(RE_LIZALFOS)) },
+        { RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS, LOCATION(RC_ENEMY_DROP_LIZALFOS, logic->CanKillEnemy(RE_LIZALFOS)) },
+        { RR_ZORAS_RIVER, LOCATION(RC_ENEMY_DROP_OCTOROK, logic->CanKillEnemy(RE_OCTOROK)) },
+        { RR_HYRULE_FIELD,
+          LOCATION(RC_ENEMY_DROP_PEAHAT, logic->IsAdult && logic->AtDay && logic->CanKillEnemy(RE_PEAHAT)) },
+        { RR_FOREST_TEMPLE_LOBBY,
+          LOCATION(RC_ENEMY_DROP_POE_SISTER,
+                   logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)) },
+        { RR_FOREST_TEMPLE_MQ_LOBBY,
+          LOCATION(RC_ENEMY_DROP_POE_SISTER,
+                   logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)) },
+        { RR_KAK_REDEAD_GROTTO, LOCATION(RC_ENEMY_DROP_REDEAD, logic->CanKillEnemy(RE_REDEAD)) },
+        { RR_DEKU_TREE_LOBBY_3F, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
+        { RR_DEKU_TREE_MQ_BASEMENT_WATER_ROOM_BACK,
+          LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
+        { RR_BOTW_PERIMETER, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
+        { RR_BOTW_MQ_PERIMETER, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
+        { RR_WATER_TEMPLE_4_SPIKES_ROOM, LOCATION(RC_ENEMY_DROP_SPIKE, logic->CanKillEnemy(RE_SPIKE)) },
+        { RR_WATER_TEMPLE_MQ_TOWER_TARGET_ROOM, LOCATION(RC_ENEMY_DROP_SPIKE, logic->CanKillEnemy(RE_SPIKE)) },
+        { RR_HYRULE_FIELD,
+          LOCATION(RC_ENEMY_DROP_STALCHILD, logic->IsChild && logic->AtNight && logic->CanKillEnemy(RE_STALCHILD)) },
+        { RR_FOREST_TEMPLE_LOWER_STALFOS, LOCATION(RC_ENEMY_DROP_STALFOS, logic->CanKillEnemy(RE_STALFOS)) },
+        { RR_FOREST_TEMPLE_MQ_3_STALFOS_ROOM, LOCATION(RC_ENEMY_DROP_STALFOS, logic->CanKillEnemy(RE_STALFOS)) },
+        { RR_JABU_JABUS_BELLY_FORK_EAST, LOCATION(RC_ENEMY_DROP_STINGER, logic->CanKillEnemy(RE_STINGER)) },
+        { RR_JABU_JABUS_BELLY_MQ_INVISIBLE_KEESE_ROOM,
+          LOCATION(RC_ENEMY_DROP_STINGER, logic->CanKillEnemy(RE_STINGER)) },
+        { RR_DEATH_MOUNTAIN_TRAIL, LOCATION(RC_ENEMY_DROP_TEKTITE, logic->CanKillEnemy(RE_TEKTITE)) },
+        { RR_JABU_JABUS_BELLY_FORK_NORTH, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
+        { RR_JABU_JABUS_BELLY_FORK_WEST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
+        { RR_JABU_JABUS_BELLY_MQ_FORK_EAST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
+        { RR_JABU_JABUS_BELLY_MQ_FORK_WEST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
+        { RR_SPIRIT_TEMPLE_FAKE_DOORS_ROOM, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
+        { RR_SPIRIT_TEMPLE_MQ_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
+        { RR_FIRE_TEMPLE_LOOP_HEXAGON_ROOM, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
+        { RR_SFM_ENTRYWAY, LOCATION(RC_ENEMY_DROP_WOLFOS, logic->IsChild && logic->CanKillEnemy(RE_WOLFOS)) },
+        { RR_SFM_WOLFOS_GROTTO, LOCATION(RC_ENEMY_DROP_WOLFOS, logic->CanKillEnemy(RE_WOLFOS)) },
+    };
+    for (const auto& [region, drop] : drops) {
+        areaTable[region].locations.push_back(drop);
+    }
+}
+
 void RegionTable_Init() {
     using namespace Rando;
     ctx = Context::GetInstance().get();
@@ -921,6 +1009,7 @@ void RegionTable_Init() {
     RegionTable_Init_GerudoTrainingGround();
     RegionTable_Init_GanonsCastle();
     DungeonRegistry_AddRegions();
+    RegionTable_AddEnemyDrops();
 
     // Set parent regions
     for (uint32_t i = RR_ROOT; i < areaTable.size(); i++) {

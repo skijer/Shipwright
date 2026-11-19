@@ -181,7 +181,6 @@ class Option {
     const std::string& GetName() const;
     const std::string& GetDescription() const;
 
-    // SOH [Unbound] a mod's option has no RandomizerSettingKey name to translate, so it brings its own text.
     Option& SetModText(std::string name, std::string description);
 
     /**

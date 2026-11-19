@@ -64,7 +64,6 @@ const SOHCustomEnemy* ActorRegistry_FindEnemyById(int16_t actorId);
 #include <string>
 #include <vector>
 
-// SOH [Unbound] Every actor type a mod registered, with the mod that registered it.
 struct SOHRegisteredActor {
     std::string key;
     std::string owner;

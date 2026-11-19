@@ -88,7 +88,7 @@ static inline void Z64Items_SetAge(SOHCustomItemDefinition* definition, SOHCusto
     definition->ageRequirement = (uint8_t)age;
 }
 
-// The game copies the keys when the item registers; until then the array must stay alive.
+// Until the item registers, the array must stay alive: the game copies the keys then.
 static inline void Z64Items_SetAllowedForms(SOHCustomItemDefinition* definition, const char* const* formKeys,
                                             uint32_t formKeyCount) {
     definition->allowedForms = formKeys;
@@ -131,8 +131,6 @@ static inline bool Z64Items_Register(const SOHModApi* api, const SOHCustomItemDe
     return SOH_MOD_API_HAS(api, RegisterCustomItem) && api->RegisterCustomItem(definition);
 }
 
-// Saves own items, and seeds place them, by key: a renamed item keeps its old key registered and hidden. It stays a
-// randomizer item that never joins a pool, so an older seed can still place it; ownership moves to the new key.
 static inline bool Z64Items_RegisterLegacyKey(const SOHModApi* api, const SOHCustomItemDefinition* current,
                                               const char* legacyKey) {
     SOHCustomItemDefinition legacy = *current;
@@ -158,7 +156,6 @@ static inline void Z64Items_MigrateLegacyKey(const SOHModApi* api, const char* l
     api->SetCustomItemOwned(legacyKey, false);
 }
 
-// For an OnCustomItemOwnedChange hook: an old seed's item becomes the renamed one the moment it is received.
 static inline void Z64Items_ForwardLegacyKey(const SOHModApi* api, const char* changedKey, bool owned,
                                              const char* legacyKey, const char* key) {
     if (owned && legacyKey != NULL && strcmp(changedKey, legacyKey) == 0) {
@@ -166,7 +163,7 @@ static inline void Z64Items_ForwardLegacyKey(const SOHModApi* api, const char* c
     }
 }
 
-// acquisitionKey is what the seed stores; itemKey must already be registered.
+// itemKey must already be registered.
 static inline SOHCustomPickupVariant Z64Items_DefinePickup(const char* itemKey, const char* variantKey,
                                                          const char* acquisitionKey) {
     SOHCustomPickupVariant pickup = { 0 };

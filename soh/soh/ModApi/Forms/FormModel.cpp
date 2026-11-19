@@ -78,7 +78,6 @@ FormBody* FindBody(const SOHFormDefinition* form) {
     return &body;
 }
 
-// TAKEOVER forms draw through the mod's own callback, which only knows the local player: others stay Link.
 const SOHFormDefinition* FindOtherPlayerForm(Player* player) {
     const char* formKey = nullptr;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnPlayerResolveForm>(player, &formKey);
@@ -154,7 +153,6 @@ bool IsModelPath(const FormBody& body, const char* path) {
     return path != nullptr && std::strstr(path, body.modelPath.c_str()) != nullptr;
 }
 
-// The pause menu draws Link outside any actor draw; only the local player is drawn there.
 DrawnPlayer DrawnPlayerFor(Player* player) {
     if (sIsDrawingPlayerActor) {
         return sDrawn;
@@ -268,15 +266,18 @@ void ResolveFaceTextures(const char** eyes, const char** mouth) {
     MirrorFaceTexture(*body, mouth);
 }
 
+void HideOnFormBody(GIVanillaBehavior, bool* should, va_list) {
+    if (DrawnBody() != nullptr) {
+        *should = false;
+    }
+}
+
 } // namespace
 
 void FormModel_Init() {
-    GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnVanillaBehavior>(
-        VB_APPLY_TUNIC_COLOR, [](GIVanillaBehavior, bool* should, va_list) {
-            if (DrawnBody() != nullptr) {
-                *should = false;
-            }
-        });
+    for (GIVanillaBehavior flag : { VB_APPLY_TUNIC_COLOR, VB_DRAW_PLAYER_GAUNTLETS_AND_BOOTS }) {
+        GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnVanillaBehavior>(flag, HideOnFormBody);
+    }
     for (int16_t actorId : { ACTOR_PLAYER, ACTOR_EN_OE2 }) {
         GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDraw>(actorId, SwapSkeleton);
         GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnActorDrawEnd>(actorId, RestoreSkeleton);

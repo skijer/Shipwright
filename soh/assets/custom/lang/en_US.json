@@ -1513,6 +1513,14 @@
                 "name": "Shuffle Boss Souls",
                 "description": "Shuffles 8 boss souls (one for each blue warp dungeon). A boss will not appear until you collect its respective soul."
             },
+            "shuffle_enemy_souls": {
+                "name": "Shuffle Enemy Souls",
+                "description": "Adds the \"souls\" of regular enemies to the item pool. An enemy will be immune to damage until its corresponding soul has been obtained."
+            },
+            "shuffle_enemy_drops": {
+                "name": "Shuffle Enemy Drops",
+                "description": "The first drop from each non-boss enemy is a check."
+            },
             "gbk_stone_count": {
                 "name": "GBK Stone Count"
             },

@@ -44,10 +44,8 @@ void Main_LogSystemHeap(void) {
     osSyncPrintf(VT_RST);
 }
 
-// SOH [Fleet] Entered from the launcher (soh/launcher/main.c); argv is UTF-8 on every platform.
 int Soh_RunMain(int argc, char* argv[]) {
 #ifdef _WIN32
-    // Inside Fleet the console and the locale are Fleet's.
     if (!FleetGame_IsHosted()) {
         AllocConsole();
         (void)freopen("CONIN$", "r", stdin);

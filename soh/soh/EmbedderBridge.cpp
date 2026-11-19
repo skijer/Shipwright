@@ -19,23 +19,15 @@ extern "C" {
 extern PlayState* gPlayState;
 }
 
-// ---- outbound ----------------------------------------------------------------------------
-// A listener runs inside dispatchEvent, synchronously, and may call Soh_RunConsoleCommand.
-// Inside the frame that raised the event, that command would act on a half-updated game: a
-// warp issued from a 'scene' listener was reset by the rest of Play_Init. So events raised
-// during a frame are held and dispatched after it, by Soh_EmbedderAfterFrame. What the
-// bridge sends from outside a frame -- file changes, 'quit', 'error' -- goes out at once.
-
+// Listeners may call Soh_RunConsoleCommand, which must not act on a half-updated frame, so events raised
+// during a frame are held and dispatched after it.
 static std::vector<std::string> sHeldEvents;
 
-// Hands one event to the page. JSON is parsed on the JS side so the detail object is a
-// plain object the listener can destructure, whoever the listener is.
 static void DispatchEvent(const std::string& json) {
     EM_ASM({ window.dispatchEvent(new CustomEvent('soh', { detail : JSON.parse(UTF8ToString($0)) })); }, json.c_str());
 }
 
 static void DispatchHeldEvents() {
-    // A listener's command can raise events of its own; those wait for the next frame.
     std::vector<std::string> events;
     events.swap(sHeldEvents);
     for (const auto& json : events) {
@@ -43,14 +35,11 @@ static void DispatchHeldEvents() {
     }
 }
 
-// The path a host sees: absolute in the VFS, e.g. /Save/file1.sav.
 static std::string VfsPath(const std::filesystem::path& path) {
     return std::filesystem::absolute(path).lexically_normal().generic_string();
 }
 
-// 'load-game' promises that play-state commands work, but OnLoadGame fires from file
-// select, before the play state exists. The load is remembered and reported with the first
-// scene of that game instead.
+// OnLoadGame fires before the play state exists, so the load is reported with the game's first scene.
 static int32_t sLoadedFileNum = -1;
 
 static void OnLoadGame(int32_t fileNum) {
@@ -66,10 +55,7 @@ static void OnSceneInit(int16_t sceneNum) {
                                       gSaveContext.entranceIndex, gSaveContext.sceneLayer));
 }
 
-// The file's bytes travel as a Uint8Array copy, so the host owns them outright and the
-// event carries the same thing whether the file is JSON (config, saves) or not. FS.readFile
-// copies straight out of the in-memory filesystem: staging the bytes in the wasm heap would
-// grow it for good, since wasm memory never shrinks, and the Unbound base is ~60 MB.
+// FS.readFile copies out of the in-memory filesystem; staging large files in the wasm heap would grow it for good.
 static void DispatchFileSaved(const std::string& path) {
     std::string vfsPath = VfsPath(path);
     EM_ASM(
@@ -84,13 +70,6 @@ static void DispatchFileSaved(const std::string& path) {
 static void DispatchFileRemoved(const std::string& path) {
     DispatchEvent(fmt::format(R"({{"type":"file-removed","path":{}}})", nlohmann::json(VfsPath(path)).dump()));
 }
-
-// ---- saved files -------------------------------------------------------------------------
-// The game writes its config and saves into the in-memory filesystem through several
-// unrelated paths (SaveManager's temp-and-rename, its metadata rewrite, SaveGlobal, LUS's
-// Config::Save), and removes saves through others (erasing a file, moving a corrupt one
-// aside). Rather than hook each one, watch the config and everything under Save/ and report
-// whatever changed or disappeared since the last frame.
 
 struct FileStamp {
     std::filesystem::file_time_type mtime;
@@ -116,7 +95,6 @@ static std::vector<std::filesystem::path> WatchedFiles() {
     std::error_code ec;
     for (const auto& entry :
          std::filesystem::directory_iterator(Ship::Context::GetPathRelativeToAppDirectory("Save"), ec)) {
-        // SaveManager writes file<N>.temp and renames it over file<N>.sav; only the result counts.
         if (entry.is_regular_file(ec) && entry.path().extension() != ".temp") {
             files.push_back(entry.path());
         }
@@ -136,7 +114,6 @@ static FileSnapshot SnapshotWatchedFiles() {
     return snapshot;
 }
 
-// What changed between two snapshots: files that are new or different, and files that are gone.
 static FileChanges DiffSnapshots(const FileSnapshot& before, const FileSnapshot& after) {
     FileChanges changes;
     for (const auto& [path, stamp] : after) {
@@ -153,9 +130,6 @@ static FileChanges DiffSnapshots(const FileSnapshot& before, const FileSnapshot&
     return changes;
 }
 
-// Reports every watched file that changed or disappeared since the last call. The first
-// call only records what the host supplied, so nothing is reported that the game did not
-// itself write.
 static void ReportFileChanges() {
     FileSnapshot now = SnapshotWatchedFiles();
     if (sSeenFilesPrimed) {
@@ -171,10 +145,6 @@ static void ReportFileChanges() {
     sSeenFilesPrimed = true;
 }
 
-// ---- diagnostics -------------------------------------------------------------------------
-// Counters for soh/wasm/tests and for profiling. Not part of the host contract: the fields
-// can change without notice.
-
 static uint64_t sTicks = 0;
 static uint64_t sDraws = 0;
 static uint64_t sAudioDrops = 0;
@@ -187,8 +157,6 @@ void Soh_EmbedderCountAudioDrop(void) {
     sAudioDrops++;
 }
 
-// Returns a JSON object, valid until the next call. updateRate is R_UPDATE_RATE, the game's
-// vsync divisor; sceneNum is -1 outside a play state.
 extern "C" EMSCRIPTEN_KEEPALIVE const char* Soh_GetStats(void) {
     static std::string json;
     json = fmt::format(R"({{"ticks":{},"draws":{},"updateRate":{},"audioBuffered":{},"audioDrops":{},"sceneNum":{}}})",
@@ -197,12 +165,10 @@ extern "C" EMSCRIPTEN_KEEPALIVE const char* Soh_GetStats(void) {
     return json.c_str();
 }
 
-// ---- entry points ------------------------------------------------------------------------
-
 void Soh_InitEmbedderBridge(void) {
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnLoadGame>(OnLoadGame);
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>(OnSceneInit);
-    ReportFileChanges(); // prime with the host's files
+    ReportFileChanges();
 }
 
 void Soh_EmbedderAfterFrame(void) {
@@ -212,19 +178,16 @@ void Soh_EmbedderAfterFrame(void) {
 }
 
 void Soh_EmbedderQuit(void) {
-    // Anything raised or written on the way out goes first.
     DispatchHeldEvents();
     ReportFileChanges();
     DispatchEvent(R"({"type":"quit"})");
 }
 
 void Soh_EmbedderError(const char* message) {
-    // The loop stops after this, with no Soh_EmbedderAfterFrame for the failing frame: report
-    // what that frame raised or wrote now, so a save made just before the throw is not lost.
+    // The loop stops after this, so report what the failing frame raised or wrote now.
     DispatchHeldEvents();
     ReportFileChanges();
-    // `replace`: a what() carrying bytes that are not UTF-8 (a parse error quoting the file it
-    // choked on) would otherwise make dump() throw, and the host would never hear of it.
+    // `replace`: a what() containing non-UTF-8 bytes would otherwise make dump() throw.
     std::string text = nlohmann::json(message).dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
     DispatchEvent(fmt::format(R"({{"type":"error","message":{}}})", text));
 }
@@ -233,14 +196,7 @@ void Soh_EmbedderReportFile(const char* path) {
     DispatchFileSaved(path);
 }
 
-// Inbound. Called from JS between frames: the build is single-threaded, so a ccall can
-// only land while no frame is running, and events are dispatched after their frame (see
-// "outbound") so this holds inside a listener too. Handlers that queue work for the next
-// frame, such as `entrance`, behave exactly as they do when typed into the console.
-//
-// Returns the handler's own result (0 is success by convention), -1 before the console
-// exists, -2 for a command the console does not know. The last case is separate because
-// Console::Run reports "unknown command" as 0, the same value as success.
+// Returns -1 before the console exists and -2 for an unknown command, which Console::Run itself reports as 0.
 extern "C" EMSCRIPTEN_KEEPALIVE int32_t Soh_RunConsoleCommand(const char* command) {
     auto context = Ship::Context::GetRawInstance();
     if (context == nullptr || context->GetConsole() == nullptr) {
@@ -257,4 +213,4 @@ extern "C" EMSCRIPTEN_KEEPALIVE int32_t Soh_RunConsoleCommand(const char* comman
     std::string output;
     return console->Run(line, &output);
 }
-#endif // __EMSCRIPTEN__
+#endif

@@ -39,7 +39,6 @@ constexpr const char* KindCountdownStop = "countdown_stop";
 constexpr const char* CountdownOwnerPrefix = "net.";
 constexpr const char* Base64Alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-// Same budget as Harpoon's ROOM.BROADCAST_EVENT share, so a mod behaves the same on either relay.
 constexpr double MessagesPerSecond = 10.0;
 constexpr size_t MaxQueuedMessages = 64;
 
@@ -173,7 +172,6 @@ void DropOldestEvent() {
     sOutgoing.erase(oldestEvent != sOutgoing.end() ? oldestEvent : sOutgoing.begin());
 }
 
-// A state still waiting in the queue is replaced in place: only its latest value is worth sending.
 void Enqueue(nlohmann::json packet, std::string stateKey) {
     if (!stateKey.empty()) {
         for (OutgoingMessage& message : sOutgoing) {

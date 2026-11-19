@@ -12,12 +12,14 @@
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/SohGui/ImGuiUtils.h"
 #include "soh/Notification/Notification.h"
 #include "soh/SaveManager.h"
 #include "soh/ShipInit.hpp"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
 #include "item_category_adj.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
@@ -88,6 +90,9 @@ extern void EnGe1_Wait_Archery(EnGe1* enGe1, PlayState* play);
 extern void EnGe1_SetAnimationIdle(EnGe1* enGe1);
 extern void EnGe1_SetAnimationIdle(EnGe1* enGe1);
 extern void EnGe2_SetupCapturePlayer(EnGe2* enGe2, PlayState* play);
+// OPEN_DISPS redeclares these inside C++ functions; declaring them here keeps their C linkage.
+void FrameInterpolation_RecordOpenChild(const void* a, int b);
+void FrameInterpolation_RecordCloseChild(void);
 }
 
 bool LocMatchesQuest(Rando::Location loc) {
@@ -1379,6 +1384,12 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
                                            .english;
                             break;
                     }
+                    const char* modKey = RandoItems_GetKey(item00->itemEntry.getItemId);
+                    const std::string displayName =
+                        modKey != nullptr ? CustomItemRegistry_GetDisplayName(modKey) : std::string{};
+                    if (!displayName.empty()) {
+                        itemName = displayName;
+                    }
 
                     Notification::Emit({
                         .message = message,
@@ -1871,18 +1882,23 @@ void RandomizerOnVanillaBehaviorHandler(GIVanillaBehavior id, bool* should, va_l
             }
             break;
         }
-        case VB_SLAY_GANON:
-            if (RAND_GET_OPTION(RSK_WINCON).IsNot(RO_WINCON_DEFEAT_GANON)) {
-                *should = false;
-                Flags_SetRandomizerInf(RAND_INF_DUNGEONS_DONE_GANONS_TOWER);
-                randomizerQueuedChecks.push(RC_GANON);
-                CheckTriggers();
-                gPlayState->nextEntranceIndex = ENTR_OUTSIDE_GANONS_CASTLE_1_2;
-                gPlayState->transitionTrigger = TRANS_TRIGGER_START;
-                gPlayState->transitionType = TRANS_TYPE_FADE_WHITE;
-                gSaveContext.nextTransitionType = TRANS_TYPE_FADE_WHITE_SLOW;
+        case VB_SLAY_GANON: {
+            const bool isGanonTheGoal = RAND_GET_OPTION(RSK_WINCON).Is(RO_WINCON_DEFEAT_GANON);
+            if (isGanonTheGoal && FleetGame_ShouldRollCredits()) {
+                break;
             }
+            *should = false;
+            Flags_SetRandomizerInf(RAND_INF_DUNGEONS_DONE_GANONS_TOWER);
+            if (!isGanonTheGoal) {
+                randomizerQueuedChecks.push(RC_GANON);
+            }
+            CheckTriggers();
+            gPlayState->nextEntranceIndex = ENTR_OUTSIDE_GANONS_CASTLE_1_2;
+            gPlayState->transitionTrigger = TRANS_TRIGGER_START;
+            gPlayState->transitionType = TRANS_TYPE_FADE_WHITE;
+            gSaveContext.nextTransitionType = TRANS_TYPE_FADE_WHITE_SLOW;
             break;
+        }
         case VB_DRAW_AMMO_COUNT: {
             s16 item = *va_arg(args, s16*);
             // don't draw ammo count if you have the infinite upgrade
@@ -2747,8 +2763,12 @@ void RandomizerOnPlayerUpdateHandler() {
 
     if (!GameInteractor::IsGameplayPaused()) {
         // Warp to credits once item queue has drained to avoid losing queued items
-        if (GameInteractor::State::TriforceHuntCreditsWarpActive && randomizerQueuedChecks.empty() &&
-            randomizerQueuedCheck == RC_UNKNOWN_CHECK) {
+        const bool isCreditsWarpDue = GameInteractor::State::TriforceHuntCreditsWarpActive &&
+                                      randomizerQueuedChecks.empty() && randomizerQueuedCheck == RC_UNKNOWN_CHECK;
+        if (isCreditsWarpDue) {
+            GameInteractor::State::TriforceHuntCreditsWarpActive = 0;
+        }
+        if (isCreditsWarpDue && FleetGame_ShouldRollCredits()) {
             gSaveContext.ship.stats.itemTimestamp[TIMESTAMP_TRIFORCE_COMPLETED] =
                 static_cast<u32>(GAMEPLAYSTAT_TOTAL_TIME);
             gSaveContext.ship.stats.gameComplete = 1;
@@ -2758,7 +2778,6 @@ void RandomizerOnPlayerUpdateHandler() {
             gSaveContext.nextCutsceneIndex = 0xFFF2;
             gPlayState->transitionTrigger = TRANS_TRIGGER_START;
             gPlayState->transitionType = TRANS_TYPE_FADE_WHITE;
-            GameInteractor::State::TriforceHuntCreditsWarpActive = 0;
         }
 
         // Reset Triforce Piece scale for GI animation. Triforce Hunt allows for multiple triforce models,
@@ -2953,3 +2972,255 @@ static void RandomizerRegisterHooks() {
 }
 
 static RegisterShipInitFunc initFunc_RegisterHooks(RandomizerRegisterHooks);
+
+// clang-format off
+static const std::unordered_map<int16_t, RandomizerInf> enemySouls = {
+    { ACTOR_EN_ANUBICE,    RAND_INF_SOUL_ENEMY_ANUBIS },
+    { ACTOR_EN_AM,         RAND_INF_SOUL_ENEMY_ARMOS },
+    { ACTOR_EN_VALI,       RAND_INF_SOUL_ENEMY_BARI },
+    { ACTOR_EN_BILI,       RAND_INF_SOUL_ENEMY_BARI },
+    { ACTOR_EN_VM,         RAND_INF_SOUL_ENEMY_BEAMOS },
+    { ACTOR_EN_BIGOKUTA,   RAND_INF_SOUL_ENEMY_BIG_OCTO },
+    { ACTOR_EN_BB,         RAND_INF_SOUL_ENEMY_BUBBLE },
+    { ACTOR_EN_TORCH2,     RAND_INF_SOUL_ENEMY_DARK_LINK },
+    { ACTOR_EN_DH,         RAND_INF_SOUL_ENEMY_DEAD_HAND },
+    { ACTOR_EN_DHA,        RAND_INF_SOUL_ENEMY_DEAD_HAND },
+    { ACTOR_EN_DEKUBABA,   RAND_INF_SOUL_ENEMY_DEKU_BABA },
+    { ACTOR_EN_KAREBABA,   RAND_INF_SOUL_ENEMY_DEKU_BABA },
+    { ACTOR_EN_DODONGO,    RAND_INF_SOUL_ENEMY_DODONGO },
+    { ACTOR_EN_DODOJR,     RAND_INF_SOUL_ENEMY_DODONGO },
+    { ACTOR_EN_FD,         RAND_INF_SOUL_ENEMY_FLARE_DANCER },
+    { ACTOR_EN_FZ,         RAND_INF_SOUL_ENEMY_FREEZARD },
+    { ACTOR_EN_GELDB,      RAND_INF_SOUL_ENEMY_GERUDO_FIGHTER },
+    { ACTOR_EN_GOMA,       RAND_INF_SOUL_ENEMY_GOHMA_LARVA },
+    { ACTOR_EN_CROW,       RAND_INF_SOUL_ENEMY_GUAY },
+    { ACTOR_EN_IK,         RAND_INF_SOUL_ENEMY_IRON_KNUCKLE },
+    { ACTOR_EN_FIREFLY,    RAND_INF_SOUL_ENEMY_KEESE },
+    { ACTOR_EN_REEBA,      RAND_INF_SOUL_ENEMY_LEEVER },
+    { ACTOR_EN_RR,         RAND_INF_SOUL_ENEMY_LIKE_LIKE },
+    { ACTOR_EN_ZF,         RAND_INF_SOUL_ENEMY_LIZALFOS },
+    { ACTOR_EN_DEKUNUTS,   RAND_INF_SOUL_ENEMY_MAD_SCRUB },
+    { ACTOR_EN_OKUTA,      RAND_INF_SOUL_ENEMY_OCTOROK },
+    { ACTOR_EN_BA,         RAND_INF_SOUL_ENEMY_PARASITIC_TENTACLE },
+    { ACTOR_EN_PEEHAT,     RAND_INF_SOUL_ENEMY_PEAHAT },
+    { ACTOR_EN_POH,        RAND_INF_SOUL_ENEMY_POE },
+    { ACTOR_EN_PO_FIELD,   RAND_INF_SOUL_ENEMY_POE },
+    { ACTOR_EN_PO_SISTERS, RAND_INF_SOUL_ENEMY_POE },
+    { ACTOR_EN_RD,         RAND_INF_SOUL_ENEMY_REDEAD },
+    { ACTOR_EN_BUBBLE,     RAND_INF_SOUL_ENEMY_SHABOM },
+    { ACTOR_EN_SB,         RAND_INF_SOUL_ENEMY_SHELLBLADE },
+    { ACTOR_EN_ST,         RAND_INF_SOUL_ENEMY_SKULLTULA },
+    { ACTOR_EN_SW,         RAND_INF_SOUL_ENEMY_SKULLTULA },
+    { ACTOR_EN_NY,         RAND_INF_SOUL_ENEMY_SPIKE },
+    { ACTOR_EN_SKB,        RAND_INF_SOUL_ENEMY_STALCHILD },
+    { ACTOR_EN_TEST,       RAND_INF_SOUL_ENEMY_STALFOS },
+    { ACTOR_EN_EIYER,      RAND_INF_SOUL_ENEMY_STINGER },
+    { ACTOR_EN_WEIYER,     RAND_INF_SOUL_ENEMY_STINGER },
+    { ACTOR_EN_TITE,       RAND_INF_SOUL_ENEMY_TEKTITE },
+    { ACTOR_EN_BW,         RAND_INF_SOUL_ENEMY_TORCH_SLUG },
+    { ACTOR_EN_WALLMAS,    RAND_INF_SOUL_ENEMY_WALLMASTER },
+    { ACTOR_EN_FLOORMAS,   RAND_INF_SOUL_ENEMY_WALLMASTER },
+    { ACTOR_EN_WF,         RAND_INF_SOUL_ENEMY_WOLFOS },
+};
+// clang-format on
+
+static const Color_RGBA8 soullessGrayscale = { 70, 70, 70, 255 };
+
+static bool HasEnemySoul(int16_t actorId) {
+    auto soul = enemySouls.find(actorId);
+    return soul == enemySouls.end() || Flags_GetRandomizerInf(soul->second);
+}
+
+static void TintSoullessLockOnArrow() {
+    OPEN_DISPS(gPlayState->state.gfxCtx);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 155, 0, 0, 255);
+    CLOSE_DISPS(gPlayState->state.gfxCtx);
+}
+
+static void GraySoullessEnemy(Actor* actor, PlayState* play, Color_RGBA8* grayscale) {
+    if (!HasEnemySoul(actor->id)) {
+        *grayscale = soullessGrayscale;
+    }
+}
+
+static void RegisterShuffleEnemySouls() {
+    bool shouldRegister = IS_RANDO && RAND_GET_OPTION(RSK_SHUFFLE_ENEMY_SOULS);
+
+    COND_VB_SHOULD(VB_PERFORM_AC_COLLISION, shouldRegister, {
+        (void)va_arg(args, Collider*);
+        Collider* ac = va_arg(args, Collider*);
+        if (ac->actor != nullptr && !HasEnemySoul(ac->actor->id)) {
+            *should = false;
+        }
+    });
+
+    COND_VB_SHOULD(VB_DRAW_LOCK_ON_ARROW, shouldRegister, {
+        Actor* actor = va_arg(args, Actor*);
+        if (!HasEnemySoul(actor->id)) {
+            TintSoullessLockOnArrow();
+            *should = false;
+        }
+    });
+
+    COND_HOOK(OnActorResolveGrayscale, shouldRegister, GraySoullessEnemy);
+}
+
+static RegisterShipInitFunc initFunc_ShuffleEnemySouls(RegisterShuffleEnemySouls, { "IS_RANDO" });
+
+enum class EnemyDropTrigger {
+    Loot,
+    Defeat,
+};
+
+struct EnemyDrop {
+    RandomizerCheck check;
+    EnemyDropTrigger trigger;
+};
+
+// clang-format off
+static const std::unordered_map<int16_t, EnemyDrop> enemyDrops = {
+    { ACTOR_EN_ANUBICE,    { RC_ENEMY_DROP_ANUBIS,       EnemyDropTrigger::Loot } },
+    { ACTOR_EN_AM,         { RC_ENEMY_DROP_ARMOS,        EnemyDropTrigger::Loot } },
+    { ACTOR_EN_VM,         { RC_ENEMY_DROP_BEAMOS,       EnemyDropTrigger::Loot } },
+    { ACTOR_EN_BIGOKUTA,   { RC_ENEMY_DROP_BIG_OCTO,     EnemyDropTrigger::Loot } },
+    { ACTOR_EN_TORCH2,     { RC_ENEMY_DROP_DARK_LINK,    EnemyDropTrigger::Loot } },
+    { ACTOR_EN_DH,         { RC_ENEMY_DROP_DEAD_HAND,    EnemyDropTrigger::Loot } },
+    { ACTOR_EN_DEKUBABA,   { RC_ENEMY_DROP_DEKU_BABA,    EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_KAREBABA,   { RC_ENEMY_DROP_DEKU_BABA,    EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_DODONGO,    { RC_ENEMY_DROP_DODONGO,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_DODOJR,     { RC_ENEMY_DROP_DODONGO,      EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_FD,         { RC_ENEMY_DROP_FLARE_DANCER, EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_FZ,         { RC_ENEMY_DROP_FREEZARD,     EnemyDropTrigger::Loot } },
+    { ACTOR_EN_CROW,       { RC_ENEMY_DROP_GUAY,         EnemyDropTrigger::Loot } },
+    { ACTOR_EN_IK,         { RC_ENEMY_DROP_IRON_KNUCKLE, EnemyDropTrigger::Loot } },
+    { ACTOR_EN_FIREFLY,    { RC_ENEMY_DROP_KEESE,        EnemyDropTrigger::Loot } },
+    { ACTOR_EN_REEBA,      { RC_ENEMY_DROP_LEEVER,       EnemyDropTrigger::Loot } },
+    { ACTOR_EN_ZF,         { RC_ENEMY_DROP_LIZALFOS,     EnemyDropTrigger::Loot } },
+    { ACTOR_EN_OKUTA,      { RC_ENEMY_DROP_OCTOROK,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_PEEHAT,     { RC_ENEMY_DROP_PEAHAT,       EnemyDropTrigger::Loot } },
+    { ACTOR_EN_PO_SISTERS, { RC_ENEMY_DROP_POE_SISTER,   EnemyDropTrigger::Loot } },
+    { ACTOR_EN_RD,         { RC_ENEMY_DROP_REDEAD,       EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_ST,         { RC_ENEMY_DROP_SKULLTULA,    EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_SW,         { RC_ENEMY_DROP_SKULLTULA,    EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_NY,         { RC_ENEMY_DROP_SPIKE,        EnemyDropTrigger::Loot } },
+    { ACTOR_EN_SKB,        { RC_ENEMY_DROP_STALCHILD,    EnemyDropTrigger::Loot } },
+    { ACTOR_EN_TEST,       { RC_ENEMY_DROP_STALFOS,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_EIYER,      { RC_ENEMY_DROP_STINGER,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_WEIYER,     { RC_ENEMY_DROP_STINGER,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_TITE,       { RC_ENEMY_DROP_TEKTITE,      EnemyDropTrigger::Loot } },
+    { ACTOR_EN_BA,         { RC_ENEMY_DROP_TENTACLE,     EnemyDropTrigger::Defeat } },
+    { ACTOR_EN_BW,         { RC_ENEMY_DROP_TORCH_SLUG,   EnemyDropTrigger::Loot } },
+    { ACTOR_EN_WF,         { RC_ENEMY_DROP_WOLFOS,       EnemyDropTrigger::Loot } },
+};
+// clang-format on
+
+static bool IsGoldSkulltula(Actor* actor) {
+    return actor->id == ACTOR_EN_SW && ((actor->params & 0xE000) >> 0xD) != 0;
+}
+
+static bool IsDropAwaitingPickup(RandomizerInf flag) {
+    for (Actor* actor = gPlayState->actorCtx.actorLists[ACTORCAT_MISC].head; actor != nullptr; actor = actor->next) {
+        if (actor->id == ACTOR_EN_ITEM00 && reinterpret_cast<EnItem00*>(actor)->randoInf == flag) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool SpawnEnemyDrop(Actor* enemy, Vec3f position, EnemyDropTrigger trigger) {
+    auto drop = enemyDrops.find(enemy->id);
+    if (drop == enemyDrops.end() || drop->second.trigger != trigger || IsGoldSkulltula(enemy)) {
+        return false;
+    }
+    RandomizerCheck check = drop->second.check;
+    RandomizerInf flag = rcToRandomizerInf.at(check);
+    if (Flags_GetRandomizerInf(flag) || IsDropAwaitingPickup(flag)) {
+        return false;
+    }
+    EnItem00* item00 = reinterpret_cast<EnItem00*>(Item_DropCollectible2(gPlayState, &position, ITEM00_SOH_DUMMY));
+    if (item00 == nullptr) {
+        return false;
+    }
+    item00->randoInf = flag;
+    item00->itemEntry = Rando::Context::GetInstance()->GetFinalGIEntry(check, true, GI_NONE);
+    item00->actor.draw = (ActorFunc)EnItem00_DrawRandomizedItem;
+    return true;
+}
+
+static void SpawnDefeatedEnemyDrop(void* refActor) {
+    Actor* actor = static_cast<Actor*>(refActor);
+    SpawnEnemyDrop(actor, actor->world.pos, EnemyDropTrigger::Defeat);
+}
+
+static void RegisterShuffleEnemyDrops() {
+    bool shouldRegister = IS_RANDO && RAND_GET_OPTION(RSK_SHUFFLE_ENEMY_DROPS);
+
+    COND_VB_SHOULD(VB_DROP_RANDOM_COLLECTIBLE, shouldRegister, {
+        Actor* fromActor = va_arg(args, Actor*);
+        Vec3f* spawnPos = va_arg(args, Vec3f*);
+        if (fromActor != nullptr && SpawnEnemyDrop(fromActor, *spawnPos, EnemyDropTrigger::Loot)) {
+            *should = false;
+        }
+    });
+
+    COND_HOOK(OnEnemyDefeat, shouldRegister, SpawnDefeatedEnemyDrop);
+}
+
+static RegisterShipInitFunc initFunc_ShuffleEnemyDrops(RegisterShuffleEnemyDrops, { "IS_RANDO" });
+
+void Rando::StaticData::RegisterEnemyDropLocations() {
+    static bool registered = false;
+    if (registered) {
+        return;
+    }
+    registered = true;
+
+    struct EnemyDropLocation {
+        RandomizerCheck check;
+        RandomizerCheckArea area;
+        ActorID actor;
+        SceneID scene;
+        const char* enemy;
+        RandomizerInf flag;
+    };
+    // clang-format off
+    const EnemyDropLocation locations[] = {
+        { RC_ENEMY_DROP_ANUBIS,       RCAREA_SPIRIT_TEMPLE,          ACTOR_EN_ANUBICE,    SCENE_SPIRIT_TEMPLE,          "Anubis",       RAND_INF_ENEMY_DROP_ANUBIS },
+        { RC_ENEMY_DROP_ARMOS,        RCAREA_DODONGOS_CAVERN,        ACTOR_EN_AM,         SCENE_DODONGOS_CAVERN,        "Armos",        RAND_INF_ENEMY_DROP_ARMOS },
+        { RC_ENEMY_DROP_BEAMOS,       RCAREA_SPIRIT_TEMPLE,          ACTOR_EN_VM,         SCENE_SPIRIT_TEMPLE,          "Beamos",       RAND_INF_ENEMY_DROP_BEAMOS },
+        { RC_ENEMY_DROP_BIG_OCTO,     RCAREA_JABU_JABUS_BELLY,       ACTOR_EN_BIGOKUTA,   SCENE_JABU_JABU,              "Big Octo",     RAND_INF_ENEMY_DROP_BIG_OCTO },
+        { RC_ENEMY_DROP_DARK_LINK,    RCAREA_WATER_TEMPLE,           ACTOR_EN_TORCH2,     SCENE_WATER_TEMPLE,           "Dark Link",    RAND_INF_ENEMY_DROP_DARK_LINK },
+        { RC_ENEMY_DROP_DEAD_HAND,    RCAREA_BOTTOM_OF_THE_WELL,     ACTOR_EN_DH,         SCENE_BOTTOM_OF_THE_WELL,     "Dead Hand",    RAND_INF_ENEMY_DROP_DEAD_HAND },
+        { RC_ENEMY_DROP_DEKU_BABA,    RCAREA_DEKU_TREE,              ACTOR_EN_DEKUBABA,   SCENE_DEKU_TREE,              "Deku Baba",    RAND_INF_ENEMY_DROP_DEKU_BABA },
+        { RC_ENEMY_DROP_DODONGO,      RCAREA_DODONGOS_CAVERN,        ACTOR_EN_DODONGO,    SCENE_DODONGOS_CAVERN,        "Dodongo",      RAND_INF_ENEMY_DROP_DODONGO },
+        { RC_ENEMY_DROP_FLARE_DANCER, RCAREA_FIRE_TEMPLE,            ACTOR_EN_FD,         SCENE_FIRE_TEMPLE,            "Flare Dancer", RAND_INF_ENEMY_DROP_FLARE_DANCER },
+        { RC_ENEMY_DROP_FREEZARD,     RCAREA_ICE_CAVERN,             ACTOR_EN_FZ,         SCENE_ICE_CAVERN,             "Freezard",     RAND_INF_ENEMY_DROP_FREEZARD },
+        { RC_ENEMY_DROP_GUAY,         RCAREA_LAKE_HYLIA,             ACTOR_EN_CROW,       SCENE_LAKE_HYLIA,             "Guay",         RAND_INF_ENEMY_DROP_GUAY },
+        { RC_ENEMY_DROP_IRON_KNUCKLE, RCAREA_SPIRIT_TEMPLE,          ACTOR_EN_IK,         SCENE_SPIRIT_TEMPLE,          "Iron Knuckle", RAND_INF_ENEMY_DROP_IRON_KNUCKLE },
+        { RC_ENEMY_DROP_KEESE,        RCAREA_SPIRIT_TEMPLE,          ACTOR_EN_FIREFLY,    SCENE_SPIRIT_TEMPLE,          "Keese",        RAND_INF_ENEMY_DROP_KEESE },
+        { RC_ENEMY_DROP_LEEVER,       RCAREA_DESERT_COLOSSUS,        ACTOR_EN_REEBA,      SCENE_DESERT_COLOSSUS,        "Leever",       RAND_INF_ENEMY_DROP_LEEVER },
+        { RC_ENEMY_DROP_LIZALFOS,     RCAREA_DODONGOS_CAVERN,        ACTOR_EN_ZF,         SCENE_DODONGOS_CAVERN,        "Lizalfos",     RAND_INF_ENEMY_DROP_LIZALFOS },
+        { RC_ENEMY_DROP_OCTOROK,      RCAREA_ZORAS_RIVER,            ACTOR_EN_OKUTA,      SCENE_ZORAS_RIVER,            "Octorok",      RAND_INF_ENEMY_DROP_OCTOROK },
+        { RC_ENEMY_DROP_PEAHAT,       RCAREA_HYRULE_FIELD,           ACTOR_EN_PEEHAT,     SCENE_HYRULE_FIELD,           "Peahat",       RAND_INF_ENEMY_DROP_PEAHAT },
+        { RC_ENEMY_DROP_POE_SISTER,   RCAREA_FOREST_TEMPLE,          ACTOR_EN_PO_SISTERS, SCENE_FOREST_TEMPLE,          "Poe Sister",   RAND_INF_ENEMY_DROP_POE_SISTER },
+        { RC_ENEMY_DROP_REDEAD,       RCAREA_KAKARIKO_VILLAGE,       ACTOR_EN_RD,         SCENE_GROTTOS,                "Redead",       RAND_INF_ENEMY_DROP_REDEAD },
+        { RC_ENEMY_DROP_SKULLTULA,    RCAREA_DEKU_TREE,              ACTOR_EN_ST,         SCENE_DEKU_TREE,              "Skulltula",    RAND_INF_ENEMY_DROP_SKULLTULA },
+        { RC_ENEMY_DROP_SPIKE,        RCAREA_WATER_TEMPLE,           ACTOR_EN_NY,         SCENE_WATER_TEMPLE,           "Spike",        RAND_INF_ENEMY_DROP_SPIKE },
+        { RC_ENEMY_DROP_STALCHILD,    RCAREA_HYRULE_FIELD,           ACTOR_EN_SKB,        SCENE_HYRULE_FIELD,           "Stalchild",    RAND_INF_ENEMY_DROP_STALCHILD },
+        { RC_ENEMY_DROP_STALFOS,      RCAREA_FOREST_TEMPLE,          ACTOR_EN_TEST,       SCENE_FOREST_TEMPLE,          "Stalfos",      RAND_INF_ENEMY_DROP_STALFOS },
+        { RC_ENEMY_DROP_STINGER,      RCAREA_JABU_JABUS_BELLY,       ACTOR_EN_EIYER,      SCENE_JABU_JABU,              "Stinger",      RAND_INF_ENEMY_DROP_STINGER },
+        { RC_ENEMY_DROP_TEKTITE,      RCAREA_DEATH_MOUNTAIN_TRAIL,   ACTOR_EN_TITE,       SCENE_DEATH_MOUNTAIN_TRAIL,   "Tektite",      RAND_INF_ENEMY_DROP_TEKTITE },
+        { RC_ENEMY_DROP_TENTACLE,     RCAREA_JABU_JABUS_BELLY,       ACTOR_EN_BA,         SCENE_JABU_JABU,              "Tentacle",     RAND_INF_ENEMY_DROP_TENTACLE },
+        { RC_ENEMY_DROP_TORCH_SLUG,   RCAREA_SPIRIT_TEMPLE,          ACTOR_EN_BW,         SCENE_SPIRIT_TEMPLE,          "Torch Slug",   RAND_INF_ENEMY_DROP_TORCH_SLUG },
+        { RC_ENEMY_DROP_WOLFOS,       RCAREA_SACRED_FOREST_MEADOW,   ACTOR_EN_WF,         SCENE_SACRED_FOREST_MEADOW,   "Wolfos",       RAND_INF_ENEMY_DROP_WOLFOS },
+    };
+    // clang-format on
+    for (const EnemyDropLocation& location : locations) {
+        locationTable[location.check] = Location::Base(
+            location.check, RCQUEST_BOTH, RCTYPE_ENEMY_DROP, location.area, location.actor, location.scene, 0,
+            std::string(location.enemy) + " Drop", "Enemy Drop " + std::string(location.enemy), RHT_ENEMY_DROP, RG_NONE,
+            SpoilerCollectionCheck::RandomizerInf(location.flag));
+    }
+}
+
+static RegisterShipInitFunc registerEnemyDropLocations(Rando::StaticData::RegisterEnemyDropLocations);

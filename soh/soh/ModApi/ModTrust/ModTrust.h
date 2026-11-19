@@ -26,7 +26,6 @@ struct ModProvenance {
     std::string problem;
 };
 
-// The store catalog is signed with the mod-signing key, release manifests with the release key.
 enum class SignedDocumentKind {
     Catalog,
     Release,

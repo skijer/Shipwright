@@ -12,6 +12,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/Fleet/FleetForeignItems.h"
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -311,7 +312,6 @@ void Message_FindMessageJPN(PlayState* play, u16 textId) {
 
     seg = messageTableEntry->segment;
 
-    // SOH [Unbound] hash lookup instead of a linear scan
     found = OTRMessage_Find(messageTableEntry, textId);
     if (found != NULL) {
         foundSeg = found->segment;
@@ -358,7 +358,6 @@ void Message_FindMessage(PlayState* play, u16 textId) {
 
     seg = messageTableEntry->segment;
 
-    // SOH [Unbound] hash lookup instead of a linear scan
     found = OTRMessage_Find(messageTableEntry, textId);
     if (found != NULL) {
         foundSeg = found->segment;
@@ -396,7 +395,6 @@ void Message_FindCreditsMessage(PlayState* play, u16 textId) {
     Font* font = &play->msgCtx.font;
 
     seg = messageTableEntry->segment;
-    // SOH [Unbound] hash lookup instead of a linear scan
     found = OTRMessage_Find(messageTableEntry, textId);
     if (found != NULL) {
         foundSeg = found->segment;
@@ -862,6 +860,10 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
     // Invalidate icon texture as it may have changed from the last time a text box had an icon
     gSPInvalidateTexCache(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE);
 
+    const char* iconOwner = FleetForeignItems_FindIconOwner(customIconPath);
+    if (iconOwner != NULL) {
+        gSPComboRMPush(gfx++, iconOwner);
+    }
     if (GameInteractor_Should(VB_DRAW_ITEM_ICON, itemId < ITEM_CUSTOM || customIconPath != NULL, &gfx)) {
         if (itemId >= ITEM_MEDALLION_FOREST && itemId != ITEM_CUSTOM) {
             gDPLoadTextureBlock(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE, G_IM_FMT_RGBA,
@@ -872,6 +874,9 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
                                 G_IM_SIZ_32b, 32, 32, 0, G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMIRROR | G_TX_WRAP,
                                 G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
         }
+    }
+    if (iconOwner != NULL) {
+        gSPComboRMPop(gfx++);
     }
     gSPTextureRectangle(gfx++, (msgCtx->textPosX + R_TEXTBOX_ICON_XPOS) << 2, R_TEXTBOX_ICON_YPOS << 2,
                         (msgCtx->textPosX + R_TEXTBOX_ICON_XPOS + R_TEXTBOX_ICON_SIZE) << 2,
@@ -2806,7 +2811,7 @@ void Message_OpenText(PlayState* play, u16 textId) {
         Message_FindCreditsMessage(play, textId);
         msgCtx->msgLength = font->msgLength;
         char* src = (uintptr_t)font->msgOffset;
-        if (font->msgLength > sizeof(font->msgBuf)) { // SOH [Unbound] never overrun the font buffer
+        if (font->msgLength > sizeof(font->msgBuf)) {
             osSyncPrintf("[Unbound] message %x is %d bytes; truncating to %d\n", textId, font->msgLength,
                          (int)sizeof(font->msgBuf));
             msgCtx->msgLength = font->msgLength = sizeof(font->msgBuf);
@@ -2845,7 +2850,7 @@ void Message_OpenText(PlayState* play, u16 textId) {
         }
         msgCtx->msgLength = font->msgLength;
         char* src = (uintptr_t)font->msgOffset;
-        if (font->msgLength > sizeof(font->msgBuf)) { // SOH [Unbound] never overrun the font buffer
+        if (font->msgLength > sizeof(font->msgBuf)) {
             osSyncPrintf("[Unbound] message %x is %d bytes; truncating to %d\n", textId, font->msgLength,
                          (int)sizeof(font->msgBuf));
             msgCtx->msgLength = font->msgLength = sizeof(font->msgBuf);

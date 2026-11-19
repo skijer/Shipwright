@@ -235,7 +235,7 @@ void ObjBean_SetupPathCount(ObjBean* this, PlayState* play) {
 
 void ObjBean_SetupPath(ObjBean* this, PlayState* play) {
     Path* path = &play->setupPathList[(this->dyna.actor.params >> 8) & 0x1F];
-    this->pathPoints = *(Vec3f*)SEGMENTED_TO_VIRTUAL(path->points); // SOH [Unbound]
+    this->pathPoints = *(Vec3f*)SEGMENTED_TO_VIRTUAL(path->points);
 }
 
 void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
@@ -255,7 +255,7 @@ void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
     path = &play->setupPathList[(this->dyna.actor.params >> 8) & 0x1F];
     nextPathPoint = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[this->nextPointIndex];
 
-    pathPointsFloat = *nextPathPoint; // SOH [Unbound]
+    pathPointsFloat = *nextPathPoint;
 
     Math_Vec3f_Diff(&pathPointsFloat, &this->pathPoints, &acell);
     mag = Math3D_Vec3fMagnitude(&acell);
@@ -272,7 +272,6 @@ void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
             this->nextPointIndex++;
         }
         sp4C = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[this->nextPointIndex];
-        // SOH [Unbound] path points are f32; the Vec3s reader would decode their bytes as shorts
         Math_Vec3f_Diff(nextPathPoint, currentPoint, &sp40);
         Math_Vec3f_Diff(sp4C, nextPathPoint, &sp34);
         if (Math3D_CosOut(&sp40, &sp34, &sp30)) {

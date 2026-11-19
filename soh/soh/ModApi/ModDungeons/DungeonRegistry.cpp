@@ -36,7 +36,6 @@ namespace {
 using SOH::Unbound::Json;
 
 constexpr const char* RegistryPath = "unbound/dungeons.json";
-// SOH [Unbound] Checks placed in vanilla regions (a new grass patch, pot or sign); see mod-sdk/docs/CHECKS.md.
 constexpr const char* ChecksRegistryPath = "unbound/checks.json";
 constexpr const char* CheckFlagPrefix = "check.";
 constexpr int32_t NoDungeon = -1;
@@ -53,8 +52,6 @@ constexpr uint8_t BossKeyBit = 1 << 0;
 constexpr uint8_t CompassBit = 1 << 1;
 constexpr uint8_t MapBit = 1 << 2;
 
-// Check types a vanilla region can gain. Each is recognised in game the way its vanilla checks are: by the actor,
-// the scene and TWO_ACTOR_PARAMS of the actor's X and Z position (the Shuffle* identities).
 struct OverworldCheckType {
     const char* name;
     RandomizerCheckType type;
@@ -77,7 +74,6 @@ constexpr OverworldCheckType kOverworldCheckTypes[] = {
     { "freestanding", RCTYPE_FREESTANDING, ACTOR_EN_ITEM00 },
 };
 
-// The setting that shuffles each type, as SeedContext reads it; NoAreaVariant marks an on/off setting.
 constexpr int32_t NoAreaVariant = -1;
 
 struct TypeShuffleRule {
@@ -292,7 +288,6 @@ void RegisterDungeonItems(int32_t dungeonIndex, const Json& def) {
     }
 }
 
-// `dungeon` is null for a check in a vanilla region, which has no keys, map or compass of its own.
 RandomizerGet ParseVanillaItem(const ModDungeon* dungeon, const std::string& text, const std::string& owner) {
     if (text.empty()) {
         return RG_GREEN_RUPEE;
@@ -374,7 +369,6 @@ const OverworldCheckType* FindOverworldCheckType(const std::string& name) {
     return nullptr;
 }
 
-// A vanilla scene's checks name the hint area of everything in it; a scene without any gives none.
 RandomizerCheckArea FindSceneArea(int16_t scene) {
     for (Rando::Location& location : Rando::StaticData::GetLocationTable()) {
         if (location.GetScene() == scene && location.GetArea() != RCAREA_INVALID) {
@@ -446,8 +440,6 @@ bool RegisterOverworldCheck(const std::string& key, const Json& def) {
     return true;
 }
 
-// Mirrors SeedContext: the type's setting decides, by overworld or dungeon when it has those variants, and a mod
-// option the check names must be on as well.
 bool IsOverworldCheckShuffled(const ModCheck& check) {
     const RandomizerCheckType type = check.location.GetRCType();
     const TypeShuffleRule* rule = nullptr;
@@ -672,7 +664,6 @@ void SaveEntranceNames() {
     });
 }
 
-// The rando section stores entrance numbers, which shift with the mod stack; the names saved here win.
 void RestoreEntranceNames() {
     auto entranceCtx = Rando::Context::GetInstance()->GetEntranceShuffler();
     for (const SavedEntranceName& saved : sPendingEntranceNames) {
@@ -768,7 +759,6 @@ void LoadState() {
     SaveManager::Instance->LoadData("swapped", wasSwapped, false);
     SaveManager::Instance->LoadData("slotKeysBackup", sSlotKeysBackup, static_cast<int8_t>(-1));
     SaveManager::Instance->LoadData("slotItemsBackup", sSlotItemsBackup, static_cast<uint8_t>(0));
-    // The base section already wrote the dungeon's counts into the slot; the next scene init swaps it back in.
     if (wasSwapped) {
         gSaveContext.inventory.dungeonKeys[KeySlot] = sSlotKeysBackup;
         gSaveContext.inventory.dungeonItems[KeySlot] = sSlotItemsBackup;
@@ -868,8 +858,8 @@ void DungeonRegistry_AddRegions() {
     for (size_t index = 0; index < sChecks.size(); index++) {
         const ModCheck& check = sChecks[index];
         if (check.vanillaRegion != RR_NONE) {
-            areaTable[check.vanillaRegion].locations.push_back(
-                LocationAccess(static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
+            areaTable[check.vanillaRegion].locations.push_back(LocationAccess(
+                static_cast<RandomizerCheck>(CheckBase + index), [] { return true; }, check.logicText));
         }
     }
 }
@@ -1075,7 +1065,6 @@ void DungeonRegistry_AddLocations(std::vector<RandomizerCheck>& allLocations) {
     for (size_t index = 0; index < sChecks.size(); index++) {
         ModCheck& check = sChecks[index];
         if (check.dungeon == NoDungeon && !IsOverworldCheckShuffled(check)) {
-            // Its actor still finds it in game, so it hands out its vanilla item.
             check.itemLocation.PlaceVanillaItem();
             continue;
         }

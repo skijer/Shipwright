@@ -1129,7 +1129,8 @@ void Player_DrawImpl(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dL
         ((CVarGetInteger(CVAR_ENHANCEMENT("FirstPersonGauntlets"), 0) && LINK_IS_ADULT) ||
          (overrideLimbDraw != Player_OverrideLimbDrawGameplayFirstPerson)) &&
         (overrideLimbDraw != Player_OverrideLimbDrawGameplayCrawling) &&
-        (gSaveContext.gameMode != GAMEMODE_END_CREDITS)) {
+        (gSaveContext.gameMode != GAMEMODE_END_CREDITS) &&
+        GameInteractor_Should(VB_DRAW_PLAYER_GAUNTLETS_AND_BOOTS, true, data)) {
         if (LINK_IS_ADULT) {
             s32 strengthUpgrade = CUR_UPG_VALUE(UPG_STRENGTH);
 

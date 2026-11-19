@@ -111,7 +111,6 @@ static inline void Z64Aiming_GetDirection(Player* player, s16* yaw, s16* pitch) 
     }
 }
 
-// The hookshot's reticle has no toggle; the others follow vanilla's Bow and Boomerang Reticle options.
 static inline bool Z64Aiming_IsReticleEnabled(Z64AimingReticleToggle toggle) {
     switch (toggle) {
         case Z64AIMING_TOGGLE_BOW:
@@ -124,7 +123,6 @@ static inline bool Z64Aiming_IsReticleEnabled(Z64AimingReticleToggle toggle) {
     }
 }
 
-// Player_DrawHookshotReticle's hit test and scale, with HookshotReticle.cpp's draw so the dot takes a tint.
 static inline void Z64Aiming_DrawReticle(PlayState* play, Player* player, f32 range, Z64AimingReticleStyle style) {
     if (play == NULL || player == NULL || !Z64Aiming_IsReticleEnabled(style.toggle)) {
         return;

@@ -52,7 +52,6 @@ static bool IsCustomActorMarker(const std::string& argument) {
     return argument == "custom_actor" || argument == "custom_enemy";
 }
 
-// The console only shows a failed command's output, so spawn reports its errors there.
 static bool ResolveCustomActorArgs(std::vector<std::string>& args, std::string* output) {
     if (args.size() < 2 || !IsCustomActorMarker(args[1])) {
         return true;
@@ -260,7 +259,6 @@ extern "C" void Soh_ResetToTitle(void) {
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnExitGame>(gSaveContext.fileNum);
 }
 
-// Inside Fleet both games share one console, so the command resets whichever game is being played.
 static bool ResetHandler(std::shared_ptr<Ship::Console> Console, std::vector<std::string> args, std::string* output) {
     if (FleetGame_ResetActiveGame()) {
         return 0;
@@ -452,7 +450,6 @@ static bool GiveItemHandler(std::shared_ptr<Ship::Console> Console, const std::v
     return 0;
 }
 
-// SOH [Unbound]
 static bool UnboundExportHandler(std::shared_ptr<Ship::Console> Console, const std::vector<std::string>& args,
                                  std::string* output) {
     std::string out = args.size() >= 2 ? args[1] : "oot-unbound.o2r";
@@ -464,7 +461,6 @@ static bool UnboundExportHandler(std::shared_ptr<Ship::Console> Console, const s
     return 0;
 }
 
-// SOH [Unbound] hex parse that rejects trailing garbage; -1 when the whole string is not a hex number
 static int32_t ParseWholeHex(const std::string& text) {
     try {
         size_t consumed = 0;
@@ -473,9 +469,7 @@ static int32_t ParseWholeHex(const std::string& text) {
     } catch (std::exception const&) { return -1; }
 }
 
-// SOH [Unbound] An entrance argument: a registered entrance name (vanilla ENTR_* or "<scene id>/<entrance id>"),
-// which wins over hex since stoi would otherwise accept the hex-looking prefix of a name such as
-// "ENTR_DEKU_TREE_0", or a hex index into the entrance table (custom entrances included). -1 for neither.
+// A name wins over hex: stoi would accept the hex-looking prefix of a name such as "ENTR_DEKU_TREE_0".
 static int32_t ParseEntrance(const std::string& token) {
     int32_t entrance = EntranceDB_RetrieveIndex(token.c_str());
     if (entrance < 0) {
@@ -499,8 +493,6 @@ static bool EntranceHandler(std::shared_ptr<Ship::Console> Console, const std::v
         return 1;
     }
 
-    // SOH [Port] Reachable from outside the game now (see EmbedderBridge.cpp), so refuse
-    // politely instead of dereferencing a null play state on the title screen.
     if (gPlayState == NULL) {
         ERROR_MESSAGE("[SOH] Not in game; load a file first.");
         return 1;
@@ -513,11 +505,6 @@ static bool EntranceHandler(std::shared_ptr<Ship::Console> Console, const std::v
     return 0;
 }
 
-// ---- warp <entrance hex> [adult|child] [time] [room x y z yaw] ---------------------------
-// The console splits on spaces, so the optional parts are told apart by what is left after
-// the entrance: a word is the age, then one token is a time, five are a point, six are both.
-
-// The whole token as an integer in `base`, within [min, max].
 static bool ParseInt(const std::string& token, int base, long min, long max, int32_t* out) {
     try {
         size_t used = 0;
@@ -549,7 +536,6 @@ static bool ParseAge(const std::string& word, int32_t* linkAge) {
     return true;
 }
 
-// `day` and `night` name the two layers; anything else is the u16 dayTime in hex.
 static bool ParseDayTime(const std::string& token, int32_t* dayTime) {
     if (token == "day") {
         *dayTime = 0x8000;
@@ -562,7 +548,6 @@ static bool ParseDayTime(const std::string& token, int32_t* dayTime) {
     return ParseInt(token, 16, 0, 0xFFFF, dayTime);
 }
 
-// room x y z yaw: the room decimal, the position as floats, the yaw a decimal binary angle.
 static bool ParsePoint(const std::vector<std::string>& tokens, size_t at, WarpPoint* point) {
     int32_t room, yaw;
     if (!ParseInt(tokens[at], 10, INT16_MIN, INT16_MAX, &room) || !ParseFloat(tokens[at + 1], &point->pos.x) ||
@@ -570,7 +555,7 @@ static bool ParsePoint(const std::vector<std::string>& tokens, size_t at, WarpPo
         !ParseInt(tokens[at + 4], 10, INT16_MIN, INT16_MAX, &yaw)) {
         return false;
     }
-    point->roomNum = (int16_t)room; // SOH [Unbound] rooms are s16
+    point->roomNum = (int16_t)room;
     point->rotY = (int16_t)yaw;
     return true;
 }
@@ -583,7 +568,7 @@ static bool WarpHandler(std::shared_ptr<Ship::Console> Console, const std::vecto
     }
 
     WarpPoint point;
-    point.entranceId = ParseEntrance(args[1]); // SOH [Unbound] a name, or hex below the table's size
+    point.entranceId = ParseEntrance(args[1]);
     if (point.entranceId < 0) {
         ERROR_MESSAGE(ENTRANCE_ARGUMENT_ERROR, EntranceDB_GetEntryCount());
         return 1;

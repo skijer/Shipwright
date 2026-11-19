@@ -202,7 +202,6 @@ typedef struct {
     /* 0x0C */ ColliderTrisElementInit* elements;
 } ColliderTrisInitType1; // size = 0x10
 
-// SOH [Unbound] dcMid/baMid are f32 (world extent)
 typedef struct {
     Vec3f quad[4];
     Vec3f dcMid; // midpoint of vectors d, c

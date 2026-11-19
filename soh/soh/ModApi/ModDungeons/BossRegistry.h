@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// A custom boss takes over one vanilla boss slot: the slot's scene id loads the boss's scene, so the
-// blue warp, heart container, boss soul, Boss Rush and both entrance shuffles keep treating it as the slot.
 typedef enum {
     SOH_BOSS_SLOT_GOHMA,
     SOH_BOSS_SLOT_KING_DODONGO,
@@ -35,14 +33,10 @@ typedef struct {
     uint32_t structSize;
     const char* key;
     const char* displayName;
-    // SceneDB name of the arena; NULL fights in the slot's own scene.
     const char* scene;
     uint32_t allowedSlots;
-    // Honoured outside the randomizer; a seed draws the slot from allowedSlots.
     int32_t preferredSlot;
-    // Randomizer condition to win the fight (LogicExpr); NULL keeps the replaced boss's.
     const char* logic;
-    // Optional CVar: 0 leaves every slot to its vanilla boss.
     const char* enabledCvar;
 } SOHBossDefinition;
 
@@ -57,7 +51,6 @@ int32_t BossRegistry_GetSlot(const char* key);
 const char* BossRegistry_GetSceneBoss(int16_t sceneNum);
 int16_t BossRegistry_GetSlotScene(int32_t slot);
 void BossRegistry_ReportDefeated(Actor* boss);
-// The scene whose resource loads for `sceneNum`: the arena of the boss that holds its slot, or itself.
 int32_t BossRegistry_ResolveSceneSource(int32_t sceneNum);
 
 #ifdef __cplusplus

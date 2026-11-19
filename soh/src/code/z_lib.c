@@ -231,15 +231,13 @@ void Math_Vec3s_ToVec3f(Vec3f* dest, Vec3s* src) {
     dest->z = src->z;
 }
 
-// SOH [Unbound] Collision vertices and bounds are s32 (world extent); collision math is f32.
 void Math_Vec3i_ToVec3f(Vec3f* dest, Vec3i* src) {
     dest->x = src->x;
     dest->y = src->y;
     dest->z = src->z;
 }
 
-// SOH [Unbound] Rounds where vanilla's BgCheck_Vec3fToVec3s truncated: the dyna bake writes transformed world
-// positions back into an integral list every frame, and truncation biases every moving platform toward zero.
+// Rounds where BgCheck_Vec3fToVec3s truncated: truncating the dyna bake every frame biases platforms toward zero.
 void Math_Vec3f_ToVec3i(Vec3i* dest, Vec3f* src) {
     dest->x = (s32)lroundf(src->x);
     dest->y = (s32)lroundf(src->y);

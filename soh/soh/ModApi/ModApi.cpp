@@ -75,7 +75,6 @@ nlohmann::json DescribeItems() {
     return items;
 }
 
-// Actor ids depend on the mounted mod set, so tools address types by key only.
 nlohmann::json DescribeActors() {
     nlohmann::json actors = nlohmann::json::array();
     for (const SOHRegisteredActor& actor : ActorRegistry_List()) {
@@ -181,8 +180,6 @@ DrawHookOwner RegisteringDrawHookOwner() {
     return DrawHookOwner{ sCurrentMod, sRegisteringModUsesNetwork };
 }
 
-// A mod draws on Link from its own local state, so on another player only the mods of that player's form and
-// held item may draw, plus the mods that take that player's state from the network themselves.
 bool MayModDrawOnPlayer(const DrawHookOwner& owner) {
     if (!FormModel_IsDrawingOtherPlayer() || owner.usesNetwork) {
         return true;
@@ -470,6 +467,7 @@ SOHModApi BuildTable() {
     api.PickUserFile = UserFiles_Pick;
     api.FreeUserFile = UserFiles_Free;
     api.SaveToModsFolder = UserFiles_SaveToMods;
+    api.ReadModsFolderFiles = UserFiles_ReadMods;
     api.ReadArchiveFiles = O2rExtractor_ReadFiles;
     api.AskPlayer = ModDialogs_Ask;
     api.TellPlayer = ModDialogs_Tell;
@@ -548,15 +546,13 @@ void ModApi_Init() {
     ModApi_WriteRegistry(Ship::Context::GetPathRelativeToAppDirectory(RegistryFileName, AppShortName));
 }
 
-// SOH [Unbound] Items and actor types exist only inside mod binaries; tools read them from this file.
 bool ModApi_WriteRegistry(const std::filesystem::path& path) {
     std::ofstream file(path);
     if (!file) {
         SPDLOG_ERROR("[ModApi] Cannot write the mod registry to {}", path.string());
         return false;
     }
-    // Item messages contain native game glyph bytes, which are not necessarily UTF-8.
-    // Replacement is limited to this diagnostic JSON; registered game text stays byte-exact.
+    // Item messages contain native game glyph bytes, which are not necessarily UTF-8; only this JSON is sanitised.
     file << nlohmann::json{ { "items", DescribeItems() }, { "actors", DescribeActors() } }.dump(
         1, ' ', false, nlohmann::json::error_handler_t::replace);
     return true;
@@ -591,6 +587,10 @@ void ModApi_ClearCurrentMod() {
 
 bool ModApi_HasHook(const char* name) {
     return HasHook(name);
+}
+
+bool ModApi_PublishHostService(const char* name, void* function) {
+    return PublishService(name, function);
 }
 
 std::string ModApi_GetCatalogFingerprint() {

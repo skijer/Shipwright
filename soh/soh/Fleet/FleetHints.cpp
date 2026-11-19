@@ -20,7 +20,6 @@ struct EndClause {
     RandomizerSettingKey count;
 };
 
-// The altar template native picks for a setting, and the count it splices in.
 std::pair<std::string, int> ResolveEndClause(RandomizerSettingKey setting, std::initializer_list<EndClause> clauses) {
     auto ctx = Rando::Context::GetInstance();
     for (const EndClause& clause : clauses) {
@@ -169,7 +168,6 @@ nlohmann::json DumpAreas() {
     return areas;
 }
 
-// The checks a player already knows at the start, which native stone hints never target.
 nlohmann::json DumpHintAccessibleChecks() {
     auto ctx = Rando::Context::GetInstance();
     nlohmann::json known = nlohmann::json::array();
@@ -211,7 +209,6 @@ nlohmann::json DumpItemHints() {
     return items;
 }
 
-// Only the templates the cross-game composer can emit; the full table is ~1600 entries.
 bool IsComposerTemplate(const std::string& name) {
     static const std::unordered_set<std::string> templates = {
         "RHT_WAY_OF_THE_HERO",

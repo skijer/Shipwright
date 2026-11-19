@@ -1,4 +1,3 @@
-// SOH [Unbound] collision.json + collision.bin -> SOH::CollisionHeader. See unbound-docs/SPEC.md §4.4.
 #include "UnboundFactories.h"
 #include "UnboundJson.h"
 #include "UnboundSchema.h"
@@ -17,7 +16,7 @@ namespace K = SOH::Unbound::Schema;
 namespace SOH {
 namespace {
 
-// collision.bin layout (SPEC.md §4.4.1): little-endian, vertices then polys, no header.
+// collision.bin: little-endian, vertices then polys, no header.
 //   vertex { s32 x, y, z } (12 B)
 //   poly   { u16 type, u16 pad, u32 vA, vB, vC, s16 nx, ny, nz, s16 pad, s32 dist } (28 B)
 constexpr size_t kVertexBytes = 12;
@@ -38,14 +37,14 @@ Vec3i ReadVertex(Ship::BinaryReader& r) {
 CollisionPoly ReadPoly(Ship::BinaryReader& r) {
     CollisionPoly p{};
     p.type = r.ReadUInt16();
-    r.ReadUInt16(); // pad
+    r.ReadUInt16();
     p.flags_vIA = r.ReadUInt32();
     p.flags_vIB = r.ReadUInt32();
     p.vIC = r.ReadUInt32();
     p.normal.x = r.ReadInt16();
     p.normal.y = r.ReadInt16();
     p.normal.z = r.ReadInt16();
-    r.ReadInt16(); // pad
+    r.ReadInt16();
     p.dist = r.ReadInt32();
     return p;
 }
@@ -111,7 +110,7 @@ void ReadSurfaceTypes(CollisionHeader& col, const Json& list, const std::string&
 }
 
 void ReadCameras(CollisionHeader& col, const Json& cameras, const Json& positions, const std::string& docPath) {
-    // Camera positions stay s16: CamData packs them into Vec3s (SPEC.md §9).
+    // Camera positions stay s16: CamData packs them into Vec3s.
     for (const auto& k : PositionalKeys(positions, docPath + " " + K::kCameraPositions)) {
         col.camPosData.push_back(Unbound::ReadVec3s(positions[k]));
     }
@@ -154,7 +153,7 @@ void ReadWaterBoxes(CollisionHeader& col, const Json& list, const std::string& d
         box.notSwimmable = (u8)Unbound::Field(w, K::kNotSwimmable);
         col.waterBoxes.push_back(box);
     }
-    if (col.waterBoxes.size() > UINT16_MAX) { // CollisionHeader.numWaterBoxes is a u16 (SPEC.md §9)
+    if (col.waterBoxes.size() > UINT16_MAX) {
         throw Unbound::DocumentError(docPath + ": " + std::to_string(col.waterBoxes.size()) + " water boxes; at most " +
                                      std::to_string(UINT16_MAX));
     }
@@ -162,7 +161,6 @@ void ReadWaterBoxes(CollisionHeader& col, const Json& list, const std::string& d
     col.collisionHeaderData.waterBoxes = col.waterBoxes.data();
 }
 
-// The only collision document this build reads is SPEC.md §4.4's; a missing $schema is not accepted.
 bool CollisionSchemaIsCurrent(const Json& doc, const std::string& docPath) {
     std::string schema = Unbound::SchemaOf(doc);
     std::string type;
@@ -209,7 +207,7 @@ ResourceFactoryJsonCollisionHeaderV3::ReadResource(std::shared_ptr<Ship::File> f
 
     try {
         return ReadCollisionDocument(doc, initData);
-    } catch (const Unbound::DocumentError& e) { // a hole in an indexed list, a bad count (SPEC.md §3)
+    } catch (const Unbound::DocumentError& e) {
         SPDLOG_ERROR("[Unbound] {}", e.what());
     } catch (const std::exception& e) { SPDLOG_ERROR("[Unbound] {}: {}", initData->Path, e.what()); }
     return nullptr;

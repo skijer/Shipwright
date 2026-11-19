@@ -379,8 +379,6 @@ void SohMenu::AddMenuSettings() {
                 .DefaultValue(1));
 #endif
 #ifndef __EMSCRIPTEN__
-    // SOH [WASM] The browser build draws one frame per game tick and the page's timer paces it,
-    // not the display, so frame interpolation and VSync have nothing to act on there.
     auto fps = CVarGetInteger(CVAR_SETTING("InterpolationFPS"), 20);
     const char* fpsFormat = fps == 20 ? "Original (%d)" : "%d";
     AddWidget(path, "Current FPS", WIDGET_CVAR_SLIDER_INT)

@@ -696,7 +696,6 @@ const std::string& SohUtils::GetSceneName(int32_t scene) {
         return sceneNames[scene];
     }
 
-    // SOH [Unbound] custom scenes are named by the registry
     const SceneDB::Entry& entry = SceneDB::Instance->RetrieveEntry(scene);
     if (entry.valid) {
         return entry.displayName;

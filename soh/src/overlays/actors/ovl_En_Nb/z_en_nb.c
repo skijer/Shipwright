@@ -101,7 +101,7 @@ s32 EnNb_GetType(EnNb* this) {
 }
 
 void EnNb_UpdatePath(EnNb* this, PlayState* play) {
-    Vec3f* pointPos; // SOH [Unbound] path points are f32
+    Vec3f* pointPos;
     Path* pathList;
     s32 pad;
     s32 path;

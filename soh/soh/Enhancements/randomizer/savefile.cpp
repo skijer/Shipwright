@@ -499,6 +499,12 @@ extern "C" void Randomizer_InitSaveFile() {
         }
     }
 
+    if (Randomizer_GetSettingValue(RSK_SHUFFLE_ENEMY_SOULS) == RO_GENERIC_OFF) {
+        for (int soul = RAND_INF_SOUL_ENEMY_ANUBIS; soul <= RAND_INF_SOUL_ENEMY_WOLFOS; soul++) {
+            Flags_SetRandomizerInf(static_cast<RandomizerInf>(soul));
+        }
+    }
+
     if (Randomizer_GetSettingValue(RSK_SHUFFLE_OCARINA_BUTTONS) == RO_GENERIC_OFF) {
         Flags_SetRandomizerInf(RAND_INF_HAS_OCARINA_A);
         Flags_SetRandomizerInf(RAND_INF_HAS_OCARINA_C_LEFT);

@@ -75,7 +75,6 @@ std::array<std::vector<Grant>, RLC_MAX> sCapabilityGrants;
 std::array<bool, RLC_MAX> sCapabilityEvaluating{};
 std::unordered_map<int32_t, std::vector<Grant>> sItemGrants;
 std::unordered_map<int32_t, std::vector<Grant>> sEnemyGrants;
-// The check, entrance or event whose condition is being evaluated, innermost last.
 std::vector<WorldEntry> sEntryStack;
 std::list<Rule> sRules;
 
@@ -288,7 +287,6 @@ void ReindexWhenWorldBuilt() {
     }
 }
 
-// Outside any check, entrance or event (a helper asked directly) only unscoped grants apply.
 bool IsInScope(const Grant& grant) {
     if (sEntryStack.empty()) {
         return grant.include.empty();
@@ -300,7 +298,6 @@ bool IsInScope(const Grant& grant) {
     return !MatchesAny(grant.exclude, entry);
 }
 
-// A grant whose condition asks for what it grants answers false to itself instead of recursing.
 bool AnyGrantHolds(std::vector<Grant>& grants) {
     for (Grant& grant : grants) {
         if (grant.evaluating || !IsInScope(grant)) {
@@ -524,7 +521,6 @@ bool RandoLogic_IsEnemyKillGranted(int32_t enemy) {
     return AnyMappedGrantHolds(sEnemyGrants, enemy);
 }
 
-// Mod checks, exits and events answer with their own condition language, never with the vanilla one.
 bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate) {
     if (DungeonRegistry_IsModCheck(check)) {
         return DungeonRegistry_EvaluateCheck(check);
@@ -589,7 +585,6 @@ bool IsAgeMet(const Rando::Logic& state, uint8_t ageRequirement) {
     }
 }
 
-// A form is reachable once the item that turns Link into it is; a form that is not registered never is.
 bool IsFormReachable(Rando::Logic& state, const char* formKey) {
     if (std::strcmp(formKey, SOH_FORM_KEY_HUMAN) == 0) {
         return true;
@@ -622,7 +617,6 @@ bool IsAnyAllowedFormReachable(Rando::Logic& state, const SOHCustomItemDefinitio
 
 } // namespace
 
-// A randomizer item with no custom item definition (a host item) carries no restriction.
 bool RandoLogic_CanMeetItemRestriction(Rando::Logic& state, int32_t randoGet) {
     const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(RandoItems_GetKey(randoGet));
     if (definition == nullptr) {

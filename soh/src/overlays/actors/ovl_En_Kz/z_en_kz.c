@@ -312,7 +312,7 @@ void func_80A9CB18(EnKz* this, PlayState* play) {
 
 s32 EnKz_FollowPath(EnKz* this, PlayState* play) {
     Path* path;
-    Vec3f* pointPos; // SOH [Unbound] path points are f32
+    Vec3f* pointPos;
     f32 pathDiffX;
     f32 pathDiffZ;
 
@@ -340,7 +340,7 @@ s32 EnKz_FollowPath(EnKz* this, PlayState* play) {
 
 s32 EnKz_SetMovedPos(EnKz* this, PlayState* play) {
     Path* path;
-    Vec3f* lastPointPos; // SOH [Unbound] path points are f32
+    Vec3f* lastPointPos;
 
     if ((this->actor.params & 0xFF00) == 0xFF00) {
         return 0;

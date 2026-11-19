@@ -683,8 +683,6 @@ void CreateActorSpecificData() {
          * Text id - 0x0200     0000000000111111    For use with the `DOOR_CHECKABLE` type
          *
          */
-        // SOH [Unbound] doors spawned from a scene's transition list take their index from the list entry
-        // (TRANSITION_ACTOR_INDEX); only a hand-spawned door still packs it into these six bits.
         u8 transitionIndex = params >> 10;
         ImGui::InputScalar("Transition Index", ImGuiDataType_U8, &transitionIndex);
         if (transitionIndex > 0x3F) {
@@ -799,7 +797,7 @@ std::vector<u16> GetActorsWithDescriptionContainingString(std::string s) {
     std::vector<u16> actors;
     for (int i = 0; i < ActorDB::Instance->GetEntryCount(); i += 1) {
         const ActorDB::Entry& actorEntry = ActorDB::Instance->RetrieveEntry(i);
-        if (!actorEntry.entry.valid) { // SOH [Unbound] the unused ids below the custom actor types
+        if (!actorEntry.entry.valid) {
             continue;
         }
         std::string desc = actorEntry.desc;
@@ -1078,7 +1076,7 @@ void ActorViewerWindow::DrawElement() {
                         : ActorDB::Instance->RetrieveEntry(actorSearchResults[currentSelectedInDropdown]).desc;
                 PushStyleCombobox(THEME_COLOR);
                 if (ImGui::BeginCombo("Results", preview.c_str())) {
-                    for (size_t i = 0; i < actorSearchResults.size(); i++) { // SOH [Unbound] a u8 never ended at 256+
+                    for (size_t i = 0; i < actorSearchResults.size(); i++) {
                         if (ImGui::Selectable(ActorDB::Instance->RetrieveEntry(actorSearchResults[i]).desc.c_str(),
                                               (s16)i == currentSelectedInDropdown)) {
                             currentSelectedInDropdown = (s16)i;
@@ -1166,7 +1164,6 @@ void ActorViewerWindow::DrawElement() {
             if (Button("Spawn as Child", ButtonOptions().Color(THEME_COLOR))) {
                 Actor* parent = display;
                 if (parent != NULL) {
-                    // SOH [Unbound] no ACTOR_ID_MAX bound: En_Partner and custom actor types live past it
                     if (ActorDB::Instance->RetrieveEntry(newActor.id).entry.valid) {
                         Actor_SpawnAsChild(&gPlayState->actorCtx, parent, gPlayState, newActor.id, newActor.pos.x,
                                            newActor.pos.y, newActor.pos.z, newActor.rot.x, newActor.rot.y,

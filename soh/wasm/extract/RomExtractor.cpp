@@ -1,10 +1,3 @@
-// SOH [WASM] The converter's entry point: a ROM file in the virtual filesystem becomes an
-// oot.o2r / oot-mq.o2r in it. This is the desktop Extractor::CallTorch path with the UI
-// removed -- the same checks (RomInfo), the same recipe, the same SohTorch extraction -- so
-// the archive it produces is the one the desktop build would have made from the same ROM.
-//
-// Called from api.js (--post-js), which is the host-facing side; see soh/wasm/HOST-API.md.
-
 #include "soh/Extractor/RomInfo.h"
 #include "soh/Extractor/TorchExtract.h"
 
@@ -23,15 +16,11 @@ namespace {
 
 namespace fs = std::filesystem;
 
-// Where the embedded extraction recipe lives (see CMakeLists.txt): config.yml and one
-// directory of asset ymls per ROM version.
 constexpr const char* kRecipeDir = "/work/assets";
 
-// The smallest prefix the checks below read: the header CRC at 0x10 and the archive
-// signatures at the start. Real ROMs are checked for their full size after that.
+// Covers the header CRC at 0x10 and the archive signatures.
 constexpr size_t kHeaderBytes = 0x40;
 
-// Negative so a host can tell them from success. Listed in HOST-API.md.
 enum class Status : int {
     Ok = 0,
     CannotRead = -1,
@@ -67,18 +56,14 @@ const char* Describe(Status status) {
 
 struct Result {
     Status status = Status::Ok;
-    std::string detail; // what Torch said, when it failed
+    std::string detail;
     std::string version;
     std::string archive;
 };
 
 std::string gLastResultJson;
 
-// Torch logs through spdlog's default logger. Warnings and errors go to stderr, where api.js
-// collects them for a failed run's message; the rest stays on stdout, which `quiet` drops.
-// That includes `critical`, which Torch uses for its always-shown banner and timing lines.
-// Under `quiet` the sink's own level drops info and below before they are formatted or cross
-// into JS; it has to be the sink's, because Torch's Init resets every logger to debug.
+// The level has to be the sink's own under `quiet`, because Torch's Init resets every logger to debug.
 class SplitConsoleSink final : public spdlog::sinks::base_sink<std::mutex> {
   protected:
     void sink_it_(const spdlog::details::log_msg& msg) override {
@@ -119,10 +104,7 @@ std::vector<uint8_t> ReadFile(const char* path) {
     return bytes;
 }
 
-// The desktop Extractor's ValidateRom (compressed, size, CRC) minus the message boxes, plus
-// one check it does not make: that Torch has a recipe for this version, which the desktop
-// only discovers when its picker asks for a version directory that does not exist. Leaves
-// the bytes in .z64 order, which is what Torch hashes against config.yml.
+// Leaves the bytes in .z64 order, which is what Torch hashes against config.yml.
 Status CheckRom(std::vector<uint8_t>& rom) {
     if (rom.size() < kHeaderBytes) {
         return Status::BadSize;
@@ -135,8 +117,6 @@ Status CheckRom(std::vector<uint8_t>& rom) {
     if (!RomInfo::IsValidSize(rom.size())) {
         return Status::BadSize;
     }
-    // Not the desktop's version table (which only labels its ROM picker) but the set Torch
-    // has a recipe for, since that is what decides whether the next step can run.
     if (RomInfo::TorchVersionDir(RomInfo::HeaderCrc(rom.data(), rom.size())) == nullptr) {
         return Status::UnknownVersion;
     }
@@ -146,9 +126,6 @@ Status CheckRom(std::vector<uint8_t>& rom) {
     return Status::Ok;
 }
 
-// Runs Torch over the version's recipe, reporting each asset file as it is parsed, and
-// leaves the archive at outDir/<archive>. Torch names the archive from config.yml; the name
-// it chose is checked against the one this module reported up front.
 Status ExtractArchive(std::vector<uint8_t> rom, const char* versionDir, const fs::path& outDir,
                       const std::string& expectedArchive, std::string& detail) {
     std::error_code ec;
@@ -172,7 +149,6 @@ Status ExtractArchive(std::vector<uint8_t> rom, const char* versionDir, const fs
         detail = "Torch wrote " + archive + ", expected " + expectedArchive + ".";
         return Status::NoArchive;
     }
-    // Torch reports every recipe file, so this only fires if a file was skipped.
     if (done != total) {
         ReportProgress(total, total);
     }
@@ -189,7 +165,6 @@ std::string Quote(const std::string& s) {
         } else if (c == '\n') {
             out += "\\n";
         } else if (c < 0x20 || c == 0x7f) {
-            // JSON forbids raw control characters; log text can carry escape codes.
             out += "\\u00";
             out += hex[c >> 4];
             out += hex[c & 0xf];
@@ -214,15 +189,7 @@ int Finish(const Result& result) {
 
 extern "C" {
 
-// Reads the ROM at `romPath` (any of .z64/.n64/.v64 byte orders), validates it as the desktop
-// game does, runs Torch over the embedded recipe, and leaves `<outDir>/oot.o2r` or
-// `<outDir>/oot-mq.o2r` behind. Returns 0 on success or a negative Status; the reason, the
-// detected version and the archive name are in Extract_ResultJson() either way. Progress goes
-// to Module._sohExtractProgress(done, total), once per recipe file as Torch finishes parsing it.
-// Nonzero `quiet` keeps log lines below warn from being written at all. The ROM file is removed
-// once read, so the run does not hold a second copy of it.
-//
-// One conversion per module instance, as with the ZAPD converter this replaced.
+// Removes the ROM file once read so the run does not hold a second copy of it.
 int Extract_RomToO2r(const char* romPath, const char* outDir, int quiet) {
     InstallLogger(quiet != 0);
     Result result;
@@ -247,9 +214,7 @@ int Extract_RomToO2r(const char* romPath, const char* outDir, int quiet) {
     return Finish(result);
 }
 
-// {"code":0,"error":"","version":"NTSC N64 1.0","archive":"oot.o2r"} for the last call.
 const char* Extract_ResultJson() {
     return gLastResultJson.c_str();
 }
-
-} // extern "C"
+}

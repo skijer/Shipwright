@@ -2,9 +2,7 @@
 #include "variables.h"
 #include "OTRGlobals.h"
 
-// SOH [Port] Declared in a C++ header with forceFixedAspect defaulted, which C cannot see, so
-// it is passed explicitly. The five-argument declaration this replaces left it as whatever was
-// in the register natively, and in a wasm build the mismatched call is a trap.
+// The C++ declaration defaults forceFixedAspect, which C cannot see; a mismatched call traps in wasm.
 int gfx_create_framebuffer(uint32_t width, uint32_t height, uint32_t native_width, uint32_t native_height,
                            uint8_t resize, bool forceFixedAspect);
 

@@ -69,13 +69,11 @@ typedef struct {
     LinkAnimationHeader* transformOffAnim;
     Vec3f transformGlowOffset;
     float transformGlowScale;
-    // Kept for the shared definition layout: Link's age is the game's own here, Majora's Mask reads it from the form.
     bool isAdult;
 } SOHFormDefinition;
 
 #define SOH_FORM_DEFINITION_MIN_SIZE (offsetof(SOHFormDefinition, draw) + sizeof(((SOHFormDefinition*)0)->draw))
 
-// Form keys both games share. Link without a form is HUMAN; the others are Majora's Mask's own forms, mods here.
 #define SOH_FORM_KEY_HUMAN "nei.human"
 #define SOH_FORM_KEY_DEKU "nei.deku"
 #define SOH_FORM_KEY_GORON "nei.goron"
@@ -92,10 +90,9 @@ bool FormRegistry_Toggle(const char* key);
 bool FormRegistry_ApplyActive(const char* key);
 const char* FormRegistry_GetActiveKey(void);
 bool FormRegistry_IsActive(const char* key);
-// The local player's form, never NULL: SOH_FORM_KEY_HUMAN while no form is active.
 const char* FormRegistry_GetCurrentKey(void);
-// An empty list names no restriction.
 bool FormRegistry_IsCurrentFormIn(const char* const* formKeys, uint32_t formKeyCount);
+bool FormRegistry_IsEquipSlotFixed(int32_t equipType);
 
 #ifdef __cplusplus
 }

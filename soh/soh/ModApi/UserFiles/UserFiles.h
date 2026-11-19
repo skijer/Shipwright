@@ -21,6 +21,9 @@ typedef struct {
 bool UserFiles_Pick(const char* title, const char* filterName, const char* filterPatterns, SOHUserFile* file);
 void UserFiles_Free(SOHUserFile* file);
 bool UserFiles_SaveToMods(const char* fileName, const void* data, uint64_t size);
+uint32_t UserFiles_ReadMods(const char* extensions,
+                            bool (*visit)(const char* path, const uint8_t* data, uint64_t size, void* userData),
+                            void* userData);
 bool UserFiles_MountArchive(const char* title);
 
 #ifdef __cplusplus

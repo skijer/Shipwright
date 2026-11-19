@@ -644,6 +644,12 @@ void GenerateItemPool() {
         AddItemToPool(RG_ZORAS_RIVER_BEAN_SOUL, 2, 1, 1, 1, false);
     }
 
+    if (ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS)) {
+        for (int soul = RG_SOUL_ENEMY_ANUBIS; soul <= RG_SOUL_ENEMY_WOLFOS; soul++) {
+            AddItemToPool(static_cast<RandomizerGet>(soul), 1, 1, 1, 1, false);
+        }
+    }
+
     if (ctx->GetOption(RSK_SHUFFLE_TOKENS).IsNot(RO_TOKENSANITY_OFF) &&
         ctx->GetOption(RSK_ITEM_POOL).Is(RO_ITEM_POOL_PLENTIFUL)) {
         tokensToAdd += 10;

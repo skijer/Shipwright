@@ -19,6 +19,7 @@
 #include "soh/ModApi/Player/PlayerHookTypes.h"
 #include "soh/ModApi/PlayerInput/PlayerInput.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/ModApi/Forms/FormTransform.h"
 #include "soh/ModApi/Forms/FormModel.h"
 
@@ -27,6 +28,7 @@ extern "C" {
 #include "functions.h"
 #include "variables.h"
 extern PlayState* gPlayState;
+void Player_ResetMeleeWeaponColliders(PlayState* play, Player* player);
 }
 
 namespace {
@@ -87,6 +89,7 @@ struct StashedLoadout {
     std::array<bool, ButtonCount> hasButton{};
     std::array<uint8_t, ButtonCount> buttonSlot{};
     std::array<std::string, ButtonCount> buttonKey{};
+    std::array<std::string, EquipTypeCount> wornKey{};
 };
 
 StashedLoadout sStash;
@@ -126,11 +129,16 @@ bool EnforceEquipment(const SOHFormDefinition& form) {
         if (wanted == current) {
             continue;
         }
-        sStash.hasEquip[type] = true;
-        sStash.equip[type] = current;
+        const bool isLinksPiece = !sStash.hasEquip[type];
+        if (isLinksPiece) {
+            sStash.hasEquip[type] = true;
+            sStash.equip[type] = current;
+        }
         if (type == EQUIP_TYPE_SWORD) {
-            sStash.buttonB = gSaveContext.equips.buttonItems[0];
-            sStash.swordless = Flags_GetInfTable(INFTABLE_SWORDLESS);
+            if (isLinksPiece) {
+                sStash.buttonB = gSaveContext.equips.buttonItems[0];
+                sStash.swordless = Flags_GetInfTable(INFTABLE_SWORDLESS);
+            }
             ChangeSword(wanted);
         } else {
             Inventory_ChangeEquipment(static_cast<s16>(type), wanted);
@@ -138,6 +146,27 @@ bool EnforceEquipment(const SOHFormDefinition& form) {
         changed = true;
     }
     return changed;
+}
+
+bool IsFormItem(const char* key) {
+    return key != nullptr &&
+           std::any_of(sForms.begin(), sForms.end(), [key](const RegisteredForm& form) { return form.item == key; });
+}
+
+bool IsEquipSlotFixed(const SOHFormDefinition& form, int32_t equipType) {
+    return form.resolveEquipment != nullptr &&
+           form.resolveEquipment(equipType, 1) == form.resolveEquipment(equipType, 2);
+}
+
+void StashWornCustomEquipment(const SOHFormDefinition& form) {
+    for (int32_t type = 0; type < EquipTypeCount; type++) {
+        const char* worn = CustomEquipRegistry_GetWorn(static_cast<uint8_t>(type));
+        if (worn == nullptr || worn[0] == '\0' || !IsEquipSlotFixed(form, type)) {
+            continue;
+        }
+        sStash.wornKey[type] = worn;
+        CustomEquipRegistry_TakeOff(static_cast<uint8_t>(type));
+    }
 }
 
 bool EnforceButtons(const RegisteredForm& form) {
@@ -149,8 +178,7 @@ bool EnforceButtons(const RegisteredForm& form) {
     for (uint8_t button = FirstItemButton; button < ButtonCount; button++) {
         const uint8_t item = gSaveContext.equips.buttonItems[button];
         const char* key = CustomItemRegistry_GetEquippedKey(button);
-        const bool isOwnMask = key != nullptr && form.item == key;
-        if (item == ITEM_NONE || isOwnMask || form.definition.allowsButtonItem(item, key)) {
+        if (item == ITEM_NONE || IsFormItem(key) || form.definition.allowsButtonItem(item, key)) {
             continue;
         }
         sStash.hasButton[button] = true;
@@ -228,6 +256,12 @@ void RestoreLoadout(Player* player) {
         }
         restored = true;
     }
+    for (int32_t type = 0; type < EquipTypeCount; type++) {
+        if (!sStash.wornKey[type].empty()) {
+            CustomEquipRegistry_Wear(sStash.wornKey[type].c_str());
+            restored = true;
+        }
+    }
     for (uint8_t button = FirstItemButton; button < ButtonCount; button++) {
         if (sStash.hasButton[button]) {
             RestoreButton(button);
@@ -258,6 +292,9 @@ void ExitActiveForm() {
     if (player != nullptr && leaving->definition.onExit != nullptr) {
         leaving->definition.onExit(gPlayState, player);
     }
+    if (player != nullptr) {
+        Player_ResetMeleeWeaponColliders(gPlayState, player);
+    }
     RefreshAgeProperties(player);
     RestoreLoadout(player);
 }
@@ -275,6 +312,7 @@ void EnterForm(RegisteredForm* form) {
         PlayerInput_Block(form->key.c_str(), form->definition.blockedButtons, false);
     }
     RefreshAgeProperties(player);
+    StashWornCustomEquipment(form->definition);
     EnforceLoadout(player);
     if (form->definition.onEnter != nullptr) {
         form->definition.onEnter(gPlayState, player);
@@ -423,6 +461,7 @@ void SaveStash() {
     for (int32_t type = 0; type < EquipTypeCount; type++) {
         SaveManager::Instance->SaveData(StashKey("HasEquip", type), sStash.hasEquip[type]);
         SaveManager::Instance->SaveData(StashKey("Equip", type), sStash.equip[type]);
+        SaveManager::Instance->SaveData(StashKey("WornKey", type), sStash.wornKey[type]);
     }
     for (int32_t button = FirstItemButton; button < ButtonCount; button++) {
         SaveManager::Instance->SaveData(StashKey("HasButton", button), sStash.hasButton[button]);
@@ -438,6 +477,7 @@ void LoadStash() {
     for (int32_t type = 0; type < EquipTypeCount; type++) {
         SaveManager::Instance->LoadData(StashKey("HasEquip", type), sStash.hasEquip[type], false);
         SaveManager::Instance->LoadData(StashKey("Equip", type), sStash.equip[type], static_cast<uint16_t>(0));
+        SaveManager::Instance->LoadData(StashKey("WornKey", type), sStash.wornKey[type], std::string());
     }
     for (int32_t button = FirstItemButton; button < ButtonCount; button++) {
         SaveManager::Instance->LoadData(StashKey("HasButton", button), sStash.hasButton[button], false);
@@ -549,12 +589,21 @@ const SOHFormDefinition* FormRegistry_GetAt(uint32_t index) {
 }
 
 bool FormRegistry_SetActive(const char* key) {
+    if (FormTransform_IsActive()) {
+        SPDLOG_WARN("[FormRegistry] Ignoring a form change while the transformation plays");
+        return false;
+    }
     if (key == nullptr || key[0] == '\0') {
-        if (sActiveForm != nullptr && FormTransform_Begin(ActiveDefinition(), nullptr)) {
+        if (sActiveForm == nullptr) {
+            sPendingForm.clear();
+            return true;
+        }
+        if (FormTransform_Begin(ActiveDefinition(), nullptr)) {
             return true;
         }
         ExitActiveForm();
         sPendingForm.clear();
+        FormTransform_PlayInstantFlash();
         return true;
     }
     RegisteredForm* form = FindForm(key);
@@ -573,6 +622,7 @@ bool FormRegistry_SetActive(const char* key) {
     }
     ExitActiveForm();
     EnterForm(form);
+    FormTransform_PlayInstantFlash();
     return true;
 }
 
@@ -597,7 +647,6 @@ bool FormRegistry_Toggle(const char* key) {
     return FormRegistry_IsActive(key) ? FormRegistry_SetActive(nullptr) : FormRegistry_SetActive(key);
 }
 
-// While another player is drawn, a form mod's draw hooks are asking about that player, not the local one.
 const char* FormRegistry_GetActiveKey(void) {
     if (FormModel_IsDrawingOtherPlayer()) {
         return FormModel_GetDrawnOtherPlayerFormKey();
@@ -625,6 +674,11 @@ bool FormRegistry_IsCurrentFormIn(const char* const* formKeys, uint32_t formKeyC
         }
     }
     return false;
+}
+
+bool FormRegistry_IsEquipSlotFixed(int32_t equipType) {
+    const SOHFormDefinition* form = ActiveDefinition();
+    return form != nullptr && equipType >= 0 && equipType < EquipTypeCount && IsEquipSlotFixed(*form, equipType);
 }
 
 void FormRegistry_SetCurrentMod(const std::string& name) {

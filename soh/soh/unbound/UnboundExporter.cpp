@@ -1,13 +1,3 @@
-// SOH [Unbound] Converts the mounted vanilla archive into the Unbound layout (unbound-docs/SPEC.md).
-//
-// Orchestration: ExportArchive
-//   -> for every registry scene (and its MQ variant): ConvertScene
-//        -> BuildSceneDocument / BuildRoomDocument (one setup object per header, alternates included)
-//        -> ConvertCollision, ConvertPaths
-//   -> ConvertMessages (one JSON per language table)
-//   -> CopyUntouchedFiles (every base-archive file we did not transform, verbatim)
-//   -> manifest
-// Output is a stored (uncompressed) zip written incrementally by ZipWriter.
 #include "UnboundExporter.h"
 
 #include <libultraship/libultraship.h>
@@ -23,7 +13,7 @@
 #include <set>
 #include <unordered_map>
 
-#include "variables.h" // gBuildForkVersion, gBuildVersionMajor
+#include "variables.h"
 #include "soh/unbound/SceneDB.h"
 #include "soh/unbound/UnboundJson.h"
 #include "soh/unbound/UnboundSchema.h"
@@ -62,10 +52,7 @@ namespace K = SOH::Unbound::Schema;
 namespace SOH::Unbound {
 namespace {
 
-// ---------------------------------------------------------------------------------------------
-// Stored-entry zip writer. Deterministic (fixed 1980-01-01 timestamps), no compression, no ZIP64:
-// an archive past 65 535 entries or 4 GB is refused (Error()) rather than written corrupt.
-// ---------------------------------------------------------------------------------------------
+// No ZIP64: an archive past 65 535 entries or 4 GB is refused (Error()) rather than written corrupt.
 class ZipWriter {
   public:
     bool Open(const std::string& path) {
@@ -89,11 +76,11 @@ class ZipWriter {
         e.offset = (uint32_t)offset;
 
         Put32(0x04034b50);
-        Put16(20);     // version needed
-        Put16(0x0800); // utf-8 names
-        Put16(0);      // stored
-        Put16(0);      // time
-        Put16(0x21);   // date 1980-01-01
+        Put16(20);
+        Put16(0x0800);
+        Put16(0);
+        Put16(0);
+        Put16(0x21);
         Put32(e.crc);
         Put32(e.size);
         Put32(e.size);
@@ -198,27 +185,23 @@ class ZipWriter {
 
     std::ofstream mOut;
     std::vector<Entry> mEntries;
-    std::string mError; // first failure; every later Add() is a no-op
+    std::string mError;
 };
 
-// ---------------------------------------------------------------------------------------------
-// Shared state for one export run
-// ---------------------------------------------------------------------------------------------
 struct ExportContext {
     ZipWriter zip;
-    std::set<std::string> consumed; // base-archive paths we transformed (not copied verbatim)
-    std::set<std::string> written;  // output paths already emitted (paths/collision shared across setups)
+    std::set<std::string> consumed;
+    std::set<std::string> written;
     ExportReport report;
 };
 
-// Every conversion failure is logged and counted; the export finishes so the log is complete, but reports !ok.
 void Fail(ExportContext& ctx, const std::string& message) {
     SPDLOG_ERROR("[Unbound export] {}", message);
     ctx.report.failures++;
 }
 
 struct SceneRefs {
-    std::string collisionPath; // base-archive path of the SetCollisionHeader target
+    std::string collisionPath;
     std::vector<std::string> roomFiles;
 };
 
@@ -250,7 +233,6 @@ std::string Hex(uint32_t v) {
     return buf;
 }
 
-// Message ids as SPEC.md §5 writes them: "0x0F12".
 std::string MessageKey(uint16_t id) {
     char buf[8];
     snprintf(buf, sizeof(buf), "0x%04X", id);
@@ -265,8 +247,8 @@ json Vec(const Vec3i& v) {
     return json::array({ v.x, v.y, v.z });
 }
 
-// The double whose shortest decimal form is also the shortest that reads back as `v`. Widening an f32 directly
-// would print its binary tail (0.1f as 0.10000000149011612); nine significant digits always round-trip an f32.
+// Widening an f32 directly would print its binary tail (0.1f as 0.10000000149011612); nine significant digits
+// round-trip.
 double ShortestRoundTrip(f32 v) {
     char text[32];
     for (int digits = 1; digits <= 9; digits++) {
@@ -278,7 +260,6 @@ double ShortestRoundTrip(f32 v) {
     return strtod(text, nullptr);
 }
 
-// SOH [Unbound] world positions are f32; emit integers when integral so converted vanilla data stays tidy.
 json Num(f32 v) {
     if (v == (f32)(int64_t)v) {
         return json((int64_t)v);
@@ -302,9 +283,6 @@ std::string Key(size_t i) {
     return std::to_string(i);
 }
 
-// ---------------------------------------------------------------------------------------------
-// Collision -> collision.json + collision.bin
-// ---------------------------------------------------------------------------------------------
 void PutS16(std::vector<uint8_t>& out, int16_t v) {
     out.push_back((uint8_t)(v & 0xFF));
     out.push_back((uint8_t)((v >> 8) & 0xFF));
@@ -320,7 +298,6 @@ void PutS32(std::vector<uint8_t>& out, int32_t v) {
     PutU32(out, (uint32_t)v);
 }
 
-// collision.bin (SPEC.md §4.4.1): s32 vertices, 28-byte polys with s32 dist.
 std::vector<uint8_t> BuildCollisionBin(const SOH::CollisionHeader& col) {
     std::vector<uint8_t> bin;
     const auto& d = col.collisionHeaderData;
@@ -333,14 +310,14 @@ std::vector<uint8_t> BuildCollisionBin(const SOH::CollisionHeader& col) {
     for (uint32_t i = 0; i < d.numPolygons; i++) {
         const auto& p = d.polyList[i];
         PutS16(bin, (int16_t)p.type);
-        PutS16(bin, 0); // pad
+        PutS16(bin, 0);
         PutU32(bin, p.flags_vIA);
         PutU32(bin, p.flags_vIB);
         PutU32(bin, p.vIC);
         PutS16(bin, p.normal.x);
         PutS16(bin, p.normal.y);
         PutS16(bin, p.normal.z);
-        PutS16(bin, 0); // pad
+        PutS16(bin, 0);
         PutS32(bin, p.dist);
     }
     return bin;
@@ -413,7 +390,6 @@ json BuildCollisionJson(const SOH::CollisionHeader& col, const std::string& binP
     return doc;
 }
 
-// Returns the output path of collision.json (empty on failure).
 std::string ConvertCollision(ExportContext& ctx, const std::string& basePath, const std::string& sceneDir) {
     std::string jsonPath = sceneDir + "/collision.json";
     if (ctx.written.contains(jsonPath)) {
@@ -433,9 +409,6 @@ std::string ConvertCollision(ExportContext& ctx, const std::string& basePath, co
     return jsonPath;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Paths -> scenes/<dir>/paths/<leaf>.json
-// ---------------------------------------------------------------------------------------------
 std::string ConvertPaths(ExportContext& ctx, const std::string& basePath, const std::string& sceneDir) {
     std::string outPath = sceneDir + "/paths/" + Leaf(basePath) + ".json";
     if (ctx.written.contains(outPath)) {
@@ -463,9 +436,6 @@ std::string ConvertPaths(ExportContext& ctx, const std::string& basePath, const 
     return outPath;
 }
 
-// ---------------------------------------------------------------------------------------------
-// Scene commands -> one setup object
-// ---------------------------------------------------------------------------------------------
 json ActorJson(const SOH::ActorEntry& a) {
     return { { K::kId, a.id }, { K::kPos, Vec(a.pos) }, { K::kRot, Vec(a.rot) }, { K::kParams, a.params } };
 }
@@ -541,7 +511,7 @@ json MeshJson(const SOH::SetMesh& mesh) {
 json LightJson(const SOH::LightInfo& l) {
     json j;
     j[K::kType] = l.type;
-    if (l.type == 1) { // LIGHT_DIRECTIONAL
+    if (l.type == 1) {
         j[K::kDir] = json::array({ l.params.dir.x, l.params.dir.y, l.params.dir.z });
         j[K::kColor] = Rgb(l.params.dir.color);
     } else {
@@ -553,7 +523,6 @@ json LightJson(const SOH::LightInfo& l) {
     return j;
 }
 
-// Positional list (SPEC.md §2): "0", "1", ... in engine order.
 template <typename T, typename F> json PositionalList(const std::vector<T>& items, F toJson) {
     json list = json::object();
     for (size_t i = 0; i < items.size(); i++) {
@@ -566,7 +535,6 @@ template <typename T> const T& As(const std::shared_ptr<SOH::ISceneCommand>& cmd
     return *static_cast<const T*>(cmd.get());
 }
 
-// One emitter per scene command (the loader's builders in UnboundSceneFactory.cpp are their inverse).
 json SpawnsJson(const SOH::SetStartPositionList& c) {
     return PositionalList(c.startPositions, [](const auto& a) { return ActorJson(a); });
 }
@@ -625,7 +593,6 @@ json TransitionActorsJson(const SOH::SetTransitionActorList& c) {
     });
 }
 
-// fogNear is the vanilla packed word: blend rate in the high bits, near distance in the low ten.
 json LightingJson(const SOH::SetLightingSettings& c) {
     return PositionalList(c.settings, [](const auto& s) {
         return json{ { K::kAmbient, Rgb(s.ambientColor) },
@@ -665,19 +632,14 @@ json SoundJson(const SOH::SetSoundSettings& c) {
     json j = { { K::kSeq, c.settings.seqId },
                { K::kNatureAmbience, c.settings.natureAmbienceId },
                { K::kReverb, c.settings.reverb } };
-    // A bound song round-trips by the path it was bound with; the resolved id is runtime-only.
     if (!c.unboundSongPath.empty()) {
         j[K::kSong] = c.unboundSongPath;
     }
     return j;
 }
 
-// SOH [Unbound] `materialAnims` (SPEC.md §4.2) round-trips from the command's owned storage. Vanilla scenes never
-// carry one; this is for a document-loaded scene exported again. Type and pass names come from the same tables
-// the reader scans (UnboundSchema.h); the loader never stores an id outside them.
 json ScrollLayerJson(const AnimatedMatTexScrollParams& l) {
     json j = { { K::kXStep, l.xStep }, { K::kYStep, l.yStep }, { K::kWidth, l.width }, { K::kHeight, l.height } };
-    // The speeds are optional keys with a zero default: written only by a layer that uses one.
     if (l.xSpeed != 0.0f) {
         j[K::kXSpeed] = Num(l.xSpeed);
     }
@@ -729,7 +691,6 @@ json MaterialAnimJson(const AnimatedMaterial& a) {
             const auto* c = (const AnimatedMatTexCycleParams*)a.params;
             json textures = json::array();
             json frames = json::array();
-            // the whole texture list, referenced or not, so a later layer may patch `frames` alone
             for (u16 i = 0; i < c->textureCount; i++) {
                 textures.push_back(StripOtrPrefix((const char*)c->textureList[i]));
             }
@@ -752,7 +713,6 @@ json CameraSettingsJson(const SOH::SetCameraSettings& c) {
     return { { K::kCameraMovement, c.settings.cameraMovement }, { K::kWorldMapArea, c.settings.worldMapArea } };
 }
 
-// Alternate headers become sibling setups; their header resources are consumed, not copied.
 std::vector<std::shared_ptr<SOH::Scene>> AlternateHeaders(ExportContext& ctx, const SOH::SetAlternateHeaders& c) {
     for (const auto& name : c.headerFileNames) {
         ctx.consumed.insert(name);
@@ -760,8 +720,6 @@ std::vector<std::shared_ptr<SOH::Scene>> AlternateHeaders(ExportContext& ctx, co
     return c.headers;
 }
 
-// Fills `setup` from one header's commands. Cross-setup references (rooms, collision) go to `refs`;
-// alternate headers are returned for the caller to recurse.
 std::vector<std::shared_ptr<SOH::Scene>> BuildSetup(ExportContext& ctx, json& setup, SOH::Scene& scene,
                                                     const std::string& sceneDir, SceneRefs& refs) {
     using SOH::SceneCommandID;
@@ -829,14 +787,14 @@ std::vector<std::shared_ptr<SOH::Scene>> BuildSetup(ExportContext& ctx, json& se
             case SceneCommandID::SetSoundSettings:
                 setup[K::kSound] = SoundJson(As<SOH::SetSoundSettings>(cmd));
                 break;
-            case SceneCommandID::SetAnimatedMaterialList: // SOH [Unbound]
+            case SceneCommandID::SetAnimatedMaterialList:
                 setup[K::kMaterialAnims] = MaterialAnimsJson(As<SOH::SetAnimatedMaterialList>(cmd));
                 break;
             case SceneCommandID::SetEchoSettings:
                 setup[K::kEcho] = As<SOH::SetEchoSettings>(cmd).settings.echo;
                 break;
             case SceneCommandID::SetCutscenes:
-                setup[K::kCutscene] = As<SOH::SetCutscenes>(cmd).fileName; // copied verbatim under its path
+                setup[K::kCutscene] = As<SOH::SetCutscenes>(cmd).fileName;
                 break;
             case SceneCommandID::SetAlternateHeaders:
                 alternates = AlternateHeaders(ctx, As<SOH::SetAlternateHeaders>(cmd));
@@ -845,13 +803,12 @@ std::vector<std::shared_ptr<SOH::Scene>> BuildSetup(ExportContext& ctx, json& se
                 setup[K::kCameraSettings] = CameraSettingsJson(As<SOH::SetCameraSettings>(cmd));
                 break;
             default:
-                break; // CsCamera, EndMarker, Unused: nothing to carry
+                break;
         }
     }
     return alternates;
 }
 
-// Builds K::kSetups: primary header + each alternate, recursing into alternates' own commands.
 json BuildSetups(ExportContext& ctx, SOH::Scene& primary, const std::string& sceneDir, SceneRefs& refs) {
     json setups = json::object();
     json first = json::object();
@@ -903,10 +860,10 @@ bool ConvertScene(ExportContext& ctx, const std::string& basePath, const std::st
     if (!refs.collisionPath.empty()) {
         std::string collision = ConvertCollision(ctx, refs.collisionPath, sceneDir);
         if (!collision.empty()) {
-            doc[K::kCollision] = collision; // absent = no collision (SPEC.md §4.2), never ""
+            doc[K::kCollision] = collision;
         }
     }
-    // rooms is positional (SPEC.md §2): one failed room would leave a hole, so the scene is not written at all.
+    // rooms is positional: one failed room would leave a hole, so the scene is not written at all.
     json rooms = json::object();
     for (size_t i = 0; i < refs.roomFiles.size(); i++) {
         if (!ConvertRoom(ctx, refs.roomFiles[i], sceneDir, i)) {
@@ -957,9 +914,6 @@ void ConvertAllScenes(ExportContext& ctx) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Messages -> text/<lang>/messages.json
-// ---------------------------------------------------------------------------------------------
 std::string BytesToJsonText(const std::string& bytes) {
     std::string out;
     out.reserve(bytes.size() + 16);
@@ -1013,14 +967,11 @@ void ConvertMessages(ExportContext& ctx) {
             doc[K::kMessages] = messages;
             ctx.zip.Add(std::string(K::kMessagesPathPrefix) + lang.name + K::kMessagesPathSuffix, doc.dump(2));
             ctx.consumed.insert(base);
-            break; // first available base wins for this language
+            break;
         }
     }
 }
 
-// ---------------------------------------------------------------------------------------------
-// Verbatim copy of everything else in the base archive
-// ---------------------------------------------------------------------------------------------
 std::shared_ptr<Ship::Archive> FindBaseArchive() {
     auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     for (const auto& entry : SceneDB::Instance->Entries()) {
@@ -1048,7 +999,7 @@ void CopyUntouchedFiles(ExportContext& ctx, std::shared_ptr<Ship::Archive> base)
     for (const auto& name : names) {
         auto file = base->LoadFile(name);
         if (file == nullptr || file->Buffer == nullptr) {
-            // O2rArchive::LoadFile returns null for zero-length entries; keep them as empty entries
+            // O2rArchive::LoadFile returns null for zero-length entries; keep them as empty entries.
             ctx.zip.Add(name, nullptr, 0);
         } else {
             ctx.zip.Add(name, (const uint8_t*)file->Buffer->data(), file->Buffer->size());
@@ -1059,9 +1010,6 @@ void CopyUntouchedFiles(ExportContext& ctx, std::shared_ptr<Ship::Archive> base)
 
 } // namespace
 
-// The release that converted a base, recorded for people reading the manifest. Nothing compares it: whether a
-// base is usable is its `baseVersion` (BaseArchiveProblem), so a release that changes nothing a base holds
-// keeps every base made before it.
 std::string ConverterName() {
     return std::string("soh ") + gBuildForkVersion;
 }
@@ -1084,7 +1032,6 @@ PortVersion MountedPortVersion() {
 
 namespace {
 
-// Provenance of a conversion: the converter build and every mounted ROM archive (SPEC.md §6 `source`).
 json CurrentProvenance() {
     auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     std::vector<uint32_t> versions = archives->GetGameVersions();
@@ -1151,11 +1098,8 @@ ExportReport ExportArchive(const std::string& outPath) {
     return ctx.report;
 }
 
-// ---- boot-time base archive --------------------------------------------------------------------
-
 namespace {
 
-// The manifest of the topmost mounted archive that has one.
 Json MountedManifest() {
     auto file = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->LoadFile(K::kManifestPath);
     if (file == nullptr || file->Buffer == nullptr) {
@@ -1164,8 +1108,6 @@ Json MountedManifest() {
     return Json::parse(file->Buffer->begin(), file->Buffer->end(), nullptr, false, true);
 }
 
-// Why a base with this manifest, holding game files of this SoH major version, cannot be used by this build, or
-// an empty string (SPEC.md §6, §10.1). The converter that wrote it does not matter.
 std::string BaseArchiveProblem(const Json& manifest, int portMajor) {
     std::string name = kBaseArchiveName;
     if (!manifest.is_object() || manifest.empty()) {
@@ -1177,12 +1119,11 @@ std::string BaseArchiveProblem(const Json& manifest, int portMajor) {
         return name + " is Unbound format version " + std::to_string(format) + "; this build reads version " +
                std::to_string(K::kCurrentFormatVersion);
     }
-    int64_t base = Field(manifest, K::kBaseVersion, 1); // bases from before the field are version 1
+    int64_t base = Field(manifest, K::kBaseVersion, 1);
     if (base != K::kCurrentBaseVersion) {
         return name + " is base version " + std::to_string(base) + "; this build reads base version " +
                std::to_string(K::kCurrentBaseVersion);
     }
-    // The copied game files follow stock SoH's rule for oot.o2r: any archive of the same major version.
     if (portMajor < 0) {
         return name + " has no portVersion file";
     }
@@ -1193,9 +1134,8 @@ std::string BaseArchiveProblem(const Json& manifest, int portMajor) {
     return "";
 }
 
-// Why the base mounted on top cannot stand in for the ROM archives under it, or an empty string. Besides being
-// compatible, it must come from the same ROM archives and the same extraction of them: its copied game files
-// shadow theirs, so a base older than a re-extracted oot.o2r would keep the old files.
+// The base must come from the same extraction of the ROM archives: its copied game files shadow theirs, so a base
+// older than a re-extracted oot.o2r would keep the old files.
 std::string MountedBaseProblem(const Json& current, const PortVersion& romArchive) {
     Json manifest = MountedManifest();
     PortVersion base = MountedPortVersion();
@@ -1214,12 +1154,12 @@ std::string MountedBaseProblem(const Json& current, const PortVersion& romArchiv
 BaseArchiveState EnsureBaseArchive(const std::string& gameArchiveDir) {
     auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
     if (archives->GetGameVersions().empty()) {
-        return BaseArchiveState::None; // no ROM archive: nothing to convert
+        return BaseArchiveState::None;
     }
     std::string path = (std::filesystem::path(gameArchiveDir) / kBaseArchiveName).string();
 
     if (std::filesystem::exists(path)) {
-        PortVersion romArchive = MountedPortVersion(); // read before the base shadows it
+        PortVersion romArchive = MountedPortVersion();
         std::string problem = "it cannot be opened";
         if (archives->AddArchive(path) != nullptr) {
             problem = MountedBaseProblem(CurrentProvenance(), romArchive);
@@ -1250,7 +1190,6 @@ BaseArchiveState EnsureBaseArchive(const std::string& gameArchiveDir) {
 }
 
 std::string CheckStandaloneBaseArchive() {
-    // The ROM hashes cannot differ: the running game read them from this archive's own version file.
     std::string problem = BaseArchiveProblem(MountedManifest(), MountedPortVersion().major);
     return problem.empty() ? "" : problem + "; convert the ROM again";
 }

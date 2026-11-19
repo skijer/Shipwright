@@ -9,7 +9,6 @@
 #include "z64scene.h"
 
 namespace SOH {
-// SOH [Unbound] Scene_CommandPathList hands the mirror to the game as a ::Path
 static_assert(sizeof(PathData) == sizeof(::Path) && offsetof(PathData, points) == offsetof(::Path, points),
               "SOH::PathData must mirror ::Path");
 std::shared_ptr<Ship::IResource>

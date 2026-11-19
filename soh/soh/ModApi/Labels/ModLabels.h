@@ -4,20 +4,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-// The names SoH's own windows (save editor, gameplay stats, time splits) show
 typedef enum {
-    SOH_LABEL_ITEM,       // an item id; per language
-    SOH_LABEL_QUEST_ITEM, // a quest item; per language
-    SOH_LABEL_SCENE,      // a scene id
-    SOH_LABEL_TIMESTAMP,  // a gameplay stats timestamp (an item id, or TIMESTAMP_DEFEAT_GOHMA onward)
+    SOH_LABEL_ITEM,
+    SOH_LABEL_QUEST_ITEM,
+    SOH_LABEL_SCENE,
+    SOH_LABEL_TIMESTAMP,
 } SOHLabelKind;
 
 typedef struct {
-    // TimeSplits' SplitTypes: SPLIT_TYPE_ITEM (id: an ITEM_*), SPLIT_TYPE_SCENE (a SCENE_*),
-    // SPLIT_TYPE_BOSS (the boss's ACTOR_*)
     uint32_t type;
-    uint32_t id;      // what the split waits for
-    const char* name; // the label (the time splits draw the image for the type and id themselves)
+    uint32_t id;
+    const char* name;
 } SOHTimeSplit;
 
 #ifdef __cplusplus

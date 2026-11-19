@@ -70,9 +70,6 @@ class ActorDB {
         ActorDBEntry entry;
     };
     Entry& AddEntry(const ActorDBInit& init);
-    // SOH [Unbound] Registers at a caller-chosen id instead of the next free one (custom actor types are numbered
-    // from their own base; unbound-docs/actors.md). Adds nothing and returns nullptr when the id or the name is
-    // already taken: unlike AddEntry's asserts, the check holds in release builds.
     Entry* TryAddEntry(const ActorDBInit& init, size_t id);
 
     Entry& RetrieveEntry(const int id);

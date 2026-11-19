@@ -481,7 +481,7 @@ void Anchor::RegisterHooks() {
 
         // When transitioning to a new room via a door, curRoom.num updates immediately but the minimap still shows the
         // previous room while fading out
-        s16 displayedRoomNum = // SOH [Unbound] s8 -> s16
+        s16 displayedRoomNum =
             gPlayState->roomCtx.prevRoom.num >= 0 ? gPlayState->roomCtx.prevRoom.num : gPlayState->roomCtx.curRoom.num;
 
         for (auto& [clientId, client] : Anchor::Instance->clients) {

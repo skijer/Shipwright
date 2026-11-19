@@ -7,7 +7,6 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
-// Equipment uses the same icon resolver as inventory and C buttons.
 static void* KaleidoScope_ResolveEquipmentIcon(PlayState* play, u16 item, const char* fallback) {
     const char* icon = fallback;
     GameInteractor_ExecuteOnKaleidoResolveItemIcon(play, item, &icon);
@@ -567,7 +566,6 @@ void KaleidoScope_DrawEquipment(PlayState* play) {
                 sEquipTimer = 10;
             } else if (CHECK_AGE_REQ_EQUIP(pauseCtx->cursorY[PAUSE_EQUIP], pauseCtx->cursorX[PAUSE_EQUIP])) {
                 if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-                    // A custom piece shares its row's vanilla value, so that value never reads as equipped.
                     const u8 isCustomWorn = CustomEquipRegistry_GetWorn(pauseCtx->cursorY[PAUSE_EQUIP]) != NULL;
 
                     // #Region SoH [Enhancements]

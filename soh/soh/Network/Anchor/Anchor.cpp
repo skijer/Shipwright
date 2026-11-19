@@ -13,8 +13,6 @@ extern "C" {
 extern PlayState* gPlayState;
 }
 
-// MARK: - Rooms
-
 static const std::string sMajorasMaskGlobalRoomId = "2ship-global";
 
 bool Anchor::IsGlobalRoom() {
@@ -58,8 +56,7 @@ void Anchor::OnConnected() {
     }
 }
 
-// The server closes the older session when a second one arrives with the same clientId (two copies of the game
-// sharing one config). Being closed right after the handshake means that happened: come back as a new client.
+// The server closes the older session when a second one arrives with the same clientId; reconnect as a new client.
 void Anchor::OnDisconnected() {
     constexpr auto TakeoverWindow = std::chrono::seconds(10);
     if (std::chrono::steady_clock::now() - connectedAt < TakeoverWindow) {

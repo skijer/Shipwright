@@ -69,7 +69,6 @@ void BuildRow(const ModItem& item) {
         itemTable.resize(static_cast<size_t>(item.randoGet) + 1);
     }
     itemTable[item.randoGet] = BuildItem(item, *definition);
-    // Mods register after InitItemTable filled the name map, and a spoiler names their items by key.
     Rando::StaticData::itemNameToEnum[item.key] = static_cast<RandomizerGet>(item.randoGet);
 }
 
@@ -147,7 +146,6 @@ bool RandoItems_IsOwned(int32_t randoGet, SOHRandoInfBank bank) {
     if (RandoInfCustom_Get(bank, item->flag)) {
         return true;
     }
-    // Logic asks for the inventory item; the seed places its pickup variants, and any one of them grants it.
     return std::any_of(sItems.begin(), sItems.end(), [&](const ModItem& candidate) {
         const SOHCustomPickupVariant* pickup = CustomItemRegistry_GetPickupVariant(candidate.key.c_str());
         return pickup != nullptr && item->key == pickup->itemKey && RandoInfCustom_Get(bank, candidate.flag);

@@ -799,7 +799,7 @@ void EnItem00_Update(Actor* thisx, PlayState* play) {
             if (*temp != play->gameplayFrames) {
                 D_80157D90 = play->gameplayFrames;
                 D_80157D94[0] = 0;
-                for (i = 0; i < play->colCtx.dyna.bgActorMax; i++) { // SOH [Unbound] was a hardcoded 50
+                for (i = 0; i < play->colCtx.dyna.bgActorMax; i++) {
                     if (play->colCtx.dyna.bgActorFlags[i] & 1) {
                         dynaActor = play->colCtx.dyna.bgActors[i].actor;
                         if ((dynaActor != NULL) && (dynaActor->update != NULL)) {
@@ -1671,6 +1671,10 @@ void Item_DropCollectibleRandom(PlayState* play, Actor* fromActor, Vec3f* spawnP
 
     param8000 = params & 0x8000;
     params &= 0x7FFF;
+
+    if (!GameInteractor_Should(VB_DROP_RANDOM_COLLECTIBLE, true, fromActor, spawnPos)) {
+        return;
+    }
 
     if (CVarGetInteger(CVAR_ENHANCEMENT("NoRandomDrops"), 0)) {
         return;

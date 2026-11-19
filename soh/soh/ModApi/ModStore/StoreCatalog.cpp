@@ -55,7 +55,6 @@ std::optional<StoreDownload> ReadDownload(const Json& object) {
     return download;
 }
 
-// The published catalog still lists one download per old API number; the newest one is this host's.
 std::optional<StoreDownload> ReadLegacyDownload(const Json& object) {
     const auto builds = object.find("builds");
     if (builds == object.end() || !builds->is_object()) {

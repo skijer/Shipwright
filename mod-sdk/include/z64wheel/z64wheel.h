@@ -1,17 +1,6 @@
 #ifndef UNBOUND_Z64WHEEL_H
 #define UNBOUND_Z64WHEEL_H
 
-/**
- * z64wheel — the in-game picker an item opens to retune itself: hold L with the item in hand and the stick
- * chooses, or, latched, the item opens a row of boxes that A confirms and B cancels.
- *
- * One wheel per mod, compiled into the mod. Nothing arbitrates between wheels because nothing has to: a
- * held wheel needs its own item in Link's hand, and a latched one stops the world while it is up.
- *
- * The mod registers it once and the library takes it from there; selection and unlocked entries live in the
- * mod's own ModStorage, so each save file keeps its own.
- */
-
 #include <math.h>
 #include <string.h>
 
@@ -532,10 +521,6 @@ static inline void Z64Wheel_OnPlayerUpdate(void) {
     Z64Wheel_Update();
 }
 
-/**
- * Registers the mod's one wheel and takes over its frame, its drawing and its save slot. A latched wheel is
- * opened by the item with Z64Wheel_Open; a plain one answers L while the item is in hand.
- */
 static inline bool Z64Wheel_Register(const SOHModApi* api, const char* itemKey, const char* modName,
                                      const Z64WheelEntry* entries, uint32_t count, bool isLatched) {
     if (api == NULL || itemKey == NULL || modName == NULL || entries == NULL || count == 0 ||

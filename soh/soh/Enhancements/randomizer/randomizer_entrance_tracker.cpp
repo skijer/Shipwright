@@ -468,7 +468,6 @@ const EntranceData* GetEntranceData(s16 index) {
             return &entranceData[i];
         }
     }
-    // SOH [Unbound] a mod's entrance (a mod dungeon's door) is not in the table: list it as one-way by its name.
     static std::unordered_map<s16, EntranceData> modEntrances;
     auto [modEntrance, isNew] = modEntrances.try_emplace(index);
     if (isNew) {

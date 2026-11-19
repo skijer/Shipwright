@@ -590,7 +590,7 @@ s32 BgCheck_CheckLineAgainstSSList(SSList* headNodeId, CollisionContext* colCtx,
                                    f32 chkDist, s32 bccFlags);
 void BgCheck_GetStaticLookupIndicesFromPos(CollisionContext* colCtx, Vec3f* pos, Vec3i* arg2);
 void BgCheck_Allocate(CollisionContext* colCtx, PlayState* play, CollisionHeader* colHeader);
-void BgCheck_Free(CollisionContext* colCtx); // SOH [Unbound]
+void BgCheck_Free(CollisionContext* colCtx);
 s32 BgCheck_PosInStaticBoundingBox(CollisionContext* colCtx, Vec3f* pos);
 f32 BgCheck_EntityRaycastFloor1(CollisionContext* colCtx, CollisionPoly** outPoly, Vec3f* pos);
 f32 BgCheck_EntityRaycastFloor2(PlayState* play, CollisionContext* colCtx, CollisionPoly** outPoly,
@@ -650,7 +650,7 @@ void SSNodeList_Initialize(SSNodeList*);
 void SSNodeList_Alloc(PlayState* play, SSNodeList* this, s32 tblMax, s32 numPolys);
 u32 SSNodeList_GetNextNodeIdx(SSNodeList* this);
 s32 DynaPoly_IsBgIdBgActor(s32 bgId);
-s32 DynaPoly_IsBgIdInTable(DynaCollisionContext* dyna, s32 bgId); // SOH [Unbound]
+s32 DynaPoly_IsBgIdInTable(DynaCollisionContext* dyna, s32 bgId);
 void DynaPoly_Init(PlayState* play, DynaCollisionContext* dyna);
 void DynaPoly_Alloc(PlayState* play, DynaCollisionContext* dyna);
 void func_8003EBF8(PlayState* play, DynaCollisionContext* dyna, s32 bgId);
@@ -967,8 +967,8 @@ void func_80077D10(f32* arg0, s16* arg1, Input* input);
 s16 Rand_S16Offset(s16 base, s16 range);
 void Math_Vec3f_Copy(Vec3f* dest, Vec3f* src);
 void Math_Vec3s_ToVec3f(Vec3f* dest, Vec3s* src);
-void Math_Vec3i_ToVec3f(Vec3f* dest, Vec3i* src); // SOH [Unbound]
-void Math_Vec3f_ToVec3i(Vec3i* dest, Vec3f* src); // SOH [Unbound] rounds
+void Math_Vec3i_ToVec3f(Vec3f* dest, Vec3i* src);
+void Math_Vec3f_ToVec3i(Vec3i* dest, Vec3f* src);
 void Math_Vec3f_Sum(Vec3f* a, Vec3f* b, Vec3f* dest);
 void Math_Vec3f_Diff(Vec3f* a, Vec3f* b, Vec3f* dest);
 void Math_Vec3s_DiffToVec3f(Vec3f* dest, Vec3s* a, Vec3s* b);
@@ -1267,7 +1267,7 @@ s32 Scene_ExecuteCommands(PlayState* play, SceneCmd* sceneCmd);
 void TransitionActor_InitContext(GameState* state, TransitionActorContext* transiActorCtx);
 void Scene_SetTransitionForNextEntrance(PlayState* play);
 void Scene_Draw(PlayState* play);
-void Scene_DrawMaterialAnims(PlayState* play); // SOH [Unbound] z_scene_proc.c
+void Scene_DrawMaterialAnims(PlayState* play);
 void SkelAnime_DrawLod(PlayState* play, void** skeleton, Vec3s* jointTable,
                        OverrideLimbDrawOpa overrideLimbDraw, PostLimbDrawOpa postLimbDraw, void* arg, s32 dListIndex);
 void SkelAnime_DrawFlexLod(PlayState* play, void** skeleton, Vec3s* jointTable, s32 dListCount,

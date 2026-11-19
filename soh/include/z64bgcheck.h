@@ -8,8 +8,6 @@ struct DynaPolyActor;
 #define COLPOLY_NORMAL_FRAC (1.0f / SHT_MAX)
 #define COLPOLY_SNORMAL(x) ((s16)((x) * SHT_MAX))
 #define COLPOLY_GET_NORMAL(n) ((n)*COLPOLY_NORMAL_FRAC)
-// SOH [Unbound] Vertex indices are 32-bit words: bits 0-28 hold the index, bits 29-31 hold the
-// poly exclusion flags (vIA) / conveyor flag (vIB). The N64 packed a 13-bit index into a u16.
 #define COLPOLY_VTX_INDEX_MASK 0x1FFFFFFFu
 #define COLPOLY_VIA_FLAGS_SHIFT 29
 #define COLPOLY_VIA_FLAGS_MASK 0xE0000000u
@@ -19,20 +17,11 @@ struct DynaPolyActor;
 
 #define DYNAPOLY_INVALIDATE_LOOKUP (1 << 0)
 
-// BGACTOR_NEG_ONE is the "no dyna actor" value an actor stores in its own bgId / floorBgId / wallBgId.
 #define BGACTOR_NEG_ONE -1
-// SOH [Unbound] The dyna actor table is heap-allocated and grows on demand (DynaCollisionContext.bgActorMax), so
-// the sentinels are fixed constants instead of the table size. BGCHECK_SCENE is the bgId of the scene's static
-// collision. BGACTOR_INVALID is the "could not allocate" value the overlay `== BGACTOR_INVALID` tests compare
-// against; vanilla returned BG_ACTOR_MAX there, the same number. DynaPoly_SetBgActor now grows the table instead.
 #define BGCHECK_SCENE 0x7FFF
 #define BGACTOR_INVALID BGCHECK_SCENE
 #define BGACTOR_INITIAL_MAX 64
-// Superseded dyna poly/vtx buffers parked per scene (see DynaCollisionContext.retiredBuffers). Growth doubles
-// from 16 384, so a list retires one buffer per doubling; 32 covers both lists past 2^31 entries.
 #define DYNA_RETIRED_BUFFERS_MAX 32
-// SOH [Unbound] World extent: positions are f32 end to end; 2^20 keeps ~0.06-unit precision at the edge.
-// BGCHECK_Y_MIN is the "no floor" sentinel (exactly representable in f32).
 #define BGCHECK_Y_MIN -2147483648.0f
 #define BGCHECK_XYZ_ABSMAX 1048576.0f
 #define BGCHECK_SUBDIV_OVERLAP 50
@@ -50,23 +39,20 @@ typedef struct {
     Vec3f pos;
 } ScaleRotPos;
 
-// SOH [Unbound] Widened from the N64 0x10-byte layout; see unbound-docs/collision.md
 typedef struct {
     u16 type;
     union {
         u32 vtxData[3];
         struct {
-            u32 flags_vIA; // COLPOLY_VIA_FLAGS_MASK is poly exclusion flags (xpFlags), COLPOLY_VTX_INDEX_MASK is vtxId
-            u32 flags_vIB; // COLPOLY_VIB_CONVEYOR = poly IsConveyor surface, COLPOLY_VTX_INDEX_MASK is vtxId
+            u32 flags_vIA;
+            u32 flags_vIB;
             u32 vIC;
         };
     };
     Vec3s normal; // Unit normal vector
                   // Value ranges from -0x7FFF to 0x7FFF, representing -1.0 to 1.0; 0x8000 is invalid
 
-    s32 dist; // Plane distance from origin along the normal. // SOH [Unbound] s16 -> s32 (world extent).
-              // Derived from a unit normal, so it is fractional even when every vertex is integral. The archive
-              // writer (SPEC.md §4.4) rounds it; the dyna bake in DynaPoly_ExpandSRT truncates it as vanilla did.
+    s32 dist; // Plane distance from origin along the normal.
 } CollisionPoly;
 
 typedef struct {
@@ -75,18 +61,16 @@ typedef struct {
     /* 0x04 */ Vec3s* camPosData;
 } CamData;
 
-// SOH [Unbound] Widened from the N64 0x10-byte layout: extents are s32 (world extent) and the packed
-// `properties` word is unpacked into fields (WaterBox_UnpackProperties for legacy data).
 typedef struct {
     s32 xMin;
     s32 ySurface;
     s32 zMin;
     s32 xLength;
     s32 zLength;
-    s32 camera;       // CamData index (was 8 bits)
-    s32 lightSetting; // lighting settings index (was 5 bits)
-    s32 room;         // -1 = all rooms (was 6 bits, 0x3F)
-    u8 notSwimmable;        // vanilla bit 19: box is only found by func_800425B0, not WaterBox_GetSurface*
+    s32 camera;
+    s32 lightSetting;
+    s32 room;
+    u8 notSwimmable;
 } WaterBox;
 
 typedef enum FloorType {
@@ -148,28 +132,25 @@ typedef enum FloorEffect {
     /*  2 */ FLOOR_EFFECT_2 // Transition
 } FloorEffect;
 
-// SOH [Unbound] The two packed vanilla words are unpacked into named fields (SurfaceType_Unpack for legacy
-// data), so `camera`, `exit` and `lightSetting` are no longer capped at 8 / 5 / 5 bits.
 typedef struct {
-    s32 camera;        // CamData index
-    s32 exit;          // scene exit index, 0 = none
-    s32 lightSetting;  // lighting settings index
-    u8 floorType;      // 0-31
-    u8 wallFlags;      // 0-7 (vanilla "unk18")
-    u8 wallType;       // 0-31, index into D_80119D90
-    u8 floorProperty;  // 0-15
-    u8 isSoft;         // "floor minus 1"
+    s32 camera;
+    s32 exit;
+    s32 lightSetting;
+    u8 floorType;
+    u8 wallFlags;
+    u8 wallType;
+    u8 floorProperty;
+    u8 isSoft;
     u8 isHorseBlocked;
-    u8 material;       // 0-15, walk sfx index
-    u8 floorEffect;    // 0-3, slope
-    u8 echo;           // 0-63
+    u8 material;
+    u8 floorEffect;
+    u8 echo;
     u8 canHookshot;
-    u8 conveyorSpeed;     // 0-7
-    u8 conveyorDirection; // 0-63, 360 / 64 degrees
+    u8 conveyorSpeed;
+    u8 conveyorDirection;
     u8 isWallDamage;
 } SurfaceType;
 
-// SOH [Unbound] Legacy (packed) collision data is unpacked at the loader boundary with these.
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -179,7 +160,6 @@ void WaterBox_UnpackProperties(WaterBox* waterBox, u32 properties);
 }
 #endif
 
-// SOH [Unbound] Widened from the N64 layout: bounds and vertices are s32 (world extent), counts are u32
 typedef struct {
     Vec3i minBounds; // minimum coordinates of poly bounding box
     Vec3i maxBounds; // maximum coordinates of poly bounding box
@@ -194,7 +174,6 @@ typedef struct {
     size_t cameraDataListLen; // OTRTODO: Added to allow for bounds checking the cameraDataList.
 } CollisionHeader; // original name: BGDataInfo
 
-// SOH [Unbound] SSNode/SSList indices widened from 16 to 32 bits (SS_NULL is 0xFFFFFFFF)
 typedef struct {
     s32 polyId;
     u32 next; // next SSNode index
@@ -225,7 +204,7 @@ typedef struct {
 } StaticLookup;
 
 typedef struct {
-    u32 polyStartIndex; // SOH [Unbound] widened from u16
+    u32 polyStartIndex;
     SSList ceiling;
     SSList wall;
     SSList floor;
@@ -235,7 +214,7 @@ typedef struct {
     struct Actor* actor;
     CollisionHeader* colHeader;
     DynaLookup dynaLookup;
-    u32 vtxStartIndex; // SOH [Unbound] widened from u16
+    u32 vtxStartIndex;
     ScaleRotPos prevTransform;
     ScaleRotPos curTransform;
     Sphere16 boundingSphere;
@@ -243,19 +222,16 @@ typedef struct {
     f32 maxY;
 } BgActor;
 
-// SOH [Unbound] Every table here is heap-allocated, grows on demand and is released by BgCheck_Free
 typedef struct {
     u8 bitFlag;
-    BgActor* bgActors;  // bgActorMax slots; grown by DynaPoly_SetBgActor
-    u16* bgActorFlags; // & 0x0008 = no dyna ceiling
+    BgActor* bgActors;
+    u16* bgActorFlags;
     s32 bgActorMax;
-    // polyList/vtxList grow in DynaPoly_Setup; superseded buffers are parked here until BgCheck_Free because
-    // actors keep CollisionPoly* into them (already stale each frame, but they must stay readable).
+    // Actors keep CollisionPoly* into superseded buffers, so they stay allocated until BgCheck_Free.
     void* retiredBuffers[DYNA_RETIRED_BUFFERS_MAX];
     s32 retiredCount;
     CollisionPoly* polyList;
-    Vec3i* vtxList; // s16 -> s32 (world extent). Baked world-space, so these quantise to whole units
-                    // each frame as they did in vanilla.
+    Vec3i* vtxList;
     DynaSSNodeList polyNodes;
     s32 polyNodesMax;
     s32 polyListMax;
@@ -272,7 +248,7 @@ typedef struct CollisionContext {
     StaticLookup* lookupTbl;    // 3d array of length subdivAmount
     SSNodeList polyNodes;
     DynaCollisionContext dyna;
-} CollisionContext; // SOH [Unbound] memSize (the N64 byte budget) is gone; see BgCheck_Allocate
+} CollisionContext;
 
 typedef struct {
     /* 0x00 */ struct PlayState* play;

@@ -150,13 +150,8 @@ bool OTRfunc_800982FC(ObjectContext* objectCtx, s32 bankIndex, s16 objectId) {
     return false;
 }
 
-// SOH [Unbound] The object list a room's command actually installs. Epona is spawned from the registry rather
-// than from any room's actor list, so a custom scene that allows her (SPEC.md §7 "horse") needs her object in
-// every one of its rooms: an object past the room's own list is dropped the next time this command runs, taking
-// the actor with it. A room that already lists her is left alone, and so is every vanilla scene — the five that
-// allow her ship object lists that already account for her.
-// `scratch` holds the appended list when one is needed, so the common case returns the room's own list
-// without copying it.
+// Epona is spawned from the registry, not a room's actor list, so her object is appended to every room's list;
+// an object outside the room's own list is dropped the next time the command runs, taking the actor with it.
 static const std::vector<int16_t>& EffectiveObjectList(PlayState* play, const std::vector<int16_t>& roomObjects,
                                                        std::vector<int16_t>& scratch) {
     if (!SceneDB_IsCustom(play->sceneNum) || !SceneDB_HorseAllowed(play->sceneNum) ||
@@ -196,7 +191,7 @@ bool Scene_CommandObjectList(PlayState* play, SOH::ISceneCommand* cmd) {
             OTRfunc_800982FC(&play->objectCtx, i, objects[k]);
         } else {
             SPDLOG_ERROR("[Unbound] object list exceeds the bank ({} slots); dropping object {:#x}",
-                         OBJECT_EXCHANGE_BANK_MAX, objects[k]); // SOH [Unbound] was a silent drop
+                         OBJECT_EXCHANGE_BANK_MAX, objects[k]);
         }
     }
 
@@ -219,7 +214,7 @@ bool Scene_CommandLightList(PlayState* play, SOH::ISceneCommand* cmd) {
 bool Scene_CommandPathList(PlayState* play, SOH::ISceneCommand* cmd) {
     // SOH::SetPathways* cmdPath = static_pointer_cast<SOH::SetPathways>(cmd);
     SOH::SetPathways* cmdPath = (SOH::SetPathways*)cmd;
-    play->setupPathList = (Path*)cmdPath->GetPathList(); // SOH [Unbound] every listed path document, concatenated
+    play->setupPathList = (Path*)cmdPath->GetPathList();
 
     return false;
 }
@@ -245,7 +240,6 @@ bool Scene_CommandTransitionActorList(PlayState* play, SOH::ISceneCommand* cmd) 
 //}
 
 bool Scene_CommandLightSettingsList(PlayState* play, SOH::ISceneCommand* cmd) {
-    // SOH [Unbound] Mirror z_scene.c: the count bounds the light-setting index (func_80074CE8).
     SOH::SetLightingSettings* cmdLight = (SOH::SetLightingSettings*)cmd;
     play->envCtx.numLightSettings = (u8)cmdLight->settings.size();
     play->envCtx.lightSettingsList = (EnvLightSettings*)cmd->GetRawPointer();
@@ -344,7 +338,7 @@ bool Scene_CommandSoundSettings(PlayState* play, SOH::ISceneCommand* cmd) {
 
     play->sequenceCtx.seqId = cmdSnd->settings.seqId;
     play->sequenceCtx.natureAmbienceId = cmdSnd->settings.natureAmbienceId;
-    Unbound_BindSceneSong(play, cmdSnd->unboundSongSeqId); // SOH [Unbound]
+    Unbound_BindSceneSong(play, cmdSnd->unboundSongSeqId);
 
     if (gSaveContext.seqId == 0xFF) {
         Audio_QueueSeqCmd(cmdSnd->settings.reverb | 0xF0000000);
@@ -373,7 +367,6 @@ bool Scene_CommandAlternateHeaderList(PlayState* play, SOH::ISceneCommand* cmd) 
     // osSyncPrintf("\n[ZU]sceneset time   =[%X]", gSaveContext.cutsceneIndex);
     // osSyncPrintf("\n[ZU]sceneset counter=[%X]", gSaveContext.sceneLayer);
 
-    // SOH [Unbound] A setup index past the last defined header behaves like an empty one (falls back below).
     auto headerAt = [&](size_t index) -> SOH::Scene* {
         return index < cmdHeaders->headers.size()
                    ? std::static_pointer_cast<SOH::Scene>(cmdHeaders->headers[index]).get()
@@ -417,7 +410,6 @@ bool Scene_CommandCutsceneData(PlayState* play, SOH::ISceneCommand* cmd) {
 }
 
 // Camera & World Map Area
-// SOH [Unbound] `materialAnims` (SPEC.md §4.2): the list lives in the command resource for as long as the scene does.
 bool Scene_CommandAnimatedMaterials(PlayState* play, SOH::ISceneCommand* cmd) {
     SOH::SetAnimatedMaterialList* list = (SOH::SetAnimatedMaterialList*)cmd;
     play->sceneMaterialAnims = list->GetPointer();
@@ -476,7 +468,7 @@ bool (*sceneCommands[])(PlayState*, SOH::ISceneCommand*) = {
     Scene_CommandCutsceneData,        // SCENE_CMD_ID_CUTSCENE_DATA
     Scene_CommandAlternateHeaderList, // SCENE_CMD_ID_ALTERNATE_HEADER_LIST
     Scene_CommandMiscSettings,        // SCENE_CMD_ID_MISC_SETTINGS
-    Scene_CommandAnimatedMaterials,   // SOH [Unbound] SceneCommandID::SetAnimatedMaterialList (0x1A)
+    Scene_CommandAnimatedMaterials,
 };
 
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene) {
@@ -496,7 +488,6 @@ s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene) {
             break;
         }
 
-        // SOH [Unbound] the table grew past the vanilla 0x19 (materialAnims); bound it by its size
         if ((size_t)cmdCode < sizeof(sceneCommands) / sizeof(sceneCommands[0])) {
             if (sceneCommands[(int)cmdCode](play, sceneCmd.get()))
                 break;
@@ -519,7 +510,7 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
             roomCtx->curRoom.segment = roomCtx->unk_34;
             gSegments[3] = VIRTUAL_TO_PHYSICAL(roomCtx->unk_34);
 
-            if (roomCtx->roomToLoad == nullptr) { // SOH [Unbound] a room that failed to load must not crash the scene
+            if (roomCtx->roomToLoad == nullptr) {
                 SPDLOG_ERROR("Room {} of scene {:#x} did not load; skipping its commands", roomCtx->curRoom.num,
                              play->sceneNum);
             } else {

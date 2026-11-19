@@ -200,8 +200,7 @@ bool Combobox(std::string label, T* value, const std::vector<const char*>& combo
               const ComboboxOptions& options = {}) {
     bool dirty = false;
     size_t currentValueIndex = static_cast<size_t>(*value);
-    // SOH [Port] Same guard as the map overload above: an index from a stale config can sit
-    // past the end of the vector, and std::vector::at would throw out of the frame callback.
+    // A stale config index past the end of the vector would make at() throw out of the frame callback.
     if (!comboVector.empty() && currentValueIndex >= comboVector.size()) {
         currentValueIndex = 0;
         *value = 0;
@@ -293,8 +292,7 @@ bool Combobox(std::string label, T* value, const std::vector<std::string>& combo
               const ComboboxOptions& options = {}) {
     bool dirty = false;
     size_t currentValueIndex = static_cast<size_t>(*value);
-    // SOH [Port] Same guard as the map overload above: an index from a stale config can sit
-    // past the end of the vector, and std::vector::at would throw out of the frame callback.
+    // A stale config index past the end of the vector would make at() throw out of the frame callback.
     if (!comboVector.empty() && currentValueIndex >= comboVector.size()) {
         currentValueIndex = 0;
         *value = 0;
@@ -385,8 +383,6 @@ template <typename T = size_t, size_t N>
 bool Combobox(std::string label, T* value, const char* (&comboArray)[N], const ComboboxOptions& options = {}) {
     bool dirty = false;
     size_t currentValueIndex = static_cast<size_t>(*value);
-    // SOH [Port] Same guard as the map overload above. This one already clamped the index, but
-    // left the stale value in place for the far label below to index with.
     if (currentValueIndex >= N) {
         currentValueIndex = 0;
         *value = 0;

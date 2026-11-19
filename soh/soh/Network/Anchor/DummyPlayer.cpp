@@ -1,5 +1,6 @@
 #include "Anchor.h"
 #include "soh/Enhancements/nametag.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
 
 extern "C" {
 #include "macros.h"
@@ -241,7 +242,12 @@ void DummyPlayer_Draw(Actor* actor, PlayState* play) {
     u8 originalButtonItem0 = gSaveContext.equips.buttonItems[0];
     gSaveContext.equips.buttonItems[0] = client.buttonItem0;
 
-    Player_Draw((Actor*)player, play);
+    const SOHFormDefinition* form = FormRegistry_Find(client.formKey.c_str());
+    if (form != nullptr && form->kind == SOH_FORM_KIND_TAKEOVER && form->draw != nullptr) {
+        form->draw(play, player);
+    } else {
+        Player_Draw((Actor*)player, play);
+    }
     gSaveContext.linkAge = originalAge;
     gSaveContext.equips.buttonItems[0] = originalButtonItem0;
 }

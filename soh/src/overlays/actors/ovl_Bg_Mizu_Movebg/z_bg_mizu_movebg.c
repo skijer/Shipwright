@@ -192,7 +192,7 @@ void BgMizuMovebg_Destroy(Actor* thisx, PlayState* play) {
 
 s32 BgMizuMovebg_SetPosFromPath(Path* pathList, Vec3f* pos, s32 pathId, s32 pointId) {
     Path* path = pathList;
-    Vec3f* point; // SOH [Unbound] f32 path points
+    Vec3f* point;
 
     path += pathId;
     point = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[pointId];

@@ -34,9 +34,6 @@ void Anchor::SendPacket_TeleportTo(uint32_t clientId) {
     SendJsonToRemote(PrepTeleportTo(clientId));
 }
 
-/**
- * Summon: the room owner sends an unrequested TELEPORT_TO, which only the room owner may do.
- */
 void Anchor::SendPacket_Summon(uint32_t clientId) {
     if (!IsSaveLoaded()) {
         return;
@@ -58,7 +55,7 @@ void Anchor::HandlePacket_TeleportTo(nlohmann::json payload) {
     }
 
     s32 entranceIndex = payload.at("entranceIndex").get<s32>();
-    s16 roomIndex = payload.at("roomIndex").get<s16>(); // SOH [Unbound]
+    s16 roomIndex = payload.at("roomIndex").get<s16>();
 
     if (entranceIndex < 0 || roomIndex < 0) {
         SPDLOG_ERROR("[Anchor] TELEPORT_TO: invalid entranceIndex {} or roomIndex {}", entranceIndex, (int)roomIndex);

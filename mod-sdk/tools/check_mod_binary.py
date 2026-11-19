@@ -6,7 +6,6 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-# Mirrors soh/soh/ModApi/ModTrust/ModTrust.cpp, which shows the same findings when asking about an unsigned mod.
 HOST_MODULES = {"soh.dll", "libultraship.dll"}
 WINDOWS_RUNTIME_PREFIXES = ("vcruntime140", "msvcp140", "ucrtbase", "api-ms-win-crt-")
 WINDOWS_STARTUP_KERNEL_IMPORTS = {

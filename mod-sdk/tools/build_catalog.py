@@ -9,8 +9,6 @@ from pathlib import Path
 
 import mod_signature
 
-# The store catalog is one JSON payload, signed like a mod, that the game reads from the "mods" release.
-# Each signature request only rewrites the entries of its own issue; everything else is carried over.
 CATALOG_FORMAT = 1
 MOD_ID = re.compile(r"^[a-z0-9_-]{1,64}$")
 PACK_ID = re.compile(r"^[a-z0-9-]{1,40}$")
@@ -26,7 +24,6 @@ def read_catalog(path):
     if path is None or not path.is_file():
         return empty_catalog()
     catalog = {**empty_catalog(), **json.loads(path.read_text(encoding="utf-8"))}
-    # Catalogs written before 0.12 kept one build per mod API major; the newest one carries over.
     for mod in catalog["mods"].values():
         builds = mod.pop("builds", {})
         if "build" not in mod and builds:
@@ -158,7 +155,6 @@ def file_hash(path):
 def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions):
     """Which built mods to sign and publish, which are already published, and which wait or are refused."""
     source = catalog["sources"].get(str(issue))
-    # Until an issue has a mod in the store, everything it asks for is part of the approval it got first.
     published = any(mod["issue"] == issue for mod in catalog["mods"].values())
     allowed = set(source["permissions"]) if source and published else None
     result = {"publish": [], "unchanged": [], "held": {}, "rejected": {}}

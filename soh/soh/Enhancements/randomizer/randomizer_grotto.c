@@ -383,7 +383,7 @@ void Grotto_SanitizeEntranceType(void) {
 }
 
 // Get the renamed entrance index based on the grotto contents and exit scene number
-s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s16 scene) { // SOH [Unbound] scene s8 -> s16
+s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s16 scene) {
     for (s16 index = 0; index < NUM_GROTTOS; index++) {
         if (content == grottoLoadTable[index].content && scene == grottoLoadTable[index].scene) {
             return ENTRANCE_GROTTO_LOAD_START | index;
@@ -400,7 +400,7 @@ s8 Grotto_CurrentGrotto() {
         return grottoId;
     } else {
         s16 entrance = gSaveContext.respawn[RESPAWN_MODE_RETURN].entranceIndex;
-        s16 scene = gEntranceTable[entrance].scene; // SOH [Unbound] s8 -> s16
+        s16 scene = gEntranceTable[entrance].scene;
         s8 data = gSaveContext.respawn[RESPAWN_MODE_RETURN].data;
         return Grotto_GetRenamedGrottoIndexFromOriginal(data, scene) & 0xFF;
     }

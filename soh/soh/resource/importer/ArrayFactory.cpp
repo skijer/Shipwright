@@ -9,7 +9,6 @@
 namespace SOH {
 namespace {
 
-// Layout after the resource header: u32 arrayType, u32 count, then the records.
 std::shared_ptr<Array> ReadScalarArray(Ship::BinaryReader& reader, ArrayResourceType arrayType, uint32_t count,
                                        std::shared_ptr<Ship::ResourceInitData> initData) {
     auto array = std::make_shared<Array>(initData);

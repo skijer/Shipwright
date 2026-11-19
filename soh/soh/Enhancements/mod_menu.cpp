@@ -212,14 +212,11 @@ bool IsOotrsExtension(std::string extension) {
     return StringHelper::IEquals(extension, ".ootrs");
 }
 
-// The mods folder, or an empty string when this install has none.
 static std::string ModsFolder() {
     std::string modsPath = Ship::Context::LocateFileAcrossAppDirs("mods", appShortName);
     return (modsPath.empty() || !std::filesystem::is_directory(modsPath)) ? "" : modsPath;
 }
 
-// Scans the mods folder into filePaths and ootrsFiles, appending any mod not yet in the enabled
-// list. Returns whether the enabled list changed.
 static bool ScanModsFolder(const std::string& modsPath, std::vector<std::filesystem::path>& ootrsFiles) {
     std::map<std::string, std::string> newMods;
     for (const std::filesystem::directory_entry& p : std::filesystem::recursive_directory_iterator(
@@ -248,14 +245,10 @@ static bool ScanModsFolder(const std::string& modsPath, std::vector<std::filesys
     return !newMods.empty();
 }
 
-// Drops enabled mods with no file behind them. The list is saved in the config, so it can
-// name mods this install does not have: a config written by another install (a desktop
-// config handed to a browser build), or a file deleted since. Returns whether any were dropped.
 static bool PruneMissingMods() {
     return std::erase_if(enabledModFiles, [](const std::string& mod) { return !filePaths.contains(mod); }) > 0;
 }
 
-// Mods without a file are not loaded: the folder is absent, so the list was kept as it is.
 static void LoadEnabledModArchives(std::vector<std::filesystem::path>& ootrsFiles) {
     for (const std::string& mod : enabledModFiles) {
         if (filePaths.contains(mod)) {
@@ -283,11 +276,7 @@ void UpdateModFiles(bool init = false, bool reset = false) {
             UserFiles_ApplyPending(modsPath);
         }
         changed = ScanModsFolder(modsPath, ootrsFiles);
-        // Only a scan can tell a deleted mod from one this install never had. Pruning used to
-        // happen only while loading archives; it happens before the list is drawn too, since
-        // the Mod Menu draws each entry's file. Without the folder (moved aside, an unmounted
-        // drive) the list is kept, order and all, so that putting the folder back restores it:
-        // nothing is loaded, and the Mod Menu shows each entry as missing.
+        // Without the folder the list is kept as it is, so restoring the folder restores the mods.
         changed |= PruneMissingMods();
     }
     if (init) {
@@ -297,7 +286,7 @@ void UpdateModFiles(bool init = false, bool reset = false) {
         SetEnabledModsCVarValue();
     }
     if (init) {
-        SceneDB::Instance->LoadCustomScenes(); // SOH [Unbound] archives are all mounted now
+        SceneDB::Instance->LoadCustomScenes();
     }
 }
 
@@ -323,7 +312,6 @@ void DisableMod(std::string file) {
     AfterModChange();
 }
 
-// The mod's file name, or the enabled-list name marked missing when there is no file behind it.
 static std::string ModDisplayName(const std::string& mod) {
     auto path = filePaths.find(mod);
     if (path == filePaths.end()) {

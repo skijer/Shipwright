@@ -887,7 +887,7 @@ s32 sOcarinaB4BtnMap = BTN_CLEFT;
 s32 sOcarinaA4BtnMap = BTN_CRIGHT;
 s32 sOcarinaF4BtnMap = BTN_CDOWN;
 s32 sOcarinaD4BtnMap = BTN_A;
-u8 sIsOcarinaInputEnabled = false; // SOH [Unbound] not static: mic_ocarina reads and writes the ocarina state
+u8 sIsOcarinaInputEnabled = false;
 static s8 sOcarinaInstrumentId = OCARINA_INSTRUMENT_OFF;
 static u8 sCurOcarinaPitch = OCARINA_PITCH_NONE;
 static u8 sPrevOcarinaPitch = OCARINA_PITCH_C4;
@@ -5529,8 +5529,7 @@ void Audio_PlayNatureAmbienceSequence(u8 natureAmbienceId) {
     u8 port;
     u8 val;
 
-    // SOH [Unbound] A scene can carry any byte here; past the table the IO data is garbage and the nature
-    // sequence jumps through it. Play nothing, as the callers do for NATURE_ID_NONE (they never pass it here).
+    // A scene can carry any byte here; past the table the nature sequence would jump through garbage.
     if (natureAmbienceId >= ARRAY_COUNT(sNatureAmbienceDataIO)) {
         return;
     }

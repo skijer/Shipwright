@@ -28,8 +28,7 @@ inline constexpr uint8_t {variable}[32] = {{
 {rows}
 }};
 """
-# Mods and the store catalog share the mod key; Unbound's own releases have a key of their own. The domain
-# keeps a signature made for one kind of document from verifying as another.
+# The domain keeps a signature made for one kind of document from verifying as another.
 KEYS = {
     "mod": {"environment": KEY_ENVIRONMENT_VARIABLE, "header": KEY_HEADER, "variable": "kTrustedModSigningKey",
             "option": ""},
@@ -53,7 +52,6 @@ def read_package_files(package):
                 continue
             if not name.isascii():
                 raise ValueError(f"{package}: '{name}' is not an ASCII path")
-            # The game indexes 'x.meta' as 'x', so a package holding one could never verify.
             if name.endswith(".meta"):
                 raise ValueError(f"{package}: '{name}' is a .meta file, which signed packages cannot hold")
             files[name] = archive.read(name)

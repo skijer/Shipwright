@@ -111,11 +111,15 @@ void DescribeCellOnCUp(PlayState* play, Input* input, bool* handled) {
     }
     const SOHCustomEquipDefinition* claim = FindClaim(static_cast<uint8_t>(play->pauseCtx.cursorY[PAUSE_EQUIP]),
                                                       static_cast<uint8_t>(play->pauseCtx.cursorX[PAUSE_EQUIP]));
-    if (claim == nullptr || claim->pauseText == nullptr) {
+    const char* text = nullptr;
+    if (claim != nullptr) {
+        text = claim->pauseText != nullptr ? claim->pauseText : claim->getItemText;
+    }
+    if (text == nullptr) {
         return;
     }
     PlayPauseSfx(NA_SE_SY_DECIDE);
-    CustomItemRegistry_ShowTextbox(play, claim->pauseText, true);
+    CustomItemRegistry_ShowTextbox(play, text, true);
     play->pauseCtx.unk_1E4 = 10;
     *handled = true;
 }

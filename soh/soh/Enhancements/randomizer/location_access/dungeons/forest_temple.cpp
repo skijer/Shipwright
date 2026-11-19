@@ -317,7 +317,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_RED_POE_ROOM] = Region("Forest Temple Red Poe Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_JOELLE, logic->CanUse(RG_FAIRY_BOW)),
+        EVENT_ACCESS(LOGIC_FOREST_JOELLE, logic->CanUse(RG_FAIRY_BOW) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_RED_POE_CHEST, logic->Get(LOGIC_FOREST_JOELLE) && logic->HasItem(RG_OPEN_CHEST)),
@@ -346,7 +346,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_BLUE_POE_ROOM] = Region("Forest Temple Blue Poe Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_BETH, logic->CanUse(RG_FAIRY_BOW)),
+        EVENT_ACCESS(LOGIC_FOREST_BETH, logic->CanUse(RG_FAIRY_BOW) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_BLUE_POE_CHEST, logic->Get(LOGIC_FOREST_BETH) && logic->CanOpenLargeChest()),
@@ -392,7 +392,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_GREEN_POE_ROOM] = Region("Forest Temple Green Poe Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_AMY, logic->CanUse(RG_FAIRY_BOW) && logic->HasItem(RG_POWER_BRACELET)),
+        EVENT_ACCESS(LOGIC_FOREST_AMY, logic->CanUse(RG_FAIRY_BOW) && logic->HasItem(RG_POWER_BRACELET) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_GREEN_POE_POT_1, logic->CanBreakPots()),
@@ -735,7 +735,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_MQ_JOELLE_ROOM] = Region("Forest Temple MQ Joelle Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_JOELLE, logic->CanUse(RG_FAIRY_BOW)),
+        EVENT_ACCESS(LOGIC_FOREST_JOELLE, logic->CanUse(RG_FAIRY_BOW) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_MQ_MAP_CHEST, logic->Get(LOGIC_FOREST_JOELLE) && logic->CanOpenLargeChest()),
@@ -764,7 +764,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_MQ_BETH_ROOM] = Region("Forest Temple MQ Beth Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_BETH, logic->CanUse(RG_FAIRY_BOW)),
+        EVENT_ACCESS(LOGIC_FOREST_BETH, logic->CanUse(RG_FAIRY_BOW) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_MQ_COMPASS_CHEST,  logic->Get(LOGIC_FOREST_BETH) && logic->CanOpenLargeChest()),
@@ -803,7 +803,7 @@ void RegionTable_Init_ForestTemple() {
 
     areaTable[RR_FOREST_TEMPLE_MQ_AMY_ROOM] = Region("Forest Temple MQ Amy Room", SCENE_FOREST_TEMPLE, {
         //Events
-        EVENT_ACCESS(LOGIC_FOREST_AMY, logic->CanUse(RG_FAIRY_BOW) && logic->HasItem(RG_POWER_BRACELET)),
+        EVENT_ACCESS(LOGIC_FOREST_AMY, logic->CanUse(RG_FAIRY_BOW) && logic->HasItem(RG_POWER_BRACELET) && logic->HasEnemySoul(RE_POE)),
     }, {
         //Locations
         LOCATION(RC_FOREST_TEMPLE_MQ_GREEN_POE_POT_1, logic->CanBreakPots()),

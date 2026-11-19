@@ -65,7 +65,6 @@ extern "C" void CrashHandler_PrintSohData(char* buffer, size_t* pos) {
     WRITE_VAR_LINE(buffer, pos, "  Build Date: ", (const char*)gBuildDate);
 
     if (gPlayState != nullptr) {
-        // SOH [Unbound] the registry names vanilla and custom scenes alike
         WRITE_VAR_LINE(buffer, pos, "Scene: ", SceneDB_GetDisplayName(gPlayState->sceneNum));
 
         snprintf(intCharBuffer, sizeof(intCharBuffer), "%i", gPlayState->roomCtx.curRoom.num);

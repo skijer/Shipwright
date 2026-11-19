@@ -41,8 +41,7 @@ void Anchor::HandlePacket_SetFlag(nlohmann::json payload) {
     s16 flag = payload.at("flag").get<s16>();
 
     // sceneNum == SCENE_ID_MAX is a sentinel meaning "global flag" (handled below); only larger
-    // values would index gSaveContext.sceneFlags out of bounds. SOH [Unbound] A registered custom scene (ids from
-    // 0x80) is valid too: its flags go through SceneFlags_Get.
+    // values would index gSaveContext.sceneFlags out of bounds.
     if (sceneNum < 0 || (sceneNum != SCENE_ID_MAX && !SceneDB::Instance->RetrieveEntry(sceneNum).valid)) {
         SPDLOG_ERROR("[Anchor] SET_FLAG: sceneNum {} out of range", sceneNum);
         return;

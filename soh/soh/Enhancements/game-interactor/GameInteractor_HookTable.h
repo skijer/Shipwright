@@ -163,7 +163,10 @@ DEFINE_HOOK(OnAudioTablesReady, ());
 // Rando
 DEFINE_HOOK(OnRandoSetCheckStatus, (RandomizerCheck rc, RandomizerCheckStatus status));
 DEFINE_HOOK(OnRandoSetIsSkipped, (RandomizerCheck rc, bool isSkipped));
+DEFINE_HOOK(OnRandoResolveCheckItem, (RandomizerCheck rc, RandomizerGet* item));
 DEFINE_HOOK(OnRandoEntranceDiscovered, (u16 entranceIndex, u8 isReversedEntrance));
 // Fires when a hint's message is resolved for textbox display. Can fire for
 // hints the seed has disabled; subscribers should check the hint is enabled.
 DEFINE_HOOK(OnRandoHintRevealed, (RandomizerHint hintKey));
+// A subscriber offering N trap types adds N to *candidateCount and sets *effect with probability N / *candidateCount.
+DEFINE_HOOK(OnTrapRoll, (uint32_t * candidateCount, void (**effect)(void)));

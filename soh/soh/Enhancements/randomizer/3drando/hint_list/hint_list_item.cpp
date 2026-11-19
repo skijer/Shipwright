@@ -1972,6 +1972,8 @@ void StaticData::HintTable_Init_Item() {
 
     hintTextTable[RHT_BEAN_SOUL] = HintText(CustomMessage("a bean soul", /*german*/"eine bohnenseele", /*french*/"une âme de haricot"));
 
+    hintTextTable[RHT_ENEMY_SOUL] = HintText(CustomMessage("an enemy soul", /*german*/"eine Feindesseele", /*french*/"une âme d'ennemi"));
+
     hintTextTable[RHT_GOHMA_SOUL] = HintText(CustomMessage("the soul of Gohma", /*german*/"Gohmas Seele", /*french*/"l'Âme de Gohma"),
                                              {
                                              CustomMessage("something webbed", /*german*/"etwas Verwobenes", /*french*/"un truc entoilé")

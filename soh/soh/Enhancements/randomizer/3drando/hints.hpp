@@ -73,5 +73,4 @@ extern void CreateAllHints();
 extern void CreateWarpSongTexts();
 void CreateStaticHints();
 RandomizerHintTextKey GetRandomJunkHint();
-// The always-hint checks the current settings leave to gossip stones.
 std::vector<RandomizerCheck> GetAlwaysHintCandidates();

@@ -3,6 +3,7 @@
 
 #include <cstring>
 #include <iterator>
+#include <memory>
 #include <fast/Fast3dGui.h>
 #include <fast/resource/type/Texture.h>
 #include <ship/Context.h>
@@ -28,14 +29,11 @@ namespace {
 
 constexpr const char* kGame = "oot";
 
-// A parked game state keeps the matrix stack and the archives alive; before the first one there is nothing to draw
-// with.
 bool CanDraw() {
     const auto game = Ship::GameRegistry::Get(kGame);
     return gGameState != nullptr && game != nullptr && game->Resources != nullptr;
 }
 
-// Draw functions read only the graphics context, the frame counters and the billboard from the play state.
 PlayState& BorrowPlayState(FleetItemDraw& request, GraphicsContext& gfx) {
     static PlayState play;
     // OPEN_DISPS marks the overlay list too; item drawings never submit to it, so the marks are discarded.
@@ -72,15 +70,18 @@ std::shared_ptr<Fast::Fast3dGui> Gui() {
     return std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
 }
 
-// Mod icons are never preloaded into the GUI: each is loaded on first use, under its own path.
+std::shared_ptr<Fast::Texture> LoadTexture(const char* path) {
+    Ship::GameScope scope(kGame);
+    return std::dynamic_pointer_cast<Fast::Texture>(
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path, true));
+}
+
 ImTextureID LoadIconTexture(const char* path) {
     const auto gui = Gui();
     if (gui->HasTextureByName(path)) {
         return gui->GetTextureByName(path);
     }
-    Ship::GameScope scope(kGame);
-    const auto texture = std::dynamic_pointer_cast<Fast::Texture>(
-        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path, true));
+    const auto texture = LoadTexture(path);
     if (texture == nullptr) {
         return 0;
     }
@@ -88,12 +89,15 @@ ImTextureID LoadIconTexture(const char* path) {
     return gui->GetTextureByName(path);
 }
 
-// A mod item, or the mod item that replaces a vanilla one, shows the icon its mod registered.
+bool FitsTextbox(const Fast::Texture& texture) {
+    return texture.Type == Fast::TextureType::RGBA32bpp && texture.Width == texture.Height &&
+           texture.Height == 32 * texture.VPixelScale;
+}
+
 const char* FindCustomIconPath(RandomizerGet item, const GetItemEntry& entry) {
     const SOHCustomItemDefinition* definition = nullptr;
     if (const char* key = RandoItems_GetKey(item)) {
         definition = CustomItemRegistry_Find(key);
-        // A progressive chain's key is no item: it shows the level it would grant next.
         const char* next = definition == nullptr ? ProgressiveItems_GetNextItem(key, SOH_RANDO_INF_SAVE) : nullptr;
         if (next != nullptr) {
             definition = CustomItemRegistry_Find(next);
@@ -107,7 +111,6 @@ const char* FindCustomIconPath(RandomizerGet item, const GetItemEntry& entry) {
                                  : nullptr;
 }
 
-// Randomizer-only items the plandomizer draws nothing for borrow the icon of their vanilla family.
 const char* FindVanillaIconName(RandomizerGet item) {
     if (item >= RG_DEATH_MOUNTAIN_CRATER_BEAN_SOUL && item <= RG_ZORAS_RIVER_BEAN_SOUL) {
         return "ITEM_BEAN";
@@ -182,18 +185,46 @@ const char* FindVanillaIconName(RandomizerGet item) {
     }
 }
 
-ImTextureID FindFallbackTexture(RandomizerGet item, const GetItemEntry& entry) {
+const char* FindHostIconPath(RandomizerGet item, const GetItemEntry& entry) {
     if (const char* path = FindCustomIconPath(item, entry)) {
-        return LoadIconTexture(path);
+        return path;
     }
-    if (item == RG_ROCS_FEATHER) {
-        return LoadIconTexture(gRocsFeatherTex);
+    return item == RG_ROCS_FEATHER ? gRocsFeatherTex : nullptr;
+}
+
+ImTextureID FindFallbackTexture(RandomizerGet item, const GetItemEntry& entry) {
+    if (const char* path = FindHostIconPath(item, entry)) {
+        return LoadIconTexture(path);
     }
     const char* name = FindVanillaIconName(item);
     return name != nullptr ? Gui()->GetTextureByName(name) : 0;
 }
 
+const char* FindIconPath(RandomizerGet item, const GetItemEntry& entry) {
+    if (const char* path = FindHostIconPath(item, entry)) {
+        return path;
+    }
+    const bool isInventoryItem = entry.modIndex == MOD_NONE && entry.itemId < std::size(gItemIcons);
+    return isInventoryItem ? static_cast<const char*>(gItemIcons[entry.itemId]) : nullptr;
+}
+
 } // namespace
+
+const char* FleetItemDraw_TextboxIconPath(const char* item) {
+    if (item == nullptr) {
+        return nullptr;
+    }
+    const auto found = Rando::StaticData::itemNameToEnum.find(item);
+    if (found == Rando::StaticData::itemNameToEnum.end()) {
+        return nullptr;
+    }
+    const char* path = FindIconPath(found->second, Rando::StaticData::RetrieveItem(found->second).GetGIEntry_Copy());
+    if (path == nullptr) {
+        return nullptr;
+    }
+    const auto texture = LoadTexture(path);
+    return texture != nullptr && FitsTextbox(*texture) ? path : nullptr;
+}
 
 bool FleetItemDraw_Icon(const char* item, FleetItemIcon* icon) {
     if (item == nullptr || icon == nullptr) {
@@ -282,4 +313,11 @@ bool FleetItemDraw_DrawForeign(PlayState* play, const char* owner, const char* i
     gfx->polyXlu.p = static_cast<Gfx*>(request.xluHead);
     gfx->polyXlu.d = static_cast<Gfx*>(request.xluTail);
     return true;
+}
+
+std::string FleetItemDraw_ForeignTextboxIconPath(const char* owner, const char* item) {
+    using FindTextboxIcon = const char* (*)(const char*, const char*);
+    const auto find = reinterpret_cast<FindTextboxIcon>(FleetGame_GetHostFunction("GetItemTextboxIcon"));
+    const char* path = find != nullptr ? find(owner, item) : nullptr;
+    return path != nullptr ? path : "";
 }

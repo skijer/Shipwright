@@ -9,7 +9,7 @@
 namespace SOH {
 typedef struct {
     /* 0x00 */ s16 id;
-    /* 0x02 */ Vec3f pos; // SOH [Unbound] s16 -> f32 (world extent)
+    /* 0x02 */ Vec3f pos;
     /* 0x08 */ Vec3s rot;
     /* 0x0E */ s16 params;
 } ActorEntry; // size = 0x10

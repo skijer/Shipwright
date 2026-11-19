@@ -107,9 +107,6 @@ void aLoadBufferImpl(const void* source_addr, uint16_t dest_addr, uint16_t nbyte
 #endif
 }
 
-// SOH [WASM] Opus and OpusFile have no Emscripten port, and they are reached only from the
-// two functions below (custom streamed Opus audio). Stub them to silence rather than
-// build two codecs from source for the first pass -- see wasm-port.md.
 #ifdef __EMSCRIPTEN__
 
 void aOPUSdecImpl(void* source_addr, uint16_t dest_addr, uint16_t nbytes, struct OpusDecState** decState, int32_t pos,
@@ -172,7 +169,7 @@ void aOPUSFree(struct OpusDecState* dec) {
     free(dec);
 }
 
-#endif // __EMSCRIPTEN__
+#endif
 
 void aSaveBufferImpl(uint16_t source_addr, int16_t* dest_addr, uint16_t nbytes) {
     memcpy(dest_addr, BUF_S16(source_addr), ROUND_DOWN_16(nbytes));

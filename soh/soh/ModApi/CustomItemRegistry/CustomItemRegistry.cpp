@@ -104,7 +104,6 @@ constexpr uint32_t HeldUpdateGraceFrames = 4;
 std::string sPauseItem;
 std::string sPendingGetItem;
 std::string sMessageItem;
-// Notifications borrow icon pointers; keep received paths stable when a mod changes its live icon.
 std::set<std::string> sFastPickupIconPaths;
 uint16_t sNextRuntimeId = RuntimeIdBase;
 
@@ -226,7 +225,6 @@ uint16_t ParseVanillaItem(const std::string& argument) {
     return (uint16_t)item;
 }
 
-// `"<key>"` or `"<key>" <variant>`: the variant names one of that item's pickups.
 std::string ResolveConsoleKey(const std::vector<std::string>& args) {
     const std::string key = ModApi_UnquoteConsoleArgument(args[2]);
     if (args.size() < 4) {
@@ -423,6 +421,16 @@ static void DrawModelPath(PlayState* play, const char* path, bool setupOpa) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// No actor binds segments for a get-item model: one it calls would run the last actor's leftover as opcodes.
+static void DrawGetItemModelPath(PlayState* play, const char* path) {
+    OPEN_DISPS(play->state.gfxCtx);
+    for (u8 segment = 0x08; segment <= 0x0C; segment++) {
+        gSPSegment(POLY_OPA_DISP++, segment, (uintptr_t)gEmptyDL);
+    }
+    CLOSE_DISPS(play->state.gfxCtx);
+    DrawModelPath(play, path, true);
+}
+
 namespace {
 
 const SOHCustomItemDefinition* GetShownItem() {
@@ -435,7 +443,7 @@ void DrawShownGetItemModel(PlayState* play, GetItemEntry* entry) {
         definition = GetShownItem();
     }
     if (definition != nullptr && definition->getItemModelPath != nullptr) {
-        DrawModelPath(play, definition->getItemModelPath, true);
+        DrawGetItemModelPath(play, definition->getItemModelPath);
     }
 }
 
@@ -445,7 +453,12 @@ void BuildGetItemText(uint16_t* textId, bool* loadFromMessageTable) {
         return;
     }
     CustomMessage message(definition->getItemText, TEXTBOX_TYPE_BLUE);
-    message.AutoFormat(ITEM_CUSTOM);
+    // Without an icon to load, the decoder would print the icon code's item byte as a letter.
+    if (CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_TEXTBOX) != nullptr) {
+        message.AutoFormat(ITEM_CUSTOM);
+    } else {
+        message.AutoFormat();
+    }
     message.LoadIntoFont();
     *loadFromMessageTable = false;
 }
@@ -561,7 +574,6 @@ bool IsValidPickupVariant(const SOHCustomPickupVariant* variant) {
     return true;
 }
 
-// The acquisition borrows what the variant leaves out from its item, and its get-item draws like the item's.
 SOHCustomItemDefinition BuildPickupDefinition(const SOHCustomPickupVariant& variant,
                                               const SOHCustomItemDefinition& parent) {
     SOHCustomItemDefinition definition = {};
@@ -652,7 +664,6 @@ bool IsValidDefinition(const SOHCustomItemDefinition* definition) {
     return true;
 }
 
-// Reads the host's copy, where a definition older than these fields left them zeroed.
 bool StoreAllowedForms(RegisteredCustomItem& item) {
     SOHCustomItemDefinition& definition = item.definition;
     if (!FormKeyList::IsValid(definition.allowedForms, definition.allowedFormCount)) {
@@ -700,8 +711,7 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     item->definition.key = item->key.c_str();
     item->definition.getItemEntry.itemId = ITEM_CUSTOM;
     item->definition.getItemEntry.getItemId = GI_CUSTOM;
-    // Every copy of the entry (randomizer checks, drops, shops) names its item: no custom entry is ever looked up
-    // in a table, so tableId is free to carry the runtime id.
+    // No custom entry is ever looked up in a table, so tableId is free to carry the runtime id.
     item->definition.getItemEntry.tableId = item->runtimeId;
     SetString(item->definition.iconPath, item->iconPath, definition->iconPath);
     SetString(item->definition.namePath, item->namePath, definition->namePath);
@@ -789,7 +799,6 @@ bool CustomItemRegistry_RegisterPickupVariant(const SOHCustomPickupVariant* vari
     stored->definition.key = stored->key.c_str();
     stored->definition.itemKey = stored->itemKey.c_str();
     stored->definition.variantKey = stored->variantKey.c_str();
-    // The caller's strings and randomizer block may live on its stack; the registered acquisition owns copies.
     const SOHCustomItemDefinition* registered = FindDefinition(stored->key);
     stored->definition.iconPath = registered->iconPath;
     stored->definition.getItemModelPath = registered->getItemModelPath;
@@ -816,8 +825,51 @@ const char* CustomItemRegistry_FindPickupKey(const char* itemKey, const char* va
     return nullptr;
 }
 
+std::vector<const SOHCustomPickupVariant*> CustomItemRegistry_ListPickupVariants(const char* itemKey) {
+    std::vector<const SOHCustomPickupVariant*> variants;
+    if (itemKey == nullptr) {
+        return variants;
+    }
+    for (const auto& [key, pickup] : sPickupVariants) {
+        if (pickup->itemKey == itemKey) {
+            variants.push_back(&pickup->definition);
+        }
+    }
+    std::sort(variants.begin(), variants.end(), [](const auto* left, const auto* right) {
+        return CustomItemRegistry_GetRuntimeId(left->key) < CustomItemRegistry_GetRuntimeId(right->key);
+    });
+    return variants;
+}
+
 const SOHCustomItemDefinition* CustomItemRegistry_Find(const char* key) {
     return key == nullptr ? nullptr : FindDefinition(key);
+}
+
+static std::string ReadHighlightedName(const char* getItemText) {
+    if (getItemText == nullptr) {
+        return {};
+    }
+    const std::string text = getItemText;
+    const size_t colour = text.find('%');
+    const size_t end = colour == std::string::npos ? colour : text.find('%', colour + 2);
+    if (end == std::string::npos) {
+        return {};
+    }
+    std::string name = text.substr(colour + 2, end - colour - 2);
+    std::replace(name.begin(), name.end(), '&', ' ');
+    const bool isPlain = std::all_of(name.begin(), name.end(), [](unsigned char c) { return c >= ' ' && c <= '~'; });
+    return isPlain ? name : std::string{};
+}
+
+std::string CustomItemRegistry_GetDisplayName(const char* key) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(key);
+    if (definition == nullptr) {
+        return {};
+    }
+    if (definition->displayName != nullptr && definition->displayName[0] != '\0') {
+        return definition->displayName;
+    }
+    return ReadHighlightedName(definition->getItemText);
 }
 
 const GetItemEntry* CustomItemRegistry_FindGetItemEntry(const char* key) {
@@ -971,7 +1023,6 @@ static bool IsWornByOtherPlayer(Player* player, const char* key) {
     return false;
 }
 
-// While another player is drawn, a mod's draw hooks are asking about what that player wears.
 bool CustomItemRegistry_IsWorn(const char* key) {
     if (key == nullptr) {
         return false;
@@ -1091,7 +1142,6 @@ const SOHCustomItemDefinition* CustomItemRegistry_GetActive(void) {
 
 static const char* ResolveOtherPlayerHeldKey(Player* player);
 
-// While another player is drawn, a mod's draw hooks are asking about that player's hand, not the local one.
 const char* CustomItemRegistry_GetHeldKey(void) {
     Player* otherPlayer = FormModel_GetDrawnOtherPlayer();
     if (otherPlayer != nullptr) {
@@ -1177,8 +1227,6 @@ static const char* ResolveOtherPlayerHeldKey(Player* player) {
     return key;
 }
 
-// A mod's drawHeld reads the local player's item state, so another player only gets the static model. An item
-// with an appearance is drawn at its own limb instead (DrawOtherPlayerAppearance).
 static void DrawOtherPlayerHeld(Player* player, PlayState* play) {
     const char* key = ResolveOtherPlayerHeldKey(player);
     const auto* definition = key == nullptr ? nullptr : FindDefinition(key);
@@ -1334,7 +1382,6 @@ bool CustomItemRegistry_Give(PlayState* play, const char* key) {
         sPendingGetItem.clear();
         return false;
     }
-    // PrepareGetItem already selected the resolved stage and its message.
     return true;
 }
 
@@ -1460,7 +1507,6 @@ bool CustomItemRegistry_UpdateDrop(Actor* actor, PlayState* play) {
                SkipCustomGetItem(
                    CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimation"), SGIA_JUNK),
                    definition->getItemEntry.getItemCategory)) {
-        // Same range and eligibility as the normal actor-driven get-item offer.
         if (actor->xzDistToPlayer < 50.0f && std::fabs(actor->yDistToPlayer) < 10.0f &&
             CanReceiveFastCustomItem(play)) {
             GetItemEntry entry = definition->getItemEntry;
@@ -1484,14 +1530,13 @@ bool CustomItemRegistry_DrawDrop(Actor* actor, PlayState* play) {
     if (definition == nullptr) {
         return true;
     }
-    // The scale the randomizer's own get-item drops use, so a mod item lies as large as a vanilla one.
     const f32 dropModelScale = CVarGetFloat(CVAR_RANDOMIZER_ENHANCEMENT("TimeSavers.SkipGetItemAnimationScale"), 10.0f);
     Matrix_Scale(dropModelScale, dropModelScale, dropModelScale, MTXMODE_APPLY);
     func_8002EBCC(actor, play, 0);
     func_8002ED80(actor, play, 0);
     EnItem00_CustomItemsParticles(actor, play, definition->getItemEntry);
     if (definition->getItemEntry.drawFunc == DrawShownGetItemModel) {
-        DrawModelPath(play, definition->getItemModelPath, true);
+        DrawGetItemModelPath(play, definition->getItemModelPath);
     } else {
         GetItemEntry_Draw(play, definition->getItemEntry);
     }

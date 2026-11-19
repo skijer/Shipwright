@@ -10,8 +10,7 @@ void Network::Enable(const char* host, uint16_t port) {
     }
 
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] The connection lives on a receive thread, and the browser build has none:
-    // constructing one aborts. Anchor, Sail and Crowd Control stay off there.
+    // Constructing a receive thread aborts in the browser build.
     SPDLOG_WARN("[Network] Networking is not available in the browser build");
     return;
 #endif
@@ -27,7 +26,6 @@ void Network::Enable(const char* host, uint16_t port) {
         receiveThread.join();
     }
 
-    // Inside Fleet a new thread has no game: the handshake must read this game's settings, not the active game's.
     receiveThread = std::thread([this, game = Ship::GameRegistry::GetCurrent()] {
         Ship::GameScope scope(game);
         ReceiveFromServer();

@@ -103,7 +103,7 @@ s32 EnRiverSound_GetSoundPos(Vec3f* points, s32 numPoints, Vec3f* hearPos, Vec3f
     Vec3f sp54;
     Vec3f vec;
     f32 pointDist = 10000.0f;
-    Vec3f* point; // SOH [Unbound] f32 path points
+    Vec3f* point;
 
     for (i = 0; i < numPoints; i++) {
         f32 dist;

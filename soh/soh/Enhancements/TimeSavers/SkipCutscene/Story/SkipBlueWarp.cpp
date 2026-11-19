@@ -94,8 +94,8 @@ void RegisterShouldPlayBlueWarp() {
         }
 
         bool overrideBlueWarpDestinations =
-            IS_RANDO && (RAND_GET_OPTION(RSK_SHUFFLE_DUNGEON_ENTRANCES) || RAND_GET_OPTION(RSK_SHUFFLE_BOSS_ENTRANCES) ||
-                         FleetRuntime_EntrancesEnabled());
+            IS_RANDO && (RAND_GET_OPTION(RSK_SHUFFLE_DUNGEON_ENTRANCES) ||
+                         RAND_GET_OPTION(RSK_SHUFFLE_BOSS_ENTRANCES) || FleetRuntime_EntrancesEnabled());
 
         // Force blue warp skip on when ER needs to place Link somewhere else.
         // This is preferred over having story cutscenes play in the overworld and then reloading Link somewhere else

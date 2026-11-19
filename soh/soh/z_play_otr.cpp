@@ -27,7 +27,6 @@ Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName) {
 }
 
 extern "C" void OTRPlay_SpawnScene(PlayState* play, s32 sceneId, s32 spawn) {
-    // SOH [Unbound] scene identity comes from SceneDB; a custom boss's arena loads under its slot's scene id
     s32 sourceSceneId = BossRegistry_ResolveSceneSource(sceneId);
     SceneDB::Entry& scene = SceneDB::Instance->RetrieveEntry(sourceSceneId);
 
@@ -70,9 +69,6 @@ void OTRPlay_InitScene(PlayState* play, s32 spawn) {
     play->cUpElfMsgs = nullptr;
     play->setupPathList = nullptr;
     play->numSetupActors = 0;
-    // SOH [Unbound] the fields an Unbound scene document's commands fill are reset here with the vanilla ones:
-    // PlayState is not zero-initialized, a document may omit the command, and the previous scene's command
-    // resources are gone with it.
     play->sequenceCtx.unboundSongSeqId = 0;
     play->sceneMaterialAnims = nullptr;
     play->sceneMaterialAnimCount = 0;

@@ -13,7 +13,7 @@ typedef struct {
 
 typedef struct {
     /* 0x00 */ PolygonBase base;
-    /* 0x01 */ u32 num; // number of dlist entries -- SOH [Unbound] mirrors z64.h
+    /* 0x01 */ u32 num; // number of dlist entries
     /* 0x04 */ void* start;
     /* 0x08 */ void* end;
 } PolygonType0; // size = 0xC
@@ -57,7 +57,7 @@ typedef struct {
 
 typedef struct {
     /* 0x00 */ PolygonBase base;
-    /* 0x01 */ u32 num; // number of dlist entries -- SOH [Unbound] mirrors z64.h
+    /* 0x01 */ u32 num; // number of dlist entries
     /* 0x04 */ void* start;
     /* 0x08 */ void* end;
 } PolygonType2; // size = 0xC
@@ -70,8 +70,8 @@ typedef union {
 } MeshHeader; // "Ground Shape"
 
 typedef struct {
-    /* 0x00 */ Vec3f pos;  // SOH [Unbound] s16 -> f32 (world extent)
-    /* 0x06 */ f32 unk_06; // SOH [Unbound] cull radius, s16 -> f32
+    /* 0x00 */ Vec3f pos;
+    /* 0x06 */ f32 unk_06;
     /* 0x08 */ Gfx* opa;
     /* 0x0C */ Gfx* xlu;
 } PolygonDlist2; // size = 0x8
@@ -100,10 +100,8 @@ class SetMesh : public SceneCommand<MeshHeader> {
     std::vector<BgImage> images;
     MeshHeader meshHeader;
 
-    // SOH [Unbound] Shared by the loaders. The game treats the returned pointer as the display list / image; the
-    // interpreter resolves "__OTR__<path>" when the room is drawn, so the string must outlive the command: it is
-    // kept in `store` (opaPaths / xluPaths / imagePaths), which the caller must `reserve()` before the first call
-    // so the c_str() pointers stay valid. Returns nullptr for an empty path.
+    // The interpreter resolves "__OTR__<path>" at draw time, so `store` must be reserve()d by the caller to keep
+    // the c_str() pointers valid.
     static Gfx* KeepDlistPath(std::vector<std::string>& store, const std::string& path) {
         if (path.empty()) {
             return nullptr;
@@ -112,7 +110,6 @@ class SetMesh : public SceneCommand<MeshHeader> {
         return (Gfx*)store.back().c_str();
     }
 
-    // PolygonType1.single mirrors BgImage minus the id / unk_00 pair.
     void SetSingleImage(const BgImage& image) {
         auto& single = meshHeader.polygon1.single;
         single.source = image.source;

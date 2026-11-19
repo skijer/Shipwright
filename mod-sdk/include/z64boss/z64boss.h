@@ -17,7 +17,6 @@ extern "C" {
 }
 #endif
 
-// True while `key` holds the slot of the loaded scene: spawn the fight from OnSceneInit when this holds.
 static inline bool Z64Boss_IsFightHere(const SOHModApi* api, const char* key, PlayState* play) {
     if (!SOH_MOD_API_HAS(api, GetSceneBoss) || play == NULL || key == NULL) {
         return false;
@@ -41,7 +40,6 @@ static inline void Z64Boss_StartTransition(PlayState* play, int16_t entrance, ui
     play->transitionType = transitionType;
 }
 
-// The credits start from the Chamber of Sages cutscene, loaded as child like Ganon's own ending.
 static inline void Z64Boss_RollCredits(PlayState* play) {
     gSaveContext.nextCutsceneIndex = 0xFFF2;
     play->linkAgeOnLoad = LINK_AGE_CHILD;
@@ -50,7 +48,6 @@ static inline void Z64Boss_RollCredits(PlayState* play) {
 
 static inline void Z64Boss_SpawnRewards(PlayState* play, Actor* boss, int32_t slot, Vec3f warpPos, Vec3f heartPos) {
     if (GameInteractor_Should(VB_SPAWN_BLUE_WARP, true, boss)) {
-        // Barinade's first warp is Ruto, who opens the real one; the blue warp alone skips the sapphire.
         const bool isRutoWarp = slot == SOH_BOSS_SLOT_BARINADE &&
                                 !Flags_GetEventChkInf(EVENTCHKINF_USED_JABU_JABUS_BELLY_BLUE_WARP);
         const bool isChildSlot = (SOH_BOSS_SLOTS_CHILD & SOH_BOSS_SLOT_BIT(slot)) != 0;
@@ -62,8 +59,6 @@ static inline void Z64Boss_SpawnRewards(PlayState* play, Actor* boss, int32_t sl
     }
 }
 
-// Ends the fight as the replaced boss would: room clear, defeat hooks, then its blue warp and heart container,
-// Ganondorf's tower collapse, or Ganon's credits.
 static inline void Z64Boss_Finish(const SOHModApi* api, PlayState* play, Actor* boss, Vec3f warpPos,
                                   Vec3f heartPos) {
     if (!SOH_MOD_API_HAS(api, ReportBossDefeated) || play == NULL || boss == NULL) {

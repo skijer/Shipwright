@@ -7276,7 +7276,7 @@ s32 Camera_UpdateWater(Camera* camera) {
     s16 waterCamIdx;
     s16* quakeId = (s16*)&camera->waterQuakeId;
     Player* player = camera->player;
-    s32 prevBgId; // SOH [Unbound]
+    s32 prevBgId;
 
     if (!(camera->unk_14C & 2) || sCameraSettings[camera->setting].unk_00 & 0x40000000) {
         return 0;

@@ -33,6 +33,8 @@ typedef struct {
     uint8_t columns;
     uint8_t cellCount;
     const SOHLayoutCell* cells;
+    // A form owns one page at most.
+    const char* ownerForm;
 } SOHLayoutPage;
 
 typedef struct {
@@ -49,7 +51,6 @@ bool ModLayout_RegisterVanilla(const SOHLayoutVanilla* entry);
 bool ModLayout_CyclePage(struct PlayState* play, uint8_t kind);
 bool ModLayout_DrawPage(struct PlayState* play, uint8_t kind);
 bool ModLayout_IsActive(uint8_t kind);
-// Inventory slot drawn in an item-page cell this frame, or -1 for a custom item or an empty cell.
 int16_t ModLayout_GetItemCellSlot(uint8_t cell);
 bool ModLayout_BeginCustomEquip(struct PlayState* play, const char* key, uint8_t button, int16_t x, int16_t y);
 void ModLayout_CompleteCustomEquip(struct PlayState* play);

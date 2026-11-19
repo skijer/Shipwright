@@ -81,7 +81,7 @@ typedef struct {
 
 typedef struct {
     u16 scene;
-    s16 room; // SOH [Unbound] u8 -> s16
+    s16 room;
     u32 sceneTime;
     u32 roomTime;
     u8 isRoom;
@@ -110,7 +110,7 @@ typedef struct {
     /*      */ u32 sceneTimer;
     /*      */ u32 roomTimer;
     /*      */ s16 sceneNum;
-    /*      */ s16 roomNum; // SOH [Unbound] s8 -> s16
+    /*      */ s16 roomNum;
     /*      */ bool gameComplete;
     /*      */ u32 itemTimestamp[TIMESTAMP_MAX];
     /*      */ SceneTimestamp sceneTimestamps[8191];
@@ -135,7 +135,7 @@ typedef struct {
 
 typedef struct {
     /* 0x00 */ s16 scene; // Upstream TODO: sceneId
-    /*      */ Vec3f pos; // SOH [Unbound] s16 -> f32 (world extent)
+    /*      */ Vec3f pos;
     /* 0x08 */ s16 angle;
 } HorseData; // size = 0x0A
 
@@ -157,7 +157,7 @@ typedef struct {
     /* 0x0C */ s16 yaw;
     /* 0x0E */ s16 playerParams;
     /* 0x10 */ s16 entranceIndex;
-    /*      */ s16 roomIndex; // SOH [Unbound] u8 -> s16
+    /*      */ s16 roomIndex;
     /* 0x13 */ s8 data;
     /* 0x14 */ u32 tempSwchFlags;
     /* 0x18 */ u32 tempCollectFlags;

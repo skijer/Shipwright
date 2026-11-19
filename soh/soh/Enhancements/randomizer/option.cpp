@@ -80,7 +80,6 @@ const static std::string trickPrefix = "randomizer.tricks.";
 const static std::string empty = "";
 const static std::string error = "[ERROR]";
 
-// Mod options take keys past the builtin enum, which have no "RSK_" name to build a lang key from.
 static std::string MakeSettingLangPart(RandomizerSettingKey key) {
     std::string_view enumName = EnumToString(key);
     if (enumName.size() <= 4) {

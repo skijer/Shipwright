@@ -9,8 +9,6 @@ from pathlib import Path
 
 import sign_request
 
-# The queue lives in issue labels and in markers inside the workflow's own comments, so a run that is cancelled
-# or fails never loses a request. Each modder keeps one issue open for good: it is their mods' page in the store.
 LABEL_REQUEST = "sign-mod"
 LABEL_QUEUED = "sign-queued"
 LABEL_AWAITING = "awaiting-approval"

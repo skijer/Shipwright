@@ -22,9 +22,6 @@ size_t CountAssetFiles(const std::string& ymlDir);
 std::string Extract(std::vector<uint8_t> rom, const std::string& srcDir, const std::string& destDir,
                     const std::string& portVersion, std::atomic<size_t>* progress);
 
-// SOH [WASM] The same, reporting each asset file as it finishes parsing to a callback rather
-// than a counter, for a caller with no other thread to poll a counter from. onError, if set,
-// receives the reason when extraction throws.
 std::string ExtractWithCallbacks(std::vector<uint8_t> rom, const std::string& srcDir, const std::string& destDir,
                                  const std::string& portVersion, const std::function<void()>& onFile,
                                  const std::function<void(const std::string&)>& onError = nullptr);

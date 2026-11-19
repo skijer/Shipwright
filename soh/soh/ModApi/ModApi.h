@@ -217,13 +217,13 @@ typedef struct {
     void (*StopNetRoomCountdown)(const char* owner);
     bool (*SetCustomItemWorn)(const char* key, bool worn);
     bool (*IsCustomItemWorn)(const char* key);
-    // Frame-global renderer parameters; actor scoping and key selection are mod policy.
     void (*SetCelShadingRamp)(float center, float softness, float highlight, float shadow, bool debugBands);
     bool (*RegisterProgressiveChain)(const SOHProgressiveChain* chain);
     uint16_t (*GetProgressiveLevel)(const char* key, SOHRandoInfBank bank);
     const char* (*GetNextProgressiveItem)(const char* key, SOHRandoInfBank bank);
     bool (*GrantLogic)(const SOHLogicGrant* grant);
     bool (*IsCustomItemFormAllowed)(const char* key);
+    uint32_t (*ReadModsFolderFiles)(const char* extensions, SOHArchiveFileFunc visit, void* userData);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \
@@ -262,8 +262,8 @@ void ModApi_SetCurrentMod(const std::string& name);
 void ModApi_ClearCurrentMod();
 std::string ModApi_GetCurrentMod();
 std::string ModApi_GetCatalogFingerprint();
-// SOH [Unbound] Writes what mods registered in C (items, actor types) as JSON for tools such as Nocturne.
 bool ModApi_WriteRegistry(const std::filesystem::path& path);
+bool ModApi_PublishHostService(const char* name, void* function);
 
 #endif
 

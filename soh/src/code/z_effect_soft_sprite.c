@@ -307,7 +307,6 @@ void EffectSs_DrawAll(PlayState* play) {
         if (sEffectSsInfo.table[i].life > -1) {
             Vec3f* pos = &sEffectSsInfo.table[i].pos;
 
-            // SOH [Unbound] was +/-32000
             if ((pos->x > BGCHECK_XYZ_ABSMAX) || (pos->x < -BGCHECK_XYZ_ABSMAX) || (pos->y > BGCHECK_XYZ_ABSMAX) ||
                 (pos->y < -BGCHECK_XYZ_ABSMAX) || (pos->z > BGCHECK_XYZ_ABSMAX) || (pos->z < -BGCHECK_XYZ_ABSMAX)) {
                 osSyncPrintf(VT_FGCOL(RED));

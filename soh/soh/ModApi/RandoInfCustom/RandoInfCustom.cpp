@@ -155,7 +155,6 @@ void RandoInfCustom_SetByKey(const char* key, bool state) {
     RandoInfCustom_Set(SOH_RANDO_INF_SAVE, RandoInfCustom_Register(key), state);
 }
 
-// SOH [Unbound] C entry point for mods: SoH 9.3.0 dropped its own wrapper around this lookup.
 extern "C" RandomizerInf Randomizer_GetRandomizerInfFromCheck(RandomizerCheck check) {
     return OTRGlobals::Instance->gRandomizer->GetRandomizerInfFromCheck(check);
 }

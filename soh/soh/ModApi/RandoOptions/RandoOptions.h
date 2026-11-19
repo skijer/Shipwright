@@ -14,6 +14,10 @@ typedef enum {
     SOH_MOD_RANDO_WIDGET_SLIDER = 1,
 } SOHModRandoWidget;
 
+typedef enum {
+    SOH_MOD_RANDO_OPTION_HIDDEN_FROM_RANDO_MENU = 1 << 0,
+} SOHModRandoOptionFlags;
+
 typedef struct {
     uint32_t structSize;
     const char* key;
@@ -23,6 +27,7 @@ typedef struct {
     uint32_t valueCount;
     uint8_t defaultValue;
     uint8_t widget;
+    uint32_t flags;
 } SOHModRandoOption;
 
 #define SOH_MOD_RANDO_OPTION_MIN_SIZE \

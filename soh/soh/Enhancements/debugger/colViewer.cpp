@@ -388,7 +388,7 @@ void DrawDynapoly(std::vector<Gfx>& dl, CollisionHeader* col, int32_t bgId) {
     // This saves several hundred commands in larger scenes
     bool previousPoly = false;
 
-    for (u32 i = 0; i < col->numPolygons; i++) { // SOH [Unbound] numPolygons is u32
+    for (u32 i = 0; i < col->numPolygons; i++) {
         CollisionPoly* poly = &col->polyList[i];
 
         if (SurfaceType_IsHookshotSurface(&gPlayState->colCtx, poly, bgId)) {
@@ -422,8 +422,7 @@ void DrawDynapoly(std::vector<Gfx>& dl, CollisionHeader* col, int32_t bgId) {
         lastColorG = color.g;
         lastColorB = color.b;
 
-        // SOH [Unbound] collision vertices are s32, and so is Vtx.ob (GBI_S32_VTX), so the overlay can draw a
-        // scene of any size. Casting to s16 here would wrap on exactly the large scenes this fork exists for.
+        // Vertices stay s32 (GBI_S32_VTX); casting to s16 would wrap on large scenes.
         Vec3i* va = &col->vtxList[COLPOLY_VTX_INDEX(poly->flags_vIA)];
         Vec3i* vb = &col->vtxList[COLPOLY_VTX_INDEX(poly->flags_vIB)];
         Vec3i* vc = &col->vtxList[COLPOLY_VTX_INDEX(poly->vIC)];
@@ -592,7 +591,7 @@ void DrawColCheckList(std::vector<Gfx>& dl, Collider** objects, int32_t count) {
                     SkinMatrix_SetTranslate(&mf, sph->dim.worldSphere.center.x, sph->dim.worldSphere.center.y,
                                             sph->dim.worldSphere.center.z);
                     MtxF ms;
-                    f32 radius = sph->dim.worldSphere.radius == 0 ? 1.0f : sph->dim.worldSphere.radius; // SOH [Unbound]
+                    f32 radius = sph->dim.worldSphere.radius == 0 ? 1.0f : sph->dim.worldSphere.radius;
                     SkinMatrix_SetScale(&ms, radius / 128.0f, radius / 128.0f, radius / 128.0f);
                     MtxF dest;
                     SkinMatrix_MtxFMtxFMult(&mf, &ms, &dest);
@@ -613,7 +612,7 @@ void DrawColCheckList(std::vector<Gfx>& dl, Collider** objects, int32_t count) {
                                         static_cast<f32>(cyl->dim.pos.y + cyl->dim.yShift),
                                         static_cast<f32>(cyl->dim.pos.z));
                 MtxF ms;
-                f32 radius = cyl->dim.radius == 0 ? 1.0f : cyl->dim.radius; // SOH [Unbound] f32
+                f32 radius = cyl->dim.radius == 0 ? 1.0f : cyl->dim.radius;
                 SkinMatrix_SetScale(&ms, radius / 128.0f, cyl->dim.height / 128.0f, radius / 128.0f);
                 MtxF dest;
                 SkinMatrix_MtxFMtxFMult(&mt, &ms, &dest);
@@ -683,7 +682,7 @@ void DrawColCheckCollision() {
 // Draws a waterbox
 void DrawWaterbox(std::vector<Gfx>& dl, WaterBox* water, float water_max_depth = -4000.0f) {
     // Skip waterboxes that would be disabled in current room
-    int32_t room = water->room; // SOH [Unbound]
+    int32_t room = water->room;
     if ((room != gPlayState->roomCtx.curRoom.num) && (room != -1)) {
         return;
     }

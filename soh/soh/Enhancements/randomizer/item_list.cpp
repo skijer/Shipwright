@@ -515,6 +515,50 @@ void Rando::StaticData::InitItemTable() {
     itemTable[RG_ROCS_FEATHER] =                        Item(RG_ROCS_FEATHER,                     Text{ "Roc's Feather", "Plume de Roc", "Greifenfeder" },                                                                             ITEMTYPE_ITEM,              0xE0,                 true,  LOGIC_ROCS_FEATHER,                 RHT_ROCS_FEATHER,                      RG_ROCS_FEATHER,                      OBJECT_GI_BOMB_2,       GID_STONE_OF_AGONY,   TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_LONG,  ITEM_CATEGORY_MAJOR,  MOD_RANDOMIZER, {"a ", "la ", "ein "}).CustomIcon(gRocsFeatherTex);
     itemTable[RG_ROCS_FEATHER].SetCustomDrawFunc(Randomizer_DrawRocsFeather);
 
+    const std::pair<RandomizerGet, Text> enemySouls[] = {
+        { RG_SOUL_ENEMY_ANUBIS,             Text{ "Soul of Anubis", "Âme des Anubis", "Anubis-Seele" } },
+        { RG_SOUL_ENEMY_ARMOS,              Text{ "Soul of Armos", "Âme des Armos", "Armos-Seele" } },
+        { RG_SOUL_ENEMY_BARI,               Text{ "Soul of Baris", "Âme des Baris", "Bari-Seele" } },
+        { RG_SOUL_ENEMY_BEAMOS,             Text{ "Soul of Beamos", "Âme des Beamos", "Beamos-Seele" } },
+        { RG_SOUL_ENEMY_BIG_OCTO,           Text{ "Soul of Big Octo", "Âme du Big Octo", "Big-Octo-Seele" } },
+        { RG_SOUL_ENEMY_BUBBLE,             Text{ "Soul of Bubbles", "Âme des Bubbles", "Bubble-Seele" } },
+        { RG_SOUL_ENEMY_DARK_LINK,          Text{ "Soul of Dark Link", "Âme de Dark Link", "Dark-Link-Seele" } },
+        { RG_SOUL_ENEMY_DEAD_HAND,          Text{ "Soul of Dead Hand", "Âme de Dead Hand", "Dead-Hand-Seele" } },
+        { RG_SOUL_ENEMY_DEKU_BABA,          Text{ "Soul of Deku Babas", "Âme des Deku Babas", "Deku-Baba-Seele" } },
+        { RG_SOUL_ENEMY_DODONGO,            Text{ "Soul of Dodongos", "Âme des Dodongos", "Dodongo-Seele" } },
+        { RG_SOUL_ENEMY_FLARE_DANCER,       Text{ "Soul of Flare Dancers", "Âme des Flare Dancers", "Flare-Dancer-Seele" } },
+        { RG_SOUL_ENEMY_FREEZARD,           Text{ "Soul of Freezards", "Âme des Freezards", "Freezard-Seele" } },
+        { RG_SOUL_ENEMY_GERUDO_FIGHTER,     Text{ "Soul of Gerudo Fighters", "Âme des Guerrières Gerudo", "Gerudo-Kriegerinnen-Seele" } },
+        { RG_SOUL_ENEMY_GOHMA_LARVA,        Text{ "Soul of Gohma Larvae", "Âme des Larves de Gohma", "Gohma-Larven-Seele" } },
+        { RG_SOUL_ENEMY_GUAY,               Text{ "Soul of Guays", "Âme des Guays", "Guay-Seele" } },
+        { RG_SOUL_ENEMY_IRON_KNUCKLE,       Text{ "Soul of Iron Knuckles", "Âme des Iron Knuckles", "Eisenprinz-Seele" } },
+        { RG_SOUL_ENEMY_KEESE,              Text{ "Soul of Keese", "Âme des Keese", "Keese-Seele" } },
+        { RG_SOUL_ENEMY_LEEVER,             Text{ "Soul of Leevers", "Âme des Leevers", "Leever-Seele" } },
+        { RG_SOUL_ENEMY_LIKE_LIKE,          Text{ "Soul of Like Likes", "Âme des Like Likes", "Like-Like-Seele" } },
+        { RG_SOUL_ENEMY_LIZALFOS,           Text{ "Soul of Lizalfos", "Âme des Lézalfos", "Echsalfos-Seele" } },
+        { RG_SOUL_ENEMY_MAD_SCRUB,          Text{ "Soul of Mad Scrubs", "Âme des Pestes Mojo", "Deku-Ranger-Seele" } },
+        { RG_SOUL_ENEMY_OCTOROK,            Text{ "Soul of Octoroks", "Âme des Octoroks", "Oktorok-Seele" } },
+        { RG_SOUL_ENEMY_PARASITIC_TENTACLE, Text{ "Soul of Parasitic Tentacles", "Âme des Tentacules", "Tentakel-Seele" } },
+        { RG_SOUL_ENEMY_PEAHAT,             Text{ "Soul of Peahats", "Âme des Peahats", "Peahat-Seele" } },
+        { RG_SOUL_ENEMY_POE,                Text{ "Soul of Poes", "Âme des Esprits", "Irrlicht-Seele" } },
+        { RG_SOUL_ENEMY_REDEAD,             Text{ "Soul of Redeads", "Âme des Effrois", "Zombie-Seele" } },
+        { RG_SOUL_ENEMY_SHABOM,             Text{ "Soul of Shaboms", "Âme des Shaboms", "Shabom-Seele" } },
+        { RG_SOUL_ENEMY_SHELLBLADE,         Text{ "Soul of Shellblades", "Âme des Shellblades", "Muschel-Seele" } },
+        { RG_SOUL_ENEMY_SKULLTULA,          Text{ "Soul of Skulltulas", "Âme des Skulltulas", "Skulltula-Seele" } },
+        { RG_SOUL_ENEMY_SPIKE,              Text{ "Soul of Spikes", "Âme des Spikes", "Stachelkugel-Seele" } },
+        { RG_SOUL_ENEMY_STALCHILD,          Text{ "Soul of Stalchildren", "Âme des Stalchildren", "Knochengänger-Seele" } },
+        { RG_SOUL_ENEMY_STALFOS,            Text{ "Soul of Stalfos", "Âme des Stalfos", "Stalfos-Seele" } },
+        { RG_SOUL_ENEMY_STINGER,            Text{ "Soul of Stingers", "Âme des Stingers", "Stinger-Seele" } },
+        { RG_SOUL_ENEMY_TEKTITE,            Text{ "Soul of Tektites", "Âme des Araknons", "Arachno-Seele" } },
+        { RG_SOUL_ENEMY_TORCH_SLUG,         Text{ "Soul of Torch Slugs", "Âme des Torch Slugs", "Fackelschnecken-Seele" } },
+        { RG_SOUL_ENEMY_WALLMASTER,         Text{ "Soul of Wallmasters", "Âme des Wallmasters", "Grapscher-Seele" } },
+        { RG_SOUL_ENEMY_WOLFOS,             Text{ "Soul of Wolfos", "Âme des Wolfos", "Wolfos-Seele" } },
+    };
+    for (const auto& [soul, name] : enemySouls) {
+        itemTable[soul] = Item(soul, name, ITEMTYPE_ITEM, 0xE0, true, LOGIC_NONE, RHT_ENEMY_SOUL, soul, OBJECT_GI_SUTARU, GID_SKULL_TOKEN, TEXT_RANDOMIZER_CUSTOM_ITEM, 0x80, CHEST_ANIM_LONG, ITEM_CATEGORY_LESSER, MOD_RANDOMIZER, {}, "%r").CustomIcon(gBossSoulTex);
+        itemTable[soul].SetCustomDrawFunc(Randomizer_DrawEnemySoul);
+    }
+
     // clang-format on
 
     RandoItems_BuildItemTable();

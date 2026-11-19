@@ -16,6 +16,7 @@ bool FormTransform_IsActive(void);
 
 void FormTransform_Init();
 bool FormTransform_Begin(const SOHFormDefinition* from, const SOHFormDefinition* to);
+void FormTransform_PlayInstantFlash(void);
 #endif
 
 #endif

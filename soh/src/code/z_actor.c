@@ -90,8 +90,7 @@
 
 static CollisionPoly* sCurCeilingPoly;
 static s32 sCurCeilingBgId;
-// SOH [Unbound] Transition-actor list index for the Actor_Spawn in flight. It has to be a side channel: the
-// actor's Init runs inside Actor_Spawn and door actors read their list index there, before Actor_Spawn returns.
+// Side channel: door actors read their list index in Init, before Actor_Spawn returns.
 static s32 sSpawnTransitionIndex = -1;
 
 // Used for animating the ice trap on the "Get Item" model.
@@ -558,7 +557,9 @@ void Attention_Draw(TargetContext* targetCtx, PlayState* play) {
         Matrix_RotateY((f32)((u16)(play->gameplayFrames * 3000)) * (M_PI / 0x8000), MTXMODE_APPLY);
         Matrix_Scale((iREG(27) + 35) / 1000.0f, (iREG(28) + 60) / 1000.0f, (iREG(29) + 50) / 1000.0f, MTXMODE_APPLY);
 
-        gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, naviColor->inner.r, naviColor->inner.g, naviColor->inner.b, 255);
+        if (GameInteractor_Should(VB_DRAW_LOCK_ON_ARROW, true, actor)) {
+            gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, naviColor->inner.r, naviColor->inner.g, naviColor->inner.b, 255);
+        }
         gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
         gSPDisplayList(POLY_XLU_DISP++, gZTargetArrowDL);
         FrameInterpolation_RecordCloseChild();
@@ -766,7 +767,6 @@ void Flags_SetTreasure(PlayState* play, s32 flag) {
  * Tests if current scene clear flag is set.
  */
 s32 Flags_GetClear(PlayState* play, s32 flag) {
-    // SOH [Unbound] Clear flags are keyed by room; rooms >= 32 live in the registry's growable store.
     if (flag >= 32) {
         return SceneFlagsExt_Get(play->sceneNum, SCENE_FLAGS_EXT_CLEAR, flag);
     }
@@ -778,7 +778,7 @@ s32 Flags_GetClear(PlayState* play, s32 flag) {
  */
 void Flags_SetClear(PlayState* play, s32 flag) {
     u8 previouslyOff = !Flags_GetClear(play, flag);
-    if (flag >= 32) { // SOH [Unbound]
+    if (flag >= 32) {
         SceneFlagsExt_Set(play->sceneNum, SCENE_FLAGS_EXT_CLEAR, flag);
     } else {
         play->actorCtx.flags.clear |= (1 << flag);
@@ -794,7 +794,7 @@ void Flags_SetClear(PlayState* play, s32 flag) {
  */
 void Flags_UnsetClear(PlayState* play, s32 flag) {
     u8 previouslyOn = Flags_GetClear(play, flag);
-    if (flag >= 32) { // SOH [Unbound]
+    if (flag >= 32) {
         SceneFlagsExt_Unset(play->sceneNum, SCENE_FLAGS_EXT_CLEAR, flag);
     } else {
         play->actorCtx.flags.clear &= ~(1 << flag);
@@ -809,7 +809,7 @@ void Flags_UnsetClear(PlayState* play, s32 flag) {
  * Tests if current scene temp clear flag is set.
  */
 s32 Flags_GetTempClear(PlayState* play, s32 flag) {
-    if (flag >= 32) { // SOH [Unbound]
+    if (flag >= 32) {
         return SceneFlagsExt_Get(play->sceneNum, SCENE_FLAGS_EXT_TEMP_CLEAR, flag);
     }
     return play->actorCtx.flags.tempClear & (1 << flag);
@@ -819,7 +819,7 @@ s32 Flags_GetTempClear(PlayState* play, s32 flag) {
  * Sets current scene temp clear flag.
  */
 void Flags_SetTempClear(PlayState* play, s32 flag) {
-    if (flag >= 32) { // SOH [Unbound]
+    if (flag >= 32) {
         SceneFlagsExt_Set(play->sceneNum, SCENE_FLAGS_EXT_TEMP_CLEAR, flag);
         return;
     }
@@ -830,7 +830,7 @@ void Flags_SetTempClear(PlayState* play, s32 flag) {
  * Unsets current scene temp clear flag.
  */
 void Flags_UnsetTempClear(PlayState* play, s32 flag) {
-    if (flag >= 32) { // SOH [Unbound]
+    if (flag >= 32) {
         SceneFlagsExt_Unset(play->sceneNum, SCENE_FLAGS_EXT_TEMP_CLEAR, flag);
         return;
     }
@@ -1115,7 +1115,6 @@ void TitleCard_InitPlaceName(PlayState* play, TitleCardContext* titleCtx, void* 
         texture = newName;
     }
 
-    // SOH [Unbound] custom scenes may register their own title card texture
     {
         const char* customTexture = SceneDB_GetTitleCardTexture(play->sceneNum);
         if (customTexture != NULL) {
@@ -2598,8 +2597,8 @@ void Actor_InitContext(PlayState* play, ActorContext* actorCtx, ActorEntry* acto
     SavedSceneFlags* savedSceneFlags;
     s32 i;
 
-    savedSceneFlags = SceneFlags_Get(play->sceneNum); // SOH [Unbound]
-    SceneFlagsExt_LoadClear(play->sceneNum);          // SOH [Unbound] clear/temp flags for rooms >= 32
+    savedSceneFlags = SceneFlags_Get(play->sceneNum);
+    SceneFlagsExt_LoadClear(play->sceneNum);
 
     memset(actorCtx, 0, sizeof(*actorCtx));
 
@@ -3071,9 +3070,6 @@ s32 Ship_CalcShouldDrawAndUpdate(PlayState* play, Actor* actor, Vec3f* projected
     f32 multiplier = CVarGetInteger(CVAR_ENHANCEMENT("DisableDrawDistance"), 1);
     multiplier = MAX(multiplier, 1);
 
-    // SOH [Unbound] Scenes that raise their draw distance past the vanilla 12800 get actor culling scaled to match,
-    // otherwise a far horizon shows empty terrain (vanilla uncull zones were tuned to the 12800 far plane).
-    // Stopgap: a per-scene cull scale in the lighting entry would be the honest format field.
     if (play->lightCtx.worldFog && play->lightCtx.zFar > 12800.0f) {
         multiplier *= play->lightCtx.zFar / 12800.0f;
     }
@@ -3428,8 +3424,6 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
 
     ActorDBEntry* dbEntry = ActorDB_Retrieve(actorId);
 
-    // SOH [Unbound] An id no actor answers to (a scene's typo, a gap below the custom actor types) spawns nothing.
-    // This was only an assert, which release builds drop: they then allocated a zero-size actor and wrote past it.
     if (!dbEntry->valid) {
         LUSLOG_ERROR("Actor_Spawn: no actor has id %#x", (u16)actorId);
         return NULL;
@@ -3473,8 +3467,6 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     SetActorListIndex(actor, -1);
     // #endregion
 
-    // SOH [Unbound] No per-type cap: numLoaded is an s32, and a room may hold hundreds of one prop (unbound-docs
-    // SPEC §9). Vanilla asserted fewer than 255, a count from its 8-bit overlay client counter.
     dbEntry->numLoaded++;
 
     if (HREG(20) != 0) {
@@ -3498,7 +3490,7 @@ Actor* Actor_Spawn(ActorContext* actorCtx, PlayState* play, s16 actorId, f32 pos
     actor->update = dbEntry->update;
     actor->draw = dbEntry->draw;
     actor->room = play->roomCtx.curRoom.num;
-    actor->transitionIndex = sSpawnTransitionIndex; // SOH [Unbound] -1 unless spawned from the transition list
+    actor->transitionIndex = sSpawnTransitionIndex;
     sSpawnTransitionIndex = -1;
     actor->home.pos.x = posX;
     actor->home.pos.y = posY;
@@ -3543,7 +3535,7 @@ Actor* Actor_SpawnAsChild(ActorContext* actorCtx, Actor* parent, PlayState* play
 
 void Actor_SpawnTransitionActors(PlayState* play, ActorContext* actorCtx) {
     TransitionActorEntry* transitionActor;
-    u16 numActors; // SOH [Unbound]
+    u16 numActors;
     s32 i;
 
     transitionActor = play->transiActorCtx.list;
@@ -3557,9 +3549,7 @@ void Actor_SpawnTransitionActors(PlayState* play, ActorContext* actorCtx) {
                 ((transitionActor->sides[1].room >= 0) &&
                  ((transitionActor->sides[1].room == play->roomCtx.curRoom.num) ||
                   (transitionActor->sides[1].room == play->roomCtx.prevRoom.num)))) {
-                // SOH [Unbound] The list index travels on Actor.transitionIndex (see TRANSITION_ACTOR_INDEX);
-                // the 6-bit packing into params is kept for the first 64 so untouched readers still work.
-                // Scene data leaves bits 10-15 clear, so masking them is equivalent to vanilla's add.
+                // The 6-bit packing into params is kept for the first 64 so untouched readers still work.
                 sSpawnTransitionIndex = i;
                 Actor_Spawn(actorCtx, play, (s16)(transitionActor->id & 0x1FFF), transitionActor->pos.x,
                             transitionActor->pos.y, transitionActor->pos.z, 0, transitionActor->rotY, 0,
@@ -5162,7 +5152,6 @@ s32 Flags_GetRandomizerInf(RandomizerInf flag) {
     }
     */
 
-    // SOH [Unbound] Flags above RAND_INF_MAX belong to mod checks and are saved by key (RandoInfCustom).
     if (flag > RAND_INF_MAX) {
         return RandoInfCustom_Get(SOH_RANDO_INF_SAVE, (u16)(flag - RAND_INF_MAX));
     }

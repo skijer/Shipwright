@@ -86,7 +86,7 @@ void func_80095AB4(PlayState* play, Room* room, u32 flags) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-#define SHAPE_SORT_MAX 1024 // SOH [Unbound] was 64
+#define SHAPE_SORT_MAX 1024
 
 typedef struct struct_80095D04 {
     /* 0x00 */ PolygonDlist2* unk_00;
@@ -106,7 +106,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
     s32 pad;
     struct_80095D04* spA4;
     s32 phi_v1;
-    s32 numEntries; // SOH [Unbound] entries actually sorted/drawn (SHAPE_SORT_MAX cap)
+    s32 numEntries;
     s32 sp9C;
     Vec3f sp90;
     Vec3f sp84;
@@ -134,7 +134,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
     polygonDlist = SEGMENTED_TO_VIRTUAL(polygon2->start);
     spA4 = spB8;
 
-    if (polygon2->num > SHAPE_SORT_MAX) { // SOH [Unbound] SPEC.md §9: type-2 mesh entries are capped
+    if (polygon2->num > SHAPE_SORT_MAX) {
         osSyncPrintf("[Unbound] room %d: %d mesh entries exceed SHAPE_SORT_MAX (%d); extra entries are not drawn\n",
                      room->num, polygon2->num, SHAPE_SORT_MAX);
     }
@@ -148,7 +148,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
         SkinMatrix_Vec3fMtxFMultXYZW(&play->viewProjectionMtxF, &sp90, &sp84, &sp80);
         if (-polygonDlist->unk_06 < sp84.z) {
             temp_f2 = sp84.z - polygonDlist->unk_06;
-            if (temp_f2 < play->lightCtx.zFar) { // SOH [Unbound] was fogFar (<= 12800)
+            if (temp_f2 < play->lightCtx.zFar) {
                 phi_v0 = spB4;
                 spA4->unk_00 = polygonDlist;
                 spA4->unk_04 = temp_f2;

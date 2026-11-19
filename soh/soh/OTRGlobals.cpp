@@ -62,7 +62,6 @@
 #include <fast/Fast3dGui.h>
 #include <fast/debug/GfxDebugger.h>
 
-// SOH [WASM] Emscripten joins the consoles in not building the ROM extractor.
 #if not defined(__SWITCH__) && not defined(__WIIU__) && not defined(__EMSCRIPTEN__)
 #include "Extractor/Extract.h"
 #endif
@@ -143,7 +142,6 @@ const uint32_t defaultImGuiScale = 1;
 
 const float imguiScaleOptionToValue[4] = { 0.75f, 1.0f, 1.5f, 2.0f };
 
-// SOH [Unbound] `--export-unbound <out.o2r>`: convert the mounted vanilla archive and exit (see InitOTR)
 static constexpr const char* kUnboundExportFlag = "--export-unbound";
 
 bool SoH_HandleConfigDrop(char* filePath);
@@ -292,10 +290,8 @@ static bool VerifyArchiveVersion(OTRVersion version);
 std::string portArchivePath = "";
 static bool sohArchiveVersionMatch = false;
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] Audio queue target; see OTRGlobals::Initialize.
 #define WASM_AUDIO_DESIRED_BUFFERED 4320
-// SOH [WASM] Both browser players (WebAudioAudioPlayer, and SDLAudioPlayer::DoPlay as the
-// fallback) discard a whole update when this many frames are already queued.
+// Both browser audio players discard a whole update when this many frames are already queued.
 #define WASM_AUDIO_DROP_THRESHOLD 6000
 #endif
 
@@ -307,7 +303,6 @@ static void LocatePortArchive() {
                              portArchiveVersion.patch == gBuildVersionPatch;
 }
 
-// SOH [Fleet] Runs in the window Fleet opened, with Ship's own resources registered beside the other game's.
 static Ship::Context* JoinFleetContext() {
     Ship::Context* context = Ship::Context::GetRawInstance();
     FleetGame_JoinHostContext();
@@ -382,13 +377,11 @@ OTRGlobals::OTRGlobals() {
     previousImGuiScaleIndex = -1;
     previousImGuiScale = defaultImGuiScale;
     ScaleImGui();
-    // Fleet's backend already built the font atlas; the fonts added above need it rebuilt.
     if (hosted) {
         context->GetWindow()->GetGui()->RebuildFontTexture();
     }
 }
 
-// Assumes Fleet attached Ship and created the Context: Ship joins it with its own settings and archive.
 OTRGlobals::OTRGlobals(RandoOnly) {
     context = Ship::Context::GetRawInstance();
     FleetGame_JoinHostContext();
@@ -417,7 +410,6 @@ void OTRGlobals::InitRandoHeadless() {
     Instance->gRandoContext->InitStaticData();
     Rando::Settings::GetInstance()->AssignContext(Instance->gRandoContext);
     Rando::StaticData::InitItemTable();
-    // The full boot registers these through ShipInit; they are plain tables.
     Rando::StaticData::RegisterSongLocations();
     Rando::StaticData::RegisterBeehiveLocations();
     Rando::StaticData::RegisterCowLocations();
@@ -435,19 +427,29 @@ void OTRGlobals::InitRandoHeadless() {
     Rando::StaticData::RegisterBeggarLocations();
     Rando::StaticData::RegisterIcicleLocations();
     Rando::StaticData::RegisterRedIceLocations();
+    Rando::StaticData::RegisterEnemyDropLocations();
     Rando::StaticData::InitHashMaps();
     Rando::Settings::GetInstance()->CreateOptions();
     Instance->gRandoContext->AddExcludedOptions();
     GameInteractor::Instance = new GameInteractor();
     SaveManager::Instance = new SaveManager();
     ActorDB::Instance = new ActorDB();
+    auto archives = Instance->context->GetResourceManager()->GetArchiveManager();
     for (const char* file : { "oot-mq.o2r", "oot.o2r", "oot-unbound.o2r" }) {
         const auto archive = Ship::Context::LocateFileAcrossAppDirs(file);
         if (!archive.empty()) {
-            Instance->context->GetResourceManager()->GetArchiveManager()->AddArchive(archive);
+            archives->AddArchive(archive);
         }
     }
-    // Mods check their resources as they load (MM masks need mm.o2r): the generator must see the files the game does.
+    // The seed generator has no mod menu to mount the mods folder.
+    std::error_code error;
+    for (const auto& entry :
+         std::filesystem::directory_iterator(Ship::Context::GetPathRelativeToAppDirectory("mods"), error)) {
+        const std::string extension = entry.path().extension().string();
+        if (entry.is_regular_file() && (extension == ".o2r" || extension == ".otr")) {
+            archives->AddArchive(entry.path().string());
+        }
+    }
     SinkForeignGameArchives();
     OTRExtScanner();
     InitHeadlessItemTables();
@@ -515,13 +517,10 @@ namespace SohGui {
 extern std::shared_ptr<SohGui::SohMenu> mSohMenu;
 }
 
-// Stops a launch that cannot go on, telling the player (desktop) or the embedding page (browser) why.
 static void AbortStartup(const char* title, const std::string& problem) {
     SPDLOG_ERROR("{}: {}", title, problem);
 #if defined(__EMSCRIPTEN__)
     Soh_EmbedderError(problem.c_str());
-    // Unwinds out of main() but keeps the runtime, so the page keeps its console and can
-    // show the message. Nothing on this stack catches the unwind.
     emscripten_exit_with_live_runtime();
 #else
 #if !defined(__SWITCH__) && !defined(__WIIU__)
@@ -545,10 +544,6 @@ static bool RemoveArchiveAcrossAppDirs(const std::string& fileName) {
 }
 
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] The checks RunExtract makes on desktop before it offers to extract, for a build
-// that cannot extract. Returns why the game cannot start, or an empty string. SOH [Unbound] A
-// standalone oot-unbound.o2r is a game archive too; it is checked once it is mounted
-// (MountUnboundBase): base version, format version and SoH major (SPEC.md §10.1).
 static std::string BrowserArchiveProblem(bool portArchiveMatches, OTRVersion vanilla, OTRVersion mq,
                                          OTRVersion unboundBase) {
     if (!portArchiveMatches) {
@@ -567,16 +562,7 @@ static std::string BrowserArchiveProblem(bool portArchiveMatches, OTRVersion van
 
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] There is no ROM to extract from in a browser tab: oot.o2r and soh.o2r are
-    // mounted into the filesystem before main() runs. Compiling this body out also removes
-    // its `while (!extractDone)` frame-pump, which would hang a browser tab outright -- it
-    // draws popups in a loop that never returns to the event loop, so the click that would
-    // dismiss one could never arrive. See wasm-port.md.
-    //
-    // The checks do carry over. Desktop will not start on a port archive from another build
-    // or a game archive from an incompatible version, and offers to extract when there is
-    // none; without them a missing or stale oot.o2r failed at the first resource load, in a
-    // loop that never returned to the page and that no event reported.
+    // The extract loop below pumps frames without returning to the browser event loop, which would hang the tab.
     std::string problem = BrowserArchiveProblem(sohArchiveVersionMatch, DetectOTRVersion("oot.o2r", false),
                                                 DetectOTRVersion("oot-mq.o2r", true),
                                                 DetectOTRVersion(SOH::Unbound::kBaseArchiveName, false));
@@ -585,7 +571,6 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     }
     return;
 #else
-    // Inside Fleet the archives come with Ship's install, already checked when Fleet attached it.
     if (FleetGame_IsHosted()) {
         return;
     }
@@ -604,7 +589,7 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     std::vector<std::string> args;
     if (argc > 1) {
         for (int i = 1; i < argc; i++) {
-            if (std::string(argv[i]) == kUnboundExportFlag) { // SOH [Unbound] consumed by InitOTR, not a ROM
+            if (std::string(argv[i]) == kUnboundExportFlag) {
                 i++;
                 continue;
             }
@@ -976,12 +961,11 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #elif defined(__WIIU__)
     Ship::WiiU::Init(appShortName);
 #endif
-#endif // __EMSCRIPTEN__
+#endif
 }
 
-// SOH [Unbound] Mounts oot-unbound.o2r as the game archive when neither ROM archive exists (see
-// CheckStandaloneBaseArchive; the browser build installs Unbound that way). Returns whether it did.
-static std::shared_ptr<Ship::Archive> MountStandaloneUnboundBase(const std::string& ootPath, const std::string& mqPath) {
+static std::shared_ptr<Ship::Archive> MountStandaloneUnboundBase(const std::string& ootPath,
+                                                                 const std::string& mqPath) {
     std::string basePath = Ship::Context::LocateFileAcrossAppDirs(SOH::Unbound::kBaseArchiveName, appShortName);
     if (std::filesystem::exists(ootPath) || std::filesystem::exists(mqPath) || !std::filesystem::exists(basePath)) {
         return nullptr;
@@ -989,13 +973,8 @@ static std::shared_ptr<Ship::Archive> MountStandaloneUnboundBase(const std::stri
     return Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->AddArchive(basePath);
 }
 
-// SOH [Unbound] A base archive converted during this launch, reported to the embedding page by InitOTR.
 static std::string sConvertedUnboundBase;
 
-// SOH [Unbound] The converted base (oot-unbound.o2r) mounts above the vanilla archives; it is generated on first
-// launch and regenerated when the ROM archives change (or are extracted again) or the base is incompatible
-// (SPEC.md §10.1); another release alone is no reason. A standalone base has nothing to be regenerated from, so
-// it is only checked. Needs the resource factories.
 static void MountUnboundBase(bool standalone, const std::string& ootPath, const std::string& mqPath) {
     if (standalone) {
         std::string problem = SOH::Unbound::CheckStandaloneBaseArchive();
@@ -1084,8 +1063,6 @@ void OTRGlobals::Initialize() {
     };
 
 #if defined(__EMSCRIPTEN__)
-    // SOH [WASM] Info even in a debug build: see the SPDLOG_MIN_CUTOFF note in the root
-    // CMakeLists. Browser console output is expensive enough to dominate boot time.
     auto defaultLogLevel = spdlog::level::info;
 #elif (_DEBUG)
     auto defaultLogLevel = spdlog::level::trace;
@@ -1113,21 +1090,8 @@ void OTRGlobals::Initialize() {
     context->GetWindow()->SetForceCursorVisibility(CVarGetInteger(CVAR_SETTING("CursorVisibility"), 0));
 
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] A much deeper buffer than desktop's 1680. Audio is synthesised once per
-    // frame on the single thread (OTRAudio_FillBuffer in Graph_ProcessGfxCommands) rather
-    // than by an audio thread that refills independently, so the buffer has to cover a
-    // whole frame interval plus any spike. At 32 kHz, 1680 samples is 52ms against a 50ms
-    // frame -- around 2ms of headroom, so anything that stalls a frame (the pause screen's
-    // framebuffer capture, a synchronous resource load) is audible. Both browser players drop
-    // any update offered while 6000 frames are already queued (WASM_AUDIO_DROP_THRESHOLD);
-    // the game only asks for more while the queue is under this target and then queues up to
-    // three 560-sample updates, so the target has to leave that much room:
-    // 6000 - 3 * 560 = 4320, 135ms. See the static_assert next to SAMPLES_HIGH.
-    //
-    // This headroom is only real with the Web Audio player (the default here), whose
-    // consumer runs on the browser's audio thread. SDL's Emscripten player consumes from a
-    // main-thread callback, so with it a long frame glitches no matter how much is queued.
-    // SampleLength only matters to that fallback: it sizes SDL's ScriptProcessorNode buffer.
+    // Audio is synthesised once per frame on one thread, so the buffer must cover a whole frame plus spikes
+    // while leaving room under WASM_AUDIO_DROP_THRESHOLD (see the static_assert next to SAMPLES_HIGH).
     context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = WASM_AUDIO_DESIRED_BUFFERED });
 #else
     context->InitAudio({ .SampleRate = 32000, .SampleLength = 1024, .DesiredBuffered = 1680 });
@@ -1206,11 +1170,9 @@ void OTRGlobals::Initialize() {
         }
     }
 
-    MountUnboundBase(standaloneUnboundBase != nullptr, ootPath, mqPath); // SOH [Unbound] needs the factories above
+    MountUnboundBase(standaloneUnboundBase != nullptr, ootPath, mqPath);
 }
 
-// Every resource type the game reads, binary, XML and (SOH [Unbound]) JSON. Shared with the wasm Unbound converter
-// (soh/wasm/convert), which loads the same vanilla resources without the rest of the game.
 void SOH_RegisterResourceFactories(std::shared_ptr<Ship::ResourceLoader> loader) {
     loader->RegisterResourceFactory(std::make_shared<Fast::ResourceFactoryBinaryTextureV0>(), RESOURCE_FORMAT_BINARY,
                                     "Texture", static_cast<uint32_t>(Fast::ResourceType::Texture), 0);
@@ -1233,7 +1195,6 @@ void SOH_RegisterResourceFactories(std::shared_ptr<Ship::ResourceLoader> loader)
                                     "Blob", static_cast<uint32_t>(Ship::ResourceType::Blob), 0);
     loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryArrayV0>(), RESOURCE_FORMAT_BINARY,
                                     "Array", static_cast<uint32_t>(SOH::ResourceType::SOH_Array), 0);
-    // SOH [Unbound] v1: vertex arrays with s32 positions (SPEC.md §8.1)
     loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryArrayV1>(), RESOURCE_FORMAT_BINARY,
                                     "Array", static_cast<uint32_t>(SOH::ResourceType::SOH_Array), 1);
     loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryBinaryAnimationV0>(), RESOURCE_FORMAT_BINARY,
@@ -1246,9 +1207,6 @@ void SOH_RegisterResourceFactories(std::shared_ptr<Ship::ResourceLoader> loader)
                                     0); // Is room scene? maybe?
     loader->RegisterResourceFactory(std::make_shared<SOH::ResourceFactoryXMLSceneV0>(), RESOURCE_FORMAT_XML, "Room",
                                     static_cast<uint32_t>(SOH::ResourceType::SOH_Room), 0); // Is room scene? maybe?
-    // SOH [Unbound] JSON scene format: existing resource types, RESOURCE_FORMAT_JSON + the "$schema" version.
-    // Scene and room share one factory instance registered under both type names (LUS aliases same-instance
-    // re-registrations); the collision factory reads both bin layouts and registers under versions 1 and 2.
     auto jsonScene = std::make_shared<SOH::ResourceFactoryJsonSceneV1>();
     loader->RegisterResourceFactory(jsonScene, RESOURCE_FORMAT_JSON, SOH::Unbound::Schema::kSceneType,
                                     static_cast<uint32_t>(SOH::ResourceType::SOH_Room), 1);
@@ -1346,9 +1304,6 @@ int AudioPlayer_Buffered(void);
 extern "C" int AudioPlayer_GetDesiredBuffered(void);
 std::unordered_map<std::string, ExtensionEntry> ExtensionCache;
 
-// SOH [WASM] The body of one audio update, lifted out of the thread loop so the wasm build
-// can call it straight from the frame callback. Desktop still runs it on the audio thread;
-// see OTRAudio_Thread below.
 static void OTRAudio_FillBuffer() {
 // AudioMgr_ThreadEntry(&gAudioMgr);
 //  528 and 544 relate to 60 fps at 32 kHz 32000/60 = 533.333..
@@ -1360,8 +1315,6 @@ static void OTRAudio_FillBuffer() {
 // 3 is the maximum authentic frame divisor.
 #define MAX_AUDIO_FRAMES_PER_UPDATE 3
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] The most the queue can hold after a top-up must stay under the players'
-    // 6000-frame drop threshold, or whole updates of audio are thrown away.
     static_assert(WASM_AUDIO_DESIRED_BUFFERED + MAX_AUDIO_FRAMES_PER_UPDATE * SAMPLES_HIGH <= WASM_AUDIO_DROP_THRESHOLD,
                   "wasm audio target leaves no room for a full update below the players' drop threshold");
 #endif
@@ -1376,7 +1329,6 @@ static void OTRAudio_FillBuffer() {
     }
 
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] Count the updates the player is about to throw away, for Soh_GetStats.
     if (samples_left >= WASM_AUDIO_DROP_THRESHOLD) {
         Soh_EmbedderCountAudioDrop();
     }
@@ -1811,7 +1763,6 @@ OTRVersion DetectOTRVersion(std::string fileName, bool isMQ) {
 
 extern "C" void Messagebox_ShowErrorBox(char* title, char* body) {
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] ShowErrorBox lives in the extractor, which is not built here.
     SPDLOG_ERROR("{}: {}", title, body);
 #else
     Extractor::ShowErrorBox(title, body);
@@ -1873,10 +1824,7 @@ static void Unbound_ExportFromCommandLine(int argc, char* argv[]) {
 }
 
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] An exception escaping the frame callback reaches Emscripten's handleException,
-// which calls quit_ and stops the main loop: the tab stays alive, the game freezes, and the
-// console shows only "Uncaught Exception {stack: undefined}" with no message. Name it, so
-// the next one is diagnosable rather than mysterious.
+// An exception escaping the frame callback stops Emscripten's main loop with no message; log it here.
 extern "C" void Soh_RunFrameGuarded(void (*runFrame)(void)) {
     try {
         runFrame();
@@ -1972,16 +1920,14 @@ extern "C" void InitOTR(int argc, char* argv[]) {
 #ifdef __EMSCRIPTEN__
     Soh_InitEmbedderBridge();
     if (!sConvertedUnboundBase.empty()) {
-        // SOH [Unbound] Written before the bridge watched anything, so it is reported here. The
-        // host keeps it and supplies it alone next time (HOST-API.md §1).
         Soh_EmbedderReportFile(sConvertedUnboundBase.c_str());
     }
 #endif
 
-    Unbound_ExportFromCommandLine(argc, argv); // SOH [Unbound] exits the process when the flag is present
+    Unbound_ExportFromCommandLine(argc, argv);
 
     SinkForeignGameArchives();
-    SOH::Unbound::LoadCustomActors(); // SOH [Unbound] mod actor types, at their own ids from 0x1000
+    SOH::Unbound::LoadCustomActors();
 
     // #region SOH [Randomizer] TODO: Remove these and refactor spoiler file handling for randomizer
     CVarClear(CVAR_GENERAL("RandomizerNewFileDropped"));
@@ -2044,7 +1990,6 @@ extern "C" void DeinitOTR() {
     sohFast3dWindow = nullptr;
 
     OTRGlobals::Instance->context = nullptr;
-    // Fleet owns the Context it hosts Ship in.
     if (FleetGame_IsHosted()) {
         FleetGame_LeaveHostContext();
     }
@@ -2219,8 +2164,6 @@ void RunCommands(Gfx* Commands, int time, int step, int denom, int count) {
 // C->C++ Bridge
 extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] Single-threaded: synthesise this update's audio inline. The handshake
-    // below would otherwise block forever on an audio thread that is never started.
     OTRAudio_FillBuffer();
 #else
     {
@@ -2231,9 +2174,6 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     audio.cv_to_thread.notify_one();
 #endif
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] One frame per game tick. Interpolated frames need a loop paced by the display
-    // to be seen; this one ticks at the game's rate (graph.c), so they were drawn back to back
-    // and only the last reached the screen, at up to three times the cost of a tick.
     int target_fps = 60 / R_UPDATE_RATE;
 #else
     int target_fps = OTRGlobals::Instance->GetInterpolationFPS();

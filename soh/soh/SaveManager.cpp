@@ -128,9 +128,9 @@ void SaveManager::ReadSaveFile(std::filesystem::path savePath, uintptr_t addr, v
 
 static std::filesystem::path SaveFolderPath() {
     const char* fleetDirectory = FleetGame_GetSaveDirectory();
-    const std::filesystem::path sSavePath = fleetDirectory != nullptr
-        ? std::filesystem::path(fleetDirectory) / "Save"
-        : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory("Save"));
+    const std::filesystem::path sSavePath =
+        fleetDirectory != nullptr ? std::filesystem::path(fleetDirectory) / "Save"
+                                  : std::filesystem::path(Ship::Context::GetPathRelativeToAppDirectory("Save"));
     return sSavePath;
 }
 
@@ -202,8 +202,7 @@ SaveManager::SaveManager() {
     AddLoadFunction("randomizer", 1, LoadRandomizer);
     AddSaveFunction("randomizer", 1, SaveRandomizer, true, SECTION_PARENT_NONE);
 
-    SceneDB_RegisterSaveFunctions(*this); // SOH [Unbound] custom-scene flags, keyed by scene name
-
+    SceneDB_RegisterSaveFunctions(*this);
     AddInitFunction(InitFileImpl);
 
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnExitGame>(
@@ -211,8 +210,7 @@ SaveManager::SaveManager() {
 
 #ifndef __EMSCRIPTEN__
     smThreadPool = std::make_shared<BS::thread_pool>(1);
-#endif // SOH [WASM] no pool: saves run inline, see SaveSection below
-
+#endif
     for (SaveFileMetaInfo& info : fileMetaInfo) {
         info.valid = false;
         info.deaths = 0;
@@ -596,13 +594,10 @@ void SaveManager::Init() {
         try {
             input >> globalBlock;
         } catch (const std::exception& e) {
-            // Treated like a global save with no version, below: it is rebuilt.
             SPDLOG_WARN("Global save could not be read: {}", e.what());
             globalBlock = nlohmann::json::object();
         }
 
-        // SOH [Port] A rebuilt global save is not a reason to skip the save slots below: an
-        // early return here left every slot looking empty until the next boot.
         int version = globalBlock.is_object() ? globalBlock.value("version", 0) : 0;
         switch (version) {
             case 1:
@@ -1348,8 +1343,6 @@ void SaveManager::SaveSection(int fileNum, int sectionID, bool threaded) {
     }
 
     auto saveContext = std::make_shared<SaveContext>(gSaveContext);
-    // SOH [WASM] smThreadPool is null in a single-threaded build, so saves take the
-    // synchronous path that already exists here. ThreadPoolWait() is already null-guarded.
     if (threaded && smThreadPool) {
         smThreadPool->detach_task(
             [this, fileNum, saveContext, sectionID] { SaveFileThreaded(fileNum, *saveContext, sectionID); });

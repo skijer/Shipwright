@@ -6,7 +6,7 @@
 #include <libultraship/libultra/types.h>
 
 namespace SOH {
-// SOH [Unbound] must stay identical to ::LightPoint (z64light.h): Scene_CommandLightList casts one to the other
+// Must stay identical to ::LightPoint (z64light.h): Scene_CommandLightList casts one to the other.
 typedef struct {
     f32 x;
     f32 y;

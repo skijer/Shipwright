@@ -1140,8 +1140,6 @@ static void PlaceVanillaModDungeonItems(std::vector<RandomizerGet>& items, Rando
     }
 }
 
-// Mod dungeons have no DungeonInfo. Their items stay in their own checks unless the option sends them
-// to any dungeon, the overworld or anywhere, which the general fill handles.
 static void PlaceModDungeonItems(const ModDungeonFillInfo& dungeon, RandomizerSettingKey setting,
                                  const std::vector<std::pair<RandomizerGet, std::vector<RandomizerCheck>>>& kinds) {
     auto ctx = Rando::Context::GetInstance();
@@ -1334,8 +1332,6 @@ void VanillaFill() {
 void ClearProgress() {
 }
 
-// Places every item bound to a restricted set of checks: shop stock and prices, dungeon rewards, own-dungeon
-// items and songs. What is left in itemPool may go anywhere.
 static void PlaceConfinedItems() {
     auto ctx = Rando::Context::GetInstance();
     // Place shop items first, since a buy shield is needed to place a dungeon reward on Gohma due to access
@@ -1467,7 +1463,6 @@ static void PlaceConfinedItems() {
     SPDLOG_INFO("Dungeon Items Done");
 }
 
-// The world a seed fills against: graph, pools and shuffled entrances. False when the entrances found no valid layout.
 static bool PrepareWorld() {
     auto ctx = Rando::Context::GetInstance();
     placementFailure = false;
@@ -1493,9 +1488,8 @@ static bool PrepareWorld() {
     }
     SetAreas();
     // erase temporary shop items
-    std::erase_if(itemPool, [](const auto item) {
-        return Rando::StaticData::RetrieveItem(item).GetItemType() == ITEMTYPE_SHOP;
-    });
+    std::erase_if(itemPool,
+                  [](const auto item) { return Rando::StaticData::RetrieveItem(item).GetItemType() == ITEMTYPE_SHOP; });
     StopPerformanceTimer(PT_ENTRANCE_SHUFFLE);
     return true;
 }

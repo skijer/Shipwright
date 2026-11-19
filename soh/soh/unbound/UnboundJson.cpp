@@ -1,4 +1,3 @@
-// SOH [Unbound] See UnboundJson.h.
 #include "UnboundJson.h"
 
 #include <cmath>
@@ -35,8 +34,6 @@ void MergeJson(Json& base, const Json& overlay) {
     }
 }
 
-// "$replace" only steers the merge (§3.4) and a null is a deletion (§3.2); the merged document
-// carries neither, even when it came from a single layer.
 static void StripDirectives(Json& doc) {
     if (!doc.is_object()) {
         return;
@@ -103,13 +100,11 @@ struct RegistryFile {
     std::string path;
 };
 
-// "unbound/actors/mymod/old_man.json" under "unbound/actors/" -> "mymod/old_man".
 static std::string RegistryName(const std::string& dir, const std::string& path) {
     return path.substr(dir.size(), path.size() - dir.size() - kRegistryFileSuffix.size());
 }
 
-// Every mounted path under `dir` ending in ".json", sorted by name: the path with ".json" attached sorts differently
-// when one name starts another ("npc-old.json" < "npc.json"). The archive manager lists each path once.
+// Sorted by name: the path with ".json" attached sorts differently when one name starts another.
 static std::vector<RegistryFile> ListRegistryFiles(const std::string& dir) {
     std::string mask = dir + "*" + std::string(kRegistryFileSuffix);
     auto listed = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(mask);
@@ -121,7 +116,6 @@ static std::vector<RegistryFile> ListRegistryFiles(const std::string& dir) {
     return files;
 }
 
-// The merged document at `file.path`, or a null Json when it is deleted or not an object (logged).
 static Json LoadRegistryFile(const RegistryFile& file, const char* what) {
     Json entry = LoadMergedJson(file.path);
     if (!entry.is_null() && !entry.is_object()) {
@@ -171,7 +165,7 @@ static std::vector<std::string> OrderedKeys(const Json& obj) {
             continue;
         }
         if (std::find(ordered.begin(), ordered.end(), k.get<std::string>()) == ordered.end()) {
-            ordered.push_back(k.get<std::string>()); // a key listed twice counts once
+            ordered.push_back(k.get<std::string>());
         }
     }
     return ordered;
@@ -186,7 +180,7 @@ std::vector<std::string> ListKeys(const Json& obj) {
         return {};
     }
     std::vector<std::string> keys = OrderedKeys(obj);
-    std::vector<std::pair<bool, std::pair<long long, std::string>>> rest; // (isNotInt, (int, key))
+    std::vector<std::pair<bool, std::pair<long long, std::string>>> rest;
     for (const auto& [key, value] : obj.items()) {
         if (IsReservedKey(key)) {
             continue;
@@ -219,8 +213,6 @@ std::vector<std::string> PositionalKeys(const Json& list, const std::string& wha
     return keys;
 }
 
-// SPEC.md §2: a numeric string is decimal or "0x" hex, optionally signed, and must be consumed whole:
-// one optional sign, an optional 0x prefix, then only digits of the base.
 static bool IsDigitOf(char c, int base) {
     if (c >= '0' && c <= '9') {
         return true;
@@ -269,7 +261,7 @@ bool ParseNumberString(const std::string& text, double& out) {
     }
     try {
         size_t consumed = 0;
-        out = std::stod(text, &consumed); // decimal, fraction, exponent
+        out = std::stod(text, &consumed);
         return consumed == text.size();
     } catch (...) { return false; }
 }
@@ -279,7 +271,7 @@ int64_t ToInt(const Json& value, int64_t fallback) {
         return value.get<int64_t>();
     }
     if (value.is_number_float()) {
-        return (int64_t)value.get<double>(); // truncated toward zero (SPEC.md §2)
+        return (int64_t)value.get<double>();
     }
     if (value.is_boolean()) {
         return value.get<bool>() ? 1 : 0;

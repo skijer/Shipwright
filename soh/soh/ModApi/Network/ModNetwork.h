@@ -10,7 +10,6 @@
 extern "C" {
 #endif
 
-// Contract: soh/tools/mods-api/NETWORK.md. Travels over Anchor.
 #define SOH_NET_TO_ROOM 0u
 #define SOH_NET_TO_TEAM 0xFFFFFFFFu
 #define SOH_NET_MAX_PAYLOAD 1024u
@@ -46,7 +45,6 @@ typedef struct {
     bool isSaveLoaded;
     bool isSameTeam;
     int16_t sceneNum;
-    // The peer's dummy in the local scene, NULL when it is elsewhere. Re-read every frame.
     Actor* actor;
 } SOHNetPeer;
 

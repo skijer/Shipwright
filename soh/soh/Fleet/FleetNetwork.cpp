@@ -8,7 +8,6 @@
 
 namespace {
 
-// Fleet copies the Anchor switch between both games; the connection follows the copied setting.
 void FollowAnchorSwitch() {
     if (!FleetGame_IsHosted() || Anchor::Instance == nullptr) {
         return;

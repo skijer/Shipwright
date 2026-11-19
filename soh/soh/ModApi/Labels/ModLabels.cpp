@@ -20,13 +20,11 @@ extern std::vector<std::string> questItemNamesEng;
 extern std::vector<std::string> questItemNamesGer;
 extern std::vector<std::string> questItemNamesFra;
 extern std::vector<std::string> sceneNames;
-extern char itemTimestampDisplayName[TIMESTAMP_MAX][24]; // as gameplaystats.cpp defines it (MSVC links by type)
+extern char itemTimestampDisplayName[TIMESTAMP_MAX][24];
 
 namespace {
 
-// The gameplay stats set their timestamp names when their window starts; a mod's are kept to be put back after
 std::map<int32_t, std::string> sTimestamps;
-// itemMapping entries as SoH made them, saved the first time a mod changes one
 std::map<uint32_t, ItemMapEntry> sOriginalIcons;
 
 std::vector<std::string>* NamesFor(SOHLabelKind kind, int32_t language) {
@@ -46,7 +44,6 @@ std::vector<std::string>* NamesFor(SOHLabelKind kind, int32_t language) {
     }
 }
 
-// SetupDisplayNames' layout: "Name:" left-aligned in 20
 void WriteTimestamp(int32_t index, const std::string& name) {
     std::string text = name.substr(0, 19) + ":";
 
@@ -81,8 +78,6 @@ extern "C" void ModLabels_ApplyTimestamps(void) {
     }
 }
 
-// Replaces the splits SoH offers (its item and boss list, and its scene list); a split already offered (same type and
-// id) keeps its times
 extern "C" bool ModLabels_SetTimeSplits(const SOHTimeSplit* splits, uint32_t count) {
     std::vector<TimeSplits::TimesplitObject> objects;
     std::vector<TimeSplits::TimesplitObject> scenes;
@@ -118,7 +113,6 @@ extern "C" bool ModLabels_SetTimeSplits(const SOHTimeSplit* splits, uint32_t cou
     return true;
 }
 
-// The items an item split's popup offers to pick from (SoH's bottles, swords...); no members removes the group
 extern "C" bool ModLabels_SetTimeSplitGroup(uint32_t id, const uint32_t* members, uint32_t count) {
     if ((count != 0) && (members == nullptr)) {
         return false;
@@ -135,7 +129,6 @@ extern "C" void ModLabels_ClearTimeSplitGroups(void) {
     TimeSplits::itemSubMenuList.clear();
 }
 
-// SoH's windows draw item's icon as source's (as SoH made source's); source == item puts item's own back
 extern "C" bool ModLabels_SetItemIcon(uint32_t item, uint32_t source) {
     auto target = itemMapping.find(item);
     auto from = itemMapping.find(source);

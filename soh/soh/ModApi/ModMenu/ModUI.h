@@ -5,9 +5,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-// General immediate-mode UI for every mod, within a UI draw callback.
-// Flags/index values follow the ImGui version returned by ModUI_GetImGuiVersion.
-// Zero flags give defaults. No callbacks or C++ types cross this ABI.
 // BeginWindow/BeginChild ALWAYS require End, even when false.
 // Other Begin functions require End only when true. Match all Push/Pop pairs.
 // Caller owns writable buffers and must provide their actual capacity.

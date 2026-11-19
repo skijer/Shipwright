@@ -153,7 +153,7 @@ typedef struct SaveStateInfo {
     std::unique_ptr<uint8_t[]> enHeishi1State;
     std::unique_ptr<uint8_t[]> playerState;
 
-    std::vector<s16> transitionActorIds_copy; // SOH [Unbound] a scene may have more than 255 transition actors
+    std::vector<s16> transitionActorIds_copy;
 
 } SaveStateInfo;
 

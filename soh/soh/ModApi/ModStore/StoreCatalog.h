@@ -65,5 +65,4 @@ struct StoreRelease {
 
 std::optional<StoreCatalog> ModStore_ParseCatalog(const std::string& payload);
 std::optional<StoreRelease> ModStore_ParseRelease(const std::string& payload);
-// Compares the digit groups of two fork versions ("9.3.0-unbound0.12"): negative, zero or positive.
 int ModStore_CompareVersions(const std::string& left, const std::string& right);

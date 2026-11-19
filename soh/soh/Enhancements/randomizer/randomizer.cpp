@@ -255,8 +255,6 @@ ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerCheck(Randomizer
 }
 
 ItemObtainability Randomizer::GetItemObtainabilityFromRandomizerGet(RandomizerGet randoGet) {
-    // A registered progressive chain may still upgrade an already-owned native item.
-    // Check before native ownership flags turn its next copy into a blue rupee.
     bool progressiveObtainable;
     if (ProgressiveItems_CheckObtainability(randoGet, &progressiveObtainable)) {
         return progressiveObtainable ? CAN_OBTAIN : CANT_OBTAIN_ALREADY_HAVE;
@@ -992,12 +990,7 @@ bool IsRandoGenerating() {
 }
 
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] Generation blocks the tab, so it runs on the game frame after the click rather
-// than from it. File select only plays the horse music, then the fanfare or the error sound,
-// if it sees IsRandoGenerating() on a frame of its own; generating inside the clicking frame
-// cleared it again before file select looked. OnGameFrameUpdate fires at the end of a game
-// frame, after file select has run and inside the frame guard, so a throw here is reported
-// like any other.
+// Generating inside the clicking frame clears IsRandoGenerating() before file select can see it.
 static std::string sPendingSeed;
 static bool sGenerationPending = false;
 
@@ -1025,10 +1018,7 @@ bool GenerateRandomizer(std::string seed /*= ""*/) {
     }
     WaitForRandoGeneration();
 #ifdef __EMSCRIPTEN__
-    // SOH [WASM] Single-threaded: generate on the next game frame (see GenerateOnNextFrame).
-    // This blocks the browser tab until the seed is done, where desktop keeps drawing a
-    // progress UI -- but blocking beats the alternative, since constructing a std::thread
-    // aborts in a build without pthreads.
+    // Constructing a std::thread aborts in a build without pthreads.
     GenerateOnNextFrame(seed);
 #else
     randoGenerating = true;
@@ -1263,8 +1253,6 @@ extern "C" u16 Randomizer_Item_Give(PlayState* play, GetItemEntry giEntry) {
         return Return_Item_Entry(giEntry, RG_NONE);
     }
 
-    // Bottle-with-content rewards also pass through the normal item-give extension,
-    // so mods can store a fifth (or later) bottle without losing its seeded content.
     if (item >= RG_BOTTLE_WITH_RED_POTION && item <= RG_BOTTLE_WITH_BIG_POE) {
         ItemID bottleItem = ITEM_NONE;
         switch (item) {

@@ -75,12 +75,6 @@ class Settings {
      */
     const std::deque<Option>& GetAllOptions() const;
 
-    /**
-     * @brief Appends an option registered by a mod.
-     *
-     * @param option
-     * @return RandomizerSettingKey
-     */
     RandomizerSettingKey AddModOption(Option&& option);
 
     /**

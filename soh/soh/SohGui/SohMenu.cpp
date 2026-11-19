@@ -238,9 +238,12 @@ std::string SohMenu::FleetMenuModel() {
                     if (widget.type == WIDGET_SEARCH) {
                         continue;
                     }
-                    widgets.push_back({ { "name", widget.name }, { "cvar", widget.cVar ? widget.cVar : "" },
-                        { "tooltip", widget.options ? std::string(widget.options->tooltip) : "" },
-                        { "search", !widget.hideInSearch }, { "column", column }, { "index", index } });
+                    widgets.push_back({ { "name", widget.name },
+                                        { "cvar", widget.cVar ? widget.cVar : "" },
+                                        { "tooltip", widget.options ? std::string(widget.options->tooltip) : "" },
+                                        { "search", !widget.hideInSearch },
+                                        { "column", column },
+                                        { "index", index } });
                 }
             }
             sidebars.push_back({ { "name", label }, { "columns", sidebar.columnCount }, { "widgets", widgets } });
@@ -259,7 +262,6 @@ SidebarEntry* SohMenu::FindFleetPage(const std::string& section, const std::stri
     return side != entry->second.sidebars.end() ? &side->second : nullptr;
 }
 
-// Fleet draws a page outside DrawElement: run what DrawElement runs first, once per page and frame.
 void SohMenu::PrepareFleetPage(const std::string& section, const std::string& sidebar) {
     ImGui::SetCurrentContext(Ship::Context::GetRawInstance()->GetWindow()->GetGui()->GetImGuiContext());
     static std::map<std::pair<std::string, std::string>, int> updatedPages;
@@ -288,7 +290,6 @@ void SohMenu::PrepareFleetPage(const std::string& section, const std::string& si
     }
 }
 
-// A combobox whose CVar holds a value it no longer lists would assert inside ImGui.
 bool SohMenu::CanFleetDrawWidget(const WidgetInfo& widget) const {
     if (widget.type != WIDGET_CVAR_COMBOBOX || widget.cVar == nullptr || widget.cVar[0] == '\0') {
         return true;
@@ -312,7 +313,6 @@ void SohMenu::FleetDrawWidget(const std::string& section, const std::string& sid
     }
 }
 
-// The column block of DrawElement, so a page Fleet shows looks exactly as it does in Ship's own menu.
 void SohMenu::FleetDrawPage(const std::string& section, const std::string& sidebar) {
     SidebarEntry* page = FindFleetPage(section, sidebar);
     if (page == nullptr) {

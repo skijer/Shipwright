@@ -5,8 +5,6 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/unbound/SceneDB.h"
 
-// SOH [Unbound] Vanilla hardcoded its five horse scenes here. The list is seeded into SceneDB instead, so a
-// custom scene can join it with the registry's "horse" key (SPEC.md §7); vanilla answers unchanged.
 s32 Horse_CanSpawn(s32 scene) {
     return SceneDB_HorseAllowed(scene);
 }
@@ -114,8 +112,6 @@ void Horse_SetupInGameplay(PlayState* play, Player* player) {
                 break;
             }
         }
-        // SOH [Unbound] The table above covers only vanilla's horse scenes; a custom scene's idle spot is the
-        // registry's "horse.pos". A scene that registers none simply has nowhere for her to wait.
         if (i >= ARRAY_COUNT(horseSpawns)) {
             Vec3f spawnPos;
             s16 spawnAngle;

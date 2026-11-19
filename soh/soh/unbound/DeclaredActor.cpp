@@ -1,6 +1,3 @@
-// SOH [Unbound] The declared-actor driver (unbound-docs/actors.md, "The driver"). Each behavior is its own function
-// taking the actor and its type, so the four ActorDB functions read as a list of steps, and so a script can later
-// call the same functions.
 #include "DeclaredActor.h"
 
 #include <algorithm>
@@ -9,7 +6,7 @@
 #include <spdlog/spdlog.h>
 
 #include "soh/ResourceManagerHelpers.h"
-#include "soh/frame_interpolation.h" // gives OPEN_DISPS's block-scope declarations their C linkage
+#include "soh/frame_interpolation.h"
 #include "soh/resource/type/Animation.h"
 #include "soh/resource/type/Skeleton.h"
 #include "soh/resource/type/SohResourceType.h"
@@ -58,11 +55,9 @@ ColliderCylinderInit sCylinderInit = {
     { 0, 0, 0, { 0, 0, 0 } },
 };
 
-constexpr s8 kTalkTargetMode = 6;       // 100-unit targeting range, as vanilla NPCs
-constexpr s16 kLookTrackingPreset = 0;  // sNpcTrackingPresets: 60 degrees of head yaw
-constexpr f32 kVanillaNpcScale = 0.01f; // the scale `shadow` is given at
-
-// ---- assets -------------------------------------------------------------------------------------------------------
+constexpr s8 kTalkTargetMode = 6;
+constexpr s16 kLookTrackingPreset = 0;
+constexpr f32 kVanillaNpcScale = 0.01f;
 
 std::shared_ptr<Ship::IResource> LoadAsset(const std::string& otrPath) {
     return ResourceMgr_GetResourceByNameHandlingMQ(otrPath.c_str() + DeclaredActorType::kOtrPrefixLength);
@@ -72,8 +67,6 @@ uint32_t AssetType(const std::shared_ptr<Ship::IResource>& resource) {
     return resource != nullptr ? resource->GetInitData()->Type : 0;
 }
 
-// The resource at `path` if it is a skeleton the driver can animate, else nullptr: normal or flex, with standard or
-// LOD limbs, at least one. Skin limbs (Epona's) have no display list where the skeleton drawer reads one.
 std::shared_ptr<SOH::Skeleton> LoadSkeleton(const std::string& path) {
     auto resource = LoadAsset(path);
     if (AssetType(resource) != (uint32_t)SOH::ResourceType::SOH_Skeleton) {
@@ -85,7 +78,6 @@ std::shared_ptr<SOH::Skeleton> LoadSkeleton(const std::string& path) {
     return supportedType && supportedLimbs && skeleton->limbCount > 0 ? skeleton : nullptr;
 }
 
-// The resource at `path` if it is a normal (not Link's) animation with at least one frame, else nullptr.
 std::shared_ptr<SOH::Animation> LoadAnimation(const std::string& path) {
     auto resource = LoadAsset(path);
     if (AssetType(resource) != (uint32_t)SOH::ResourceType::SOH_Animation) {
@@ -104,38 +96,28 @@ bool IsTexture(const std::string& path) {
     return AssetType(LoadAsset(path)) == (uint32_t)Fast::ResourceType::Texture;
 }
 
-// ---- pure rules ---------------------------------------------------------------------------------------------------
-
-// A placement's message: its params when they name one, otherwise the type's default (0 = cannot talk).
 u16 PlacementMessage(s16 params, const DeclaredActorType& type) {
     u16 fromParams = (u16)params;
     return fromParams != 0 && fromParams != 0xFFFF ? fromParams : type.message;
 }
 
-// A looping animation's playback rate. The skeleton code wraps the frame once per update, so a step longer than
-// the animation would carry it out of the animation's data.
+// The skeleton code wraps the frame once per update, so a step longer than the animation would read past its data.
 f32 LoopSpeed(f32 speed, f32 length) {
     return CLAMP(speed, -length, length);
 }
 
-// The shadow scale that draws `shadow` at the same size whatever the model's scale: vanilla scales a shadow by the
-// actor's scale, and `shadow` is given at the scale of vanilla NPCs. The registry accepts only a positive scale.
 f32 ShadowScale(const DeclaredActorType& type) {
     return type.shadow * kVanillaNpcScale / type.scale;
 }
 
-// The height of the focus point above the actor's position when there is no head to put it on.
 f32 FocusHeight(const DeclaredActorType& type) {
     return type.HasCollision() ? (f32)(type.yShift + type.height) : 0.0f;
 }
 
-// ---- type checks --------------------------------------------------------------------------------------------------
-
-// What the first spawn of a type found about its assets.
 struct TypeCheck {
-    bool spawns = false; // every asset path names an asset the driver can use
-    bool flex = false;   // the skeleton is a flex skeleton
-    bool looks = false;  // `look.limb` is a limb of the skeleton
+    bool spawns = false;
+    bool flex = false;
+    bool looks = false;
 };
 
 void LogUnusable(const DeclaredActorType& type, const char* what, const std::string& path) {
@@ -143,7 +125,6 @@ void LogUnusable(const DeclaredActorType& type, const char* what, const std::str
                  path.substr(DeclaredActorType::kOtrPrefixLength));
 }
 
-// Every segment texture must load: an unresolved path would reach the renderer as raw bytes.
 bool SegmentsUsable(const DeclaredActorType& type) {
     for (const auto& [segment, texture] : type.segments) {
         if (!IsTexture(texture)) {
@@ -154,7 +135,6 @@ bool SegmentsUsable(const DeclaredActorType& type) {
     return true;
 }
 
-// The skeleton, or nullptr, logged, when the skeleton or its animation cannot be used.
 std::shared_ptr<SOH::Skeleton> UsableSkeleton(const DeclaredActorType& type) {
     auto skeleton = LoadSkeleton(type.skeleton);
     if (skeleton == nullptr) {
@@ -166,7 +146,6 @@ std::shared_ptr<SOH::Skeleton> UsableSkeleton(const DeclaredActorType& type) {
         LogUnusable(type, "no animation with frames at", type.animation);
         return nullptr;
     }
-    // One entry per limb plus the root position, as the skeleton's joint table: fewer would be read past the end.
     if (animation->rotationIndices.size() < (size_t)skeleton->limbCount + 1) {
         LogUnusable(type, "an animation for fewer limbs than the skeleton at", type.animation);
         return nullptr;
@@ -174,7 +153,6 @@ std::shared_ptr<SOH::Skeleton> UsableSkeleton(const DeclaredActorType& type) {
     return skeleton;
 }
 
-// Limb-draw numbering: the root is 1 and the last limb is limbCount.
 bool LookLimbValid(const DeclaredActorType& type, s32 limbCount) {
     if (!type.looks) {
         return false;
@@ -188,8 +166,6 @@ bool LookLimbValid(const DeclaredActorType& type, s32 limbCount) {
     return true;
 }
 
-// Logs each hidden limb past the skeleton's last limb. Such an entry hides nothing; the registry already refused
-// entries below 1.
 void CheckHiddenLimbs(const DeclaredActorType& type, s32 limbCount) {
     for (s32 limb : type.hideLimbs) {
         if (limb > limbCount) {
@@ -221,9 +197,7 @@ TypeCheck CheckType(const DeclaredActorType& type) {
     return check;
 }
 
-// Checks a type on its first spawn and remembers the result for the session, so its assets are looked up, and a
-// problem logged, once rather than for every placement. Mods are mounted only at startup, so neither the registry nor
-// the assets its paths name change later, and the registry never moves a type, so its address is a stable key.
+// The registry never moves a type, so its address is a stable key.
 const TypeCheck& CheckedType(const DeclaredActorType& type) {
     static std::unordered_map<const DeclaredActorType*, TypeCheck> sChecked;
     auto it = sChecked.find(&type);
@@ -232,8 +206,6 @@ const TypeCheck& CheckedType(const DeclaredActorType& type) {
     }
     return it->second;
 }
-
-// ---- init ---------------------------------------------------------------------------------------------------------
 
 bool ResolveType(DeclaredActor* self) {
     self->type = SOH::Unbound::GetDeclaredActorType(self->actor.id);
@@ -245,7 +217,6 @@ bool ResolveType(DeclaredActor* self) {
     return true;
 }
 
-// Kills the actor when its type's assets cannot be used (CheckType logged why).
 bool CanSpawn(DeclaredActor* self) {
     if (!CheckedType(*self->type).spawns) {
         Actor_Kill(&self->actor);
@@ -261,16 +232,13 @@ void InitShape(DeclaredActor* self) {
     Actor_SetScale(&self->actor, type.scale);
 }
 
-// The ground the round shadow is drawn on: the shadow draws only over a known floor. The actor never moves, so one
-// raycast at spawn serves, and it records the floor without moving the actor onto it. Only scene collision is kept:
-// a moving floor's polygons are renumbered as dyna actors come and go, so a stored pointer would drift to another
-// polygon.
+// Only scene collision is kept: a moving floor's polygons are renumbered as dyna actors come and go.
 void InitFloor(DeclaredActor* self, PlayState* play) {
     if (self->actor.shape.shadowDraw == NULL) {
         return;
     }
     Vec3f checkPos = self->actor.world.pos;
-    checkPos.y += 50.0f; // as the vanilla floor check, so a floor at the actor's feet is found
+    checkPos.y += 50.0f;
     CollisionPoly* floorPoly = NULL;
     s32 bgId = BGCHECK_SCENE;
     f32 floorHeight = BgCheck_EntityRaycastFloor5(play, &play->colCtx, &floorPoly, &bgId, &self->actor, &checkPos);
@@ -282,8 +250,6 @@ void InitFloor(DeclaredActor* self, PlayState* play) {
     self->actor.floorBgId = bgId;
 }
 
-// Vanilla's culling zone fits an NPC: a model reaching further from its origin widens it, and a draw distance moves
-// its far edge.
 void InitCulling(DeclaredActor* self) {
     const DeclaredActorType& type = *self->type;
     self->actor.uncullZoneScale = std::max(self->actor.uncullZoneScale, type.cullRadius);
@@ -293,7 +259,6 @@ void InitCulling(DeclaredActor* self) {
     }
 }
 
-// The animation is loaded and checked by CheckType.
 void InitAnimation(DeclaredActor* self) {
     const DeclaredActorType& type = *self->type;
     AnimationHeader* animation = (AnimationHeader*)type.animation.c_str();
@@ -307,7 +272,6 @@ void InitAnimation(DeclaredActor* self) {
     }
 }
 
-// The skeleton is checked by CheckType; a display-list model needs no setup.
 void InitMesh(DeclaredActor* self, PlayState* play) {
     const DeclaredActorType& type = *self->type;
     if (type.skeleton.empty()) {
@@ -352,7 +316,6 @@ void InitTalk(DeclaredActor* self) {
         self->actor.textId = message;
         self->actor.targetMode = kTalkTargetMode;
     } else {
-        // The type's flags make every placement targetable; this one has nothing to say.
         self->actor.flags &= ~(ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY);
     }
 }
@@ -366,25 +329,20 @@ void InitFocus(DeclaredActor* self) {
     self->actor.focus.pos.y += FocusHeight(*self->type);
 }
 
-// ---- update -------------------------------------------------------------------------------------------------------
-
-// Whether the player is talking to this actor. Read from the Player every frame rather than latched: the actor does
-// not update while culled, so a latch could miss the one frame the conversation closes on and stay set.
+// Read every frame rather than latched: a culled actor does not update and could miss the frame the conversation closes
+// on.
 bool IsTalkingTo(DeclaredActor* self, PlayState* play) {
     Player* player = GET_PLAYER(play);
     return (player->stateFlags1 & PLAYER_STATE1_TALKING) && player->talkActor == &self->actor;
 }
 
-// A box that ends in an event waits for its actor to close it, as vanilla actors do in their talk state. With no
-// behavior to run, the driver closes it when the player advances, so no message can hold the player in the textbox.
 void CloseEventBox(PlayState* play) {
     if (Message_GetState(&play->msgCtx) == TEXT_STATE_EVENT && Message_ShouldAdvance(play)) {
         Message_CloseTextbox(play);
     }
 }
 
-// A culled actor does not update, and CloseEventBox runs in its update: while talking, it updates wherever the
-// camera is. The type's flags never include this one, so clearing it restores them.
+// CloseEventBox runs in the actor's update, so a talking actor must update wherever the camera is.
 void KeepUpdatingWhileTalking(DeclaredActor* self) {
     if (self->talking) {
         self->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
@@ -433,15 +391,10 @@ void UpdateAnimation(DeclaredActor* self) {
     }
 }
 
-// ---- draw ---------------------------------------------------------------------------------------------------------
-
-// The point the head turns about, in the head limb's space: `pivot` along the turn axis.
 Vec3f HeadPivot(const DeclaredActorType& type) {
     return { type.pivot * type.turnAxis.x, type.pivot * type.turnAxis.y, type.pivot * type.turnAxis.z };
 }
 
-// Rotates the current matrix about a unit axis in its own space. The X and Z axes keep Matrix_RotateX/Z, so the
-// default look axes turn a head exactly as before the axes could be set.
 void RotateAbout(f32 angle, const Vec3f& axis) {
     if (axis.x == 1.0f && axis.y == 0.0f && axis.z == 0.0f) {
         Matrix_RotateX(angle, MTXMODE_APPLY);
@@ -453,9 +406,7 @@ void RotateAbout(f32 angle, const Vec3f& axis) {
     }
 }
 
-// Turns the head about the head limb's own axes, around HeadPivot: left and right about `turnAxis`, then up and down
-// about `nodAxis` (by default X and Z, as vanilla character rigs are built). The limb's transform is applied here and
-// zeroed so the skeleton drawer applies nothing further.
+// The limb's transform is applied here and zeroed so the skeleton drawer applies nothing further.
 void TurnHead(DeclaredActor* self, s32 limbIndex, Vec3f* pos, Vec3s* rot) {
     if (!self->looking || limbIndex != self->type->limb) {
         return;
@@ -481,11 +432,10 @@ void RecordHeadFocus(DeclaredActor* self, s32 limbIndex) {
 void HideLimb(DeclaredActor* self, s32 limbIndex, Gfx** dList) {
     const std::vector<s32>& hidden = self->type->hideLimbs;
     if (std::find(hidden.begin(), hidden.end(), limbIndex) != hidden.end()) {
-        *dList = NULL; // children still draw
+        *dList = NULL;
     }
 }
 
-// The limb callbacks, shared by both passes; the per-pass signatures below only forward to them.
 s32 OverrideLimb(void* arg, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot) {
     HideLimb((DeclaredActor*)arg, limbIndex, dList);
     TurnHead((DeclaredActor*)arg, limbIndex, pos, rot);
@@ -508,10 +458,8 @@ void PostLimbXlu(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* 
     RecordHeadFocus((DeclaredActor*)arg, limbIndex);
 }
 
-// The draw state vanilla character draws set before their skeleton. Every segment 8-12 the type does not name gets
-// an empty display list: character models call one of them to set their render mode (vanilla binds
-// &D_80116280[2], an end-of-list, there), and an unbound segment would be whatever the last actor left in it. The
-// env colour is opaque black, which models that fade through env alpha read as fully visible.
+// Segments 8-12 the type does not name get an empty display list (vanilla binds &D_80116280[2]); an unbound
+// segment would hold whatever the last actor left in it.
 Gfx* BindSegments(const DeclaredActorType& type, Gfx* gfx) {
     for (u8 segment = DeclaredActorType::kSegmentMin; segment <= DeclaredActorType::kSegmentMax; segment++) {
         gSPSegment(gfx++, segment, (uintptr_t)gEmptyDL);
@@ -534,11 +482,8 @@ void DrawDisplayList(DeclaredActor* self, PlayState* play) {
 
 } // namespace
 
-// ---- display lists and ActorDB functions --------------------------------------------------------------------------
-
-// OPEN_DISPS declares the frame-interpolation hooks at block scope. Inside an anonymous namespace that declaration
-// names a function of the namespace, which nothing defines, so the functions that open the display lists, and the
-// ActorDB functions that call them, are file-local statics outside it.
+// OPEN_DISPS declares the frame-interpolation hooks at block scope; inside an anonymous namespace that would name an
+// undefined function, so these are file-local statics outside it.
 static void DrawSkeleton(DeclaredActor* self, PlayState* play) {
     SkelAnime* skel = &self->skelAnime;
     if (!self->type->translucent) {

@@ -108,13 +108,6 @@ void Anchor::HandlePacket_GiveItem(nlohmann::json payload) {
     }
 }
 
-/**
- * CUSTOM_PROGRESS
- *
- * Custom items, custom equipment and custom randomizer flags, by key. A client without the mod still saves the
- * item and flag keys, so that progress is there once the mod is installed.
- */
-
 void Anchor::SendPacket_CustomProgress(const std::string& kind, const char* key, bool state) {
     if (!IsSaveLoaded() || isProcessingIncomingPacket || !roomState.syncItemsAndFlags || key == nullptr) {
         return;
@@ -161,7 +154,6 @@ nlohmann::json Anchor::PrepCustomProgressState() {
     };
 }
 
-// Merged like the vanilla flags: a team save only ever adds progress.
 void Anchor::ApplyCustomProgressState(const nlohmann::json& state) {
     for (const std::string& key : state.value(CUSTOM_PROGRESS_ITEM, std::vector<std::string>{})) {
         CustomItemRegistry_SetOwned(key.c_str(), true);

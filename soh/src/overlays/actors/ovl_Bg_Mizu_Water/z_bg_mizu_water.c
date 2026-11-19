@@ -82,9 +82,7 @@ u32 BgMizuWater_GetWaterLevelActionIndex(s16 switchFlag, PlayState* play) {
     return ret;
 }
 
-void BgMizuWater_SetWaterBoxesHeight(
-    WaterBox* waterBoxes,
-    s32 height) { // SOH [Unbound] s16 -> s32: ySurface is s32 now (world extent); the s16 param re-narrowed it
+void BgMizuWater_SetWaterBoxesHeight(WaterBox* waterBoxes, s32 height) {
     u32 i;
 
     for (i = 0; i < 8; i++) {

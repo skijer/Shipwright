@@ -1,7 +1,11 @@
 #include "FormTransform.h"
 
+#include <algorithm>
+#include <cstring>
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <spdlog/spdlog.h>
 #include <libultraship/bridge.h>
@@ -21,6 +25,7 @@ extern "C" {
 extern PlayState* gPlayState;
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
+LinkAnimationHeader* Player_GetIdleAnim(Player* player);
 f32 Camera_LERPCeilF(f32 target, f32 cur, f32 stepScale, f32 minDiff);
 s16 Camera_LERPCeilS(s16 target, s16 cur, f32 stepScale, s16 minDiff);
 void Camera_LERPCeilVec3f(Vec3f* target, Vec3f* cur, f32 yStepScale, f32 xzStepScale, f32 minDiff);
@@ -43,7 +48,16 @@ constexpr int32_t TakeOffLastFrame = 0x37;
 constexpr int32_t SkipFirstFrame = 5;
 constexpr int32_t SkipButtons = BTN_A | BTN_B | BTN_CUP | BTN_CDOWN | BTN_CLEFT | BTN_CRIGHT;
 constexpr int32_t FlashStep = 45;
-constexpr int32_t PostFlashHold = 24;
+constexpr int32_t InstantFlashStep = 85;
+constexpr int32_t InstantFlashPeakFrame = 3;
+constexpr int32_t InstantFlashFrames = 5;
+constexpr int32_t IdleMorphFrame = 4;
+constexpr float IdleMorphFrames = 20.0f;
+constexpr int32_t StickSkipFrame = 10;
+constexpr const char* MaskSettleAnimPath = "__OTR__misc/link_animetion/gPlayerAnim_cl_setmaskend_Data";
+constexpr const char* MaskOffAnimPath = "__OTR__misc/link_animetion/gPlayerAnim_cl_maskoff_Data";
+constexpr int32_t MmAnimValuesPerFrame = 67;
+constexpr s16 MmAnimRootX = -57;
 constexpr int32_t EnvStageFirstFrame = 16;
 constexpr float EnvStageRate = 10.0f / 100.0f;
 constexpr int32_t EnvLightningFrame = 59;
@@ -69,7 +83,7 @@ constexpr const char* FaceGlowDl = "__OTR__objects/gameplay_keep/gameplay_keep_D
 constexpr int32_t FaceGlowSegment = 0x0B;
 constexpr Vec3f LinkFaceGlowOffset = { -230.0f, -520.0f, 0.0f };
 
-#define DEG_TO_BINANG_F(degrees) ((s16)(s32)((degrees) * 182.04167f))
+#define DEG_TO_BINANG_F(degrees) ((s16)(s32)((degrees)*182.04167f))
 
 struct EnvKey {
     s16 fogNear;
@@ -143,11 +157,13 @@ bool sIsMaskCutscene = false;
 TransformPhase sPhase = PhasePose;
 int32_t sFrame = 0;
 int32_t sFlashAlpha = 0;
-int32_t sHoldTimer = 0;
+int32_t sSettleFrame = 0;
+int32_t sInstantFlashFrame = 0;
 std::string sTargetKey;
 const char* sMaskDl = nullptr;
 const char* sMaskClimaxDl = nullptr;
 LinkAnimationHeader* sPoseAnim = nullptr;
+bool sIsLoweringMask = false;
 uint16_t sVoiceSfx = 0;
 bool sMaskClimax = false;
 std::unordered_set<std::string> sSeenForms;
@@ -751,6 +767,7 @@ void Forget(int16_t sceneNum) {
     sMaskDl = nullptr;
     sMaskClimaxDl = nullptr;
     sFlashAlpha = 0;
+    sInstantFlashFrame = 0;
     sSubCamId = SUBCAM_NONE;
     sLightNode = nullptr;
     sDistortType = DistortNone;
@@ -758,13 +775,83 @@ void Forget(int16_t sceneNum) {
     TimeControl_Release(TimeControlOwner);
 }
 
-void ApplyFormAtFlashPeak(PlayState* play) {
+struct RebasedClip {
+    LinkAnimationHeader header = {};
+    std::vector<s16> frames;
+};
+
+LinkAnimationHeader* LoadRebasedMmClip(const char* path) {
+    static std::unordered_map<std::string, RebasedClip> sClips;
+
+    auto [slot, isNew] = sClips.try_emplace(path);
+    RebasedClip& clip = slot->second;
+    if (isNew) {
+        LinkAnimationHeader* source = ResourceMgr_LoadPlayerAnimAsHeader(path);
+        if (source != nullptr && source->common.frameCount > 0) {
+            const s16* values = static_cast<const s16*>(source->segment);
+            clip.frames.assign(values, values + source->common.frameCount * MmAnimValuesPerFrame);
+            for (s32 frame = 0; frame < source->common.frameCount; frame++) {
+                clip.frames[frame * MmAnimValuesPerFrame] = MmAnimRootX;
+                clip.frames[frame * MmAnimValuesPerFrame + 2] = 0;
+            }
+            clip.header.common.frameCount = source->common.frameCount;
+            clip.header.segment = clip.frames.data();
+        }
+    }
+    return clip.frames.empty() ? nullptr : &clip.header;
+}
+
+void PlayMaskClip(PlayState* play, Player* player, LinkAnimationHeader* clip, u8 mode) {
+    LinkAnimation_Change(play, &player->skelAnime, clip, PoseAnimSpeed, 0.0f, Animation_GetLastFrame(clip), mode, 0.0f);
+}
+
+void TickPose(PlayState* play, Player* player) {
+    const bool isPoseDone = LinkAnimation_Update(play, &player->skelAnime);
+    if (!isPoseDone || sFromForm || !sIsMaskCutscene || player->skelAnime.animation != sPoseAnim) {
+        return;
+    }
+    LinkAnimationHeader* hold = LoadRebasedMmClip(MaskSettleAnimPath);
+    if (hold != nullptr) {
+        PlayMaskClip(play, player, hold, ANIMMODE_LOOP);
+    }
+}
+
+void StartSettlePose(PlayState* play, Player* player) {
+    sSettleFrame = 0;
+    sIsLoweringMask = false;
+    if (!sIsMaskCutscene) {
+        return;
+    }
+    LinkAnimationHeader* pose = LoadRebasedMmClip(sFromForm ? MaskOffAnimPath : MaskSettleAnimPath);
+    if (pose == nullptr) {
+        return;
+    }
+    sIsLoweringMask = sFromForm;
+    PlayMaskClip(play, player, pose, sFromForm ? ANIMMODE_ONCE : ANIMMODE_LOOP);
+}
+
+bool SettleIntoIdle(PlayState* play, Player* player) {
+    if (sSettleFrame++ < IdleMorphFrame) {
+        if (sSettleFrame == IdleMorphFrame && !sIsLoweringMask) {
+            LinkAnimation_Change(play, &player->skelAnime, Player_GetIdleAnim(player), 1.0f, 0.0f, IdleMorphFrames,
+                                 ANIMMODE_ONCE, IdleMorphFrames);
+        }
+        return false;
+    }
+    const Input* input = &play->state.input[0];
+    const bool isSteering = input->rel.stick_x != 0 || input->rel.stick_y != 0;
+    const bool isIdleReached = LinkAnimation_Update(play, &player->skelAnime);
+    return isIdleReached || (sSettleFrame > StickSkipFrame && isSteering);
+}
+
+void ApplyFormAtFlashPeak(PlayState* play, Player* player) {
     sLightStage = 3.0f;
     sMaskClimax = false;
     sMaskDl = nullptr;
     sFaceGlowAlpha = 0;
     ClearEnvAdjust(play);
     FormRegistry_ApplyActive(sTargetKey.empty() ? nullptr : sTargetKey.c_str());
+    StartSettlePose(play, player);
 }
 
 void TransformAction(Player* player, PlayState* play) {
@@ -773,7 +860,7 @@ void TransformAction(Player* player, PlayState* play) {
 
     switch (sPhase) {
         case PhasePose:
-            LinkAnimation_Update(play, &player->skelAnime);
+            TickPose(play, player);
             if (StepBeforeFlash(play, player)) {
                 sPhase = PhaseFlashIn;
                 sFlashAlpha = 0;
@@ -782,30 +869,45 @@ void TransformAction(Player* player, PlayState* play) {
             break;
 
         case PhaseFlashIn:
-            LinkAnimation_Update(play, &player->skelAnime);
+            TickPose(play, player);
             StepUnderFlash(play, player);
             sFlashAlpha += FlashStep;
             if (sFlashAlpha >= 255) {
                 sFlashAlpha = 255;
-                ApplyFormAtFlashPeak(play);
+                ApplyFormAtFlashPeak(play, player);
                 sPhase = PhaseFlashOut;
-                sHoldTimer = 0;
             }
             break;
 
-        default:
-            sFlashAlpha -= FlashStep;
-            if (sFlashAlpha < 0) {
-                sFlashAlpha = 0;
-            }
-            sHoldTimer++;
+        case PhaseFlashOut:
+            sFlashAlpha = std::max(sFlashAlpha - FlashStep, 0);
             StepAfterFlash(play, player);
-            if (sFlashAlpha == 0 && sHoldTimer >= PostFlashHold) {
+            if (SettleIntoIdle(play, player) && sFlashAlpha == 0) {
                 Stop(play, player);
                 func_80839FFC(player, play);
             }
             break;
+
+        default:
+            SPDLOG_ERROR("[FormTransform] Unknown phase {}", static_cast<int32_t>(sPhase));
+            Stop(play, player);
+            func_80839FFC(player, play);
+            break;
     }
+}
+
+void StepInstantFlash() {
+    if (sInstantFlashFrame == 0) {
+        return;
+    }
+    sInstantFlashFrame++;
+    if (sInstantFlashFrame > InstantFlashFrames) {
+        sInstantFlashFrame = 0;
+        sFlashAlpha = 0;
+        return;
+    }
+    const int32_t step = sInstantFlashFrame <= InstantFlashPeakFrame ? InstantFlashStep : -InstantFlashStep;
+    sFlashAlpha = std::clamp(sFlashAlpha + step, 0, 255);
 }
 
 void StartPendingTransform(PlayState* play, Player* player) {
@@ -829,6 +931,7 @@ void StartPendingTransform(PlayState* play, Player* player) {
 }
 
 void UpdateTransform() {
+    StepInstantFlash();
     if (!sActive || gPlayState == nullptr) {
         return;
     }
@@ -852,7 +955,7 @@ void UpdateTransform() {
 }
 
 void DrawFlash() {
-    if (!sActive || sFlashAlpha <= 0 || gPlayState == nullptr) {
+    if (sFlashAlpha <= 0 || gPlayState == nullptr) {
         return;
     }
     PlayState* play = gPlayState;
@@ -939,6 +1042,20 @@ bool FormTransform_IsActive(void) {
     return sActive;
 }
 
+void FormTransform_PlayInstantFlash(void) {
+    Player* player = GetPlayer();
+    if (player == nullptr || sActive) {
+        return;
+    }
+    sInstantFlashFrame = 1;
+    sFlashAlpha = InstantFlashStep;
+    PlaySfx(MmSfxTransformMaskFlash, NA_SE_EV_WHITE_OUT, &player->actor.projectedPos);
+}
+
+static bool IsMaskWearer(const SOHFormDefinition* form) {
+    return form->transformMask != nullptr || form->modelPath != nullptr;
+}
+
 bool FormTransform_Begin(const SOHFormDefinition* from, const SOHFormDefinition* to) {
     PlayState* play = gPlayState;
     Player* player = GetPlayer();
@@ -955,7 +1072,7 @@ bool FormTransform_Begin(const SOHFormDefinition* from, const SOHFormDefinition*
     sActive = true;
     sPhase = PhasePose;
     sTargetKey = to == nullptr ? "" : to->key;
-    sIsMaskCutscene = wearer->transformMask != nullptr;
+    sIsMaskCutscene = IsMaskWearer(wearer);
     sMaskDl = sFromForm ? nullptr : wearer->transformMask;
     sMaskClimaxDl = sFromForm ? nullptr : wearer->transformMaskClimax;
     sPoseAnim = (sFromForm && wearer->transformOffAnim != nullptr) ? wearer->transformOffAnim : wearer->transformAnim;
@@ -969,7 +1086,9 @@ bool FormTransform_Begin(const SOHFormDefinition* from, const SOHFormDefinition*
     sPendingStart = true;
     sFrame = 0;
     sFlashAlpha = 0;
-    sHoldTimer = 0;
+    sInstantFlashFrame = 0;
+    sSettleFrame = 0;
+    sIsLoweringMask = false;
     sEnvStage = 0.0f;
     sLightStage = 0.0f;
     sMaskSquashZ = 0.0f;

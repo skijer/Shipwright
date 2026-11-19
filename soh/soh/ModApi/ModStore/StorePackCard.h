@@ -5,7 +5,6 @@
 #include <string>
 #include <imgui.h>
 
-// Presentation only: activation uses ImGui's selectable so mouse and keyboard behave alike.
 namespace StorePackCard {
 
 inline std::string SingleLine(std::string value) {
@@ -38,7 +37,7 @@ inline std::string FitLine(const std::string& text, float size, float width) {
 
 inline bool Draw(const std::string& name, const std::string& author, const std::string& version, ImTextureID icon,
                  bool expanded, float width) {
-    ImGui::Dummy(ImVec2(0, 0)); // Reset the previous table cell's text baseline before placing the card.
+    ImGui::Dummy(ImVec2(0, 0));
     const float base = ImGui::GetFontSize();
     const float padding = base * 0.65f;
     const float titleSize = base * 1.4f;

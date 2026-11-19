@@ -1,5 +1,3 @@
-// Ship's executable: the game lives in the soh module so that mods and Fleet load the same
-// binary. This only forwards the command line, in UTF-8, as SDL2main used to.
 
 int Soh_RunMain(int argc, char* argv[]);
 

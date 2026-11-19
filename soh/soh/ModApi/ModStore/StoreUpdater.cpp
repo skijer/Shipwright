@@ -167,7 +167,6 @@ bool StageFiles(const std::vector<StagedFile>& files, std::string& error) {
         const bool isTopLevel = !fs::path(file.name).has_parent_path();
         const bool isLauncher = isTopLevel && IsSameFileName(file.name, ReleaseExecutable);
         hasLauncher = hasLauncher || isLauncher;
-        // The running exe may have been renamed; the release always ships it under its own name.
         if (isLauncher && isStandalone) {
             loadedModules.emplace_back(executable, &file);
             continue;

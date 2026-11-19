@@ -39,7 +39,6 @@ bool sRequestedCatalog = false;
 std::string sConfiguringPack;
 ImGuiTextFilter sPackFilter;
 bool sOptionsChanged = false;
-// Icons use the game's existing texture cache; catalog metadata cannot open local paths.
 ImTextureID PackIcon(const std::string& icon) {
     const auto gui = std::dynamic_pointer_cast<Fast::Fast3dGui>(Ship::Context::GetRawInstance()->GetWindow()->GetGui());
     const std::string key = icon.rfind("ITEM_", 0) == 0 && gui->HasTextureByName(icon) ? icon : "ITEM_SONG_TIME";
@@ -124,7 +123,6 @@ void DrawModLabel(const StoreView& view, const StoreMod& mod) {
     ImGui::TextColored(StateColor(state), "%s", DescribeState(state));
 }
 
-// Warns before a change that would leave other installed mods without something they need.
 void ConfirmIfNeeded(const StoreView& view, const StoreMod& mod, const char* verb, Actions& actions,
                      std::function<void()> change) {
     const std::vector<std::string> dependents = ModStore_FindDependents(view, mod.id);
@@ -151,7 +149,6 @@ std::vector<StorePack> PacksWithOtherMods(const StoreCatalog& catalog) {
             packs.push_back(std::move(pack));
         }
     }
-    // Older catalogs group these same mods differently. Preserve unrelated community packs.
     for (const auto& pack : catalog.packs) {
         if (std::none_of(pack.mods.begin(), pack.mods.end(),
                          [&](const std::string& id) { return curatedIds.count(id) != 0 || id == "mm_assets"; })) {
@@ -170,7 +167,6 @@ std::vector<StorePack> PacksWithOtherMods(const StoreCatalog& catalog) {
         const std::string author = !mod.owner.empty() ? mod.owner : !mod.author.empty() ? mod.author : "Unknown author";
         auto& group = byAuthor[author];
         if (group.id.empty()) {
-            // Encode the author instead of using credits text as a CVar path.
             group.id = "other-";
             constexpr char hex[] = "0123456789abcdef";
             for (unsigned char c : author) {
@@ -215,8 +211,6 @@ void SavePackSelection(const std::string& id, const std::set<std::string>& unche
     Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
-// Installed manifests can expose options before a new remote catalog is published.
-// Only read mounted package metadata; never change download URLs, hashes or trust decisions.
 const std::vector<StoreOption>& InstalledOptions(const std::string& id) {
     static const auto optionsByMod = [] {
         std::map<std::string, std::vector<StoreOption>> result;
@@ -249,9 +243,7 @@ const std::vector<StoreOption>& InstalledOptions(const std::string& id) {
                         result[packageId].push_back({ key, name });
                     }
                 }
-            } catch (const std::exception&) {
-                // Malformed optional UI metadata must not prevent browsing the store.
-            }
+            } catch (const std::exception&) {}
         }
         return result;
     }();
@@ -381,7 +373,6 @@ void DrawPacks(const StoreView& view, Actions& actions) {
         return;
     }
     constexpr size_t Columns = 3;
-    // Keep three readable columns on narrow menus; the child supplies horizontal scrolling.
     const float contentWidth = std::max(ImGui::GetContentRegionAvail().x, ImGui::GetFontSize() * 60.0f);
     ImGui::SetNextWindowContentSize(ImVec2(contentWidth, 0));
     if (ImGui::BeginChild("##PackGridScroll", ImVec2(0, 0), ImGuiChildFlags_None,

@@ -864,7 +864,7 @@ void EnBb_FaceWaypoint(EnBb* this) {
 
 void EnBb_SetWaypoint(EnBb* this, PlayState* play) {
     Path* path = &play->setupPathList[this->path];
-    Vec3f* point; // SOH [Unbound] f32 path points
+    Vec3f* point;
 
     if (this->waypoint == (s16)(path->count - 1)) {
         this->waypoint = 0;

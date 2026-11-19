@@ -351,7 +351,7 @@ void EnDaikuKakariko_StopRunning(EnDaikuKakariko* this, PlayState* play) {
 void EnDaikuKakariko_Run(EnDaikuKakariko* this, PlayState* play) {
     s32 pad;
     Path* path;
-    Vec3f* pathPos; // SOH [Unbound] path points are f32
+    Vec3f* pathPos;
     f32 xDist;
     f32 zDist;
     s16 runAngle;

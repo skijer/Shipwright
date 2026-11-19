@@ -53,7 +53,6 @@ bool CanUseFiles(const ModIdentity* mod) {
     return ModPermissions_HasDeclared(*mod, ModPermission::Files);
 }
 
-// A mounted archive cannot be replaced while the game runs, so a busy name waits beside it until the next start.
 bool PlaceInModsFolder(const std::filesystem::path& source, const std::string& fileName) {
     const std::filesystem::path mods = ModLoader_GetModsDirectory();
     std::error_code error;
@@ -158,6 +157,66 @@ bool SaveFor(const ModIdentity* mod, const char* fileName, const void* data, uin
     return WriteBytes(temporary, data, size) && PlaceInModsFolder(temporary, fileName);
 }
 
+constexpr uint64_t kMaxModsFolderFileSize = 64ULL * 1024 * 1024;
+
+bool HasListedExtension(const std::filesystem::path& path, const std::string& extensions) {
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(),
+                   [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+    size_t start = 0;
+    while (start <= extensions.size()) {
+        size_t end = extensions.find(';', start);
+        std::string listed = extensions.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        std::transform(listed.begin(), listed.end(), listed.begin(),
+                       [](unsigned char character) { return static_cast<char>(std::tolower(character)); });
+        if (!extension.empty() && listed == extension) {
+            return true;
+        }
+        if (end == std::string::npos) {
+            break;
+        }
+        start = end + 1;
+    }
+    return false;
+}
+
+// Read-only and confined to the mods folder, like the archives mounted from it; dot-named entries are the game's.
+uint32_t ReadModsFor(const ModIdentity* mod, const char* extensions,
+                     bool (*visit)(const char*, const uint8_t*, uint64_t, void*), void* userData) {
+    if (extensions == nullptr || visit == nullptr || !CanUseFiles(mod)) {
+        return 0;
+    }
+    const std::filesystem::path mods = ModLoader_GetModsDirectory();
+    std::error_code error;
+    uint32_t visited = 0;
+    auto entry = std::filesystem::recursive_directory_iterator(
+        mods, std::filesystem::directory_options::skip_permission_denied, error);
+    for (; !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        const std::filesystem::path path = entry->path();
+        if (path.filename().string().rfind('.', 0) == 0) {
+            if (entry->is_directory(error)) {
+                entry.disable_recursion_pending();
+            }
+            continue;
+        }
+        const uint64_t size = entry->is_regular_file(error) ? entry->file_size(error) : 0;
+        if (size == 0 || size > kMaxModsFolderFileSize || !HasListedExtension(path, extensions)) {
+            continue;
+        }
+        std::vector<uint8_t> bytes(size);
+        std::ifstream input(path, std::ios::binary);
+        if (!input.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(size))) {
+            continue;
+        }
+        ++visited;
+        const std::string relative = path.lexically_relative(mods).generic_string();
+        if (!visit(relative.c_str(), bytes.data(), size, userData)) {
+            break;
+        }
+    }
+    return visited;
+}
+
 } // namespace
 
 extern "C" bool UserFiles_Pick(const char* title, const char* filterName, const char* filterPatterns,
@@ -176,6 +235,11 @@ extern "C" void UserFiles_Free(SOHUserFile* file) {
 
 extern "C" bool UserFiles_SaveToMods(const char* fileName, const void* data, uint64_t size) {
     return SaveFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), fileName, data, size);
+}
+
+extern "C" uint32_t UserFiles_ReadMods(const char* extensions,
+                                       bool (*visit)(const char*, const uint8_t*, uint64_t, void*), void* userData) {
+    return ReadModsFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), extensions, visit, userData);
 }
 
 extern "C" bool UserFiles_MountArchive(const char* title) {

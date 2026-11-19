@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <map>
 #include <set>
 #include <string>
@@ -12,6 +13,7 @@
 #include <fast/Fast3dGui.h>
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
+#include "soh/ModApi/Forms/FormRegistry.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -44,6 +46,7 @@ struct Page {
     int rows;
     int columns;
     std::vector<SOHLayoutCell> cells;
+    std::string ownerForm;
 };
 
 struct Placement {
@@ -88,6 +91,7 @@ std::array<int, SOH_LAYOUT_COUNT> sLastDirection{};
 std::array<bool, SOH_LAYOUT_COUNT> sActive{};
 bool sPreviewingSong = false;
 std::string sAnimatingItem;
+std::string sLastHoveredItem;
 
 std::string Setting(const std::string& key, const char* field) {
     std::string result = CVAR_ENHANCEMENT("ModLayout.");
@@ -253,8 +257,6 @@ std::vector<Entry> NativeEntries(uint8_t kind) {
             entry.owned = i == 24 ? (gSaveContext.inventory.questItems >> 28) != 0 : CHECK_QUEST_ITEM(i);
             entry.icon = static_cast<const char*>(gItemIcons[entry.item]);
         }
-        // Match the native item/equipment pages: upgrades can replace the
-        // current vanilla item's icon without registering a separate cell.
         if (entry.owned && kind != SOH_LAYOUT_COLLECTABLES) {
             GameInteractor_ExecuteOnKaleidoResolveItemIcon(gPlayState, entry.item, &entry.icon);
         }
@@ -651,15 +653,43 @@ int ReadDirection(PlayState* play, uint8_t kind) {
     return direction;
 }
 
-void MoveCursor(PlayState* play, const Page& page, const std::vector<Entry>& entries, int direction) {
-    auto& pause = play->pauseCtx;
-    if (pause.cursorSpecialPos != 0) {
-        if ((pause.cursorSpecialPos == PAUSE_CURSOR_PAGE_LEFT && direction == 1) ||
-            (pause.cursorSpecialPos == PAUSE_CURSOR_PAGE_RIGHT && direction == -1)) {
-            pause.cursorSpecialPos = 0;
+bool IsNearerArrow(const SOHLayoutCell& cell, const SOHLayoutCell& other, bool fromLeft) {
+    if (cell.x != other.x) {
+        return fromLeft ? cell.x < other.x : cell.x > other.x;
+    }
+    return cell.y > other.y;
+}
+
+int FindArrowLandingCell(const Page& page, const std::vector<Entry>& entries, bool fromLeft) {
+    int landing = -1;
+    for (int cell = 0; cell < CellCount(page); ++cell) {
+        if (CellEntries(entries, page, cell, true).empty()) {
+            continue;
         }
+        if (landing < 0 || IsNearerArrow(page.cells[cell], page.cells[landing], fromLeft)) {
+            landing = cell;
+        }
+    }
+    return landing;
+}
+
+void LeaveArrow(PlayState* play, const Page& page, const std::vector<Entry>& entries, int direction) {
+    auto& pause = play->pauseCtx;
+    const bool fromLeft = pause.cursorSpecialPos == PAUSE_CURSOR_PAGE_LEFT;
+    if (direction != (fromLeft ? 1 : -1)) {
         return;
     }
+    pause.cursorSpecialPos = 0;
+    if (page.kind != SOH_LAYOUT_ITEMS) {
+        return;
+    }
+    const int landing = FindArrowLandingCell(page, entries, fromLeft);
+    if (landing >= 0) {
+        sCursor[page.kind] = landing;
+    }
+}
+
+int FindNeighbourCell(const Page& page, const std::vector<Entry>& entries, int direction) {
     const auto& origin = page.cells[sCursor[page.kind]];
     float score = 1e9f;
     int next = -1;
@@ -677,6 +707,16 @@ void MoveCursor(PlayState* play, const Page& page, const std::vector<Entry>& ent
             next = i;
         }
     }
+    return next;
+}
+
+void MoveCursor(PlayState* play, const Page& page, const std::vector<Entry>& entries, int direction) {
+    auto& pause = play->pauseCtx;
+    if (pause.cursorSpecialPos != 0) {
+        LeaveArrow(play, page, entries, direction);
+        return;
+    }
+    const int next = FindNeighbourCell(page, entries, direction);
     if (next >= 0) {
         sCursor[page.kind] = next;
         pause.namedItem = PAUSE_ITEM_NONE;
@@ -776,14 +816,18 @@ void SelectTradeItem(PlayState* play, const Entry& entry) {
     }
 }
 
-void EquipEntry(PlayState* play, const Entry& entry, const SOHLayoutCell& cell) {
+bool IsInventorySlotEntry(const Entry& entry) {
+    return entry.custom == nullptr && entry.sourceKind == SOH_LAYOUT_ITEMS && entry.source >= 0;
+}
+
+void EquipEntry(PlayState* play, const Entry& entry, const Entry& hovered, const SOHLayoutCell& cell) {
     const uint16_t buttons[] = { BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT, BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
     for (int i = 0; i < 7; ++i) {
         if (!(play->state.input[0].press.button & buttons[i]) ||
             (i >= 3 && !CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0))) {
             continue;
         }
-        if (!IsAgeAllowed(entry)) {
+        if (!IsAgeAllowed(hovered)) {
             PlaySound(NA_SE_SY_ERROR);
         } else if (entry.custom != nullptr) {
             if (!ModLayout_BeginCustomEquip(play, entry.key.c_str(), i + 1, cell.x * 10, cell.y * 10)) {
@@ -793,10 +837,33 @@ void EquipEntry(PlayState* play, const Entry& entry, const SOHLayoutCell& cell) 
             if (IsTradeEntry(entry)) {
                 SelectTradeItem(play, entry);
             }
-            KaleidoScope_SetupItemEquip(play, entry.item, entry.source, cell.x * 10, cell.y * 10);
+            const int slot = IsInventorySlotEntry(hovered) ? hovered.source : entry.source;
+            KaleidoScope_SetupItemEquip(play, entry.item, slot, cell.x * 10, cell.y * 10);
         }
         return;
     }
+}
+
+const Entry* FindOwnedEntry(const std::vector<Entry>& entries, const std::string& key) {
+    for (const auto& entry : entries) {
+        if (entry.owned && entry.key == key) {
+            return &entry;
+        }
+    }
+    return nullptr;
+}
+
+void EquipOnArrowExit(PlayState* play, const Page& page, const std::vector<Entry>& entries) {
+    const auto& pause = play->pauseCtx;
+    const int cell = sCursor[page.kind];
+    const auto* hovered = SelectedEntry(CellEntries(entries, page, cell, true), page, cell);
+    if (hovered == nullptr) {
+        return;
+    }
+    const int vertical = pause.stickRelY > 30 ? -2 : pause.stickRelY < -30 ? 2 : 0;
+    const bool isPushBlocked = vertical != 0 && FindNeighbourCell(page, entries, vertical) < 0;
+    const auto* stale = isPushBlocked ? FindOwnedEntry(entries, sLastHoveredItem) : nullptr;
+    EquipEntry(play, stale != nullptr ? *stale : *hovered, *hovered, page.cells[cell]);
 }
 
 void TurnCell(PlayState* play, const Page& page, const std::vector<const Entry*>& entries, int direction) {
@@ -847,6 +914,7 @@ void HandleInput(PlayState* play, const Page& page, const std::vector<Entry>& en
             sPreviewingSong = true;
         }
     }
+    const bool wasOnArrow = pause.cursorSpecialPos != 0;
     if (direction != 0) {
         if (sPreviewingSong) {
             AudioOcarina_SetInstrument(0);
@@ -859,10 +927,18 @@ void HandleInput(PlayState* play, const Page& page, const std::vector<Entry>& en
             MoveCursor(play, page, entries, direction);
         }
     }
+    if (kind == SOH_LAYOUT_ITEMS && wasOnArrow) {
+        if (pause.cursorSpecialPos == 0) {
+            EquipOnArrowExit(play, page, entries);
+        } else {
+            sLastHoveredItem.clear();
+        }
+    }
     if (direction == 0 && selected != nullptr && pause.cursorSpecialPos == 0) {
-        EquipEntry(play, *selected, page.cells[sCursor[kind]]);
+        EquipEntry(play, *selected, *selected, page.cells[sCursor[kind]]);
         if (selected->custom != nullptr && (buttons & BTN_CUP)) {
-            const char* text = selected->custom->pauseText;
+            const char* description = selected->custom->pauseText;
+            const char* text = description != nullptr ? description : selected->custom->getItemText;
             if (text != nullptr) {
                 CustomItemRegistry_ShowTextbox(play, text, true);
                 pause.unk_1E4 = 10;
@@ -1077,6 +1153,40 @@ void ModLayout_CompleteCustomEquip(PlayState* play) {
     sAnimatingItem.clear();
 }
 
+static bool IsPageVisibleToCurrentForm(const Page& page) {
+    return page.ownerForm.empty() || page.ownerForm == FormRegistry_GetCurrentKey();
+}
+
+static std::string FindCurrentFormPage(uint8_t kind) {
+    for (const auto& [key, page] : sTemplates) {
+        if (page.kind == kind && page.ownerForm == FormRegistry_GetCurrentKey()) {
+            return key;
+        }
+    }
+    return "";
+}
+
+static void MoveCursorToFirstEntry(uint8_t kind, const Page& page, const std::vector<Entry>& entries) {
+    sCursor[kind] = 0;
+    for (int cell = 0; cell < CellCount(page); ++cell) {
+        if (!CellEntries(entries, page, cell, true).empty()) {
+            sCursor[kind] = cell;
+            return;
+        }
+    }
+}
+
+static void OpenOnCurrentFormPage() {
+    const std::string formPage = FindCurrentFormPage(SOH_LAYOUT_ITEMS);
+    const auto entries = Entries(SOH_LAYOUT_ITEMS);
+
+    if (formPage.empty() || !HasOwnedEntry(entries, formPage)) {
+        return;
+    }
+    sShown[SOH_LAYOUT_ITEMS] = formPage;
+    MoveCursorToFirstEntry(SOH_LAYOUT_ITEMS, FindPage(Pages(SOH_LAYOUT_ITEMS, entries), formPage), entries);
+}
+
 bool ModLayout_CyclePage(PlayState* play, uint8_t kind) {
     if (play == nullptr || kind >= SOH_LAYOUT_COUNT || play->pauseCtx.state != 6 ||
         (play->pauseCtx.unk_1E4 != 0 && play->pauseCtx.unk_1E4 != 8)) {
@@ -1084,9 +1194,11 @@ bool ModLayout_CyclePage(PlayState* play, uint8_t kind) {
     }
     const auto entries = Entries(kind);
     const auto pages = Pages(kind, entries);
+    const std::string formPage = FindCurrentFormPage(kind);
     std::vector<std::string> visible{ NativePage };
     for (const auto& page : pages) {
-        if (page.key == NativePage || !HasOwnedEntry(entries, page.key)) {
+        const bool isOfferedToForm = formPage.empty() ? IsPageVisibleToCurrentForm(page) : page.key == formPage;
+        if (page.key == NativePage || !HasOwnedEntry(entries, page.key) || !isOfferedToForm) {
             continue;
         }
         visible.push_back(page.key);
@@ -1096,14 +1208,7 @@ bool ModLayout_CyclePage(PlayState* play, uint8_t kind) {
     }
     auto current = std::find(visible.begin(), visible.end(), sShown[kind]);
     sShown[kind] = current == visible.end() || ++current == visible.end() ? visible.front() : *current;
-    const auto& page = FindPage(pages, sShown[kind]);
-    sCursor[kind] = 0;
-    for (int cell = 0; cell < CellCount(page); ++cell) {
-        if (!CellEntries(entries, page, cell, true).empty()) {
-            sCursor[kind] = cell;
-            break;
-        }
-    }
+    MoveCursorToFirstEntry(kind, FindPage(pages, sShown[kind]), entries);
     sCycling[kind] = false;
     play->pauseCtx.unk_1E4 = 0;
     play->pauseCtx.cursorSpecialPos = 0;
@@ -1125,7 +1230,8 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
     const auto pages = Pages(kind, entries);
     const auto& requestedPage = FindPage(pages, sShown[kind]);
     const bool emptyPage = requestedPage.key != NativePage && !HasOwnedEntry(entries, requestedPage.key);
-    const auto& page = emptyPage ? FindPage(pages, NativePage) : requestedPage;
+    const bool canShowPage = !emptyPage && IsPageVisibleToCurrentForm(requestedPage);
+    const auto& page = canShowPage ? requestedPage : FindPage(pages, NativePage);
     sShown[kind] = page.key;
     const bool movedVanilla = std::any_of(entries.begin(), entries.end(), [](const Entry& entry) {
         return entry.key.rfind("vanilla.", 0) == 0 &&
@@ -1163,9 +1269,7 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
         const auto contents = CellEntries(entries, page, cell, true);
         const auto* selected = SelectedEntry(contents, page, cell);
         if (kind == SOH_LAYOUT_ITEMS && cell < MaxCells) {
-            const bool isInventorySlot =
-                selected != nullptr && selected->custom == nullptr && selected->sourceKind == SOH_LAYOUT_ITEMS;
-            sItemCellSlots[cell] = isInventorySlot ? selected->source : -1;
+            sItemCellSlots[cell] = selected != nullptr && IsInventorySlotEntry(*selected) ? selected->source : -1;
         }
         const bool quest =
             selected != nullptr && selected->custom == nullptr && selected->sourceKind == SOH_LAYOUT_COLLECTABLES;
@@ -1201,7 +1305,6 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
             KaleidoScope_DrawQuadTextureRGBA32(play->state.gfxCtx, const_cast<char*>(selected->icon), textureWidth,
                                                textureHeight, 0);
         }
-        // The native item page runs this per cell; this page must too, or mods lose their overlay.
         if (kind == SOH_LAYOUT_ITEMS) {
             GameInteractor_ExecuteOnKaleidoItemDraw(play, cell, selected->item, &vertices[cell * 4]);
         }
@@ -1231,6 +1334,9 @@ bool ModLayout_DrawPage(PlayState* play, uint8_t kind) {
         if (selected != nullptr && selected->custom != nullptr) {
             CustomItemRegistry_SelectPauseItem(selected->key.c_str());
         }
+        if (kind == SOH_LAYOUT_ITEMS) {
+            sLastHoveredItem = selected != nullptr ? selected->key : "";
+        }
         KaleidoScope_SetCursorVtx(&pause, sCursor[kind] * 4, vertices);
         KaleidoScope_DrawCursor(play, PausePages[kind]);
     }
@@ -1245,10 +1351,26 @@ bool ModLayout_HasMods(void) {
     return CustomItemRegistry_GetCount() != 0 || CustomEquipRegistry_GetCount() != 0 || !sTemplates.empty();
 }
 
+static const char* GetDeclaredOwnerForm(const SOHLayoutPage* definition) {
+    const size_t requiredSize = offsetof(SOHLayoutPage, ownerForm) + sizeof(definition->ownerForm);
+    return definition->structSize >= requiredSize ? definition->ownerForm : nullptr;
+}
+
+static bool IsValidOwnerForm(const SOHLayoutPage* definition) {
+    const char* ownerForm = GetDeclaredOwnerForm(definition);
+    if (ownerForm == nullptr) {
+        return true;
+    }
+    const bool isTaken = std::any_of(sTemplates.begin(), sTemplates.end(),
+                                     [ownerForm](const auto& entry) { return entry.second.ownerForm == ownerForm; });
+    return ownerForm[0] != '\0' && definition->kind == SOH_LAYOUT_ITEMS && !isTaken;
+}
+
 bool ModLayout_RegisterPage(const SOHLayoutPage* definition) {
-    if (definition == nullptr || definition->structSize < sizeof(SOHLayoutPage) || definition->key == nullptr ||
-        definition->key[0] == '\0' || definition->kind >= SOH_LAYOUT_COUNT || definition->rows == 0 ||
-        definition->columns == 0 || definition->rows * definition->columns > MaxCells ||
+    constexpr size_t MinPageSize = offsetof(SOHLayoutPage, cells) + sizeof(SOHLayoutPage::cells);
+    if (definition == nullptr || definition->structSize < MinPageSize || definition->key == nullptr ||
+        !IsValidOwnerForm(definition) || definition->key[0] == '\0' || definition->kind >= SOH_LAYOUT_COUNT ||
+        definition->rows == 0 || definition->columns == 0 || definition->rows * definition->columns > MaxCells ||
         definition->cellCount > MaxCells || std::string(definition->key) == NativePage ||
         std::string(definition->key).rfind("user.", 0) == 0 || std::string(definition->key).rfind("page.", 0) == 0 ||
         sTemplates.count(definition->key)) {
@@ -1266,6 +1388,8 @@ bool ModLayout_RegisterPage(const SOHLayoutPage* definition) {
         }
         page.cells.assign(definition->cells, definition->cells + definition->cellCount);
     }
+    const char* ownerForm = GetDeclaredOwnerForm(definition);
+    page.ownerForm = ownerForm != nullptr ? ownerForm : "";
     sTemplates.emplace(page.key, std::move(page));
     return true;
 }
@@ -1419,6 +1543,11 @@ void ModLayout_Init(void) {
     auto gui = Ship::Context::GetRawInstance()->GetWindow()->GetGui();
     gui->AddGuiWindow(std::make_shared<LayoutWindow>(WindowCvar, "Mods Items Layout", ImVec2(760, 640)));
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnKaleidoResolveName>(ResolveName);
+    REGISTER_VB_SHOULD(VB_OPEN_PAUSE_MENU, {
+        if (*should) {
+            OpenOnCurrentFormPage();
+        }
+    });
     GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
         if (sPreviewingSong &&
             (gPlayState == nullptr || gPlayState->pauseCtx.state != 6 ||

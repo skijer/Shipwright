@@ -248,7 +248,7 @@ const std::vector<EntranceIndex> advancedTeleportDestinations = {
     ENTR_SHADOW_TEMPLE_BOSS_DOOR,
 };
 
-std::vector<AltTrapType> getEnabledAddTraps() {
+static std::vector<AltTrapType> GetEnabledAddTraps() {
     std::vector<AltTrapType> enabledAddTraps;
     for (int i = 0; i < ADD_TRAP_MAX; i++) {
         if (CVarGetInteger(altTrapTypeCvars[i], 0)) {
@@ -259,11 +259,8 @@ std::vector<AltTrapType> getEnabledAddTraps() {
             enabledAddTraps.push_back(static_cast<AltTrapType>(i));
         }
     }
-    if (enabledAddTraps.size() == 0) {
-        enabledAddTraps.push_back(ADD_ICE_TRAP);
-    }
     return enabledAddTraps;
-};
+}
 
 static void RollRandomTrap(uint64_t seed) {
     uint64_t finalSeed = seed + (IS_RANDO ? static_cast<uint64_t>(Rando::Context::GetInstance()->GetSeed())
@@ -271,7 +268,20 @@ static void RollRandomTrap(uint64_t seed) {
     uint64_t state;
     ShipUtils::RandInit(finalSeed, &state);
 
-    roll = ShipUtils::RandomElement(getEnabledAddTraps(), &state);
+    std::vector<AltTrapType> enabledAddTraps = GetEnabledAddTraps();
+    uint32_t candidateCount = static_cast<uint32_t>(enabledAddTraps.size());
+    void (*modTrapEffect)(void) = nullptr;
+    GameInteractor::Instance->ExecuteHooks<GameInteractor::OnTrapRoll>(&candidateCount, &modTrapEffect);
+    if (modTrapEffect != nullptr) {
+        roll = ADD_TRAP_MAX;
+        modTrapEffect();
+        return;
+    }
+    if (enabledAddTraps.empty()) {
+        enabledAddTraps.push_back(ADD_ICE_TRAP);
+    }
+
+    roll = ShipUtils::RandomElement(enabledAddTraps, &state);
     switch (roll) {
         case ADD_ICE_TRAP:
             GameInteractor::RawAction::FreezePlayer();

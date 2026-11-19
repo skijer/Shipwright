@@ -64,7 +64,7 @@ static SOH::Scene* LayerHeader(SOH::Scene* scene, int32_t sceneLayer) {
     return headers->headers[sceneLayer - 1].get();
 }
 
-// Same path as OTRPlay_SpawnScene. SOH [Unbound] SceneDB names custom scenes too, which gSceneTable does not reach.
+// Same path as OTRPlay_SpawnScene.
 static std::string ScenePath(int32_t sceneNum) {
     return SceneDB::Instance->GetScenePath(sceneNum);
 }

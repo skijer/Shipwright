@@ -34,6 +34,102 @@ static SOHRandoInfBank ModItemBank(const SaveContext* saveContext) {
     return saveContext == &gSaveContext ? SOH_RANDO_INF_SAVE : SOH_RANDO_INF_LOGIC;
 }
 
+static bool IsEnemySoul(RandomizerGet item) {
+    return item >= RG_SOUL_ENEMY_ANUBIS && item <= RG_SOUL_ENEMY_WOLFOS;
+}
+
+static RandomizerGet GetEnemySoul(RandomizerEnemy enemy) {
+    switch (enemy) {
+        case RE_ANUBIS:
+            return RG_SOUL_ENEMY_ANUBIS;
+        case RE_ARMOS:
+            return RG_SOUL_ENEMY_ARMOS;
+        case RE_BARI:
+            return RG_SOUL_ENEMY_BARI;
+        case RE_BEAMOS:
+            return RG_SOUL_ENEMY_BEAMOS;
+        case RE_BIG_OCTO:
+            return RG_SOUL_ENEMY_BIG_OCTO;
+        case RE_BLUE_BUBBLE:
+        case RE_GREEN_BUBBLE:
+            return RG_SOUL_ENEMY_BUBBLE;
+        case RE_DARK_LINK:
+            return RG_SOUL_ENEMY_DARK_LINK;
+        case RE_DEAD_HAND:
+            return RG_SOUL_ENEMY_DEAD_HAND;
+        case RE_DEKU_BABA:
+        case RE_WITHERED_DEKU_BABA:
+            return RG_SOUL_ENEMY_DEKU_BABA;
+        case RE_DODONGO:
+            return RG_SOUL_ENEMY_DODONGO;
+        case RE_FLARE_DANCER:
+            return RG_SOUL_ENEMY_FLARE_DANCER;
+        case RE_FREEZARD:
+            return RG_SOUL_ENEMY_FREEZARD;
+        case RE_GERUDO_WARRIOR:
+            return RG_SOUL_ENEMY_GERUDO_FIGHTER;
+        case RE_GOHMA_LARVA:
+            return RG_SOUL_ENEMY_GOHMA_LARVA;
+        case RE_GUAY:
+            return RG_SOUL_ENEMY_GUAY;
+        case RE_IRON_KNUCKLE:
+            return RG_SOUL_ENEMY_IRON_KNUCKLE;
+        case RE_KEESE:
+        case RE_FIRE_KEESE:
+            return RG_SOUL_ENEMY_KEESE;
+        case RE_LEEVER:
+        case RE_PURPLE_LEEVER:
+            return RG_SOUL_ENEMY_LEEVER;
+        case RE_LIKE_LIKE:
+            return RG_SOUL_ENEMY_LIKE_LIKE;
+        case RE_LIZALFOS:
+        case RE_DINOLFOS:
+            return RG_SOUL_ENEMY_LIZALFOS;
+        case RE_MAD_SCRUB:
+            return RG_SOUL_ENEMY_MAD_SCRUB;
+        case RE_OCTOROK:
+            return RG_SOUL_ENEMY_OCTOROK;
+        case RE_TENTACLE:
+            return RG_SOUL_ENEMY_PARASITIC_TENTACLE;
+        case RE_PEAHAT:
+            return RG_SOUL_ENEMY_PEAHAT;
+        case RE_POE:
+        case RE_MEG:
+            return RG_SOUL_ENEMY_POE;
+        case RE_REDEAD:
+        case RE_GIBDO:
+            return RG_SOUL_ENEMY_REDEAD;
+        case RE_SHABOM:
+            return RG_SOUL_ENEMY_SHABOM;
+        case RE_SHELL_BLADE:
+            return RG_SOUL_ENEMY_SHELLBLADE;
+        case RE_GOLD_SKULLTULA:
+        case RE_BIG_SKULLTULA:
+        case RE_WALLTULA:
+            return RG_SOUL_ENEMY_SKULLTULA;
+        case RE_SPIKE:
+            return RG_SOUL_ENEMY_SPIKE;
+        case RE_STALCHILD:
+            return RG_SOUL_ENEMY_STALCHILD;
+        case RE_STALFOS:
+            return RG_SOUL_ENEMY_STALFOS;
+        case RE_STINGER:
+            return RG_SOUL_ENEMY_STINGER;
+        case RE_TEKTITE:
+            return RG_SOUL_ENEMY_TEKTITE;
+        case RE_TORCH_SLUG:
+            return RG_SOUL_ENEMY_TORCH_SLUG;
+        case RE_WALLMASTER:
+        case RE_FLOORMASTER:
+            return RG_SOUL_ENEMY_WALLMASTER;
+        case RE_WOLFOS:
+        case RE_WHITE_WOLFOS:
+            return RG_SOUL_ENEMY_WOLFOS;
+        default:
+            return RG_NONE;
+    }
+}
+
 bool Logic::HasItem(RandomizerGet itemName) {
     LOGIC_MOD_ITEM_GRANTS(itemName);
     bool progressiveOwned = false;
@@ -44,6 +140,9 @@ bool Logic::HasItem(RandomizerGet itemName) {
     }
     if (RandoItems_IsModItem(itemName)) {
         return RandoItems_IsOwned(itemName, ModItemBank(mSaveContext));
+    }
+    if (IsEnemySoul(itemName)) {
+        return CheckRandoInf(StaticData::RandoGetToRandInf.at(itemName));
     }
     switch (itemName) {
         case RG_FAIRY_OCARINA:
@@ -784,9 +883,20 @@ bool Logic::CanDoGlitch(GlitchType glitch) {
 
 // RANDOTODO quantity is a placeholder for proper ammo use calculation logic. in time will want updating to account for
 // ammo capacity
+bool Logic::HasEnemySoul(RandomizerEnemy enemy) {
+    if (!ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS)) {
+        return true;
+    }
+    RandomizerGet soul = GetEnemySoul(enemy);
+    return soul == RG_NONE || HasItem(soul);
+}
+
 bool Logic::CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wallOrFloor, uint8_t quantity, bool timer,
                          bool inWater) {
     LOGIC_MOD_ENEMY_GRANTS(enemy);
+    if (!HasEnemySoul(enemy)) {
+        return false;
+    }
     bool killed = false;
     switch (enemy) {
         case RE_GERUDO_GUARD:
@@ -960,6 +1070,10 @@ bool Logic::CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wal
         case RE_WOLFOS:
         case RE_WHITE_WOLFOS:
         case RE_WALLMASTER:
+        case RE_PEAHAT:
+        case RE_TEKTITE:
+        case RE_STALCHILD:
+        case RE_LEEVER:
             return CanJumpslash() || CanUse(RG_FAIRY_BOW) || CanUse(RG_FAIRY_SLINGSHOT) || CanUse(RG_BOMBCHU_5) ||
                    CanUse(RG_DINS_FIRE) ||
                    (CanUse(RG_BOMB_BAG) && (CanUse(RG_NUTS) || CanUse(RG_HOOKSHOT) || CanUse(RG_BOOMERANG)));
@@ -1339,13 +1453,13 @@ bool Logic::CanBreakMudWalls() {
 
 bool Logic::CanGetDekuBabaSticks() {
     LOGIC_MOD_GRANTS(CanGetDekuBabaSticks);
-    return CanUseSword() || CanUse(RG_BOOMERANG);
+    return HasEnemySoul(RE_DEKU_BABA) && (CanUseSword() || CanUse(RG_BOOMERANG));
 }
 
 bool Logic::CanGetDekuBabaNuts() {
     LOGIC_MOD_GRANTS(CanGetDekuBabaNuts);
-    return CanJumpslash() || CanUse(RG_FAIRY_SLINGSHOT) || CanUse(RG_FAIRY_BOW) || HasExplosives() ||
-           CanUse(RG_DINS_FIRE);
+    return HasEnemySoul(RE_DEKU_BABA) && (CanJumpslash() || CanUse(RG_FAIRY_SLINGSHOT) || CanUse(RG_FAIRY_BOW) ||
+                                          HasExplosives() || CanUse(RG_DINS_FIRE));
 }
 
 bool Logic::CanHitEyeTargets() {
@@ -2083,6 +2197,43 @@ std::map<RandomizerGet, uint32_t> StaticData::RandoGetToRandInf = {
     { RG_BONGO_BONGO_SOUL, RAND_INF_BONGO_BONGO_SOUL },
     { RG_TWINROVA_SOUL, RAND_INF_TWINROVA_SOUL },
     { RG_GANON_SOUL, RAND_INF_GANON_SOUL },
+    { RG_SOUL_ENEMY_ANUBIS, RAND_INF_SOUL_ENEMY_ANUBIS },
+    { RG_SOUL_ENEMY_ARMOS, RAND_INF_SOUL_ENEMY_ARMOS },
+    { RG_SOUL_ENEMY_BARI, RAND_INF_SOUL_ENEMY_BARI },
+    { RG_SOUL_ENEMY_BEAMOS, RAND_INF_SOUL_ENEMY_BEAMOS },
+    { RG_SOUL_ENEMY_BIG_OCTO, RAND_INF_SOUL_ENEMY_BIG_OCTO },
+    { RG_SOUL_ENEMY_BUBBLE, RAND_INF_SOUL_ENEMY_BUBBLE },
+    { RG_SOUL_ENEMY_DARK_LINK, RAND_INF_SOUL_ENEMY_DARK_LINK },
+    { RG_SOUL_ENEMY_DEAD_HAND, RAND_INF_SOUL_ENEMY_DEAD_HAND },
+    { RG_SOUL_ENEMY_DEKU_BABA, RAND_INF_SOUL_ENEMY_DEKU_BABA },
+    { RG_SOUL_ENEMY_DODONGO, RAND_INF_SOUL_ENEMY_DODONGO },
+    { RG_SOUL_ENEMY_FLARE_DANCER, RAND_INF_SOUL_ENEMY_FLARE_DANCER },
+    { RG_SOUL_ENEMY_FREEZARD, RAND_INF_SOUL_ENEMY_FREEZARD },
+    { RG_SOUL_ENEMY_GERUDO_FIGHTER, RAND_INF_SOUL_ENEMY_GERUDO_FIGHTER },
+    { RG_SOUL_ENEMY_GOHMA_LARVA, RAND_INF_SOUL_ENEMY_GOHMA_LARVA },
+    { RG_SOUL_ENEMY_GUAY, RAND_INF_SOUL_ENEMY_GUAY },
+    { RG_SOUL_ENEMY_IRON_KNUCKLE, RAND_INF_SOUL_ENEMY_IRON_KNUCKLE },
+    { RG_SOUL_ENEMY_KEESE, RAND_INF_SOUL_ENEMY_KEESE },
+    { RG_SOUL_ENEMY_LEEVER, RAND_INF_SOUL_ENEMY_LEEVER },
+    { RG_SOUL_ENEMY_LIKE_LIKE, RAND_INF_SOUL_ENEMY_LIKE_LIKE },
+    { RG_SOUL_ENEMY_LIZALFOS, RAND_INF_SOUL_ENEMY_LIZALFOS },
+    { RG_SOUL_ENEMY_MAD_SCRUB, RAND_INF_SOUL_ENEMY_MAD_SCRUB },
+    { RG_SOUL_ENEMY_OCTOROK, RAND_INF_SOUL_ENEMY_OCTOROK },
+    { RG_SOUL_ENEMY_PARASITIC_TENTACLE, RAND_INF_SOUL_ENEMY_PARASITIC_TENTACLE },
+    { RG_SOUL_ENEMY_PEAHAT, RAND_INF_SOUL_ENEMY_PEAHAT },
+    { RG_SOUL_ENEMY_POE, RAND_INF_SOUL_ENEMY_POE },
+    { RG_SOUL_ENEMY_REDEAD, RAND_INF_SOUL_ENEMY_REDEAD },
+    { RG_SOUL_ENEMY_SHABOM, RAND_INF_SOUL_ENEMY_SHABOM },
+    { RG_SOUL_ENEMY_SHELLBLADE, RAND_INF_SOUL_ENEMY_SHELLBLADE },
+    { RG_SOUL_ENEMY_SKULLTULA, RAND_INF_SOUL_ENEMY_SKULLTULA },
+    { RG_SOUL_ENEMY_SPIKE, RAND_INF_SOUL_ENEMY_SPIKE },
+    { RG_SOUL_ENEMY_STALCHILD, RAND_INF_SOUL_ENEMY_STALCHILD },
+    { RG_SOUL_ENEMY_STALFOS, RAND_INF_SOUL_ENEMY_STALFOS },
+    { RG_SOUL_ENEMY_STINGER, RAND_INF_SOUL_ENEMY_STINGER },
+    { RG_SOUL_ENEMY_TEKTITE, RAND_INF_SOUL_ENEMY_TEKTITE },
+    { RG_SOUL_ENEMY_TORCH_SLUG, RAND_INF_SOUL_ENEMY_TORCH_SLUG },
+    { RG_SOUL_ENEMY_WALLMASTER, RAND_INF_SOUL_ENEMY_WALLMASTER },
+    { RG_SOUL_ENEMY_WOLFOS, RAND_INF_SOUL_ENEMY_WOLFOS },
     { RG_OCARINA_A_BUTTON, RAND_INF_HAS_OCARINA_A },
     { RG_OCARINA_C_UP_BUTTON, RAND_INF_HAS_OCARINA_C_UP },
     { RG_OCARINA_C_DOWN_BUTTON, RAND_INF_HAS_OCARINA_C_DOWN },
@@ -2280,6 +2431,10 @@ void Logic::ApplyItemEffect(Item& item, bool state) {
     }
     if (RandoItems_IsModItem(randoGet)) {
         RandoItems_SetOwned(randoGet, ModItemBank(mSaveContext), state);
+        return;
+    }
+    if (IsEnemySoul(randoGet)) {
+        SetRandoInf(StaticData::RandoGetToRandInf.at(randoGet), state);
         return;
     }
     if (item.GetGIEntry()->objectId == OBJECT_GI_STICK) {
@@ -3279,6 +3434,12 @@ void Logic::Reset(bool resetSaveContext /*= true*/) {
         if (ctx->GetOption(RSK_SHUFFLE_BEAN_SOULS).Is(false)) {
             for (const BeanPatch& patch : beanPatches) {
                 SetRandoInf(patch.soulRandInf, true);
+            }
+        }
+
+        if (ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS).Is(false)) {
+            for (int soul = RAND_INF_SOUL_ENEMY_ANUBIS; soul <= RAND_INF_SOUL_ENEMY_WOLFOS; soul++) {
+                SetRandoInf(static_cast<RandomizerInf>(soul), true);
             }
         }
 

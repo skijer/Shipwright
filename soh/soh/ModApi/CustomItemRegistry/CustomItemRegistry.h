@@ -79,18 +79,13 @@ typedef struct {
     const char* hintKey;
     const char* progressionGroup;
     const char* poolCountOption;
-    // Optional: the item joins the seed's pool only while this rando option equals poolModeValue (or, inverted,
-    // only while it does not).
     const char* poolModeOption;
     int32_t poolModeValue;
     bool poolModeInvert;
-    // Optional native pool contributions. Each copy chooses one source with the seed RNG.
-    // An empty list preserves the custom item's own randomizer identity.
     const int32_t* poolSources;
     uint16_t poolSourceCount;
 } SOHCustomItemRandomizer;
 
-// How other players see this item on you, drawn by the game while you hold it or wear it (SetCustomItemWorn).
 typedef struct {
     const char* modelPath;
     uint8_t limb;      // PLAYER_LIMB_*; 0 = left hand when held, head when worn
@@ -134,17 +129,13 @@ typedef struct {
     uint8_t meleeWeapon;
     SOHCustomItemAmmoFunc getAmmo;
     SOHCustomItemAppearance appearance;
-    // Optional UTF-8 label for notifications; omitted labels fall back to the registered key.
     const char* displayName;
-    // Optional form keys (SOH_FORM_KEY_* or a registered form's key) that may use the item; none means every form.
     const char* const* allowedForms;
     uint32_t allowedFormCount;
 } SOHCustomItemDefinition;
 
 typedef void (*SOHPickupVariantReceiveFunc)(const char* itemKey, const char* variantKey);
 
-// One of several ways to find a single inventory item: its own randomizer item and get-item, hidden from the
-// pause screen. Receiving it grants itemKey and tells the mod which variant arrived.
 typedef struct {
     uint32_t structSize;
     const char* key;
@@ -183,7 +174,6 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition);
 const SOHCustomItemDefinition* CustomItemRegistry_FindReplacement(uint16_t vanillaItem);
 bool CustomItemRegistry_IsAgeAllowed(const char* key);
 bool CustomItemRegistry_IsFormAllowed(const char* key);
-// The one gate for showing, equipping and using an item: its age and its form both allow the player.
 bool CustomItemRegistry_IsUsableNow(const char* key);
 bool CustomItemRegistry_IsPauseItemAgeAllowed(void);
 const char* CustomItemRegistry_ResolveTexture(const char* key, SOHItemIconSurface surface);
@@ -269,7 +259,6 @@ bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool auto
 bool CustomItemRegistry_IsCustomGetItem(const GetItemEntry* entry);
 bool CustomItemRegistry_HasMessageItemIcon(void);
 bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEntry* entry);
-// Immediate pickup: resolve its own identity, grant once, report receipt and show its notification.
 bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetItemEntry* entry);
 const SOHCustomItemDefinition* CustomItemRegistry_GetPendingGetItem(void);
 void CustomItemRegistry_ClearPendingGetItem(void);
@@ -287,6 +276,8 @@ void CustomItemRegistry_Init();
 std::vector<std::string> CustomItemRegistry_ListOwned();
 std::string CustomItemRegistry_GetOwner(const char* key);
 std::vector<std::string> CustomItemRegistry_ListWorn();
+std::string CustomItemRegistry_GetDisplayName(const char* key);
+std::vector<const SOHCustomPickupVariant*> CustomItemRegistry_ListPickupVariants(const char* itemKey);
 void KaleidoItemManager_Init();
 void CustomItemRegistry_SetCurrentMod(const std::string& name);
 void CustomItemRegistry_ClearCurrentMod();

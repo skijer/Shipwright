@@ -16,7 +16,7 @@ typedef struct {
 
 typedef struct {
     s16 entranceIndex;
-    s16 room; // SOH [Unbound]
+    s16 room;
     s16 angle;
     Vec3f pos;
 } GrottoReturnInfo;
@@ -34,7 +34,7 @@ void Grotto_ForceGrottoReturnOnSpecialEntrance(void);
 void Grotto_ForceGrottoReturn(void);
 void Grotto_ForceRegularVoidOut(void);
 void Grotto_SanitizeEntranceType(void);
-s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s16 scene); // SOH [Unbound] scene s8 -> s16
+s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s16 scene);
 s8 Grotto_CurrentGrotto();
 #ifdef __cplusplus
 };

@@ -350,7 +350,6 @@ void BossRegistry_ReportDefeated(Actor* boss) {
         GameInteractor_ExecuteOnBossDefeat(boss);
         return;
     }
-    // The slot's actor id reaches the hooks filtered by boss (timestamps, game completion, Anchor).
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnBossDefeat>(boss);
     GameInteractor::Instance->ExecuteHooksForID<GameInteractor::OnBossDefeat>(kSlots[slot].vanillaActor, boss);
     GameInteractor::Instance->ExecuteHooksForPtr<GameInteractor::OnBossDefeat>((uintptr_t)boss, boss);

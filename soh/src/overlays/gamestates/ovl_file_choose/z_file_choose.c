@@ -2083,8 +2083,8 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
 
         // If no randomizer is generated and "start randomizer" is selected, show text to explain why user can't start
         // the randomizer.
-        if (!FleetGame_HasGeneratedSeed(this->buttonIndex) && !Randomizer_IsSeedGenerated() && !Randomizer_IsSpoilerLoaded() &&
-            this->randomizerIndex == RSM_START_RANDOMIZER) {
+        if (!FleetGame_HasGeneratedSeed(this->buttonIndex) && !Randomizer_IsSeedGenerated() &&
+            !Randomizer_IsSpoilerLoaded() && this->randomizerIndex == RSM_START_RANDOMIZER) {
             Interface_DrawTextLine(this->state.gfxCtx,
                                    SohFileSelect_GetSettingText(RSM_NO_RANDOMIZER_GENERATED, language), 70, (80 + 64),
                                    240, 80, 80, textAlpha, 0.8f, true);

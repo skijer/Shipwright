@@ -10,18 +10,24 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <fleet/rando/CrossDungeonRuntime.h>
 #include <spdlog/spdlog.h>
 
+#include "soh/ModApi/ModApi.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
+#include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/ModApi/RandoInfCustom/RandoInfCustom.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
+#include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/savefile.h"
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/Enhancements/randomizer/logic.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
 #include "soh/OTRGlobals.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 void StartingItemGive(GetItemEntry entry, RandomizerCheck check);
@@ -73,6 +79,56 @@ bool IsPlaying() {
            gSaveContext.gameMode == GAMEMODE_NORMAL && IS_RANDO && gSaveContext.fileNum == FleetRuntime_Slot();
 }
 
+void CompleteHeartPieces() {
+    constexpr uint32_t pieceShift = QUEST_HEART_PIECE + 4;
+    constexpr uint32_t piecesPerContainer = 4;
+    gSaveContext.healthAccumulator = MAX_HEALTH;
+    while ((gSaveContext.inventory.questItems >> pieceShift) >= piecesPerContainer) {
+        gSaveContext.inventory.questItems -= piecesPerContainer << pieceShift;
+        gSaveContext.healthCapacity += FULL_HEART_HEALTH;
+        gSaveContext.health += FULL_HEART_HEALTH;
+    }
+}
+
+void ApplyReceiveBookkeeping(const GetItemEntry& entry) {
+    if (entry.modIndex != MOD_NONE) {
+        return;
+    }
+    switch (entry.itemId) {
+        case ITEM_SHIELD_DEKU:
+            Flags_SetRandomizerInf(RAND_INF_HAS_FOUND_DEKU_SHIELD);
+            break;
+        case ITEM_SHIELD_HYLIAN:
+            Flags_SetRandomizerInf(RAND_INF_HAS_FOUND_HYLIAN_SHIELD);
+            break;
+        case ITEM_TUNIC_GORON:
+            Flags_SetRandomizerInf(RAND_INF_HAS_FOUND_GORON_TUNIC);
+            break;
+        case ITEM_TUNIC_ZORA:
+            Flags_SetRandomizerInf(RAND_INF_HAS_FOUND_ZORA_TUNIC);
+            break;
+        case ITEM_SONG_EPONA:
+            Flags_SetEventChkInf(EVENTCHKINF_EPONA_OBTAINED);
+            break;
+        case ITEM_HEART_PIECE:
+        case ITEM_HEART_PIECE_2:
+        case ITEM_HEART_CONTAINER:
+            CompleteHeartPieces();
+            break;
+        default:
+            break;
+    }
+}
+
+void GiveNativeItem(RandomizerGet item) {
+    const GetItemEntry entry = Rando::StaticData::RetrieveItem(item).GetGIEntry_Copy();
+    if (!ProgressiveItems_GiveRando(item)) {
+        StartingItemGive(entry, RC_MAX);
+    }
+    GameInteractor_ExecuteOnItemReceiveHooks(entry);
+    ApplyReceiveBookkeeping(entry);
+}
+
 void Grant(const nlohmann::json& delivery) {
     const std::string item = delivery.value("trap", false) ? "Ice Trap" : delivery.at("item").get<std::string>();
     const auto found = Rando::StaticData::itemNameToEnum.find(item);
@@ -82,41 +138,147 @@ void Grant(const nlohmann::json& delivery) {
     const char* key = RandoItems_GetKey(found->second);
     if (key != nullptr) {
         CustomItemRegistry_ReceiveGetItem(key);
-    } else {
-        const GetItemEntry entry = Rando::StaticData::RetrieveItem(found->second).GetGIEntry_Copy();
-        StartingItemGive(entry, RC_MAX);
-        GameInteractor_ExecuteOnItemReceiveHooks(entry);
-    }
-}
-
-void GrantSharedTier(const std::string& key, int current, const nlohmann::json& item) {
-    RandomizerGet grant = RG_NONE;
-    if (key == "wallets") {
-        grant = current == 0 ? RG_ADULT_WALLET : current == 1 ? RG_GIANT_WALLET : RG_TYCOON_WALLET;
-    } else if (key == "bows") {
-        grant = current == 0 ? RG_FAIRY_BOW : current == 1 ? RG_BIG_QUIVER : RG_BIGGEST_QUIVER;
-    } else if (key == "bombBags") {
-        grant = current == 0 ? RG_BOMB_BAG : current == 1 ? RG_BIG_BOMB_BAG : RG_BIGGEST_BOMB_BAG;
-    } else if (key == "magic") {
-        grant = current == 0 ? RG_MAGIC_SINGLE : RG_MAGIC_DOUBLE;
-    } else if (key == "hookshot") {
-        grant = current == 0 ? RG_HOOKSHOT : RG_LONGSHOT;
-    }
-    if (grant == RG_NONE) {
-        Grant({ { "item", item } });
         return;
     }
-    const GetItemEntry entry = Rando::StaticData::RetrieveItem(grant).GetGIEntry_Copy();
-    StartingItemGive(entry, RC_MAX);
-    GameInteractor_ExecuteOnItemReceiveHooks(entry);
+    GiveNativeItem(found->second);
+}
+
+uint8_t RandoOption(RandomizerSettingKey key) {
+    return OTRGlobals::Instance->gRandomizer->GetRandoSettingValue(key);
+}
+
+std::vector<RandomizerGet> SharedTierItems(const std::string& key) {
+    std::vector<RandomizerGet> levels;
+    RandomizerGet infinite = RG_NONE;
+    if (key == "wallets") {
+        levels = { RG_CHILD_WALLET, RG_ADULT_WALLET, RG_GIANT_WALLET };
+        if (RandoOption(RSK_INCLUDE_TYCOON_WALLET)) {
+            levels.push_back(RG_TYCOON_WALLET);
+        }
+        infinite = RG_WALLET_INF;
+    } else if (key == "bows") {
+        levels = { RG_FAIRY_BOW, RG_BIG_QUIVER, RG_BIGGEST_QUIVER };
+        infinite = RG_QUIVER_INF;
+    } else if (key == "bombBags") {
+        levels = { RG_BOMB_BAG, RG_BIG_BOMB_BAG, RG_BIGGEST_BOMB_BAG };
+        infinite = RG_BOMB_BAG_INF;
+    } else if (key == "magic") {
+        levels = { RG_MAGIC_SINGLE, RG_MAGIC_DOUBLE };
+        infinite = RG_MAGIC_INF;
+    } else if (key == "dekuStickBag") {
+        levels = { RG_DEKU_STICK_BAG, RG_DEKU_STICK_CAPACITY_20, RG_DEKU_STICK_CAPACITY_30 };
+        infinite = RG_STICK_UPGRADE_INF;
+    } else if (key == "dekuNutBag") {
+        levels = { RG_DEKU_NUT_BAG, RG_DEKU_NUT_CAPACITY_30, RG_DEKU_NUT_CAPACITY_40 };
+        infinite = RG_NUT_UPGRADE_INF;
+    } else if (key == "bombchuBags") {
+        levels = { RG_PROGRESSIVE_BOMBCHU_BAG, RG_PROGRESSIVE_BOMBCHU_BAG, RG_PROGRESSIVE_BOMBCHU_BAG };
+        infinite = RG_BOMBCHU_INF;
+    } else if (key == "hookshot") {
+        levels = { RG_HOOKSHOT, RG_LONGSHOT };
+    }
+    if (infinite != RG_NONE && RandoOption(RSK_INFINITE_UPGRADES) != RO_INF_UPGRADES_OFF) {
+        levels.push_back(infinite);
+    }
+    return levels;
+}
+
+uint16_t TierReceipt(const std::string& key, int level) {
+    return RandoInfCustom_Register(("fleet:tier:" + key + ":" + std::to_string(level)).c_str());
+}
+
+bool GrantLevelOnce(const std::string& key, int level, const nlohmann::json& item) {
+    const uint16_t receipt = TierReceipt(key, level);
+    if (receipt == 0 || RandoInfCustom_Get(SOH_RANDO_INF_SAVE, receipt)) {
+        return false;
+    }
+    Grant({ { "item", item } });
+    RandoInfCustom_Set(SOH_RANDO_INF_SAVE, receipt, true);
+    return true;
+}
+
+bool GrantSharedTier(const std::string& key, int current, const nlohmann::json& item) {
+    const std::vector<RandomizerGet> levels = SharedTierItems(key);
+    if (levels.empty()) {
+        return GrantLevelOnce(key, current, item);
+    }
+    if (current < 0 || static_cast<size_t>(current) >= levels.size()) {
+        return false;
+    }
+    GiveNativeItem(levels[current]);
+    return true;
+}
+
+int WalletLevel() {
+    constexpr int kInfiniteWallet = 5;
+    if (Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MONEY)) {
+        return kInfiniteWallet;
+    }
+    const bool hasWallet = !RandoOption(RSK_SHUFFLE_CHILD_WALLET) || Flags_GetRandomizerInf(RAND_INF_HAS_WALLET);
+    return hasWallet ? 1 + CUR_UPG_VALUE(UPG_WALLET) : 0;
+}
+
+bool IsChateauLendingMagic() {
+    using LendsMagic = bool (*)(void);
+    const auto lends = reinterpret_cast<LendsMagic>(ModApi_Get()->FindService("nei.chateau.lends_magic"));
+    return lends != nullptr && lends();
+}
+
+int MagicLevel() {
+    constexpr int kInfiniteMagic = 3;
+    const bool isInfinite = Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER) && !IsChateauLendingMagic();
+    return isInfinite ? kInfiniteMagic : gSaveContext.isMagicAcquired + gSaveContext.isDoubleMagicAcquired;
+}
+
+int BombchuBagLevel() {
+    if (RandoOption(RSK_BOMBCHU_BAG) == RO_BOMBCHU_BAG_PROGRESSIVE) {
+        return gSaveContext.ship.quest.data.randomizer.bombchuUpgradeLevel;
+    }
+    return INV_CONTENT(ITEM_BOMBCHU) != ITEM_NONE;
+}
+
+int LevelOrInfinite(RandomizerInf infiniteFlag, int infiniteLevel, int level) {
+    return Flags_GetRandomizerInf(infiniteFlag) ? infiniteLevel : level;
+}
+
+int SwordLevel() {
+    const int kokiri = CHECK_OWNED_EQUIP(EQUIP_TYPE_SWORD, EQUIP_INV_SWORD_KOKIRI) ? 1 : 0;
+    return std::max<int>(kokiri, ProgressiveItems_GetLevel("nei.upgrades.kokiri", SOH_RANDO_INF_SAVE));
+}
+
+int StrengthLevel() {
+    const int upgrade = CUR_UPG_VALUE(UPG_STRENGTH);
+    return upgrade > 0 ? upgrade + 1 : static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CAN_GRAB));
+}
+
+int GoldenRedQuarters() {
+    using ReadQuarters = int32_t (*)();
+    const auto read = reinterpret_cast<ReadQuarters>(ModApi_Get()->FindService("nei.heart.golden_red_quarters"));
+    return read != nullptr ? read() : 0;
+}
+
+int HeartQuarters() {
+    constexpr uint32_t pieceShift = QUEST_HEART_PIECE + 4;
+    const int pieces = static_cast<int>(gSaveContext.inventory.questItems >> pieceShift);
+    return gSaveContext.healthCapacity / FULL_HEART_HEALTH * 4 + pieces - GoldenRedQuarters();
+}
+
+int OcarinaLevel() {
+    const u8 ocarina = INV_CONTENT(ITEM_OCARINA_FAIRY);
+    if (ocarina == ITEM_NONE) {
+        return 0;
+    }
+    return ocarina == ITEM_OCARINA_TIME ? 2 : 1;
 }
 
 nlohmann::json ReadSharedTiers() {
-    return { { "bows", static_cast<int>(CUR_UPG_VALUE(UPG_QUIVER)) },
-             { "bombBags", static_cast<int>(CUR_UPG_VALUE(UPG_BOMB_BAG)) },
-             { "bombchuBags", static_cast<int>(INV_CONTENT(ITEM_BOMBCHU) != ITEM_NONE) },
-             { "magic", static_cast<int>(gSaveContext.isMagicAcquired + gSaveContext.isDoubleMagicAcquired) },
-             { "wallets", static_cast<int>(CUR_UPG_VALUE(UPG_WALLET)) },
+    return { { "bows", LevelOrInfinite(RAND_INF_HAS_INFINITE_QUIVER, 4, CUR_UPG_VALUE(UPG_QUIVER)) },
+             { "bombBags", LevelOrInfinite(RAND_INF_HAS_INFINITE_BOMB_BAG, 4, CUR_UPG_VALUE(UPG_BOMB_BAG)) },
+             { "bombchuBags", LevelOrInfinite(RAND_INF_HAS_INFINITE_BOMBCHUS, 4, BombchuBagLevel()) },
+             { "dekuStickBag", LevelOrInfinite(RAND_INF_HAS_INFINITE_STICK_UPGRADE, 4, CUR_UPG_VALUE(UPG_STICKS)) },
+             { "dekuNutBag", LevelOrInfinite(RAND_INF_HAS_INFINITE_NUT_UPGRADE, 4, CUR_UPG_VALUE(UPG_NUTS)) },
+             { "magic", MagicLevel() },
+             { "wallets", WalletLevel() },
              { "fireArrows", static_cast<int>(INV_CONTENT(ITEM_ARROW_FIRE) == ITEM_ARROW_FIRE) },
              { "iceArrows", static_cast<int>(INV_CONTENT(ITEM_ARROW_ICE) == ITEM_ARROW_ICE) },
              { "lightArrows", static_cast<int>(INV_CONTENT(ITEM_ARROW_LIGHT) == ITEM_ARROW_LIGHT) },
@@ -130,18 +292,260 @@ nlohmann::json ReadSharedTiers() {
              { "zoraMask", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CHILD_TRADES_HAS_MASK_ZORA)) },
              { "keatonMask", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CHILD_TRADES_HAS_MASK_KEATON)) },
              { "bunnyHood", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CHILD_TRADES_HAS_MASK_BUNNY)) },
-             { "maskOfTruth", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CHILD_TRADES_HAS_MASK_TRUTH)) } };
+             { "maskOfTruth", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CHILD_TRADES_HAS_MASK_TRUTH)) },
+             { "ocarina", OcarinaLevel() },
+             { "songOfTime", static_cast<int>(CHECK_QUEST_ITEM(QUEST_SONG_TIME) != 0) },
+             { "sunsSong", static_cast<int>(CHECK_QUEST_ITEM(QUEST_SONG_SUN) != 0) },
+             { "sariasSong", static_cast<int>(CHECK_QUEST_ITEM(QUEST_SONG_SARIA) != 0) },
+             { "swords", SwordLevel() },
+             { "strength", StrengthLevel() },
+             { "scale", static_cast<int>(Flags_GetRandomizerInf(RAND_INF_CAN_SWIM)) },
+             { "heartQuarters", HeartQuarters() } };
+}
+
+bool SynchronizeBottles() {
+    using ReadBottles = const char* (*)(void);
+    using WriteBottles = void (*)(const char*);
+    static std::string sReported;
+    static std::string sApplied;
+    const auto get = Host<const char* (*)(const char*)>("GetBottles");
+    const auto report = Host<bool (*)(const char*, const char*)>("ReportBottles");
+    const auto read = reinterpret_cast<ReadBottles>(ModApi_Get()->FindService("nei.bottles.read"));
+    const auto write = reinterpret_cast<WriteBottles>(ModApi_Get()->FindService("nei.bottles.write"));
+    if (get == nullptr || report == nullptr || read == nullptr || write == nullptr) {
+        return false;
+    }
+    bool isRewritten = false;
+    const char* remote = get(kGame);
+    if (remote != nullptr && remote[0] != '\0' && sApplied != remote) {
+        if (std::string(remote) != read()) {
+            write(remote);
+            isRewritten = true;
+        }
+        sApplied = remote;
+    }
+    const std::string local = read();
+    if (local != sReported && report(kGame, local.c_str())) {
+        sReported = local;
+    }
+    return isRewritten;
+}
+
+struct SharedEquip {
+    const char* key;
+    u8 slot;
+    u8 buttonItem = ITEM_NONE;
+};
+
+constexpr SharedEquip kSharedEquips[] = {
+    { "fireArrows", SLOT_ARROW_FIRE, ITEM_BOW_ARROW_FIRE },
+    { "iceArrows", SLOT_ARROW_ICE, ITEM_BOW_ARROW_ICE },
+    { "lightArrows", SLOT_ARROW_LIGHT, ITEM_BOW_ARROW_LIGHT },
+    { "bow", SLOT_BOW },
+    { "ocarina", SLOT_OCARINA },
+    { "bombs", SLOT_BOMB },
+    { "bombchus", SLOT_BOMBCHU },
+    { "dekuSticks", SLOT_STICK },
+    { "dekuNuts", SLOT_NUT },
+    { "hookshot", SLOT_HOOKSHOT },
+    { "lens", SLOT_LENS },
+    { "magicBeans", SLOT_BEAN },
+    { "bottle1", SLOT_BOTTLE_1 },
+    { "bottle2", SLOT_BOTTLE_2 },
+    { "bottle3", SLOT_BOTTLE_3 },
+    { "bottle4", SLOT_BOTTLE_4 },
+};
+constexpr size_t kSharedButtons = 7;
+constexpr size_t kSharedCButtons = 3;
+
+struct EquipButton {
+    u8* item;
+    u8* slot;
+};
+
+EquipButton SharedButton(size_t index) {
+    return { &gSaveContext.equips.buttonItems[index + 1], &gSaveContext.equips.cButtonSlots[index] };
+}
+
+const SharedEquip* FindEquipOnButton(const EquipButton& button) {
+    if (*button.item == ITEM_NONE) {
+        return nullptr;
+    }
+    for (const auto& equip : kSharedEquips) {
+        const bool isHeld =
+            equip.buttonItem != ITEM_NONE ? *button.item == equip.buttonItem : *button.slot == equip.slot;
+        if (isHeld) {
+            return &equip;
+        }
+    }
+    return nullptr;
+}
+
+nlohmann::json ReadSharedEquips() {
+    auto equips = nlohmann::json::array();
+    for (size_t index = 0; index < kSharedButtons; index++) {
+        const SharedEquip* equip = FindEquipOnButton(SharedButton(index));
+        equips.push_back(equip != nullptr ? equip->key : "");
+    }
+    return equips;
+}
+
+u8 OwnedButtonItem(const SharedEquip& equip) {
+    const u8 owned = gSaveContext.inventory.items[equip.slot];
+    if (owned == ITEM_NONE || equip.buttonItem == ITEM_NONE) {
+        return owned;
+    }
+    return gSaveContext.inventory.items[SLOT_BOW] != ITEM_NONE ? equip.buttonItem : ITEM_NONE;
+}
+
+bool CanEquipSharedButton(size_t index) {
+    return index < kSharedCButtons || CVarGetInteger(CVAR_ENHANCEMENT("DpadEquips"), 0) != 0;
+}
+
+void EquipSharedItem(size_t index, const SharedEquip& equip) {
+    const u8 item = OwnedButtonItem(equip);
+    const EquipButton target = SharedButton(index);
+    if (item == ITEM_NONE || !CanEquipSharedButton(index) || FindEquipOnButton(target) == &equip) {
+        return;
+    }
+    for (size_t other = 0; other < kSharedButtons; other++) {
+        const EquipButton holder = SharedButton(other);
+        if (FindEquipOnButton(holder) == &equip) {
+            *holder.item = *target.item;
+            *holder.slot = *target.slot;
+        }
+    }
+    *target.item = item;
+    *target.slot = equip.slot;
+}
+
+void ReloadSharedButtonIcons() {
+    constexpr u8 kFirstIconlessItem = 0xF0;
+    for (size_t index = 0; index < kSharedButtons; index++) {
+        if (*SharedButton(index).item < kFirstIconlessItem) {
+            Interface_LoadItemIcon1(gPlayState, static_cast<u16>(index + 1));
+        }
+    }
+}
+
+void ApplySharedEquips(const nlohmann::json& equips) {
+    if (!equips.is_array() || equips.size() != kSharedButtons) {
+        return;
+    }
+    for (size_t index = 0; index < kSharedButtons; index++) {
+        const std::string key = equips[index].is_string() ? equips[index].get<std::string>() : std::string{};
+        const auto equip = std::find_if(std::begin(kSharedEquips), std::end(kSharedEquips),
+                                        [&](const SharedEquip& candidate) { return key == candidate.key; });
+        if (equip != std::end(kSharedEquips)) {
+            EquipSharedItem(index, *equip);
+        }
+    }
+    ReloadSharedButtonIcons();
+}
+
+nlohmann::json ReadLiveState() {
+    return { { "rupees", gSaveContext.rupees },
+             { "health", gSaveContext.health },
+             { "magic", gSaveContext.magic },
+             { "chateau", IsChateauLendingMagic() },
+             { "equips", ReadSharedEquips() } };
+}
+
+void CallChateauService(const char* name) {
+    using ChateauService = void (*)(void);
+    const auto service = reinterpret_cast<ChateauService>(ModApi_Get()->FindService(name));
+    if (service != nullptr) {
+        service();
+    }
+}
+
+void ApplyLiveState(const nlohmann::json& state) {
+    if (state.contains("rupees")) {
+        gSaveContext.rupees =
+            static_cast<s16>(std::clamp(state.at("rupees").get<int>(), 0, static_cast<int>(CUR_CAPACITY(UPG_WALLET))));
+    }
+    if (state.contains("health") && state.at("health").get<int>() > 0) {
+        gSaveContext.health =
+            static_cast<s16>(std::min(state.at("health").get<int>(), static_cast<int>(gSaveContext.healthCapacity)));
+    }
+    if (state.contains("magic") && gSaveContext.isMagicAcquired) {
+        gSaveContext.magic =
+            static_cast<s8>(std::clamp(state.at("magic").get<int>(), 0, static_cast<int>(gSaveContext.magicCapacity)));
+    }
+    if (state.contains("chateau") && state.at("chateau").get<bool>() != IsChateauLendingMagic()) {
+        CallChateauService(state.at("chateau").get<bool>() ? "nei.chateau.lend" : "nei.chateau.end");
+    }
+    if (state.contains("equips")) {
+        ApplySharedEquips(state.at("equips"));
+    }
+}
+
+void SynchronizeLiveState() {
+    static std::string sReported;
+    static std::string sApplied;
+    const auto get = Host<const char* (*)(const char*)>("GetLiveState");
+    const auto report = Host<bool (*)(const char*, const char*)>("ReportLiveState");
+    if (get == nullptr || report == nullptr) {
+        return;
+    }
+    const char* remote = get(kGame);
+    if (remote != nullptr && remote[0] != '\0' && sApplied != remote) {
+        const auto state = nlohmann::json::parse(remote, nullptr, false);
+        if (state.is_object()) {
+            ApplyLiveState(state);
+        }
+        sApplied = remote;
+    }
+    const std::string local = ReadLiveState().dump();
+    if (local != sReported && report(kGame, local.c_str())) {
+        sReported = local;
+    }
+}
+
+bool OwnsItemNamed(const std::string& item) {
+    const auto found = Rando::StaticData::itemNameToEnum.find(item);
+    return found != Rando::StaticData::itemNameToEnum.end() &&
+           OTRGlobals::Instance->gRandoContext->GetLogic()->HasItem(found->second);
+}
+
+nlohmann::json ReadTiers(const nlohmann::json& shared) {
+    nlohmann::json tiers = ReadSharedTiers();
+    for (const auto& entry : shared) {
+        const std::string key = entry.at("key");
+        if (entry.value("owned", false) && !tiers.contains(key)) {
+            tiers[key] = static_cast<int>(OwnsItemNamed(entry.at("item").get<std::string>()));
+        }
+    }
+    return tiers;
+}
+
+void MarkHeldLevels(const nlohmann::json& tiers) {
+    for (const auto& [key, level] : tiers.items()) {
+        for (int held = 0; held < level.get<int>(); held++) {
+            const uint16_t receipt = TierReceipt(key, held);
+            if (receipt != 0) {
+                RandoInfCustom_Set(SOH_RANDO_INF_SAVE, receipt, true);
+            }
+        }
+    }
 }
 
 void SynchronizeSharedTiers() {
+    static std::string sMarked;
     const auto report = Host<bool (*)(const char*, const char*)>("ReportSharedTiers");
     const auto get = Host<const char* (*)(const char*)>("GetSharedTiers");
-    if (report == nullptr || get == nullptr) {
+    const char* listed = report != nullptr && get != nullptr ? get(kGame) : nullptr;
+    if (listed == nullptr) {
         return;
     }
-    const std::string native = ReadSharedTiers().dump();
+    const nlohmann::json held = ReadTiers(nlohmann::json::parse(listed));
+    const std::string native = held.dump();
     if (!report(kGame, native.c_str())) {
         return;
+    }
+    if (native != sMarked) {
+        MarkHeldLevels(held);
+        sMarked = native;
     }
     const char* raw = get(kGame);
     if (raw == nullptr) {
@@ -152,14 +556,16 @@ void SynchronizeSharedTiers() {
     for (const auto& entry : shared) {
         const std::string key = entry.at("key");
         const int desired = entry.at("tier");
+        if (held.value(key, 0) >= desired) {
+            continue;
+        }
         for (int attempt = 0; attempt < 16; attempt++) {
-            const int previous = ReadSharedTiers().value(key, 0);
-            if (previous >= desired) {
+            const int previous = ReadTiers(shared).value(key, 0);
+            if (previous >= desired || !GrantSharedTier(key, previous, entry.at("item"))) {
                 break;
             }
-            GrantSharedTier(key, previous, entry.at("item"));
             changed = true;
-            if (ReadSharedTiers().value(key, 0) <= previous) {
+            if (ReadTiers(shared).value(key, 0) <= previous) {
                 break;
             }
         }
@@ -186,7 +592,6 @@ void ReceiveItems() {
         if (RandoInfCustom_Get(SOH_RANDO_INF_SAVE, flag)) {
             continue;
         }
-        // Logged before the grant: after a crash, the last line names the item.
         SPDLOG_INFO("[Fleet] Receiving {} from {}", delivery.at("item").get<std::string>(),
                     delivery.at("id").get<std::string>());
         Grant(delivery);
@@ -301,6 +706,17 @@ void FleetRuntime_Save() {
     }
 }
 
+void FleetRuntime_CatchUpParked() {
+    if (!FleetRuntime_HasSession() || !IsPlaying()) {
+        return;
+    }
+    ReceiveItems();
+    SynchronizeSharedTiers();
+    if (SynchronizeBottles()) {
+        FleetRuntime_Save();
+    }
+}
+
 void FleetRuntime_FrameEnd() {
     if (!FleetRuntime_HasSession() || !IsPlaying() || gPlayState->transitionTrigger != TRANS_TRIGGER_OFF) {
         return;
@@ -309,6 +725,8 @@ void FleetRuntime_FrameEnd() {
     if (gPlayState->msgCtx.msgMode == MSGMODE_NONE) {
         ReceiveItems();
         SynchronizeSharedTiers();
+        SynchronizeBottles();
+        SynchronizeLiveState();
     }
 }
 

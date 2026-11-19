@@ -32,7 +32,7 @@ typedef struct {
     bool isSaveLoaded;
     bool isGameComplete;
     s16 sceneNum;
-    s16 curRoomNum; // SOH [Unbound] s8 -> s16
+    s16 curRoomNum;
     s32 entranceIndex;
 
     // Only available in PLAYER_UPDATE packets
@@ -158,9 +158,7 @@ class Anchor : public Network {
     RoomState roomState;
 
     inline static const std::string GLOBAL_ROOM_ID = "soh-global";
-    // Inside Fleet both games share one Room ID setting, so the other game's public id also means this one's.
     static bool IsGlobalRoom();
-    // The room the handshake asks for: the public room as it is, any other kept per game inside Fleet.
     static std::string RoomToJoin();
 
     void Enable();
@@ -176,7 +174,6 @@ class Anchor : public Network {
     bool CanTeleportTo(uint32_t clientId);
     uint32_t GetDummyPlayerClientId(const Actor* actor);
 
-    // Custom progress travels by key: runtime ids depend on which mods each client loaded, and in what order.
     inline static const std::string CUSTOM_PROGRESS_ITEM = "item";
     inline static const std::string CUSTOM_PROGRESS_RECEIVE = "receive";
     inline static const std::string CUSTOM_PROGRESS_EQUIPMENT = "equipment";

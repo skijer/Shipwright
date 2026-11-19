@@ -89,7 +89,6 @@ void ApplyVanillaValue(uint8_t slot, uint16_t value) {
     }
 }
 
-// Value a slot falls back to when its piece comes off: no sword or shield, the Kokiri tunic and boots.
 uint16_t BareValue(uint8_t slot) {
     if (slot == SOH_EQUIP_SLOT_TUNIC) {
         return EQUIP_VALUE_TUNIC_KOKIRI;
@@ -110,8 +109,20 @@ bool IsAgeAllowed(const SOHCustomEquipDefinition* definition) {
     return (definition->ageRequirement == SOH_CUSTOM_ITEM_AGE_CHILD) == (gSaveContext.linkAge == LINK_AGE_CHILD);
 }
 
+bool IsSlotFreeInForm(uint8_t slot) {
+    if (IsVanillaSlot(slot)) {
+        return !FormRegistry_IsEquipSlotFixed(slot);
+    }
+    for (uint8_t vanillaSlot = 0; vanillaSlot < SOH_EQUIP_SLOT_UPGRADE; vanillaSlot++) {
+        if (!FormRegistry_IsEquipSlotFixed(vanillaSlot)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool IsFormAllowed(const SOHCustomEquipDefinition* definition) {
-    return definition != nullptr &&
+    return definition != nullptr && IsSlotFreeInForm(definition->slot) &&
            FormRegistry_IsCurrentFormIn(definition->allowedForms, definition->allowedFormCount);
 }
 
@@ -119,7 +130,6 @@ bool IsUsableNow(const SOHCustomEquipDefinition* definition) {
     return IsAgeAllowed(definition) && IsFormAllowed(definition);
 }
 
-// Reads the host's copy, where a definition older than these fields left them zeroed.
 bool StoreAllowedForms(RegisteredEquip& entry) {
     SOHCustomEquipDefinition& definition = entry.definition;
     if (!FormKeyList::IsValid(definition.allowedForms, definition.allowedFormCount)) {
@@ -375,7 +385,7 @@ void CustomEquipRegistry_TakeOff(uint8_t slot) {
 }
 
 bool CustomEquipRegistry_IsToggleOn(const char* key) {
-    return key != nullptr && sToggled.count(key) != 0;
+    return key != nullptr && sToggled.count(key) != 0 && CustomEquipRegistry_IsFormAllowed(key);
 }
 
 bool CustomEquipRegistry_SetToggle(const char* key, bool on) {

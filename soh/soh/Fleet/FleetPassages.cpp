@@ -27,7 +27,6 @@ static_assert(kPassages[0].oot == ENTR_GRAVEYARD_ENTRANCE && kPassages[1].oot ==
               kPassages[2].oot == ENTR_ZORAS_FOUNTAIN_TUNNEL_EXIT && kPassages[3].oot == ENTR_LOST_WOODS_SOUTH_EXIT);
 
 constexpr float kTriggerRadius = 20.0f;
-// A player who arrives beside the hole must step this far away before it can take them back.
 constexpr float kArmRadius = 70.0f;
 
 struct PassageHole {
@@ -75,7 +74,6 @@ void UpdateHole(Actor* actor, PlayState* play) {
     }
 }
 
-// Dry floor at the spawn's own height, beside its approach rather than on it.
 std::optional<Vec3f> FindHoleSpot(PlayState* play, const ActorEntry& spawn) {
     const float forwardX = Math_SinS(spawn.rot.y);
     const float forwardZ = Math_CosS(spawn.rot.y);
@@ -100,7 +98,6 @@ std::optional<Vec3f> FindHoleSpot(PlayState* play, const ActorEntry& spawn) {
     return std::nullopt;
 }
 
-// The spawn list is indexed through the scene's entrance list; linkActorEntry points into it.
 const ActorEntry* SpawnFor(PlayState* play, int32_t entrance) {
     const ActorEntry* spawns = play->linkActorEntry - play->setupEntranceList[play->curSpawn].spawn;
     return &spawns[play->setupEntranceList[gEntranceTable[entrance].spawn].spawn];

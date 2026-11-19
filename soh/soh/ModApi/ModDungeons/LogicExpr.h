@@ -5,11 +5,9 @@
 #include <string>
 #include <vector>
 
-// Condition language of mod dungeons and bosses, compiled once and evaluated against the rando Logic:
 //   expr := term ('or' term)*   term := factor ('and' factor)*   factor := 'not' factor | '(' expr ')' | atom
 class LogicExpr {
   public:
-    // Resolves `event(name)` and `keys(n)` / `bosskey` inside the dungeon that owns the expression.
     struct Scope {
         int32_t dungeon = -1;
     };

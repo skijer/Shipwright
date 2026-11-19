@@ -411,6 +411,10 @@ void PlandomizerItemImageCorrection(Rando::Item randoItem) {
         textureID = gui->GetTextureByName("BOSS_SOUL");
     }
 
+    if (randoItem.GetRandomizerGet() >= RG_SOUL_ENEMY_ANUBIS && randoItem.GetRandomizerGet() <= RG_SOUL_ENEMY_WOLFOS) {
+        textureID = gui->GetTextureByName("BOSS_SOUL");
+    }
+
     if (randoItem.GetRandomizerGet() >= RG_OCARINA_A_BUTTON &&
         randoItem.GetRandomizerGet() <= RG_OCARINA_C_RIGHT_BUTTON) {
         textureID = gui->GetTextureByName("ITEM_OCARINA_TIME");

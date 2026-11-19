@@ -12,7 +12,6 @@ extern PlayState* gPlayState;
 
 namespace {
 
-// Every custom item shares one item action and one item id, and vanilla clients have neither: they go by key.
 s8 ToVanillaItemAction(s8 itemAction) {
     return itemAction == PLAYER_IA_CUSTOM ? PLAYER_IA_NONE : itemAction;
 }

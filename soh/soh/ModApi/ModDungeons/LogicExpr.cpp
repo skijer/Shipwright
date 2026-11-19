@@ -217,7 +217,6 @@ class LogicExprParser {
         return false;
     }
 
-    // Event names are region-style labels, so they may hold spaces: everything up to the closing parenthesis.
     std::string ReadEventName() {
         SkipSpaces();
         size_t end = mText.find(')', mPosition);

@@ -10877,6 +10877,16 @@ void Player_InitCommon(Player* this, PlayState* play, FlexSkeletonHeader* skelHe
     this->ivanDamageMultiplier = 1;
 }
 
+void Player_ResetMeleeWeaponColliders(PlayState* play, Player* this) {
+    this->meleeWeaponState = 0;
+    for (s32 quad = 0; quad < ARRAY_COUNT(this->meleeWeaponQuads); quad++) {
+        Collider_SetQuad(play, &this->meleeWeaponQuads[quad], &this->actor, &D_80854650);
+    }
+    for (s32 info = 0; info < ARRAY_COUNT(this->meleeWeaponInfo); info++) {
+        this->meleeWeaponInfo[info].active = 0;
+    }
+}
+
 static void (*sStartModeFuncs[PLAYER_START_MODE_MAX])(PlayState* play, Player* this) = {
     Player_StartMode_Nothing,         // PLAYER_START_MODE_NOTHING
     Player_StartMode_TimeTravel,      // PLAYER_START_MODE_TIME_TRAVEL
@@ -12310,8 +12320,7 @@ void Player_Update(Actor* thisx, PlayState* play) {
     Player* this = (Player*)thisx;
     s32 dogParams;
     s32 pad;
-    // Static: sControlInput keeps pointing here after this update, and Player_StartTalking writes through it
-    // when an NPC calls play->talkWithPlayer from its own update.
+    // Static: sControlInput keeps pointing here after this update.
     static Input input;
 
     if (Player_UpdateNoclip(this, play)) {
@@ -14154,8 +14163,7 @@ s32 func_8084DFF4(PlayState* play, Player* this) {
                 if (definition != NULL) {
                     CustomItemRegistry_ReceiveGetItem(definition->key);
                 }
-                // SOH [Unbound] Item_Give is what reports a vanilla item; without this the randomizer never sees
-                // a mod item arrive and gives it again forever.
+                // Item_Give reports vanilla items only; without this the randomizer never sees a mod item arrive.
                 GameInteractor_ExecuteOnItemReceiveHooks(giEntry);
             } else if (giEntry.modIndex == MOD_NONE) {
                 // RANDOTOD: Move this into Item_Give() or some other more central location

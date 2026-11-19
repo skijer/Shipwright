@@ -10,5 +10,5 @@ struct StoreHttpResult {
 };
 
 bool ModStore_HasHttps();
-// Blocking HTTPS GET that follows redirects; call it off the game thread. Fails above maxBytes.
+// Blocking: call it off the game thread.
 StoreHttpResult ModStore_HttpsGet(const std::string& url, size_t maxBytes);

@@ -96,7 +96,6 @@ uint32_t O2rExtractor_ExportFiles(const char* searchMask, const char* destinatio
     return O2rExtractor_ExportMatching(searchMask, destinationDir);
 }
 
-// Read-only: the mounted archives are already open to every mod through the resource manager.
 uint32_t O2rExtractor_ReadFiles(const char* searchMask, SOHArchiveFileFunc visit, void* userData) {
     if (searchMask == nullptr || visit == nullptr) {
         return 0;

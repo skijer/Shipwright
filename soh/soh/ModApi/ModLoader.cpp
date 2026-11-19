@@ -24,6 +24,7 @@
 
 #include "ModPermissions/ModPermissions.h"
 #include "ModTrust/ModTrust.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/ResourceManagerHelpers.h"
 
 #if defined(_WIN32)
@@ -404,6 +405,9 @@ std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship:
     if (!ReadManifest(archive, manifest) || !manifest.contains("binaries") || !manifest["binaries"].is_object()) {
         return std::nullopt;
     }
+    if (manifest.value("fleet_only", false) && !FleetGame_IsHosted()) {
+        return std::nullopt;
+    }
 
     auto binaryEntry = manifest["binaries"].find(platform);
     if (binaryEntry == manifest["binaries"].end() || !binaryEntry->is_string()) {
@@ -515,6 +519,20 @@ std::string GetEnvironmentFingerprint() {
     return Hex(hash);
 }
 
+void MountFleetMods() {
+    const char* folder = FleetGame_GetModsDirectory();
+    std::error_code error;
+    if (folder == nullptr || !std::filesystem::is_directory(folder, error)) {
+        return;
+    }
+    auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
+    for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
+        if (entry.path().extension() == ".o2r") {
+            archives->AddArchive(entry.path().string());
+        }
+    }
+}
+
 } // namespace
 
 void ModLoader_LoadMods() {
@@ -524,6 +542,10 @@ void ModLoader_LoadMods() {
         return;
     }
 
+    if (FleetGame_IsHosted()) {
+        ModApi_PublishHostService("fleet.hosted", reinterpret_cast<void*>(FleetGame_IsHosted));
+        MountFleetMods();
+    }
     auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->GetArchives();
     std::vector<NativeModPackage> packages;
     for (const auto& archive : *archives) {

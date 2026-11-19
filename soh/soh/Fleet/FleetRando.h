@@ -4,7 +4,6 @@
 #include <fleet/FleetGameApi.h>
 #include <nlohmann/json.hpp>
 
-// Ship's half of Fleet's combined randomizer: the reachability oracle and the services behind RandoRequest.
 char* FleetRando_DumpStaticData(void);
 void FleetRando_Reset(void);
 void FleetRando_SetOwnedItems(const char* itemsJson);

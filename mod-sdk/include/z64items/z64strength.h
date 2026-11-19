@@ -1,6 +1,4 @@
-// Form strength as an offset on Link's own level, the same rule 2Ship's oot_collectables uses.
 // Level -1 is the rando's missing grab, 0 lifts small things and each strength upgrade adds one.
-// A form whose total reaches 0 grabs without the rando's grab ability; one below 0 never grabs.
 #ifndef Z64STRENGTH_H
 #define Z64STRENGTH_H
 
@@ -25,14 +23,12 @@ static inline s32 Z64Strength_GetEffective(s32 formOffset) {
     return level + formOffset;
 }
 
-// VB_USE_STRENGTH_UPGRADE: the returned strength replaces the vanilla upgrade read.
 static inline void Z64Strength_ResolveUpgrade(bool* should, va_list args, s32 formOffset) {
     s32* strength = va_arg(args, s32*);
     *strength = CLAMP(Z64Strength_GetEffective(formOffset), PLAYER_STR_NONE, PLAYER_STR_GOLD_G);
     *should = false;
 }
 
-// VB_PREVENT_STRENGTH has two callers: the lift (Link already carrying) and the block push (flag set just before).
 // The rando handler ran first and cleared the push flag when it prevented; a skipped check restores it.
 static inline void Z64Strength_ResolvePrevent(bool* should, s32 formOffset) {
     Player* player = GET_PLAYER(gPlayState);

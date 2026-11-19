@@ -47,7 +47,6 @@ typedef enum {
     /* 0x08 */ GI_COLOR_BLACK,
 } GIColors;
 
-// SOH [Unbound] the mod hooks in GameInteractor_HookTable.h take full game types (SaveContext, Input, Player funcs).
 #include <z64.h>
 
 #ifdef __cplusplus

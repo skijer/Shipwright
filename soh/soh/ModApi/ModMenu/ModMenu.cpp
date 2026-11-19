@@ -42,7 +42,6 @@ struct RegisteredSidebar {
 
 std::deque<RegisteredSidebar> sSidebars;
 
-// The map points into the registered strings, which a deque element never moves.
 std::map<int32_t, const char*> BuildComboMap(const std::vector<std::string>& values) {
     std::map<int32_t, const char*> comboMap;
     for (size_t index = 0; index < values.size(); index++) {
@@ -111,15 +110,20 @@ void AddWidget(const RegisteredWidget& registered) {
                                .Max(definition.maxFloat)
                                .Tooltip(registered.tooltip.c_str()));
             break;
-        case SOH_MOD_MENU_TEXT:
-            widget.Options(UIWidgets::TextOptions().Tooltip(registered.tooltip.c_str()));
+        case SOH_MOD_MENU_TEXT: {
+            UIWidgets::TextOptions options;
+            options.tooltip = registered.tooltip;
+            widget.Options(options);
             break;
-        case SOH_MOD_MENU_COMBOBOX:
-            widget.Options(UIWidgets::ComboboxOptions()
-                               .ComboMap(BuildComboMap(registered.values))
-                               .DefaultIndex(static_cast<uint32_t>(definition.defaultInt))
-                               .Tooltip(registered.tooltip.c_str()));
+        }
+        case SOH_MOD_MENU_COMBOBOX: {
+            UIWidgets::ComboboxOptions options;
+            options.ComboMap(BuildComboMap(registered.values))
+                .DefaultIndex(static_cast<uint32_t>(definition.defaultInt));
+            options.tooltip = registered.tooltip;
+            widget.Options(options);
             break;
+        }
         default:
             break;
     }

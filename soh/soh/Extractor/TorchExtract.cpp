@@ -60,8 +60,6 @@ std::string ExtractWithCallbacks(std::vector<uint8_t> rom, const std::string& sr
         // Init is the whole run; it calls Process() internally.
         companion->Init(ExportType::Binary);
 #ifdef __EMSCRIPTEN__
-        // SOH [WASM] ...except in an Emscripten build, where Torch leaves Process() for its own
-        // web API to call.
         std::atomic<size_t> assetCount{ 0 };
         companion->Process(assetCount);
 #endif
