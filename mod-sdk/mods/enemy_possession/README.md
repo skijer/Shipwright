@@ -38,8 +38,7 @@ control leaves Link at his starting position instead.
 Depends on `command_melody`. It publishes `nei.possession.request.v1`, a
 `bool (*)(Actor*)` request service. It uses the same camera/input lifecycle
 as companions via the appended `NEI_PARTNER_TRACK_PLAYER` provider flag.
-Ivan's Revenge / second-player input is deferred at the user's request; no
-PvP mode is registered in this release.
+Second-player input (Ivan's Revenge) and PvP are not part of this release.
 
 Geometry, icon and text are authored in `build_assets.py.txt`, with pre-encoded
 textures so builds need no Pillow. Compile/install from Shipwright-unbound

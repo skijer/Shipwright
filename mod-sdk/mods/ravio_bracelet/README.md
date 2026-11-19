@@ -18,8 +18,6 @@ full. An integer accumulator carries fractional progress between points,
 with identical rates at the same fill percentage for single/double magic.
 Lens use and native magic animations suspend
 recovery. Pauses, textboxes, cutscenes and transitions do not advance recovery.
-The recovery curve follows the user's 23 October feedback; the initial delay
-is unchanged.
 
 The original HUD draws the bar with its native position, dimensions, opacity,
 single/double capacity and spending animation. The fill is purple, with a
@@ -32,9 +30,4 @@ the tint. Both paused and ordinary world draw paths retain it until the
 interface has rendered. No config
 save is requested. No wheel or second meter is drawn.
 
-Only the magic/stamina utility is implemented; wall merging is deferred by
-the user's explicit scope. Compile/install from Shipwright-unbound with
-`./build-all.local.ps1 -Only Mods -Reconfigure`.
-
-Production-function tests: `NEI-Unbound-pruebas/test_new_items.py`. In-game
-bar appearance, interaction with spells, and balancing await user feedback.
+Only the magic recovery is implemented; wall merging is not.

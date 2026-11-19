@@ -13,7 +13,7 @@
  * See memory: mm_oot_audio_engine_divergence.md
  */
 #include <libultraship/log/luslog.h>
-#include "z64.h" // SoH SoundFont / SequenceData (global scope); z64audio.h no compila solo
+#include "z64.h" // SoH SoundFont / SequenceData; z64audio.h does not compile on its own
 #include "soh/ResourceManagerHelpers.h"
 
 #include "mm_sfx_synth_ctx.h"
@@ -134,8 +134,8 @@ extern "C" int MmSfxSynth_Init(void) {
             MMSYN_LOG("Init: font %d (%s) not ready — retry next call", f, kFontPaths[f]);
             return 0; // assets not ready yet; retry next call
         }
-        // Las 15 muestras que MM comparte de nombre con OoT (audio/samples/*_META) salen de la capa que gane
-        // el montaje: NEI las releía de mm.o2r; aquí no, y esos SFX pueden sonar con la muestra de OoT.
+        // The 15 samples MM shares by name with OoT come from whichever archive wins the mount, so those SFX
+        // may play OoT's sample.
         sFontTable[f] = *reinterpret_cast<mmsfx::SoundFont*>(sf);
         MMSYN_LOG("Init: font %d loaded (inst=%d drums=%d sfx=%d)", f, sFontTable[f].numInstruments,
                   sFontTable[f].numDrums, sFontTable[f].numSfx);

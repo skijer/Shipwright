@@ -33,10 +33,8 @@ Native display names and RG constants in `rando_catalog.inc.h` were extracted fr
 `Shipwright-unbound/soh/soh/Enhancements/randomizer/item_list.cpp` on 2026-10-24.
 The custom catalog is read live from loaded mods, including their variants.
 
-Build/install from the authoritative host checkout:
+Build/install from the host checkout:
 
 ```powershell
 .\build-all.local.ps1 -Only Mods -Reconfigure
 ```
-
-In-game validation belongs to the user; the game is not launched by the build.

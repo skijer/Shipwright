@@ -43,7 +43,3 @@ interpolation and no retargeting calculations.
 Python/Pillow only for regeneration. Packaging does not require Pillow.
 Compile/install from Shipwright-unbound with
 `./build-all.local.ps1 -Only Mods -Reconfigure`.
-
-Production-function collision/death tests are in `test_new_items.py`; asset
-validation is in `verify_partner_items.py`, both under NEI-Unbound-pruebas.
-Visual grip, pose transitions and gameplay impacts await in-game feedback.

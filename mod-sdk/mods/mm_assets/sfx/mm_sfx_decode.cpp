@@ -1,5 +1,5 @@
-// Decodificación de una muestra VADPCM entera a PCM, que es lo que el sintetizador aislado cachea para cada
-// muestra de MM. El algoritmo es el de aADPCMdecImpl (soh/soh/mixer.c), frame a frame.
+// Decodes a whole VADPCM sample to the PCM the isolated synthesizer caches, following aADPCMdecImpl
+// (soh/soh/mixer.c) frame by frame.
 #include "z64.h"
 
 #include <cstdlib>
@@ -17,8 +17,7 @@ int16_t Clamp16(int32_t value) {
     return static_cast<int16_t>(value > 32767 ? 32767 : (value < -32768 ? -32768 : value));
 }
 
-// Los nibbles se escalan por el shift de la cabecera antes de predecir; el códec pequeño trae 2 bits por
-// muestra en vez de 4.
+// Nibbles are scaled by the header shift before prediction; the small codec packs 2 bits per sample, not 4.
 void ReadSubframeInputs(const uint8_t* data, int32_t frameBytes, int32_t half, int32_t shift, int16_t inputs[8]) {
     if (frameBytes == FrameBytesSmallAdpcm) {
         const uint8_t* bytes = &data[half * 2];
@@ -37,8 +36,8 @@ void ReadSubframeInputs(const uint8_t* data, int32_t frameBytes, int32_t half, i
     }
 }
 
-// Cada frame son dos subframes de 8 muestras. La predicción suma sobre las ENTRADAS del subframe, no sobre
-// lo ya decodificado, igual que mixer.c: cambiarlo da un sonido parecido y equivocado.
+// Prediction sums over the subframe's INPUTS, not the decoded output, as mixer.c does; the other way sounds
+// close but wrong.
 void DecodeFrame(const uint8_t* frame, int32_t frameBytes, const int16_t* book, int32_t order, int16_t history[2],
                  int16_t* out) {
     const int32_t shift = frame[0] >> 4;
@@ -64,7 +63,7 @@ void DecodeFrame(const uint8_t* frame, int32_t frameBytes, const int16_t* book, 
 
 } // namespace
 
-// Devuelve un buffer de malloc que pasa a ser del llamador, o NULL si la muestra no es ADPCM decodificable.
+// The caller owns the returned malloc buffer; NULL when the sample is not decodable ADPCM.
 extern "C" short* MmSfxDecode_Sample(void* soundFontSample, unsigned int* outLen) {
     const SoundFontSample* sample = static_cast<const SoundFontSample*>(soundFontSample);
     if (sample == nullptr || sample->sampleAddr == nullptr || sample->size == 0 || sample->book == nullptr ||
@@ -83,7 +82,6 @@ extern "C" short* MmSfxDecode_Sample(void* soundFontSample, unsigned int* outLen
 
     uint32_t frameCount = sample->size / frameBytes;
     uint32_t sampleCount = frameCount * SamplesPerFrame;
-    // Una muestra en bucle no se reproduce más allá del final del bucle.
     if (sample->loop != nullptr && sample->loop->loopEnd > 0 && sample->loop->loopEnd < sampleCount) {
         sampleCount = sample->loop->loopEnd;
         frameCount = (sampleCount + SamplesPerFrame - 1) / SamplesPerFrame;

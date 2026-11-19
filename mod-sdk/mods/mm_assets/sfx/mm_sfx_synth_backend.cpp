@@ -692,8 +692,8 @@ extern "C" void MmSfxSynth_RenderInto(int16_t* outBuf, uint32_t numSamples) {
     const s32 perUpdate = gMmSfx.audioBufferParameters.numSamplesPerUpdate;
     const s32 updatesPerFrame = gMmSfx.audioBufferParameters.updatesPerFrame;
 
-    // Sin volumen propio: se mezcla en el grupo SFX de AudioMix, que ya aplica el general y el de efectos. Leer
-    // los CVars aquí sería hacerlo desde el hilo de audio.
+    // No volume of its own: AudioMix's SFX group already applies master and effects, and reading CVars here
+    // would do it from the audio thread.
     static s32 sUpdateIndex = 0;      // cycles 0..updatesPerFrame-1
     static s32 sSamplesUntilTick = 0; // samples remaining before next seq tick
 

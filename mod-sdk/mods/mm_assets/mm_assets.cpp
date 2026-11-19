@@ -1,6 +1,5 @@
-// Los recursos de Majora's Mask para Unbound. Si ningún archivo cargado los trae, pide la ROM y la extrae
-// entera con el ZAPD que lleva dentro, que nunca toca el disco: la ROM y el árbol de XML de su propio .o2r
-// van a memoria, y el mm.o2r resultante lo guarda el juego en mods/ tras preguntárselo al jugador.
+// Majora's Mask resources for Unbound. When no loaded archive has them, asks for the ROM and extracts it with the
+// bundled ZAPD entirely in memory; the game saves the resulting mm.o2r to mods/ after asking the player.
 #include "soh/ModApi/ModApi.h"
 #include "sfx/mm_sfx_service.h"
 #include "Utils/VirtualFileSystem.h"
@@ -29,7 +28,7 @@ static const char* const kMarkerResources[] = {
 #define ZAPD_ASSET_PREFIX "mm_zapd/"
 #define ZAPD_ROM_PATH "rom.z64"
 
-// Palabra 4 de la cabecera de la ROM: la que distingue las versiones que ZAPD sabe leer.
+// Word 4 of the ROM header tells apart the versions ZAPD can read.
 #define MM_VERSION_US_10 0x5354631C
 #define MM_VERSION_US_10_UNCOMPRESSED 0xDA6983E7
 #define MM_VERSION_US_GC 0xB443EB08
@@ -45,7 +44,7 @@ static const SOHModApi* sApi;
 
 namespace {
 
-// Cada versión de la ROM tiene su propio árbol de XML, porque los offsets no son los mismos.
+// Each ROM version has its own XML tree because the offsets differ.
 struct RomLayout {
     uint32_t crc;
     const char* xmlVersion;

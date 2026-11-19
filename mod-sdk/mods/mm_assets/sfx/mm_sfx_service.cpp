@@ -1,6 +1,5 @@
-// Los SFX de Majora's Mask para los demás mods. El motor aislado de la NEI ejecuta la secuencia de SFX de MM
-// con sus propios fonts, fuera del pipeline de OoT, y se mezcla en el grupo SFX del juego para que el slider
-// de efectos mande sobre él. Aquí se publica como servicio y se conecta al audio.
+// Majora's Mask SFX for other mods. An isolated engine runs MM's SFX sequence with its own fonts, outside OoT's
+// pipeline, and mixes into the game's SFX group so the effects slider governs it.
 #include "mm_sfx_service.h"
 #include "mm_audio_sfx.h"
 #include "mm_sfx_synth.h"
@@ -15,18 +14,17 @@ extern "C" {
 namespace {
 
 constexpr const char* SfxSequence = "audio/sequences/Sequence_0";
-// El token con el que MM agrupa las peticiones de un mismo emisor.
 constexpr u8 SfxToken = 4;
 
 const SOHModApi* sApi;
-// Guarda el planificador y el sintetizador, que el juego toca al pedir un sonido y el audio al mezclarlo.
+// Guards the scheduler and synthesizer: the game touches them to request a sound, the audio thread to mix it.
 std::mutex sEngineMutex;
 std::atomic<bool> sGamePaused{ false };
 bool sQueueReset = false;
-// El planificador compara posiciones por puntero, así que nunca puede recibir NULL.
+// The scheduler compares positions by pointer, so it never gets NULL.
 Vec3f sNoPosition = { 0.0f, 0.0f, 0.0f };
 
-// Arranca la primera vez que alguien pide un sonido, no al cargar: lee la secuencia de SFX y dos fonts.
+// Starts on the first request rather than at load, reading the SFX sequence and two fonts.
 // Assumes sEngineMutex is held.
 bool IsEngineReady() {
     if (MmSfxSynth_IsReady()) {
@@ -97,8 +95,8 @@ void StopMmSfx(uint16_t sfxId) {
     }
 }
 
-// Hilo de audio: nunca espera. Si el juego tiene el motor (encolando, o cargándolo la primera vez), ese
-// buffer sale sin SFX de MM antes que atascar el audio del juego.
+// Audio thread: never waits. While the game holds the engine, this buffer goes out without MM SFX rather than
+// stalling the game's audio.
 void MixMmSfx(int16_t* samples, uint32_t frameCount) {
     if (sGamePaused.load(std::memory_order_relaxed)) {
         return;
@@ -110,14 +108,8 @@ void MixMmSfx(int16_t* samples, uint32_t frameCount) {
     MmSfxSynth_RenderInto(samples, frameCount);
 }
 
-// MM procesa la cola y los bancos de SFX una vez por frame de gameplay, no una
-// vez por callback de audio. SoH suele producir tres buffers de audio por cada
-// frame lógico; hacerlo en MixMmSfx consumía la renovación de los sonidos
-// flagged (bubble breath/flight) tres veces más rápido de lo que Deku podía
-// renovarla, reiniciando o cortando el sample entre frames.
-//
-// Las órdenes al sequence player cruzan al hilo de audio mediante su propia
-// cola; el mutex sólo protege el estado compartido del scheduler aislado.
+// MM runs the SFX queue once per gameplay frame, not per audio callback; at three buffers a frame, looping
+// sounds such as Deku bubbles expired before Deku could renew them.
 void UpdateMmSfx() {
     sGamePaused.store(gPlayState != nullptr && gPlayState->pauseCtx.state != 0, std::memory_order_relaxed);
     if (!sQueueReset) {

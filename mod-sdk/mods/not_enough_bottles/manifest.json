@@ -1,7 +1,10 @@
 {
     "name": "not_enough_bottles",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.0.1",
+    "dependencies": [
+        "mm_assets"
+    ],
     "description": "NotEnoughBottles: the four bottle slots become two wheels of four bottles, the Net and the Bottomless Bottle.",
     "permissions": [
         "network"

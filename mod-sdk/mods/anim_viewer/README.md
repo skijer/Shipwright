@@ -1,25 +1,18 @@
 # Anim Viewer
 
-Abre **Dev Tools → Anim Viewer** y pulsa **Refresh**.
+Open **Dev Tools → Anim Viewer** and press **Refresh**.
 
-- Escribe en el buscador para filtrar por nombre o ruta. Los presets permiten buscar vault, spin y cortes.
-- Selecciona el archivo de origen en **Source** y una animación en el dropdown o en la lista con scroll.
-- **Previous / Next** cambia de clip. **Play on Link**, **Pause / Resume**, **Stop** y **Restart clip** controlan la reproducción.
-- **Frame** permite arrastrar hasta una pose; los botones de frame avanzan de uno en uno. **Speed** incluye cámara lenta y reversa. **Loop** repite el clip.
-- **Lock root translation** bloquea el desplazamiento visual de la raíz. El actor permanece en su posición durante la vista previa.
-- Los botones **Copy animation path / Copy raw clip path** copian las rutas al portapapeles.
-- **Mark for Byrna** guarda la animación y el frame. Pulsa un candidato para copiarlo o usa **Export candidates** para guardarlos en `mods/animviewer_byrna.txt`.
+- Search by name or path; presets find vaults, spins and slashes.
+- Pick the archive in **Source** and a clip from the list. **Play on Link**, **Pause / Resume**, **Stop** and **Restart clip** control playback.
+- **Frame** scrubs to a pose, **Speed** covers slow motion and reverse, **Loop** repeats the clip.
+- **Lock root translation** keeps Link in place during the preview.
+- **Copy animation path / Copy raw clip path** copy the paths to the clipboard.
+- **Mark for Byrna** saves the clip and frame; **Export candidates** writes them to `mods/animviewer_byrna.txt`.
 
-Inicia la vista previa con Link en suelo seguro y fuera de diálogos o cinemáticas. **Stop** devuelve el control al juego. No se modifica el inventario; Link guarda el objeto que llevaba en la mano al iniciar.
+Start a preview with Link on safe ground, outside dialogue and cutscenes. **Stop** returns control. The inventory is untouched.
 
-## Otros O2R
+## Other archives
 
-**Import O2R** abre el selector del juego y guarda el archivo elegido en `mods`. Después reinicia y pulsa **Refresh**. Usa bibliotecas de recursos de animación; un paquete que contiene otros mods también cargará esos mods al reiniciar. **Include resources with custom names** busca también clips sin «anim» en su ruta.
+**Import O2R** copies an archive into `mods`; restart and press **Refresh**. An archive that contains mods loads them too. **Include resources with custom names** also lists clips without "anim" in their path.
 
-Compatible con animaciones del esqueleto humano de Link de 67 valores por frame, incluidos clips personalizados. Los clips de NPC u otras formas requieren su propio esqueleto y no se reinterpretan como Link.
-
-## Requisito de versión
-
-Esta versión usa los nuevos controles generales `ModUI` del host actualizado. Las funciones están disponibles para todos los mods; no dependen de Randomizer. Importar una biblioteca sigue requiriendo reiniciar porque el montaje de archivos en caliente no forma parte de esta ampliación de UI.
-
-La reproducción en una partida queda pendiente de prueba del usuario.
+Clips must target Link's 67-value human skeleton. NPC and form clips need their own skeleton.

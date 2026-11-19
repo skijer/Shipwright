@@ -1,22 +1,12 @@
 # Easy Equipment
 
-Cambiar escudo, túnica o botas desde un botón C, con una rueda.
+Swap shield, tunic or boots from a C button, with a wheel.
 
-## Uso
+1. Enable **Assignable Tunics and Boots** in Enhancements.
+2. On the equipment page, assign a shield, tunic or boots to a C button.
+3. Tap it to put the piece on, or take it off if worn. Without a shield it unequips; tunic and boots fall back to Kokiri.
+4. Hold it to open a wheel with every owned piece of that category, vanilla or modded. Aim with the stick and release C to equip; B cancels. The chosen piece takes over that C button.
 
-1. Activar **Assignable Tunics and Boots** en Enhancements y poner `easy_equipment.o2r` en `mods/`.
-2. En la página de equipo, asignar un escudo, una túnica o unas botas vanilla a C-izquierda, C-abajo o C-derecha.
-3. Un toque en ese C pone la pieza o la quita si ya la llevas. Sin escudo al quitarlo; túnica y botas vuelven a Kokiri.
-4. Mantener el C 10 frames abre la rueda con todas las piezas de esa categoría que tienes, vanilla y de mods. Se elige con el stick izquierdo y se equipa al soltar C; B cancela. La pieza elegida pasa a ese C, también si es de un mod.
+The wheel freezes the world and the clock. Pieces for the other age are dimmed unless Timeless Equipment is on. Past 12 pieces the wheel adds outer rings.
 
-La rueda detiene el mundo y el reloj. Las piezas de otra edad salen atenuadas y no se equipan, salvo con Timeless Equipment. Con más de 12 piezas en una categoría hay anillos concéntricos: más recorrido del stick elige los exteriores.
-
-En **Mods → Equipment**, «Open equipment wheel» permite elegir **Hold** o **Instant**.
-
-## Pendiente de smoke test en juego
-
-- Túnica vanilla ↔ Champion's Tunic, y Climb Boots ↔ Iron/Kokiri Boots, desde el toque y desde la rueda.
-- Una pieza de mod elegida en la rueda se queda en el C y su toque la pone y la quita.
-- Mantener C sin mover el stick: soltar no cambia nada.
-- Guardar y recargar con piezas en C.
-- Abrir pausa, cambiar de escena o de edad durante un gesto: la rueda se cierra y suelta mundo y controles.
+**Mods → Equipment → Open equipment wheel** chooses **Hold** or **Instant**.

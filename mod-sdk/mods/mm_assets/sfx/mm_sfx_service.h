@@ -3,9 +3,8 @@
 
 #include "soh/ModApi/ModApi.h"
 
-// Lo que mm_assets ofrece a los demás mods con PublishService. El id es el de MM (NA_SE_* de 2ship), no el de
-// OoT. El planificador de MM guarda el puntero de posición mientras el sonido vive: tiene que ser uno que dure,
-// como &actor->projectedPos. Devuelve false si el mm.o2r no está.
+// Ids are MM's (2ship's NA_SE_*). MM keeps the position pointer while the sound lives, so it must outlast it,
+// like &actor->projectedPos. Returns false without mm.o2r.
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 #define MM_SFX_PLAY_SCALED_SERVICE "mm.sfx.play_scaled"
 #define MM_SFX_STOP_SERVICE "mm.sfx.stop"
@@ -16,9 +15,8 @@ typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
 typedef bool (*MmSfxPlayScaledFunc)(uint16_t sfxId, Vec3f* pos, f32* freqScale, f32* volume);
 typedef void (*MmSfxStopFunc)(uint16_t sfxId);
 
-// Una nota de ocarina con la voz de un instrumento de MM (OCARINA_INSTRUMENT_* de 2ship: 5 Ikana, 7 tambores
-// Goron, 8 guitarra Zora, 9 gaitas Deku). pitch es el de OoT/MM (C4 = 0); 0xFF la suelta. bendFreq se lee
-// mientras la nota suena, así que tiene que durar.
+// Instruments are 2ship's OCARINA_INSTRUMENT_*; pitch is OoT/MM's (C4 = 0) and 0xFF releases the note.
+// bendFreq is read while the note plays, so it must outlast it.
 #define MM_OCARINA_NOTE_SERVICE "mm.ocarina.note"
 typedef bool (*MmOcarinaNoteFunc)(uint8_t instrumentId, uint8_t pitch, f32* bendFreq);
 
