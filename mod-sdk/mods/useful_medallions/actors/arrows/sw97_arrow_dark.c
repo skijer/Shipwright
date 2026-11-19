@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================================
-// Struct (merged from z_arrow_dark.h)
-// ============================================================================
-
 struct ArrowDark;
 
 typedef void (*ArrowDarkActionFunc)(struct ArrowDark*, PlayState*);
@@ -23,11 +19,6 @@ typedef struct ArrowDark {
     /* 0x0164 */ f32 unk_164;
     /* 0x0168 */ ArrowDarkActionFunc actionFunc;
 } ArrowDark; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_dark_gfx.c)
-// ============================================================================
 
 static u64 sArrowDarkTexture2[] = {
     0x49495264706a7477, 0x6a817b8564939777, 0x5864443c37201506, 0x1101030000000000, 0x4747474c61586461,
@@ -207,13 +198,8 @@ static Gfx sArrowDarkVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97DarkMatDL[] = "__OTR__overlays/ovl_Arrow_Fire/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97DarkMdlDL[] = "__OTR__overlays/ovl_Arrow_Fire/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 
@@ -361,9 +347,6 @@ void Sw97_ArrowDark_Fly(ArrowDark* this, PlayState* play) {
         Sw97_ArrowDark_SetupAction(this, Sw97_ArrowDark_Hit);
         this->timer = 32;
         this->alpha = 255;
-        // Shadow arrow blinds the target — enemies / NPCs lose Link's position
-        // for ~10 sec. The hit actor lives on the arrow's collider.base.at
-        // (same pointer the Dark lifesteal hook reads).
         Actor* hit = arrow->collider.base.at;
         if (hit != NULL && hit->update != NULL &&
             (hit->category == ACTORCAT_ENEMY || hit->category == ACTORCAT_NPC || (hit->flags & ACTOR_FLAG_HOSTILE))) {

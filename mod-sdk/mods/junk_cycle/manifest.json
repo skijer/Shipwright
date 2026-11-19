@@ -1,0 +1,8 @@
+{
+    "name": "junk_cycle",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Junk Items Cycle",
+    "game": "oot",
+    "description": "Junk checks show a random junk item you can use right now, cycling every 1.5 seconds or fixed per check, and give the item shown."
+}

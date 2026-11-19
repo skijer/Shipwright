@@ -2,14 +2,14 @@
     "packs": [
         {
             "id": "skijer-devtools",
-            "name": "Skijer Dev Tools",
+            "name": "Developer Tools",
             "icon": "ITEM_LENS",
             "mods": [
                 "anim_viewer",
                 "item_drop_tester",
                 "turbo"
             ],
-            "description": "Tools for testing animations, item drops and gameplay while developing mods."
+            "description": "For mod makers: test animations, item drops and game speed."
         },
         {
             "id": "nei-items",
@@ -45,7 +45,7 @@
                 "wolf_link",
                 "zonai_permafrost"
             ],
-            "description": "Expand your inventory with new tools, weapons and abilities from across the Zelda series."
+            "description": "New weapons, tools and abilities from across the Zelda series. Pick only the ones you want."
         },
         {
             "id": "nei-equipment",
@@ -73,18 +73,18 @@
                 "trident",
                 "zora_tunic"
             ],
-            "description": "Discover new shields, tunics, companions and equipment for your adventure."
+            "description": "New swords, shields, tunics, boots and companions. Pick only the pieces you want."
         },
         {
             "id": "mm-items",
-            "name": "MM Items",
+            "name": "Majora's Mask Items",
             "icon": "ITEM_OCARINA_TIME",
             "mods": [
                 "mm_wearables",
                 "mm_collectables",
                 "mm_items"
             ],
-            "description": "Customize Majora's Mask masks, boss remains and items. Configure each feature separately."
+            "description": "Majora's Mask's masks, boss remains, songs and items in Ocarina of Time. Turn each one on or off."
         },
         {
             "id": "nei-forms",
@@ -101,7 +101,7 @@
                 "kafei",
                 "rito"
             ],
-            "description": "Explore new character forms and their unique abilities."
+            "description": "Transform into new forms, each with its own moves and abilities."
         },
         {
             "id": "nei-enemies",
@@ -114,11 +114,24 @@
                 "trutefel_miniblin",
                 "trutefel_sbeetle"
             ],
-            "description": "Add new enemies and minibosses to challenge your adventure."
+            "description": "New enemies and minibosses to fight."
+        },
+        {
+            "id": "randomizer-extras",
+            "name": "Randomizer Extras",
+            "icon": "ITEM_COMPASS",
+            "mods": [
+                "golden_hearts",
+                "junk_cycle",
+                "mm_skills",
+                "mm_trap_types",
+                "shuffle_great_spin"
+            ],
+            "description": "More to shuffle in the randomizer: golden hearts, new traps, skills and livelier junk items."
         },
         {
             "id": "nei-others",
-            "name": "NEI Others",
+            "name": "Utilities and Visuals",
             "icon": "ITEM_MEDALLION_SPIRIT",
             "mods": [
                 "pak_loader",
@@ -128,18 +141,18 @@
                 "cel_shading",
                 "mic_ocarina"
             ],
-            "description": "Utility, visual and gameplay additions for your NEI collection."
+            "description": "Quality of life, appearance packs, graphics and microphone play."
         },
         {
             "id": "other-skijer-mods",
-            "name": "Other Skijer Mods",
+            "name": "Companions and Experiments",
             "icon": "ITEM_CHICKEN",
             "mods": [
                 "enemy_possession",
                 "ray_gun",
                 "malon_companion"
             ],
-            "description": "More standalone gameplay experiments and companions by Skijer."
+            "description": "Standalone companions and gameplay experiments."
         }
     ]
 }

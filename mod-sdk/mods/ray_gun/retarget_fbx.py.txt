@@ -58,7 +58,7 @@ convert=Matrix(((1,0,0),(0,0,1),(0,-1,0)))
 source={};reference=None;fps={}
 for label,file in [('draw','Drawing Gun'),('shoot','Shooting')]:
     bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-    bpy.ops.import_scene.fbx(filepath=f'C:/Users/LENOVO/Downloads/{file}.fbx')
+    bpy.ops.import_scene.fbx(filepath=f'{file}.fbx')
     rig=next(o for o in bpy.context.scene.objects if o.type=='ARMATURE')
     action=rig.animation_data.action;start,end=map(int,action.frame_range)
     fps[label]=bpy.context.scene.render.fps

@@ -1,6 +1,3 @@
-// The six medallions as spells: pressing one runs NEI's cast (vanilla's Din's Fire flow widened to six spells)
-// and spawns its SW97 actor. Holding the Shadow Medallion trades three hearts for magic.
-
 #include "z64items.h"
 
 #include <string.h>
@@ -23,7 +20,6 @@
 #define ANIMSFX_TYPE_WALKING 8
 #define GAMEPLAY_KEEP_ANIM(name) "__OTR__objects/gameplay_keep/" name
 
-// Layout of z_player.c's private AnimSfxEntry.
 typedef struct {
     u16 sfxId;
     s16 data;
@@ -71,7 +67,6 @@ static const ALIGN_ASSET(2) char sSpiritName[] = "__OTR__textures/item_name_stat
 static const ALIGN_ASSET(2) char sShadowName[] = "__OTR__textures/item_name_static/gShadowMedallionItemNameENGTex";
 static const ALIGN_ASSET(2) char sLightName[] = "__OTR__textures/item_name_static/gLightMedallionItemNameENGTex";
 
-// NEI's six-spell tables: 0..2 keep vanilla's Farore/Din/Nayru rows, 3..5 are the SW97 additions.
 static const char* const sCastAnims[SW97_SPELL_COUNT] = {
     sKaze1Anim, sHonoo1Anim, sTamashii1Anim, sKaze1Anim, sTamashii1Anim, sHonoo1Anim,
 };
@@ -149,7 +144,6 @@ static const MedallionInfo* FindMedallion(Sw97Spell spell) {
     return NULL;
 }
 
-// Nothing in the item registry derives ownership from a quest flag, so the mod restates it as the flags move.
 static void SyncQuestOwnership(void) {
     uint32_t questItems = gSaveContext.inventory.questItems;
 
@@ -162,7 +156,6 @@ static void SyncQuestOwnership(void) {
     }
 }
 
-// Water rides Farore's item action in NEI, so Fast Farore's Wind speeds it up too.
 static bool IsFastFarores(s8 spell) {
     return spell == SW97_SPELL_ICE && CVarGetInteger(SW97_CVAR_FAST_FARORES, 0);
 }
@@ -233,7 +226,6 @@ static void PlayCastSounds(Player* player, PlayState* play, Sw97Spell spell, boo
     }
 }
 
-// Player_Action_808507F4 as NEI runs it for a medallion: every spell fires and forgets, none saves a warp.
 static void CastAction(Player* player, PlayState* play) {
     s8 spell = (s8)player->av1.actionVar1;
     bool isFast = IsFastFarores(spell);
@@ -255,8 +247,7 @@ static bool CanAffordSpell(Sw97Spell spell) {
            gSaveContext.magic >= sSpellCosts[spell];
 }
 
-// The press lands inside vanilla's item handling, which would replace the action func the same frame: the
-// cast starts at the end of the player's update instead.
+// The press lands inside vanilla's item handling, which would replace the action func the same frame.
 static void PressMedallion(Sw97Spell spell) {
     if (!CanAffordSpell(spell)) {
         Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
@@ -289,7 +280,6 @@ static void PressFire(PlayState* play, Player* player) {
     PressMedallion(SW97_SPELL_FIRE);
 }
 
-// Vanilla only casts from the ground or the water surface.
 static bool CanStartCast(Player* player, PlayState* play) {
     bool isGrounded = (player->actor.bgCheckFlags & 1) != 0;
 
@@ -329,7 +319,6 @@ static void ResetShadowExchange(void) {
     sIsShadowExchanged = false;
 }
 
-// Outside the cast on purpose: the trade is what a player with an empty meter reaches for.
 static void TickShadowExchange(Player* player, PlayState* play) {
     uint16_t buttons = FindShadowButtons();
 

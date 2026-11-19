@@ -94,6 +94,7 @@ typedef bool (*MmOcarinaNoteFunc)(uint8_t instrumentId, uint8_t pitch, f32* bend
 #define PIPE_PIECE_COUNT 5
 // LinkAnimation advances R_UPDATE_RATE * 0.5 clip frames per update, and the rate is always 3.
 #define CLIP_FRAMES_PER_UPDATE 1.5f
+#define MM_ANIM_ADJUSTED_SPEED (2.0f / 3.0f)
 
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__icon_item_static_yar/gItemIconDekuMaskTex";
 static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__item_name_static/gItemNameDekuMaskENGTex";
@@ -160,14 +161,11 @@ static const char* const sDekuLimbDL[PLAYER_LIMB_MAX] = {
     "__OTR__objects/object_link_nuts/gLinkDekuTorsoDL",
 };
 
-// Same limb order as OoT Link. Only the local translations differ.
 static const Vec3f sDekuJointPos[PLAYER_LIMB_MAX] = {
-    { 0, 0, 0 },       { 0, 0, 0 },       { 0, 0, 0 },       { 945, 0, 0 },
-    { -800, 0, -250 }, { 458, 0, 0 },     { 309, 5, 11 },    { -800, 0, 250 },
-    { 454, 0, 0 },     { 310, 6, 3 },     { 0, 21, -7 },     { 705, 0, 0 },
-    { -500, -1400, 0 },{ 0, 0, 0 },       { 370, 0, 350 },   { 406, 0, 0 },
-    { 356, 0, 0 },     { 370, 0, -350 },  { 425, 0, 0 },     { 336, 0, 0 },
-    { 600, -250, 0 },  { 0, 0, 0 },
+    { 0, 0, 0 },        { 0, 0, 0 },      { 0, 0, 0 },      { 945, 0, 0 }, { -800, 0, -250 }, { 458, 0, 0 },
+    { 309, 5, 11 },     { -800, 0, 250 }, { 454, 0, 0 },    { 310, 6, 3 }, { 0, 21, -7 },     { 705, 0, 0 },
+    { -500, -1400, 0 }, { 0, 0, 0 },      { 370, 0, 350 },  { 406, 0, 0 }, { 356, 0, 0 },     { 370, 0, -350 },
+    { 425, 0, 0 },      { 336, 0, 0 },    { 600, -250, 0 }, { 0, 0, 0 },
 };
 
 static const char* const sRequiredHooks[] = {
@@ -189,13 +187,6 @@ typedef enum {
 } DekuAction;
 
 static const SOHModApi* sApi;
-extern bool FormRegistry_ApplyActive(const char* key);
-static bool ToggleConfiguredForm(const char* key) {
-    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
-        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
-    }
-    return sApi->ToggleForm(key);
-}
 
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
@@ -281,6 +272,7 @@ static f32 sDekuCheekScale = 1.0f;
 static void StopSpinTrail(PlayState* play);
 
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
+void Player_SetBootData(PlayState* play, Player* player);
 void Player_Action_Idle(Player* player, PlayState* play);
 void func_80839FFC(Player* player, PlayState* play);
 void Player_PlayVoiceSfx(Player* player, u16 sfxId);
@@ -315,12 +307,7 @@ static ColliderCylinderInit sBubbleColliderInit = {
 
 static ColliderCylinderInit sGuardColliderInit = {
     { COLTYPE_METAL, AT_NONE, AC_ON | AC_TYPE_PLAYER, OC1_NONE, OC2_TYPE_PLAYER, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK0,
-      { 0x00000000, 0x00, 0x00 },
-      { 0xFFCFFFFF, 0x00, 0x00 },
-      TOUCH_NONE,
-      BUMP_ON,
-      OCELEM_NONE },
+    { ELEMTYPE_UNK0, { 0x00000000, 0x00, 0x00 }, { 0xFFCFFFFF, 0x00, 0x00 }, TOUCH_NONE, BUMP_ON, OCELEM_NONE },
     { 28, 38, 0, { 0, 0, 0 } },
 };
 
@@ -351,7 +338,7 @@ static void PlayMmSfx(u16 mmSfx, u16 fallback, Vec3f* pos) {
     }
     if (sPlayMmSfx == NULL || !sPlayMmSfx(mmSfx, pos)) {
         Audio_PlaySfxGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultReverb);
+                             &gSfxDefaultReverb);
     }
 }
 
@@ -414,11 +401,16 @@ static void LoadAnims(void) {
     sPipesPlayAnim = LoadMmAnim(sPipesPlayPath, 14);
 }
 
+static f32 GetMmAnimSpeed(LinkAnimationHeader* anim) {
+    return (anim == sSpinAnim || anim == sBubbleReadyAnim) ? 1.0f : MM_ANIM_ADJUSTED_SPEED;
+}
+
 static void ChangeAnim(PlayState* play, Player* player, LinkAnimationHeader* anim, u8 mode, f32 morph) {
     if (anim == NULL) {
         return;
     }
-    LinkAnimation_Change(play, &player->skelAnime, anim, 1.0f, 0.0f, Animation_GetLastFrame(anim), mode, morph);
+    LinkAnimation_Change(play, &player->skelAnime, anim, GetMmAnimSpeed(anim), 0.0f, Animation_GetLastFrame(anim), mode,
+                         morph);
 }
 
 static void SetupAirAction(PlayState* play, Player* player, PlayerActionFunc actionFunc) {
@@ -427,8 +419,8 @@ static void SetupAirAction(PlayState* play, Player* player, PlayerActionFunc act
     player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
 }
 
-static void InitCylinder(PlayState* play, Player* player, ColliderCylinder* collider,
-                         ColliderCylinderInit* init, bool* ready) {
+static void InitCylinder(PlayState* play, Player* player, ColliderCylinder* collider, ColliderCylinderInit* init,
+                         bool* ready) {
     if (*ready) {
         return;
     }
@@ -468,12 +460,10 @@ static void SpawnDekuDust(PlayState* play, Player* player, s16 scale) {
     EffectSsDtBubble_SpawnCustomColor(play, &pos, &velocity, &accel, &prim, &env, scale, 18, 0);
 }
 
-// ---- spin ----
-
 static void StartSpinTrail(PlayState* play) {
     EffectBlureInit2 blure = {
         0, 8, 0, { 255, 255, 255, 255 }, { 255, 255, 255, 64 }, { 255, 255, 255, 0 }, { 255, 255, 255, 0 }, 4,
-        0, 2, 0, { 0, 0, 0, 0 }, { 0, 0, 0, 0 },
+        0, 2, 0, { 0, 0, 0, 0 },         { 0, 0, 0, 0 },
     };
 
     if (sSpinTrail < 0) {
@@ -504,8 +494,8 @@ static void SpawnSpinSparkle(PlayState* play, Player* player) {
     velocity.z = (Rand_ZeroFloat(0.5f) + 1.0f) * sign;
     accel.z = 0.0f;
     pos.y += Rand_ZeroFloat(15.0f);
-    EffectSsKiraKira_SpawnDispersed(play, &pos, &velocity, &accel, &prim, &env,
-                                     Rand_ZeroOne() < 0.5f ? 2000 : -150, 32);
+    EffectSsKiraKira_SpawnDispersed(play, &pos, &velocity, &accel, &prim, &env, Rand_ZeroOne() < 0.5f ? 2000 : -150,
+                                    32);
 }
 
 static void UpdateSpinMarks(void) {
@@ -530,7 +520,6 @@ static void AddSpinMark(Player* player) {
     f32 width = 2.0f;
     s16 yaw = player->yaw;
 
-    // MM refuses dynamic collision and ends the current strip at poly gaps.
     if (player->actor.floorPoly == NULL || player->actor.floorBgId != BGCHECK_SCENE) {
         sSpinMarkContinue = false;
         return;
@@ -555,11 +544,8 @@ static void SpawnSpinFloorEffect(PlayState* play, Player* player) {
         return;
     }
     // MM's func_8083F8A8 only emits this ring on ordinary ground and sand.
-    // Other materials either use their own debris (grass/snow) or no dust;
-    // spawning the yellow ring everywhere was the visibly wrong floor effect.
-    if (sSpinAngularSpeed > 9500.0f &&
-        (player->floorSfxOffset == NA_SE_PL_WALK_GROUND - SFX_FLAG ||
-         player->floorSfxOffset == NA_SE_PL_WALK_SAND - SFX_FLAG)) {
+    if (sSpinAngularSpeed > 9500.0f && (player->floorSfxOffset == NA_SE_PL_WALK_GROUND - SFX_FLAG ||
+                                        player->floorSfxOffset == NA_SE_PL_WALK_SAND - SFX_FLAG)) {
         Actor_SpawnFloorDustRing(play, &player->actor, &player->actor.world.pos, 2.0f, 1, 2.5f, 10, 18, true);
     }
     AddSpinMark(player);
@@ -614,8 +600,7 @@ static void StartSpin(Player* player, PlayState* play) {
     sSpinMarkContinue = false;
     player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
     StartSpinTrail(play);
-    // Keep ownership of the action after walking off a ledge. Otherwise OoT's
-    // airborne dispatcher replaces the spin with its fall/auto-jump action.
+    // Otherwise OoT's airborne dispatcher replaces the spin with its fall/auto-jump action.
     SetupAirAction(play, player, DekuSpinAction);
     ChangeAnim(play, player, sSpinAnim, ANIMMODE_ONCE, -3.0f);
     PlayMmSfx(MM_DEKU_SPIN, NA_SE_IT_SWORD_SWING, &player->actor.projectedPos);
@@ -626,8 +611,7 @@ static int32_t StartSpinAction(PlayState* play, Player* player) {
         return SOH_FORM_ACTION_VANILLA;
     }
     if (sAction == DEKU_ACTION_BUBBLE_CHARGE) {
-        // A belongs to the bubble pipeline while aiming: TickBubbleCharge uses
-        // it to cancel, exactly like NEI, instead of starting a spin underneath it.
+        // A belongs to the bubble pipeline while aiming: TickBubbleCharge uses it to cancel.
         return SOH_FORM_ACTION_BLOCKED;
     }
     if (sAction == DEKU_ACTION_WATER_HOP || !CanAct(player) || !IsGrounded(player) || sSpinAnim == NULL) {
@@ -640,15 +624,12 @@ static int32_t StartSpinAction(PlayState* play, Player* player) {
 static int32_t HandleZTargetA(PlayState* play, Player* player) {
     const s8 direction = player->controlStickDirections[player->controlStickDataIndex];
 
-    // Handler 10 also owns vanilla's sidehop and backflip. NEI only redirects the
-    // neutral/forward roll path to Deku spin; sideways and backwards stay vanilla.
+    // Handler 10 also owns vanilla's sidehop and backflip; only the neutral/forward roll becomes the spin.
     if (direction > PLAYER_STICK_DIR_FORWARD) {
         return SOH_FORM_ACTION_VANILLA;
     }
     return StartSpinAction(play, player);
 }
-
-// ---- bubble ----
 
 static void PopBubble(PlayState* play) {
     if (!sBubbleActive) {
@@ -661,7 +642,6 @@ static void PopBubble(PlayState* play) {
         (void)velocity;
         (void)accel;
     }
-    // 2Ship's EnArrow only stops requesting the flagged flight sound here.
     // DEKUNUTS_FIRE is a one-shot and must be allowed to finish naturally.
     PlayMmSfx(MM_DEKU_BUBBLE_VANISH, NA_SE_EV_WATER_BUBBLE, &sBubblePos);
     sBubbleActive = false;
@@ -707,15 +687,12 @@ static void RefreshBubbleStep(void) {
 
 static void FireBubble(Player* player, PlayState* play) {
     if (!HasBubbleMagic()) {
-        // 2Ship func_808305BC returns zero below 2 MP, so no EnArrow exists;
-        // Player_UpperAction_7 plays this dry-fire sound instead.
         PlayMmSfx(MM_DEKU_BUBBLE_MISS_FIRE, NA_SE_IT_SLING_FLICK, &player->actor.projectedPos);
         return;
     }
     gSaveContext.magic -= BUBBLE_MAGIC_COST;
     AimBubble(player);
-    // MM's EnArrow clamps a released bubble to 3.5. A scale-1 tap otherwise
-    // reaches the shrink endpoint immediately and plays VANISH over FIRE.
+    // MM's EnArrow clamps a released bubble to 3.5; a scale-1 tap would play VANISH over FIRE.
     sBubbleScale = MAX(sBubbleScale, 3.5f);
     RefreshBubbleStep();
     sBubbleLife = BUBBLE_LIFE;
@@ -733,7 +710,6 @@ static void FireFlightBubble(Player* player, PlayState* play) {
     player->actor.focus.rot.y = player->actor.shape.rot.y;
     player->actor.focus.rot.x = 0;
     AimBubble(player);
-    // MM lets Deku drop a projectile during flower flight without leaving the flight action.
     sBubbleStep.x += player->actor.velocity.x * 0.5f;
     sBubbleStep.z += player->actor.velocity.z * 0.5f;
     sBubbleLife = BUBBLE_LIFE;
@@ -752,7 +728,7 @@ static void EndBubbleCharge(Player* player, PlayState* play, bool fire) {
         FireBubble(player, play);
         if (sBubbleShootAnim != NULL) {
             SkelAnime* skeleton = ownsWholeBody ? &player->skelAnime : &player->upperSkelAnime;
-            LinkAnimation_Change(play, skeleton, sBubbleShootAnim, 1.0f, 0.0f,
+            LinkAnimation_Change(play, skeleton, sBubbleShootAnim, MM_ANIM_ADJUSTED_SPEED, 0.0f,
                                  Animation_GetLastFrame(sBubbleShootAnim), ANIMMODE_ONCE, -2.0f);
         }
     }
@@ -777,7 +753,7 @@ static void ShootBubbleAndKeepAiming(Player* player, PlayState* play) {
     FireBubble(player, play);
     if (sBubbleShootAnim != NULL) {
         SkelAnime* skeleton = ownsWholeBody ? &player->skelAnime : &player->upperSkelAnime;
-        LinkAnimation_Change(play, skeleton, sBubbleShootAnim, 1.0f, 0.0f,
+        LinkAnimation_Change(play, skeleton, sBubbleShootAnim, MM_ANIM_ADJUSTED_SPEED, 0.0f,
                              Animation_GetLastFrame(sBubbleShootAnim), ANIMMODE_ONCE, -2.0f);
     }
     sBubbleArmed = false;
@@ -795,8 +771,6 @@ static void UpdateBubbleAimPose(Player* player) {
     }
     player->actor.focus.rot.y = Math_Vec3f_Yaw(&player->actor.focus.pos, &target->focus.pos);
     player->actor.focus.rot.x = Math_Vec3f_Pitch(&player->actor.focus.pos, &target->focus.pos);
-    // This is OoT's own head/upper-body tracking splitter. It clamps and smooths
-    // the target rotation between headLimbRot and upperLimbRot exactly as Link does.
     func_80836AB8(player, false);
 }
 
@@ -804,8 +778,7 @@ static void TickBubbleCharge(Player* player, PlayState* play) {
     bool zTargeting = Player_IsZTargeting(player);
     bool zHeld = CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_Z);
 
-    // ItemCamera_Update in NEI changes modes live: locking on leaves first person,
-    // losing lock-on enters it. Only first person owns the whole-body action.
+    // Locking on leaves first person and losing lock-on enters it; only first person owns the whole-body action.
     if (sBubbleFirstPerson && (zTargeting || zHeld)) {
         Z64Aiming_Release(player, play);
         sBubbleFirstPerson = false;
@@ -826,8 +799,6 @@ static void TickBubbleCharge(Player* player, PlayState* play) {
         Z64Aiming_Update(player, play);
         Player_ZeroSpeedXZ(player);
     } else {
-        // Z-target is an upper-body item state in NEI. The current vanilla lower
-        // action remains responsible for walk/run/strafe and landing.
         UpdateBubbleAimPose(player);
     }
     if (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_DEAD)) {
@@ -842,8 +813,6 @@ static void TickBubbleCharge(Player* player, PlayState* play) {
         f32 cheekTarget;
 
         if (!sBubbleArmed) {
-            // After an automatic full-charge shot, MM waits for a fresh button
-            // press instead of starting another charge from the same hold.
             if (!CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
                 return;
             }
@@ -851,8 +820,8 @@ static void TickBubbleCharge(Player* player, PlayState* play) {
             sBubbleFullChargeTimer = 0;
             sBubbleCanFire = HasBubbleMagic();
             if (sBubbleReadyAnim != NULL) {
-                SkelAnime* skeleton = player->actionFunc == BubbleChargeAction ? &player->skelAnime
-                                                                               : &player->upperSkelAnime;
+                SkelAnime* skeleton =
+                    player->actionFunc == BubbleChargeAction ? &player->skelAnime : &player->upperSkelAnime;
                 LinkAnimation_Change(play, skeleton, sBubbleReadyAnim, 1.0f, 0.0f,
                                      Animation_GetLastFrame(sBubbleReadyAnim), ANIMMODE_LOOP, -3.0f);
             }
@@ -866,13 +835,10 @@ static void TickBubbleCharge(Player* player, PlayState* play) {
         cheekTarget = 1.0f + (sBubbleCharge / BUBBLE_MAX_CHARGE) * 0.3f;
         Math_SmoothStepToF(&sDekuCheekScale, cheekTarget, 0.3f, 0.05f, 0.01f);
         if (chargeStep > 0.5f) {
-            // Verbatim MM dispatch: Actor_PlaySfx_Flagged(..., id - SFX_FLAG).
-            // Removing 0x800 is what makes this a per-frame request instead of
-            // a persistent one-shot in the MM scheduler.
+            // Removing 0x800 (id - SFX_FLAG) makes this a per-frame request instead of a persistent one-shot.
             RefreshMmSfx(MM_DEKU_BUBBLE_BREATH_FLAGGED, &player->actor.projectedPos);
             sBubbleFullChargeTimer = 0;
         } else {
-            // EnArrow waits 21 frames at full size, then releases automatically.
             if (++sBubbleFullChargeTimer > 20) {
                 ShootBubbleAndKeepAiming(player, play);
                 return;
@@ -899,8 +865,6 @@ static int32_t StartBubble(PlayState* play, Player* player) {
         return SOH_FORM_ACTION_VANILLA;
     }
     if (sAction == DEKU_ACTION_BUBBLE_CHARGE) {
-        // The existing aim session re-arms on B; do not recreate its camera or
-        // replace the lower-body Z-target action.
         return SOH_FORM_ACTION_STARTED;
     }
     if (sAction == DEKU_ACTION_WATER_HOP || !CanAct(player) || !IsGrounded(player) || sBubbleReadyAnim == NULL) {
@@ -919,7 +883,6 @@ static int32_t StartBubble(PlayState* play, Player* player) {
         Player_SetupAction(play, player, BubbleChargeAction, 0);
         ChangeAnim(play, player, sBubbleReadyAnim, ANIMMODE_LOOP, -3.0f);
     } else {
-        // Keep the lower-body action so lock-on walking and strafing continue.
         LinkAnimation_Change(play, &player->upperSkelAnime, sBubbleReadyAnim, 1.0f, 0.0f,
                              Animation_GetLastFrame(sBubbleReadyAnim), ANIMMODE_LOOP, -3.0f);
         UpdateBubbleAimPose(player);
@@ -952,14 +915,13 @@ static void UpdateBubble(Player* player, PlayState* play) {
     sBubblePos.x += sBubbleStep.x;
     sBubblePos.y += sBubbleStep.y;
     sBubblePos.z += sBubbleStep.z;
-    // 2Ship: Actor_PlaySfx_Flagged(..., id - SFX_FLAG), once per flight frame.
     RefreshMmSfx(MM_DEKU_BUBBLE_SHOT_LEVEL_FLAGGED, &sBubblePos);
 
     CollisionPoly* poly = NULL;
     s32 bgId;
     Vec3f hit;
-    bool hitWall = BgCheck_EntityLineTest1(&play->colCtx, &previous, &sBubblePos, &hit, &poly, true, true, true,
-                                           true, &bgId);
+    bool hitWall =
+        BgCheck_EntityLineTest1(&play->colCtx, &previous, &sBubblePos, &hit, &poly, true, true, true, true, &bgId);
     InitCylinder(play, player, &sBubbleCollider, &sBubbleColliderInit, &sBubbleColliderReady);
     sBubbleCollider.dim.radius = MAX(BUBBLE_RADIUS_MIN, (s16)(sBubbleScale * 3.0f));
     sBubbleCollider.dim.height = sBubbleCollider.dim.radius * 2;
@@ -979,8 +941,6 @@ static void UpdateBubble(Player* player, PlayState* play) {
         PopBubble(play);
     }
 }
-
-// ---- flower and flight ----
 
 static void EndFlight(Player* player, PlayState* play) {
     bool wasOpen = sFlightOpen;
@@ -1008,7 +968,6 @@ static void DekuFlightAction(Player* player, PlayState* play) {
     }
     if (!sFlightOpen) {
         if (player->actor.velocity.y > 0.0f) {
-            // MM's launch rises sharply; the flower opens only on the way down.
             player->actor.gravity = -5.5f;
             player->actor.minVelocityY = -20.0f;
             return;
@@ -1022,8 +981,7 @@ static void DekuFlightAction(Player* player, PlayState* play) {
         player->actor.velocity.y = 6.0f;
         player->actor.gravity = -0.5f;
         player->actor.minVelocityY = -10.0f;
-        ChangeAnim(play, player, sFlightOpenAnim != NULL ? sFlightOpenAnim : sFlightFlutterAnim,
-                   ANIMMODE_ONCE, -3.0f);
+        ChangeAnim(play, player, sFlightOpenAnim != NULL ? sFlightOpenAnim : sFlightFlutterAnim, ANIMMODE_ONCE, -3.0f);
         PlayMmSfx(MM_DEKU_FLOWER_OPEN, NA_SE_PL_CHANGE_ARMS, &player->actor.projectedPos);
         return;
     }
@@ -1046,8 +1004,7 @@ static void DekuFlightAction(Player* player, PlayState* play) {
     if (remaining <= 300.0f && sFlightFlutterAnim != NULL && player->skelAnime.animation != sFlightFlutterAnim) {
         ChangeAnim(play, player, sFlightFlutterAnim, ANIMMODE_LOOP, -3.0f);
     }
-    if (player->skelAnime.animation == sFlightFlutterAnim &&
-        LinkAnimation_OnFrame(&player->skelAnime, 6.0f)) {
+    if (player->skelAnime.animation == sFlightFlutterAnim && LinkAnimation_OnFrame(&player->skelAnime, 6.0f)) {
         PlayMmSfx(MM_DEKU_FLOWER_STRUGGLE, NA_SE_PL_JUMP, &player->actor.projectedPos);
     }
     if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
@@ -1071,8 +1028,6 @@ static void DekuFlightAction(Player* player, PlayState* play) {
     player->actor.gravity = -0.2f;
     player->actor.minVelocityY = -0.38f;
     player->fallStartHeight = player->actor.world.pos.y;
-    // Audio_PlaySfx_AtPosWithTimer(..., 2.0f) in MM resolves to the configured
-    // maximum-petal-speed interval: one pulse every two frames.
     if (--sFlowerRollTimer <= 0) {
         PlayMmSfx(MM_DEKU_FLOWER_ROLL, NA_SE_PL_PLANT_MOVE, &player->actor.projectedPos);
         sFlowerRollTimer = 2;
@@ -1186,8 +1141,7 @@ static void StartAirFlowerGlide(Player* player, PlayState* play, u16 buttonMask)
         player->actor.velocity.y = -0.38f;
     }
     SetupAirAction(play, player, DekuFlightAction);
-    ChangeAnim(play, player, sFlightOpenAnim != NULL ? sFlightOpenAnim : sFlightFlutterAnim,
-               ANIMMODE_ONCE, -3.0f);
+    ChangeAnim(play, player, sFlightOpenAnim != NULL ? sFlightOpenAnim : sFlightFlutterAnim, ANIMMODE_ONCE, -3.0f);
     PlayMmSfx(MM_DEKU_FLOWER_OPEN, NA_SE_PL_CHANGE_ARMS, &player->actor.projectedPos);
 }
 
@@ -1222,12 +1176,9 @@ static void TryStartFlower(Player* player, PlayState* play) {
         gSaveContext.magic -= magicCost;
         StartFlower(player, play, buttons);
     } else {
-        // Like the regular Deku Leaf glide, airborne use pays while held.
         StartAirFlowerGlide(player, play, buttons);
     }
 }
-
-// ---- water hopping ----
 
 static bool FindEquippedRocsButton(u16* buttonMask, bool* cape) {
     if (!SOH_MOD_API_HAS(sApi, GetEquippedCustomItem)) {
@@ -1251,9 +1202,8 @@ static void TryUseDekuRocs(Player* player, PlayState* play) {
     u16 buttonMask = 0;
     bool cape = false;
 
-    if (!FindEquippedRocsButton(&buttonMask, &cape) ||
-        !CHECK_BTN_ALL(play->state.input[0].press.button, buttonMask) || sAction != DEKU_ACTION_NONE ||
-        !CanAct(player)) {
+    if (!FindEquippedRocsButton(&buttonMask, &cape) || !CHECK_BTN_ALL(play->state.input[0].press.button, buttonMask) ||
+        sAction != DEKU_ACTION_NONE || !CanAct(player)) {
         return;
     }
     if (player->stateFlags1 & PLAYER_STATE1_IN_WATER) {
@@ -1276,7 +1226,6 @@ static void TryUseDekuRocs(Player* player, PlayState* play) {
     }
 }
 
-// Unlike MM's decay toward half the stick speed, a hop keeps its momentum: the stick only steers or brakes.
 static void SteerHop(Player* player, PlayState* play) {
     f32 targetSpeed = 0.0f;
     s16 targetYaw = player->yaw;
@@ -1307,7 +1256,6 @@ static void WaterHopAction(Player* player, PlayState* play) {
     player->actor.minVelocityY = -12.0f;
 }
 
-// MM func_8083784C: only water too deep to wade in is skipped over.
 static bool IsInDeepWater(Player* player) {
     f32 depth = player->actor.yDistToWater;
     f32 floorDistance = player->actor.world.pos.y - player->actor.floorHeight;
@@ -1338,7 +1286,6 @@ static void StartLastHopSpin(Player* player, PlayState* play) {
     PlayMmSfx(MM_DEKU_SPIN, NA_SE_IT_SWORD_SWING, &player->actor.projectedPos);
 }
 
-// Mirrors MM func_808373F8's Deku branch: lift to the surface and relaunch, keeping horizontal speed.
 static void HopOffWater(Player* player, PlayState* play) {
     f32 used = WATER_HOPS - sWaterHops;
     f32 hopSpeed = MAX(MAX(player->linearVelocity, WATER_HOP_SPEED) * (0.3f + (used * 0.18f)), 4.0f);
@@ -1354,9 +1301,8 @@ static void HopOffWater(Player* player, PlayState* play) {
     Vec3f splashPos = player->actor.world.pos;
     EffectSsGSplash_Spawn(play, &splashPos, NULL, NULL, hopSpeed <= 10.0f ? 0 : 1, (s16)(hopSpeed * 50.0f));
     PlayMmSfx((u16)(MM_DEKU_JUMP1 + used), NA_SE_PL_JUMP, &player->actor.projectedPos);
-    // The hops are close enough together that the MM bridge can still own the
-    // preceding auto-jump voice. Restart the final one so it is not rejected as
-    // a duplicate while preserving MM's hop -> voice -> last-hop spin order.
+    // The MM bridge can still own the preceding auto-jump voice; restart the final one so it is not rejected as a
+    // duplicate.
     if (sWaterHops == 1) {
         StopMmSfx(MM_DEKU_AUTO_JUMP_VOICE);
     }
@@ -1400,8 +1346,6 @@ static void UpdateWaterContact(Player* player, PlayState* play) {
     HopOffWater(player, play);
 }
 
-// ---- guard ----
-
 static void DekuGuardAction(Player* player, PlayState* play) {
     LinkAnimation_Update(play, &player->skelAnime);
     Player_ZeroSpeedXZ(player);
@@ -1413,7 +1357,6 @@ static void DekuGuardAction(Player* player, PlayState* play) {
     PlaceCylinder(&sGuardCollider, &player->actor.world.pos);
     sGuardCollider.base.acFlags |= AC_ON;
     CollisionCheck_SetAC(play, &play->colChkCtx, &sGuardCollider.base);
-    // The wooden shell is a full-body guard. Keep ordinary damage from racing the custom AC pass.
     if (player->invincibilityTimer == 0) {
         player->invincibilityTimer = 1;
     }
@@ -1428,8 +1371,12 @@ static int32_t StartGuard(PlayState* play, Player* player) {
     }
     sAction = DEKU_ACTION_GUARD;
     Player_SetupAction(play, player, DekuGuardAction, 0);
-    ChangeAnim(play, player, sGuardAnim != NULL ? sGuardAnim : sSpinAnim, ANIMMODE_ONCE, -3.0f);
-    player->skelAnime.playSpeed = 0.0f;
+    if (sGuardAnim != NULL) {
+        ChangeAnim(play, player, sGuardAnim, ANIMMODE_ONCE, -3.0f);
+    } else {
+        ChangeAnim(play, player, sSpinAnim, ANIMMODE_ONCE, -3.0f);
+        player->skelAnime.playSpeed = 0.0f;
+    }
     PlayMmSfx(MM_DEKU_CHANGE_ARMS, NA_SE_IT_SHIELD_POSTURE, &player->actor.projectedPos);
     return SOH_FORM_ACTION_STARTED;
 }
@@ -1441,14 +1388,10 @@ static const SOHFormActionOverride sActions[] = {
     { SOH_PLAYER_ACTION_SHIELD, StartGuard },
 };
 
-// Let OoT select and advance idle normally, but resolve the base wait group to
-// MM's pose. Do not force this animation again from UpdateDeku: doing both was
-// what made the legs repeatedly snap/flex while standing.
+// Do not force this animation again from UpdateDeku: doing both makes the legs snap while standing.
 static SOHFormAnimOverride sAnimOverrides[] = {
     { PLAYER_ANIMGROUP_wait, -1, NULL },
 };
-
-// ---- model and drawing ----
 
 static void ResolveDekuBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
     if (!IsDeku() || limbIndex <= PLAYER_LIMB_NONE || limbIndex >= PLAYER_LIMB_MAX) {
@@ -1484,8 +1427,6 @@ static void DrawOpenFlower(PlayState* play, Player* player, int32_t limbIndex) {
         Vec3f tip;
         Vec3f base;
 
-        // MM z_player_lib.c: the Deku spin ribbon follows these two points on
-        // the hat's local X axis, rather than the actor origin or head center.
         Matrix_MultVec3f(&tipLocal, &tip);
         Matrix_MultVec3f(&baseLocal, &base);
         EffectBlure_AddVertex(Effect_GetByIndex(sSpinTrail), &tip, &base);
@@ -1509,9 +1450,6 @@ static void DrawOpenFlower(PlayState* play, Player* player, int32_t limbIndex) {
     if (limbIndex != PLAYER_LIMB_HEAD) {
         return;
     }
-    // MM attaches the charging bubble to an offset in the head matrix. This
-    // matrix already contains Link's upper/head limb tracking, so both points
-    // follow the torso instead of being reconstructed from actor yaw.
     Matrix_MultVec3f(&mouthOffset, &sBubbleMouthPos);
     Matrix_MultVec3f(&forwardOffset, &sBubbleMouthForward);
     sBubbleMouthReady = true;
@@ -1547,11 +1485,9 @@ static void DrawBubbleDL(PlayState* play, Vec3f* pos, f32 bubbleScale, s16 yaw, 
     Matrix_RotateX(BINANG_TO_RAD(pitch), MTXMODE_APPLY);
     Matrix_Scale(modelScale, modelScale, modelScale, MTXMODE_APPLY);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    // MM's still/moving bubble lists are geometry-only. 06F380 installs the
-    // texture tiles and material state they reference.
+    // MM's bubble lists are geometry-only; 06F380 installs the texture tiles and material state they reference.
     gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sBubbleSetupDL);
-    // The MM bubble textures carry their silhouette in TEXEL alpha. The generic
-    // XLU setup ignored it, which made the quad/sphere look opaque.
+    // The MM bubble textures carry their silhouette in texel alpha, which the generic XLU setup ignores.
     gDPSetCombineMode(POLY_XLU_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 230, 225, 150, alpha);
     gDPSetEnvColor(POLY_XLU_DISP++, 150, 150, 100, alpha);
@@ -1601,8 +1537,7 @@ static void DrawChargingBubble(Player* player, PlayState* play) {
     position.x = camera->eye.x + direction.x * 3.0f;
     position.y = camera->eye.y + direction.y * 3.0f;
     position.z = camera->eye.z + direction.z * 3.0f;
-    // NEI's first-person route deliberately uses OoT's self-contained effect
-    // sphere; the MM 06F9F0 geometry is reserved for the visible 3D body route.
+    // First person uses OoT's self-contained effect sphere; the MM 06F9F0 geometry is for the visible 3D body route.
     {
         f32 chargeRatio = sBubbleCharge / BUBBLE_MAX_CHARGE;
         f32 scale = 0.02f + chargeRatio * 0.23f;
@@ -1709,8 +1644,6 @@ static void SpeakWithDekuVoice(Actor* actor, int32_t kind, uint16_t* sfxId, bool
     }
 }
 
-// ---- lifetime and registration ----
-
 static void ResetState(Player* player) {
     sAction = DEKU_ACTION_NONE;
     sFlowerTimer = 0;
@@ -1753,8 +1686,6 @@ static void EnterDeku(PlayState* play, Player* player) {
     ResetState(player);
 }
 
-// ---- pipes ----
-
 typedef enum {
     PIPES_IDLE,
     PIPES_RAISING,
@@ -1767,24 +1698,33 @@ typedef struct {
     Vec3s scale;
 } PipeKey;
 
-// MM's D_801C0340 (the mouthpiece) and D_801C0368 (the pipes): they pop out while pn_gakkistart plays.
 static const PipeKey sMouthpieceKeys[] = {
-    { 0, { 0, 0, 0 } }, { 5, { 0, 0, 0 } }, { 7, { 100, 100, 100 } }, { 9, { 110, 110, 110 } }, { 11, { 100, 100, 100 } },
+    { 0, { 0, 0, 0 } },       { 5, { 0, 0, 0 } },        { 7, { 100, 100, 100 } },
+    { 9, { 110, 110, 110 } }, { 11, { 100, 100, 100 } },
 };
 static const PipeKey sPipeKeys[] = {
-    { 0, { 0, 0, 0 } },         { 4, { 0, 0, 0 } },       { 6, { 120, 150, 60 } },  { 8, { 130, 80, 160 } },
+    { 0, { 0, 0, 0 } },       { 4, { 0, 0, 0 } },      { 6, { 120, 150, 60 } },   { 8, { 130, 80, 160 } },
     { 9, { 100, 100, 100 } }, { 10, { 90, 100, 90 } }, { 11, { 100, 100, 100 } },
 };
+static const PipeKey sPipeReplayKeys[] = {
+    { 0, { 100, 100, 100 } },
+    { 2, { 120, 120, 120 } },
+    { 6, { 90, 90, 90 } },
+    { 7, { 93, 93, 93 } },
+};
+
+#define PIPE_BLOWN_SCALE 1.2f
+#define PIPE_SETTLE_STEP 0.04f
 
 static u8 sPipesPhase;
+static f32 sPipeScale[PIPE_PIECE_COUNT] = { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };
 static bool sIsOcarinaOut;
 static bool sWasNoteStruck;
 static u8 sLastNote = OCARINA_NOTE_NONE;
-// Set on the game thread while the pipes are out; the note hook runs on the audio thread and only reads it.
+// Written on the game thread; the note hook runs on the audio thread and only reads it.
 static MmOcarinaNoteFunc sPipesVoice;
 static f32 sPipesBend = 1.0f;
 
-// MM's func_80124618: a linear blend between the keys either side of the frame, in hundredths.
 static void BlendPipeKeys(const PipeKey* keys, s32 count, f32 frame, Vec3f* scale) {
     s32 next = 1;
 
@@ -1833,7 +1773,6 @@ static void VoicePipes(uint8_t note, float bendFreq) {
     }
 }
 
-// Runs inside the ocarina's own update; the pose consumes the edge on the game frame.
 static void NoteStruck(uint8_t note, float modulator, int8_t bend) {
     (void)bend;
     if (note != OCARINA_NOTE_NONE && note != sLastNote) {
@@ -1863,45 +1802,64 @@ static void ChangePipesClip(PlayState* play, Player* player, LinkAnimationHeader
                          speed >= 0.0f ? last : 0.0f, mode, morph);
 }
 
-// Vanilla's ocarina action waits for the end of its intro and outro clips; the pipes' own clip takes their
-// place, so that wait is what raises and lowers them, as MM's Player_Action_63 does.
 static bool SwapOcarinaClip(PlayState* play, Player* player) {
     if (IsPlayingOcarinaClip(player, "okarina_start")) {
-        ChangePipesClip(play, player, sPipesRaiseAnim, 1.0f, ANIMMODE_ONCE, -6.0f);
+        ChangePipesClip(play, player, sPipesRaiseAnim, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -6.0f);
         sPipesPhase = PIPES_RAISING;
+        for (s32 i = 0; i < PIPE_PIECE_COUNT; i++) {
+            sPipeScale[i] = 1.0f;
+        }
         return true;
     }
     if (IsPlayingOcarinaClip(player, "okarina_end")) {
-        ChangePipesClip(play, player, sPipesRaiseAnim, -1.0f, ANIMMODE_ONCE, -6.0f);
+        ChangePipesClip(play, player, sPipesRaiseAnim, -MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -6.0f);
         sPipesPhase = PIPES_LOWERING;
         return true;
     }
     return false;
 }
 
-// Each note blows the play clip once, as MM's func_80852290 does. It loops: that same action reopens the
-// ocarina whenever a clip reports its end, which would wipe the notes of the song being played.
+static bool IsReplayingSong(PlayState* play) {
+    return play->msgCtx.msgMode >= MSGMODE_SONG_PLAYED && play->msgCtx.msgMode <= MSGMODE_DISPLAY_SONG_PLAYED;
+}
+
+static void BlowPipe(Player* player) {
+    u8 button = AudioOcarina_GetPlayingStaff()->buttonIndex;
+
+    if (button == OCARINA_BTN_C_RIGHT_OR_C_LEFT) {
+        button = OCARINA_BTN_C_RIGHT;
+    }
+    if (button < PIPE_PIECE_COUNT) {
+        sPipeScale[button] = PIPE_BLOWN_SCALE;
+    }
+    player->skelAnime.curFrame = 0.0f;
+    player->skelAnime.playSpeed = MM_ANIM_ADJUSTED_SPEED;
+}
+
+// The clip loops parked short of its end: the ocarina action reopens whenever a clip reports its end, wiping the notes.
 static void PosePipes(PlayState* play, Player* player) {
     f32 blowEnd = Animation_GetLastFrame(sPipesPlayAnim) - CLIP_FRAMES_PER_UPDATE;
 
     if (player->skelAnime.animation != sPipesPlayAnim) {
-        ChangePipesClip(play, player, sPipesPlayAnim, 1.0f, ANIMMODE_LOOP, -4.0f);
+        ChangePipesClip(play, player, sPipesPlayAnim, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_LOOP, -4.0f);
         player->skelAnime.playSpeed = 0.0f;
         sPipesPhase = PIPES_PLAYING;
     }
-    bool isBlowDone = player->skelAnime.curFrame >= blowEnd;
-    if (sWasNoteStruck) {
-        if (isBlowDone) {
-            player->skelAnime.curFrame = 0.0f;
+    if (IsReplayingSong(play)) {
+        player->skelAnime.playSpeed = MM_ANIM_ADJUSTED_SPEED;
+    } else if (sWasNoteStruck) {
+        BlowPipe(player);
+    } else {
+        for (s32 i = 0; i < PIPE_PIECE_COUNT; i++) {
+            Math_StepToF(&sPipeScale[i], 1.0f, PIPE_SETTLE_STEP);
         }
-        player->skelAnime.playSpeed = 1.0f;
-    } else if (isBlowDone) {
-        player->skelAnime.playSpeed = 0.0f;
+        if (player->skelAnime.curFrame >= blowEnd) {
+            player->skelAnime.playSpeed = 0.0f;
+        }
     }
     sWasNoteStruck = false;
 }
 
-// The ocarina stays out across the message session, so the latch only lets go once no message is up.
 static void UpdatePipes(PlayState* play, Player* player) {
     bool isSessionOpen = play->msgCtx.msgMode != MSGMODE_NONE;
 
@@ -1927,7 +1885,6 @@ static void UpdatePipes(PlayState* play, Player* player) {
     if (isRaising || sPipesPhase == PIPES_LOWERING) {
         return;
     }
-    // A raise that ended hands over to the play clip even before an actor opens the session it was played for.
     if (isSessionOpen || sPipesPhase == PIPES_RAISING) {
         PosePipes(play, player);
     }
@@ -1943,21 +1900,62 @@ static void DrawScaledDL(PlayState* play, const char* dList, Vec3f* scale) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// MM draws the pipes from the head, grown in by their keys while the raise plays and whole after it.
 static void DrawPipes(PlayState* play, Player* player, int32_t limbIndex) {
     if (!IsDeku() || limbIndex != PLAYER_LIMB_HEAD || !sIsOcarinaOut || sPipesPhase == PIPES_IDLE) {
         return;
     }
     Vec3f mouthpiece = { 1.0f, 1.0f, 1.0f };
-    Vec3f pipes = { 1.0f, 1.0f, 1.0f };
+    Vec3f pipes[PIPE_PIECE_COUNT];
     if (player->skelAnime.animation == sPipesRaiseAnim) {
         BlendPipeKeys(sMouthpieceKeys, ARRAY_COUNT(sMouthpieceKeys), player->skelAnime.curFrame, &mouthpiece);
-        BlendPipeKeys(sPipeKeys, ARRAY_COUNT(sPipeKeys), player->skelAnime.curFrame, &pipes);
+        BlendPipeKeys(sPipeKeys, ARRAY_COUNT(sPipeKeys), player->skelAnime.curFrame, &pipes[0]);
+        for (s32 i = 1; i < PIPE_PIECE_COUNT; i++) {
+            pipes[i] = pipes[0];
+        }
+    } else if (IsReplayingSong(play)) {
+        BlendPipeKeys(sPipeReplayKeys, ARRAY_COUNT(sPipeReplayKeys), player->skelAnime.curFrame, &pipes[0]);
+        for (s32 i = 1; i < PIPE_PIECE_COUNT; i++) {
+            pipes[i] = pipes[0];
+        }
+    } else {
+        for (s32 i = 0; i < PIPE_PIECE_COUNT; i++) {
+            pipes[i] = (Vec3f){ sPipeScale[i], sPipeScale[i], sPipeScale[i] };
+        }
     }
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     DrawScaledDL(play, sPipesDL, &mouthpiece);
     for (s32 i = 0; i < PIPE_PIECE_COUNT; i++) {
-        DrawScaledDL(play, sPipePieceDLs[i], &pipes);
+        DrawScaledDL(play, sPipePieceDLs[i], &pipes[i]);
+    }
+}
+
+// MM's func_80123140 PLAYER_BOOTS_DEKU row in OoT's Player_SetBootData order (REG(39) has no OoT reader).
+static const s16 sDekuBootRow[17] = { 200, 1000, 300, 700, 550, 270, 600, 1000, 800,
+                                      600, -100, 600, 590, 750, 125, 200, 130 };
+
+static void WearDekuBoots(PlayState* play, Player* player) {
+    if (player->currentBoots != PLAYER_BOOTS_KOKIRI) {
+        return;
+    }
+    REG(19) = sDekuBootRow[0];
+    REG(30) = sDekuBootRow[1];
+    REG(32) = sDekuBootRow[2];
+    REG(34) = sDekuBootRow[3];
+    REG(35) = sDekuBootRow[4];
+    REG(36) = sDekuBootRow[5];
+    REG(37) = sDekuBootRow[6];
+    REG(38) = sDekuBootRow[7];
+    REG(43) = sDekuBootRow[8];
+    REG(45) = sDekuBootRow[9];
+    REG(68) = sDekuBootRow[10];
+    REG(69) = sDekuBootRow[11];
+    IREG(66) = sDekuBootRow[12];
+    IREG(67) = sDekuBootRow[13];
+    IREG(68) = sDekuBootRow[14];
+    IREG(69) = sDekuBootRow[15];
+    MREG(95) = sDekuBootRow[16];
+    if (play->roomCtx.curRoom.behaviorType1 == ROOM_BEHAVIOR_TYPE1_2) {
+        REG(45) = 500;
     }
 }
 
@@ -1973,6 +1971,7 @@ static void ExitDeku(PlayState* play, Player* player) {
     sPipesPhase = PIPES_IDLE;
     sIsOcarinaOut = false;
     ResetState(player);
+    Player_SetBootData(play, player);
     if (player->actionFunc == DekuSpinAction || player->actionFunc == BubbleChargeAction ||
         player->actionFunc == DekuFlowerAction || player->actionFunc == DekuFlightAction ||
         player->actionFunc == WaterHopAction || player->actionFunc == DekuGuardAction) {
@@ -1981,6 +1980,7 @@ static void ExitDeku(PlayState* play, Player* player) {
 }
 
 static void UpdateDeku(PlayState* play, Player* player) {
+    WearDekuBoots(play, player);
     UpdateSpinMarks();
     if (IsGrounded(player)) {
         sRocsDoubleJumped = false;
@@ -2025,10 +2025,9 @@ static bool CanWearMask(Player* player, PlayState* play) {
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    ToggleConfiguredForm(DEKU_FORM_KEY);
+    sApi->ToggleForm(DEKU_FORM_KEY);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEKU_MASK_KEY, DEKU_MASK_KEY, "",
 };
@@ -2052,13 +2051,18 @@ static void RegisterMask(void) {
 }
 
 static uint16_t ResolveDekuEquipment(int32_t equipType, uint16_t value) {
-    if (equipType == EQUIP_TYPE_SWORD || equipType == EQUIP_TYPE_SHIELD) {
-        return equipType == EQUIP_TYPE_SWORD ? EQUIP_VALUE_SWORD_NONE : EQUIP_VALUE_SHIELD_NONE;
+    switch (equipType) {
+        case EQUIP_TYPE_SWORD:
+            return EQUIP_VALUE_SWORD_NONE;
+        case EQUIP_TYPE_SHIELD:
+            return EQUIP_VALUE_SHIELD_NONE;
+        case EQUIP_TYPE_TUNIC:
+            return EQUIP_VALUE_TUNIC_KOKIRI;
+        case EQUIP_TYPE_BOOTS:
+            return EQUIP_VALUE_BOOTS_KOKIRI;
+        default:
+            return value;
     }
-    if (equipType == EQUIP_TYPE_BOOTS) {
-        return EQUIP_VALUE_BOOTS_KOKIRI;
-    }
-    return value;
 }
 
 static bool AllowsDekuItem(uint16_t item, const char* customKey) {
@@ -2104,8 +2108,6 @@ static void RegisterForm(void) {
     deku.rootScaleAdult = DEKU_ROOT_SCALE_ADULT;
     deku.rootScaleChild = DEKU_ROOT_SCALE_CHILD;
     deku.height = DEKU_HEIGHT;
-    // FormRegistry applies this after OoT has already resolved its stick speed.
-    // MM's age-property 0.3 is a skeleton/root-motion value, not this multiplier.
     deku.motionScale = 1.0f;
     deku.resolveEquipment = ResolveDekuEquipment;
     deku.allowsButtonItem = AllowsDekuItem;
@@ -2163,4 +2165,3 @@ SOH_MOD_EXPORT void ModInit(void) {
     sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveDekuGrab);
     sApi->RegisterVB(VB_PLAYER_ADJUST_LEGS_TO_FLOOR, BlockLegPlanting);
 }
-

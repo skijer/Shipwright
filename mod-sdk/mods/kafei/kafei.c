@@ -16,7 +16,6 @@
 #define KAFEI_MASK_KEY "nei.mask_kafei"
 #define KAFEI_FORM_KEY "nei.kafei"
 #define KAFEI_MODEL_PATH "objects/forms/kafei"
-// Cell 14 of the mask page is where Majora's Mask keeps Kafei's Mask.
 #define KAFEI_MASK_PAGE 1
 #define KAFEI_MASK_SLOT 14
 
@@ -35,7 +34,6 @@
 #define STAMINA_REFILL_PER_FRAME 2.2f
 #define STAMINA_REFILL_DELAY 18
 
-// SW97 guards below this speed, backing up included, so a coasting halt still blocks.
 #define GUARD_STILL_SPEED 0.1f
 
 #define MOVING_SLASH_MIN_SPEED 2.0f
@@ -53,7 +51,6 @@
 #define LANDMINE_REARM 200
 #define LANDMINE_FALL_SPEED 8.0f
 
-// The stamina wheel is built in hundredths of a unit and scaled down, so the ring can use integer vertices.
 #define WHEEL_SEGMENTS 32
 #define WHEEL_RADIUS 1200
 #define WHEEL_THICKNESS 340
@@ -80,7 +77,6 @@ static const ALIGN_ASSET(2) char sAdultEmptyHandDL[] = "__OTR__" KAFEI_MODEL_PAT
 static const ALIGN_ASSET(2) char sChildEmptyHandDL[] = "__OTR__" KAFEI_MODEL_PATH
                                                        "/object_link_child/gLinkChildRightHandNearDL";
 
-// SW97's landmine, converted from the prototype's gameplay_keep.
 static const ALIGN_ASSET(2) char sLandmineSphereDL[] = "__OTR__objects/object_landmine/gLandMineSphereDL";
 static const ALIGN_ASSET(2) char sLandminePlaneDL[] = "__OTR__objects/object_landmine/gLandMinePlaneDL";
 static const ALIGN_ASSET(2) char sLandmineSpikesDL[] = "__OTR__objects/object_landmine/gLandMineSphere004DL";
@@ -133,8 +129,6 @@ static f32 GetStickMagnitude(Input* input) {
     return MIN(sqrtf((x * x) + (y * y)), STICK_MAX);
 }
 
-// ---- stamina sprint ----
-
 static f32 sStamina;
 static bool sIsSprinting;
 static bool sIsWinded;
@@ -152,7 +146,6 @@ static void ResetStamina(void) {
     sRefillDelay = 0;
 }
 
-// Running out costs the whole recovery: Kafei stays doubled over until the wheels are full again, like BotW.
 static void WindedAction(Player* player, PlayState* play) {
     player->linearVelocity = 0.0f;
     LinkAnimation_Update(play, &player->skelAnime);
@@ -161,7 +154,6 @@ static void WindedAction(Player* player, PlayState* play) {
     }
 }
 
-// Ocarina has no out-of-breath clip, so the heavy landing stands in: Link doubled over, recovering.
 static void StartWinded(PlayState* play, Player* player) {
     LinkAnimationHeader* landing = (LinkAnimationHeader*)gPlayerAnim_link_normal_landing;
 
@@ -203,8 +195,7 @@ static void UpdateStamina(PlayState* play, Player* player, Input* input) {
     }
 }
 
-// unk_868 is the phase every locomotion action loads the legs from, and func_8084029C caps its step at 7.25 a
-// frame, so a faster run skates. Stepping it again here, after the cap, is what speeds the legs up.
+// unk_868 is the phase every locomotion action loads the legs from, and func_8084029C caps its step at 7.25 a frame.
 static void QuickenLegCycle(Player* player) {
     f32 step = player->unk_868 - sLegCycle;
 
@@ -240,7 +231,6 @@ static f32 GetWheelFill(u8 wheel) {
     return CLAMP(remaining / STAMINA_WHEEL_FRAMES, 0.0f, 1.0f);
 }
 
-// Hidden while full and idle, so the wheel does not sit over Kafei's head forever.
 static bool IsStaminaWheelVisible(void) {
     return sIsSprinting || sIsWinded || sStamina < GetStaminaCapacity();
 }
@@ -258,7 +248,6 @@ static void SetWheelVertex(Vtx* vertex, f32 angle, s32 radius, const Color_RGBA8
     vertex->v.cn[3] = color->a;
 }
 
-// An arc from twelve o'clock, clockwise, as inner/outer vertex pairs drawn one quad at a time.
 static void DrawWheelArc(PlayState* play, s32 radius, f32 fill, const Color_RGBA8* color) {
     s32 segments = (s32)ceilf(fill * WHEEL_SEGMENTS);
 
@@ -305,7 +294,6 @@ static void DrawStaminaWheel(Actor* actor, PlayState* play) {
     gDPPipeSync(POLY_XLU_DISP++);
     gSPTexture(POLY_XLU_DISP++, 0xFFFF, 0xFFFF, 0, G_TX_RENDERTILE, G_OFF);
     gDPSetCombineMode(POLY_XLU_DISP++, G_CC_SHADE, G_CC_SHADE);
-    // No depth test: like the BotW wheel it reads through walls, and Kafei's own head never hides it.
     gDPSetRenderMode(POLY_XLU_DISP++, G_RM_XLU_SURF, G_RM_XLU_SURF2);
     gSPClearGeometryMode(POLY_XLU_DISP++,
                          G_ZBUFFER | G_CULL_BOTH | G_FOG | G_LIGHTING | G_TEXTURE_GEN | G_TEXTURE_GEN_LINEAR);
@@ -319,8 +307,6 @@ static void DrawStaminaWheel(Actor* actor, PlayState* play) {
         DrawWheelArc(play, radius, GetWheelFill(wheel), sIsWinded ? &sWindedColor : &sFillColor);
     }
 }
-
-// ---- standalone shield ----
 
 static Vec3f sHandShieldCorners[4] = {
     { -4500.0f, -3000.0f, -600.0f },
@@ -336,8 +322,7 @@ static bool IsGuardingPassively(Player* player) {
            player->linearVelocity <= GUARD_STILL_SPEED;
 }
 
-// SW97's shield blocks on its own while Link stands still. Vanilla only registers the shield quad under
-// PLAYER_STATE1_SHIELDING; registering it here is enough, since the player's damage check reads AC_BOUNCED.
+// Vanilla only registers the shield quad under PLAYER_STATE1_SHIELDING; the damage check reads AC_BOUNCED.
 static void GuardWhileStill(PlayState* play, Player* player, int32_t limbIndex) {
     if (limbIndex != PLAYER_LIMB_R_HAND || !IsGuardingPassively(player) || !sApi->IsFormActive(KAFEI_FORM_KEY)) {
         return;
@@ -357,8 +342,6 @@ static void GuardWhileStill(PlayState* play, Player* player, int32_t limbIndex) 
     CollisionCheck_SetAT(play, &play->colChkCtx, &player->shieldQuad.base);
 }
 
-// ---- slashing without breaking stride ----
-
 typedef enum {
     SLASH_SWORD,
     SLASH_STICK,
@@ -371,7 +354,6 @@ typedef struct {
     u8 arcEnd;
 } SlashArc;
 
-// The arcs are measured: the frames where the arm's angular velocity clears 30% of the clip's peak.
 static const SlashArc sSlashArcs[] = {
     { ANIM_SW97_DIR "move_sword_slash", 1, 5 },
     { ANIM_SW97_DIR "move_stick_slash", 2, 4 },
@@ -394,7 +376,6 @@ static SlashClip GetSlashClip(Player* player) {
     }
 }
 
-// The sword swings on B; a Deku Stick swings on the button it is equipped to, where B would swap in the sword.
 static bool IsSwingPressed(Input* input, Player* player) {
     static const u16 sItemButtons[] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                         BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
@@ -425,8 +406,6 @@ static void EndMovingSlash(Player* player) {
     }
 }
 
-// The vanilla attack takes the whole body and brakes to a stop, so while moving it is refused and the SW97
-// clip drives only the sword arm from the form's update; Link's own locomotion keeps the legs and the speed.
 static int32_t SlashWhileMoving(PlayState* play, Player* player) {
     Input* input = &play->state.input[0];
 
@@ -459,16 +438,13 @@ static void UpdateMovingSlash(PlayState* play, Player* player) {
     }
     const SlashArc* arc = &sSlashArcs[sSlash];
     LinkAnimationHeader* anim = sSlashAnims[sSlash];
-    // SetLoadFrame copies the face channel after the limbs, hence the extra entry.
     Vec3s pose[PLAYER_LIMB_MAX + 1];
 
-    // The walk or run pose is already in jointTable by now: only the sword arm changes.
     AnimationContext_SetLoadFrame(play, anim, sSlashFrame, PLAYER_LIMB_MAX, pose);
     player->skelAnime.jointTable[PLAYER_LIMB_L_SHOULDER] = pose[PLAYER_LIMB_L_SHOULDER];
     player->skelAnime.jointTable[PLAYER_LIMB_L_FOREARM] = pose[PLAYER_LIMB_L_FOREARM];
     player->skelAnime.jointTable[PLAYER_LIMB_L_HAND] = pose[PLAYER_LIMB_L_HAND];
 
-    // The blade damages straight off the hand matrix, so arming it over the arc is all the hit detection needed.
     bool bladeLive = sSlashFrame >= arc->arcStart && sSlashFrame <= arc->arcEnd;
     if (bladeLive != (player->meleeWeaponState != 0)) {
         func_80833A20(player, bladeLive);
@@ -480,10 +456,6 @@ static void UpdateMovingSlash(PlayState* play, Player* player) {
     }
 }
 
-// ---- A button ----
-
-// OoT rolls on the press, so a moving A belongs to the sprint from the frame it goes down. Standing still it
-// stays Link's: that same handler puts the sword away.
 static int32_t SprintInsteadOfRoll(PlayState* play, Player* player) {
     Input* input = &play->state.input[0];
     bool isSprintPress = CHECK_BTN_ALL(input->cur.button, BTN_A) && GetStickMagnitude(input) >= STICK_MOVING;
@@ -493,11 +465,11 @@ static int32_t SprintInsteadOfRoll(PlayState* play, Player* player) {
 
 static bool CanJumpFromFloor(PlayState* play, Player* player) {
     return play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2 && player->actor.floorPoly != NULL &&
-           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
+           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) !=
+               FLOOR_TYPE_NO_JUMP &&
            SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
 }
 
-// A under Z-target is a plain jump, never a jump slash: vanilla's own jump, with its animation and launch.
 static int32_t JumpInsteadOfJumpslash(PlayState* play, Player* player) {
     const s8 stick = player->controlStickDirections[player->controlStickDataIndex];
 
@@ -514,8 +486,6 @@ static const SOHFormActionOverride sActions[] = {
     { SOH_PLAYER_ACTION_MELEE, SlashWhileMoving },
     { SOH_PLAYER_ACTION_ZTARGET_A, JumpInsteadOfJumpslash },
 };
-
-// ---- the whistle ----
 
 typedef enum {
     WHISTLE_IDLE,
@@ -543,7 +513,6 @@ static bool IsPlayingOcarinaClip(Player* player, const char* name) {
     return anim != NULL && ResourceMgr_OTRSigCheck((char*)anim) && strstr(anim, name) != NULL;
 }
 
-// Runs inside the ocarina's own update; it only records the edge, the pose consumes it on the game frame.
 static void NoteStruck(uint8_t note, float modulator, int8_t bend) {
     if (note != OCARINA_NOTE_NONE && note != sLastNote) {
         sWasNoteStruck = true;
@@ -559,8 +528,6 @@ static void ChangeWhistleClip(PlayState* play, Player* player, LinkAnimationHead
     LinkAnimation_Change(play, &player->skelAnime, anim, 1.0f, 0.0f, Animation_GetLastFrame(anim), mode, morphFrames);
 }
 
-// Vanilla's ocarina action waits for the end of its intro and outro clips; the whistle's own clips take
-// their place, so that wait is what raises and lowers the hand.
 static bool SwapOcarinaClip(PlayState* play, Player* player) {
     if (IsPlayingOcarinaClip(player, "okarina_start")) {
         ChangeWhistleClip(play, player, sWhistleRaise, ANIMMODE_ONCE, -6.0f);
@@ -575,9 +542,8 @@ static bool SwapOcarinaClip(PlayState* play, Player* player) {
     return false;
 }
 
-// Park on the play clip at speed 0; each note replays the gesture. Freezing with playSpeed instead of
-// re-arming frame 0 keeps the pose from snapping back between notes. It loops: that same action reopens the
-// ocarina whenever a clip reports its end, which would wipe the notes of the song being played.
+// The ocarina action reopens whenever a clip reports its end, which would wipe the notes, so the clip is parked at
+// speed 0.
 static void PoseWhistle(PlayState* play, Player* player) {
     f32 playEnd = Animation_GetLastFrame(sWhistlePlay) - CLIP_FRAMES_PER_UPDATE;
 
@@ -606,15 +572,12 @@ static void StopWhistling(PlayState* play, Player* player) {
     }
     sWhistlePhase = WHISTLE_IDLE;
     sWasNoteStruck = false;
-    // The ocarina session already closed, and vanilla leaves the instrument off between sessions.
     if (sIsInstrumentLent) {
         AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_OFF);
         sIsInstrumentLent = false;
     }
 }
 
-// The ocarina stays out across the message system's session, so the latch arms on the instrument in hand and
-// only lets go once no message is up.
 static void UpdateWhistle(PlayState* play, Player* player) {
     bool isSessionOpen = play->msgCtx.msgMode != MSGMODE_NONE;
 
@@ -637,18 +600,15 @@ static void UpdateWhistle(PlayState* play, Player* player) {
         return;
     }
     if (isSessionOpen) {
-        // Re-applied every frame: the message system sets the instrument again around opening, and the last
-        // write wins.
+        // Re-applied every frame: the message system sets the instrument again around opening.
         AudioOcarina_SetInstrument(OCARINA_INSTRUMENT_WHISTLE);
         sIsInstrumentLent = true;
     }
-    // A raise that ended hands over to the gesture even before an actor opens the session it was played for.
     if (isSessionOpen || sWhistlePhase == WHISTLE_RAISING) {
         PoseWhistle(play, player);
     }
 }
 
-// Ocarina bakes the instrument into the hand, so Kafei whistles with the empty hand of his own model.
 static void HideOcarina(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
     if (limbIndex != PLAYER_LIMB_R_HAND || !sIsOcarinaOut || !IsHoldingOcarina(player)) {
         return;
@@ -660,8 +620,6 @@ static void HideOcarina(Player* player, int32_t limbIndex, Gfx** dList, Gfx* lim
     }
 }
 
-// ---- landmines ----
-
 typedef struct {
     const char* dl;
     f32 scale;
@@ -670,8 +628,7 @@ typedef struct {
     bool isPitchFromCamera;
 } LandminePiece;
 
-// The prototype aims each piece its own way: the dome turns with the camera in yaw, the band is a full
-// billboard hung 5 units up, and the spikes follow the actor. Scales are on top of the chu's own 0.01.
+// Scales are on top of the chu's own 0.01.
 static const LandminePiece sLandminePieces[] = {
     { sLandmineSphereDL, 95.0f, 0.0f, true, false },
     { sLandminePlaneDL, 105.0f, 5.0f, true, true },
@@ -708,7 +665,6 @@ static void DetonateLandmine(EnBomChu* chu, PlayState* play) {
     chu->actionFunc = LandmineVanish;
 }
 
-// A mine lies where it was dropped and waits for an enemy to step on it or for something to hit it.
 static void LandmineLie(EnBomChu* chu, PlayState* play) {
     if (IsLandmineTriggered(chu)) {
         DetonateLandmine(chu, play);
@@ -716,14 +672,12 @@ static void LandmineLie(EnBomChu* chu, PlayState* play) {
     }
     chu->actor.speedXZ = 0.0f;
     chu->visualJitter = 0.0f;
-    // The fuse only drives the blink now; recycled before it reaches the fast "about to blow" rate.
     chu->timer--;
     if (chu->timer < LANDMINE_REARM) {
         chu->timer = LANDMINE_FUSE;
     }
 
     Actor_UpdateBgCheckInfo(play, &chu->actor, 5.0f, 5.0f, 0.0f, 0x1F);
-    // A constant drop rather than gravity: EnBomChu has no field to accumulate a fall speed in.
     if (chu->actor.world.pos.y > chu->actor.floorHeight) {
         chu->actor.world.pos.y = MAX(chu->actor.world.pos.y - LANDMINE_FALL_SPEED, chu->actor.floorHeight);
     }
@@ -733,8 +687,7 @@ static bool IsLandmine(EnBomChu* chu) {
     return chu->actionFunc == LandmineLie || chu->actionFunc == LandmineVanish;
 }
 
-// Convert the release inside the actor update, before OnActorUpdate observers can
-// mistake the mine's one-frame vanilla crawling action for a remote bombchu.
+// Converted inside the actor update, before OnActorUpdate observers mistake the one-frame crawl for a remote bombchu.
 static void UpdateLandmine(Actor* actor, PlayState* play) {
     EnBomChu* chu = (EnBomChu*)actor;
 
@@ -750,7 +703,6 @@ static void UpdateLandmine(Actor* actor, PlayState* play) {
     }
 }
 
-// OnActorInit runs after the chu's own init, which set the 120-frame fuse and the hold-in-hand action.
 static void ArmLandmine(void* actorRef) {
     EnBomChu* chu = (EnBomChu*)actorRef;
 
@@ -778,7 +730,6 @@ static void DrawLandminePiece(PlayState* play, Actor* actor, const LandminePiece
 
     OPEN_DISPS(play->state.gfxCtx);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_NOPUSH | G_MTX_LOAD);
-    // Per piece: the band's own list forces PRIM to black and would carry it into the next piece.
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, fade, fade, 255);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)piece->dl);
     CLOSE_DISPS(play->state.gfxCtx);
@@ -786,7 +737,6 @@ static void DrawLandminePiece(PlayState* play, Actor* actor, const LandminePiece
     Matrix_Pop();
 }
 
-// The chu's own blink, as EnBomChu_Draw computes it, so the mine still warns.
 static f32 GetFuseBlink(s16 timer) {
     s32 halfPeriod = timer >= 40 ? 10 : (timer >= 10 ? 5 : 1);
     s32 blink = timer >= 40 ? timer % 20 : (timer >= 10 ? timer % 10 : timer & 1);
@@ -819,7 +769,6 @@ static void DrawLandmine(Actor* actor, PlayState* play, bool* drawVanilla) {
     }
 }
 
-// Every surface that shows a bombchu slot asks here, so the slot reads as a mine while Kafei carries it.
 static void ShowLandmineOnButton(PlayState* play, uint8_t button, uint16_t item, const char** iconPath) {
     if (item == ITEM_BOMBCHU && sApi->IsFormActive(KAFEI_FORM_KEY)) {
         *iconPath = sLandmineIconTex;
@@ -829,8 +778,6 @@ static void ShowLandmineOnButton(PlayState* play, uint8_t button, uint16_t item,
 static void ShowLandmineInPause(PlayState* play, uint16_t item, const char** iconPath) {
     ShowLandmineOnButton(play, 0, item, iconPath);
 }
-
-// ---- form ----
 
 // A Majora player animation is Ocarina's raw format with its root elsewhere: force Ocarina's base translation
 // on a copy, since the resource is shared by the whole game.
@@ -895,7 +842,6 @@ static void UpdateKafei(PlayState* play, Player* player) {
     UpdateWhistle(play, player);
 }
 
-// The new scene brings a new player: whatever pointed at the old one's state starts over.
 static void ForgetScene(int16_t sceneNum) {
     sSlash = SLASH_NONE;
     sWhistlePhase = WHISTLE_IDLE;
@@ -908,8 +854,6 @@ static void ForgetScene(int16_t sceneNum) {
     }
 }
 
-// ---- mask ----
-
 static bool CanWearMask(Player* player, PlayState* play) {
     return IsOnGround(player) &&
            !(player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE));
@@ -919,7 +863,6 @@ static void WearMask(PlayState* play, Player* player) {
     sApi->ToggleForm(KAFEI_FORM_KEY);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, KAFEI_MASK_KEY, KAFEI_MASK_KEY, "",
 };
@@ -929,8 +872,8 @@ static void RegisterMask(void) {
 
     Z64Items_SetButtons(&mask, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     mask.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
-    // These MM icon/name resources are optional and are not present in every archive set. In particular,
-    // asking the Save Editor to load the absent icon dereferences a null texture in the host GUI.
+    // These MM icon/name resources are optional: asking the Save Editor to load an absent icon dereferences a null
+    // texture.
     mask.disabledIconSurfaces |= SOH_ITEM_ICON_SAVE_EDITOR;
     Z64Items_SetPlacement(&mask, KAFEI_MASK_PAGE, KAFEI_MASK_SLOT, 0);
     if (sApi->HasResource(sGetItemDL)) {
@@ -948,7 +891,6 @@ static void RegisterMask(void) {
     Z64Items_Register(sApi, &mask);
 }
 
-// Kafei is Link-sized and keeps Link's equipment, items and voice: only the body and the moves change.
 static void RegisterForm(void) {
     SOHFormDefinition kafei = { 0 };
 

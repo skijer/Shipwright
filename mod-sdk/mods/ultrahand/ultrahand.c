@@ -1,8 +1,3 @@
-/**
- * Ultrahand: grab what Link aims at and carry it, turn it, weld pieces into one solid, store a structure and
- * rebuild it with magic. Assembled from pieces: it does nothing until the configured number is found.
- */
-
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -46,8 +41,12 @@ typedef struct {
 static void Combat_InitCylinder(PlayState* play, ColliderCylinder* col, Actor* owner, CombatColliderConfig* cfg) {
     ColliderCylinderInit init = {
         { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-        { ELEMTYPE_UNK2, { cfg->dmgFlags, cfg->effect, cfg->damage }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL,
-          BUMP_NONE, OCELEM_NONE },
+        { ELEMTYPE_UNK2,
+          { cfg->dmgFlags, cfg->effect, cfg->damage },
+          { 0, 0, 0 },
+          TOUCH_ON | TOUCH_SFX_NORMAL,
+          BUMP_NONE,
+          OCELEM_NONE },
         { (s16)cfg->radius, (s16)cfg->height, 0, { 0, 0, 0 } },
     };
 
@@ -88,7 +87,6 @@ void Pacci_BackRiderDrop(void);
 
 static const SOHModApi* sApi;
 
-// Another mod's actors, known only by the string keys it registered them under.
 static bool IsSomariaWeight(Actor* actor) {
     static const char* const sWeightKeys[] = { "nei.somaria.statue", "nei.somaria.crate" };
     static s16 sWeightIds[] = { -1, -1 };
@@ -104,7 +102,6 @@ static bool IsSomariaWeight(Actor* actor) {
     return false;
 }
 
-// Reach sweep for things at Link's feet the aim line can't hit; short on purpose, not a second grab range.
 #define PACCI_UH_REACH_RANGE 180.0f
 #define PACCI_UH_REACH_CONE 0x2000
 #define PACCI_UH_DIST_MIN 150.0f
@@ -113,14 +110,11 @@ static bool IsSomariaWeight(Actor* actor) {
 #define PACCI_UH_ROT_STEP 1000
 #define PACCI_UH_FOLLOW_WEIGHT 0.80f
 #define PACCI_UH_TURN_RATE 0x0400
-// En_Ishi's own fall numbers, the closest vanilla analogue to a heavy released prop.
 #define PACCI_UH_DROP_GRAVITY -3.2f
 #define PACCI_UH_DROP_MIN_VEL_Y -36.0f
 #define PACCI_UH_DROP_DRAG 0.94f
-// Caps inertia inherited from the carry so a fast aim whip can't catapult the release.
 #define PACCI_UH_THROW_MAX 16.0f
 #define PACCI_UH_GROUND_PROBE 600.0f
-// Runaway guard only; PACCI_UH_ABANDON_DROP is what actually gives up on a fall.
 #define PACCI_UH_DROP_TIMEOUT 400
 #define PACCI_UH_ABANDON_DROP 250.0f
 
@@ -128,16 +122,14 @@ static bool IsSomariaWeight(Actor* actor) {
 #define PACCI_UH_SUMMON_HOLD 20
 #define PACCI_UH_SUMMON_RISE 40.0f
 #define PACCI_PLACE_PULL 0.12f
-// Resting exactly ON a surface is a coin flip to the engine's standing test; sink past it a little.
+// Resting exactly on a surface is a coin flip to the engine's standing test, so sink past it a little.
 #define PACCI_PLACE_SINK 1.5f
 #define PACCI_PLACE_ARRIVED 0.9f
 #define PACCI_PRESS_HOLD 40.0f
 #define PACCI_BACKRIDE_BEHIND 9.0f
 #define PACCI_BACKRIDE_RISE 6.0f
 #define PACCI_UH_FLAG_TRAVEL 70.0f
-// Bg_Dodoago's own open pose; the only LOCKED actor there is.
 #define PACCI_UH_LOCKED_OPEN_X 0x1333
-// Damage 2 is one boomerang hit; En_Ba has 4 HP, so a cut takes 4 goes like the real thing.
 #define PACCI_UH_CUT_DAMAGE 2
 #define PACCI_UH_CUT_RADIUS 30.0f
 #define PACCI_UH_CUT_HEIGHT 80.0f
@@ -150,10 +142,8 @@ static bool IsSomariaWeight(Actor* actor) {
 #define PACCI_UH_THROW_RISE 6.0f
 #define PACCI_UH_THROW_SPEED 14.0f
 #define PACCI_UH_THROW_LIFT 3.0f
-// Past this half-extent a dynapoly body with no trait row is room geometry, not an object.
 #define PACCI_UH_MAX_HALF 300.0f
 
-// colorFilterParams has only three modes: 0x8000 white, 0x4000 red, anything else blue.
 #define PACCI_TINT_FLIP(actor, dur) Actor_SetColorFilter((actor), 0x4000, 255, 0, (dur))
 #define PACCI_TINT_STONE(actor, dur) Actor_SetColorFilter((actor), 0x8000, 255, 0, (dur))
 #define PACCI_TINT_ULTRAHAND(actor, dur) Actor_SetColorFilter((actor), 0, 255, 0, (dur))
@@ -164,25 +154,14 @@ static bool IsSomariaWeight(Actor* actor) {
 #endif
 
 static const s16 sPacciBlacklist[] = {
-    ACTOR_EN_IK,
-    ACTOR_EN_TORCH2,
-    ACTOR_EN_ZF,
-    ACTOR_EN_WALLMAS,
-    ACTOR_EN_FLOORMAS,
-    ACTOR_EN_RD,
-    ACTOR_EN_FZ,
-    ACTOR_EN_VM,
-    ACTOR_EN_RR,
-    // Invisible, model-less song-trigger spots; grabbing one would carry the trigger away.
-    ACTOR_EN_OKARINA_TAG,
-    ACTOR_EN_OKARINA_EFFECT,
+    ACTOR_EN_IK, ACTOR_EN_TORCH2, ACTOR_EN_ZF, ACTOR_EN_WALLMAS,     ACTOR_EN_FLOORMAS,       ACTOR_EN_RD,
+    ACTOR_EN_FZ, ACTOR_EN_VM,     ACTOR_EN_RR, ACTOR_EN_OKARINA_TAG, ACTOR_EN_OKARINA_EFFECT,
 };
 
 #define TARGETSEL_DEFAULT_RANGE 520.0f
 #define TARGETSEL_DEFAULT_CONE 0x1800
 #define TARGETSEL_MIN_DIST 30.0f
 
-/** The categories the Switch Hook scans; the default set when `cats` is NULL. */
 extern const u8 gTargetSelectDefaultCats[4];
 #define TARGETSEL_DEFAULT_CAT_COUNT 4
 
@@ -264,7 +243,6 @@ Actor* TargetSelect_Scan(PlayState* play, TargetSelectFilter filter) {
 }
 
 void SwitchHook_ShiftCollider(Collider* col, Vec3f* delta) {
-    // Round rather than truncate: the s16 shapes would otherwise lag the model by a unit/frame.
     s16 dxs = (s16)((delta->x >= 0.0f) ? (delta->x + 0.5f) : (delta->x - 0.5f));
     s16 dys = (s16)((delta->y >= 0.0f) ? (delta->y + 0.5f) : (delta->y - 0.5f));
     s16 dzs = (s16)((delta->z >= 0.0f) ? (delta->z + 0.5f) : (delta->z - 0.5f));
@@ -305,7 +283,6 @@ void SwitchHook_ShiftCollider(Collider* col, Vec3f* delta) {
                     tri->vtx[j].y += delta->y;
                     tri->vtx[j].z += delta->z;
                 }
-                // Plane is `n . p + originDist = 0`; translating the tri moves it by -(n . delta).
                 tri->plane.originDist -= (tri->plane.normal.x * delta->x) + (tri->plane.normal.y * delta->y) +
                                          (tri->plane.normal.z * delta->z);
             }
@@ -320,7 +297,6 @@ void SwitchHook_ShiftCollider(Collider* col, Vec3f* delta) {
                 quad->dim.quad[i].y += delta->y;
                 quad->dim.quad[i].z += delta->z;
             }
-            // Cached edge midpoints are world-space too; they drive the quad-vs-quad tests.
             quad->dim.dcMid.x += dxs;
             quad->dim.dcMid.y += dys;
             quad->dim.dcMid.z += dzs;
@@ -332,7 +308,6 @@ void SwitchHook_ShiftCollider(Collider* col, Vec3f* delta) {
     }
 }
 
-// One point per collider: the rest of the shape moves rigidly with it.
 s32 SwitchHook_GetColliderRefPos(Collider* col, Vec3f* out) {
     switch (col->shape) {
         case COLSHAPE_JNTSPH: {
@@ -376,39 +351,30 @@ s32 SwitchHook_GetColliderRefPos(Collider* col, Vec3f* out) {
     return 0;
 }
 
-
-// A table, not a rule: "on a rail" or "on fire" is nothing the actor struct exposes.
 typedef enum {
     PACCI_UH_TRAIT_EXCLUDE = 1 << 0,
     PACCI_UH_TRAIT_AXIS_Y = 1 << 1,
     PACCI_UH_TRAIT_PLANE_XZ = 1 << 2,
-    PACCI_UH_TRAIT_PATH = 1 << 3,     // confined to the scene path its params name
+    PACCI_UH_TRAIT_PATH = 1 << 3,
     PACCI_UH_TRAIT_NO_TURN = 1 << 4,
-    PACCI_UH_TRAIT_BURNS = 1 << 5,    // sets fire to what it touches while carried
-    // Opts in actors neither the raycast nor the category scan can see (En_Ice_Hono).
+    PACCI_UH_TRAIT_BURNS = 1 << 5,
     PACCI_UH_TRAIT_REACHABLE = 1 << 6,
-    PACCI_UH_TRAIT_NO_FACE = 1 << 7,    // still answers L + D-pad, but doesn't turn to face Link
-    PACCI_UH_TRAIT_SETS_FLAG = 1 << 8,  // moving it far enough sets the switch flag params name
-    PACCI_UH_TRAIT_CLEARS_FLAG = 1 << 9, // moving it back the other way clears that flag
-    PACCI_UH_TRAIT_LOCKED = 1 << 10,    // never moved; D-pad drives its FLAG instead of position
-    // SETS_FLAG only: the flag index is real only when params fit entirely inside the field.
+    PACCI_UH_TRAIT_NO_FACE = 1 << 7,
+    PACCI_UH_TRAIT_SETS_FLAG = 1 << 8,
+    PACCI_UH_TRAIT_CLEARS_FLAG = 1 << 9,
+    PACCI_UH_TRAIT_LOCKED = 1 << 10,
     PACCI_UH_TRAIT_FLAG_STRICT = 1 << 11,
-    // A proxy is carried instead, for actors that must stay put (bomb flower, torch).
     PACCI_UH_TRAIT_PROXY = 1 << 12,
-    PACCI_UH_TRAIT_EXPLODES = 1 << 13, // proxy is a live bomb; attach button detonates it
-    // home.pos is written too, for actors that rebuild position from it (Bg_Hidan_Fslift).
+    PACCI_UH_TRAIT_EXPLODES = 1 << 13,
     PACCI_UH_TRAIT_DRIVE_HOME = 1 << 14,
-    // Hit with the row's blow instead of carried; the actor plays its own reaction.
     PACCI_UH_TRAIT_STRIKES = 1 << 15,
-    PACCI_UH_TRAIT_HEIGHT = 1 << 16,   // held in place; D-pad drives HEIGHT, not position
-    PACCI_UH_TRAIT_THROWS = 1 << 17,   // aiming at it hands it to its own throw
-    PACCI_UH_TRAIT_PULLABLE = 1 << 18, // hauled along the ground with the vanilla pull animation
-    // Split out of LOCKED: LOCKED used to imply this and tilted every locked body 26 degrees on X.
-    PACCI_UH_TRAIT_JAW = 1 << 19,      // D-pad swings one hinge of this body open/shut, posed by hand
-    PACCI_UH_TRAIT_HINGE = 1 << 20,    // same gesture, handed to an animation the actor already owns
+    PACCI_UH_TRAIT_HEIGHT = 1 << 16,
+    PACCI_UH_TRAIT_THROWS = 1 << 17,
+    PACCI_UH_TRAIT_PULLABLE = 1 << 18,
+    PACCI_UH_TRAIT_JAW = 1 << 19,
+    PACCI_UH_TRAIT_HINGE = 1 << 20,
 } PacciUhTrait;
 
-// MOVEBG_TYPE is the top nibble of params; these four split Bg_Mizu_Movebg's seven machines by it.
 static u8 Pacci_UhMovebgType(Actor* actor) {
     return (u8)(((u16)actor->params >> 0xC) & 0xF);
 }
@@ -431,37 +397,30 @@ static u8 Pacci_UhCondMovebgHookshot(Actor* actor) {
     return (Pacci_UhMovebgType(actor) == 7) ? 1 : 0;
 }
 
-// Only the deck, params -1 (unexported DT_DRAWBRIDGE); the chains are 0 and 1 and follow it.
 static u8 Pacci_UhCondDrawbridge(Actor* actor) {
     return (actor->params == -1) ? 1 : 0;
 }
 
 typedef struct {
     s16 actorId;
-    // u32: the traits run past bit 15.
     u32 traits;
     u8 pathShift;
     u8 pathMask;
-    // NULL means the row applies unconditionally; otherwise it gates on actor state, not identity.
     u8 (*cond)(Actor* actor);
-    // SETS_FLAG only: which way the body must travel before the flag sets. +1 up, -1 down, 0 either.
     s8 flagDir;
 
     s16 proxyId;
     s16 proxyParams;
-    // STRIKES only: flags the target's own bumper accepts, so its rules decide the outcome.
     u32 hitFlags;
     s16 hitDamage;
 } PacciUhTraitRow;
 
-// The flame collider is submitted only while lit; read off the AC list, not ObjSyokudai's layout.
 static u8 Pacci_UhTorchLit(PlayState* play, Actor* actor) {
     s32 i;
 
     for (i = 0; i < play->colChkCtx.colACCount; i++) {
         Collider* col = play->colChkCtx.colAC[i];
 
-        // The flame is the one with no OC: the stand collides with you, the fire does not.
         if ((col != NULL) && (col->actor == actor) && (col->ocFlags1 == OC1_NONE)) {
             return 1;
         }
@@ -473,7 +432,6 @@ static u8 Pacci_UhCondTorchLit(Actor* actor) {
     return (gPlayState != NULL) ? Pacci_UhTorchLit(gPlayState, actor) : 0;
 }
 
-// params 0xFFFF is the persistent variant; vanilla treats params as a switch index only below 0x40.
 static u8 Pacci_UhCondSwitchParams(Actor* actor) {
     return (actor->params < 0x40) ? 1 : 0;
 }
@@ -482,7 +440,6 @@ static u8 Pacci_UhCondPersistent(Actor* actor) {
     return ((u16)actor->params == 0xFFFF) ? 1 : 0;
 }
 
-// EnRu1 plays gRutoChildSittingAnim right before each Actor_OfferCarry: the one reliable tell.
 static u8 Pacci_UhCondRutoSitting(Actor* actor) {
     if ((actor == NULL) || (actor->parent != NULL)) {
         return 0;
@@ -492,15 +449,12 @@ static u8 Pacci_UhCondRutoSitting(Actor* actor) {
 
 static const PacciUhTraitRow sPacciUhTraits[] = {
     { ACTOR_BG_MORI_KAITENKABE, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
-    // Can't be CARRIED: its Draw rewrites world/home.pos from a matrix every frame. Can be thrown.
     { ACTOR_BG_HEAVY_BLOCK, PACCI_UH_TRAIT_THROWS, 0, 0, NULL },
-    // Only y is rebuilt from home (bob sine); x/z stay free, so PLANE_XZ is correct here.
     { ACTOR_BG_HAKA_SHIP, PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
     { ACTOR_BG_MIZU_WATER, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
     { ACTOR_BG_JYA_ZURERUKABE, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
     { ACTOR_BG_JYA_AMISHUTTER, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
     { ACTOR_BG_HIDAN_HAMSTEP, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
-    // Update ends in Math_Vec3f_Copy(world.pos, home.pos): teleports back the frame you let go.
     { ACTOR_OBJ_LIFT, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
     // JntSph collider centre is baked at Init and never refreshed; moving it leaves the hitbox behind.
     { ACTOR_BG_MENKURI_EYE, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
@@ -511,75 +465,56 @@ static const PacciUhTraitRow sPacciUhTraits[] = {
     { ACTOR_BG_MORI_HASHIRA4, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
     { ACTOR_BG_MORI_HASHIGO, PACCI_UH_TRAIT_EXCLUDE, 0, 0, NULL },
 
-    // These two track a switch flag for "I am up"; Obj_Elevator/Bg_Hidan_Syoku have no such flag.
     { ACTOR_BG_MORI_ELEVATOR, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_SETS_FLAG, 0, 0x3F, NULL,
       1 },
-    // BgJyaLift_Move only steps between two hardcoded heights then nulls its actionFunc: a toggle.
     { ACTOR_BG_JYA_LIFT, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0x3F, NULL, 1 },
     { ACTOR_OBJ_ELEVATOR, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
-    // Moving one sets the flag the room's own switch would; BgDdanJd_Idle reads it only below 0x40.
     { ACTOR_BG_DDAN_JD,
       PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_FLAG_STRICT, 0, 0x3F,
       NULL, 1 },
     { ACTOR_BG_DDAN_KD, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
-    // Held in place, D-up/D-down drive the switch flag (params & 0x3F) directly.
     { ACTOR_BG_JYA_KANAAMI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0x3F, NULL, 1 },
-    // Flag does nothing at runtime (Init-only read); what it answers to is an explosion.
     { ACTOR_BG_JYA_BOMBCHUIWA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_EXPLOSIVE, PACCI_UH_CUT_DAMAGE },
-    // Init does `params &= 0xFF`, so the surviving byte IS the flag index here, unlike its neighbours.
     { ACTOR_BG_HAKA_HUTA, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG, 0, 0xFF, NULL, 1 },
     { ACTOR_BG_DODOAGO,
       PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_JAW | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F, NULL,
       1 },
-    // Fire Temple movers rebuild position from home.pos every frame; home is the only handle they have.
     { ACTOR_BG_HIDAN_SYOKU, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_DRIVE_HOME, 0, 0, NULL },
     { ACTOR_BG_HIDAN_ROCK, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_DRIVE_HOME, 0, 0, NULL },
     { ACTOR_BG_HIDAN_SIMA, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_DRIVE_HOME, 0, 0, NULL },
     { ACTOR_BG_HIDAN_FSLIFT, PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_NO_TURN | PACCI_UH_TRAIT_DRIVE_HOME, 0, 0, NULL },
 
-    // Pinning Y is the puzzle itself: lifting a slide block over its obstacle deletes the room.
     { ACTOR_BG_ICE_OBJECTS, PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
     { ACTOR_BG_GND_ICEBLOCK, PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_NO_TURN, 0, 0, NULL },
 
-    // Types 0-3 follow the water level or a private field: nothing to hand over.
     { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_EXCLUDE, 0, 0, Pacci_UhCondMovebgWaterSlaved },
     { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_EXCLUDE, 0, 0, Pacci_UhCondMovebgDragonRoom },
-    // Types 4-6 are a real two-way switch toggle.
     { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_SETS_FLAG | PACCI_UH_TRAIT_CLEARS_FLAG, 0, 0x3F,
       Pacci_UhCondMovebgSwitched, 1 },
     { ACTOR_BG_MIZU_MOVEBG, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0xF, Pacci_UhCondMovebgHookshot },
     { ACTOR_OBJ_BEAN, PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_NO_TURN, 8, 0x1F, NULL },
 
-    // Flame Circle is carried for real, as a barrier; no proxy.
     { ACTOR_BG_HIDAN_CURTAIN, PACCI_UH_TRAIT_BURNS, 0, 0, NULL },
-    // What comes away is a loose En_Light flame, not a copy of the wall.
     { ACTOR_BG_HIDAN_FIREWALL, PACCI_UH_TRAIT_BURNS | PACCI_UH_TRAIT_PROXY, 0, 0, NULL, 0, ACTOR_EN_LIGHT, 0 },
     { ACTOR_BG_HIDAN_FWBIG, PACCI_UH_TRAIT_BURNS | PACCI_UH_TRAIT_PROXY, 0, 0, NULL, 0, ACTOR_EN_LIGHT, 0 },
     { ACTOR_EN_LIGHT, PACCI_UH_TRAIT_BURNS | PACCI_UH_TRAIT_PROXY | PACCI_UH_TRAIT_REACHABLE, 0, 0, NULL, 0,
       ACTOR_EN_LIGHT, 0 },
-    // Lifting a bomb flower takes a fuseless proxy bomb; the attach button lights it.
     { ACTOR_EN_BOMBF, PACCI_UH_TRAIT_PROXY | PACCI_UH_TRAIT_EXPLODES, 0, 0, NULL, 0, ACTOR_EN_BOM, 0 },
     { ACTOR_OBJ_SYOKUDAI, PACCI_UH_TRAIT_BURNS, 0, 0, Pacci_UhCondTorchLit },
     { ACTOR_BG_PO_SYOKUDAI, PACCI_UH_TRAIT_BURNS, 0, 0, Pacci_UhCondTorchLit },
 
-    // Keep whatever angle is set, ignoring Link's position, for bodies that must end up square.
     { ACTOR_OBJ_OSHIHIKI, PACCI_UH_TRAIT_NO_FACE, 0, 0, NULL },
     { ACTOR_EN_AM, PACCI_UH_TRAIT_NO_FACE, 0, 0, NULL },
 
-    // Red ice only checks the hit actor's id against En_Ice_Hono; carrying the flame is the only door.
     { ACTOR_EN_ICE_HONO, PACCI_UH_TRAIT_REACHABLE | PACCI_UH_TRAIT_PROXY, 0, 0, Pacci_UhCondPersistent, 0,
       ACTOR_EN_ICE_HONO, (s16)0xFFFF },
 
-    // NO_FACE: she keeps her own facing while carried, like a person, not a crate.
     { ACTOR_EN_RU1, PACCI_UH_TRAIT_REACHABLE | PACCI_UH_TRAIT_NO_FACE, 0, 0, Pacci_UhCondRutoSitting },
 
-    // DMG_BOOMERANG only, health 4; not En_Bx, the electrified tentacle with no death at all.
     { ACTOR_EN_BA, PACCI_UH_TRAIT_STRIKES, 0, 0, NULL, 0, 0, 0, DMG_BOOMERANG, PACCI_UH_CUT_DAMAGE },
 
-    // world.pos.y rebuilds every frame from currentHeight; targetHeight is the only real handle.
     { ACTOR_EN_SIOFUKI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HEIGHT, 0, 0, NULL },
 
-    // Writes destAngle and points the actor at its own rise/fall function; the bridge does the rest.
     { ACTOR_BG_SPOT00_HANEBASI, PACCI_UH_TRAIT_LOCKED | PACCI_UH_TRAIT_HINGE, 0, 0, Pacci_UhCondDrawbridge },
 
     { ACTOR_BG_HAKA_ZOU, PACCI_UH_TRAIT_PULLABLE, 0, 0, NULL },
@@ -593,7 +528,6 @@ static const PacciUhTraitRow* Pacci_UhTraitRow(Actor* actor) {
             if (sPacciUhTraits[i].actorId != actor->id) {
                 continue;
             }
-            // One id can have several rows, told apart by cond, so a false one keeps searching.
             if ((sPacciUhTraits[i].cond != NULL) && !sPacciUhTraits[i].cond(actor)) {
                 continue;
             }
@@ -609,7 +543,6 @@ static u32 Pacci_UhTraits(Actor* actor) {
     return (row != NULL) ? row->traits : 0;
 }
 
-// Horizontal extent only, from the CollisionHeader bounds: a tall totem is still an object.
 static u8 Pacci_UhTooBig(Actor* actor) {
     PlayState* play = gPlayState;
     s32 i;
@@ -638,12 +571,11 @@ static u8 Pacci_UhIsStructure(Actor* actor) {
     return (Pacci_UhTraits(actor) & PACCI_UH_TRAIT_EXCLUDE) ? 1 : 0;
 }
 
-// Everything defaults to THROW; the table only lists actors that need something else.
 typedef enum {
-    PACCI_BEHAV_THROW = 0,  // flies, damages what it hits, breaks on impact
-    PACCI_BEHAV_SNAP_FLOOR, // released onto the floor, and onto a switch if one is underneath
-    PACCI_BEHAV_PLACE,      // stays exactly where released, no gravity
-    PACCI_BEHAV_CARRY_ONLY, // movable, but its own logic keeps running (live bombs)
+    PACCI_BEHAV_THROW = 0,
+    PACCI_BEHAV_SNAP_FLOOR,
+    PACCI_BEHAV_PLACE,
+    PACCI_BEHAV_CARRY_ONLY,
 } PacciBehaviour;
 
 typedef struct {
@@ -655,7 +587,7 @@ static const PacciBehaviourRow sPacciBehaviours[] = {
     { ACTOR_OBJ_OSHIHIKI, PACCI_BEHAV_SNAP_FLOOR },
     { ACTOR_OBJ_LIFT, PACCI_BEHAV_SNAP_FLOOR },
     { ACTOR_EN_BOM, PACCI_BEHAV_CARRY_ONLY },
-    { ACTOR_EN_BOMBF, PACCI_BEHAV_PLACE }, // takes the plant, so it can be replanted elsewhere
+    { ACTOR_EN_BOMBF, PACCI_BEHAV_PLACE },
 };
 
 u8 Pacci_BehaviourFor(Actor* actor) {
@@ -669,31 +601,28 @@ u8 Pacci_BehaviourFor(Actor* actor) {
     return PACCI_BEHAV_THROW;
 }
 
-// isDyna: the actor came from DynaPoly_GetActor, so it owns collision and the draw gate is skipped.
 u8 Pacci_IsLiftableEx(Actor* actor, u8 isDyna) {
     typedef bool (*IsPillarFunc)(Actor*);
-    IsPillarFunc isPillar=SOH_MOD_API_HAS(sApi,FindService)?(IsPillarFunc)sApi->FindService("nei.slate.is_cryonis_pillar"):NULL;
-    if(isPillar && isPillar(actor))return 0;
+    IsPillarFunc isPillar =
+        SOH_MOD_API_HAS(sApi, FindService) ? (IsPillarFunc)sApi->FindService("nei.slate.is_cryonis_pillar") : NULL;
+    if (isPillar && isPillar(actor))
+        return 0;
     if ((actor == NULL) || (actor->update == NULL)) {
         return 0;
     }
     if ((actor->id == ACTOR_PLAYER) || (actor->category == ACTORCAT_BOSS)) {
         return 0;
     }
-    // A REACHABLE row outranks every generic rule below (En_Ru1 is an NPC, En_Ice_Hono has no collision).
     if (Pacci_UhTraits(actor) & PACCI_UH_TRAIT_REACHABLE) {
         return 1;
     }
 
-    // NPCs are refused by category; everything else that is invisible is filtered by the draw check.
     if (!(actor->flags & PACCI_FLAG_LIFTABLE) && (actor->category == ACTORCAT_NPC)) {
         return 0;
     }
-    // Only on enemies: props such as Obj_Oshihiki set MASS_IMMOVABLE themselves.
     if ((actor->category == ACTORCAT_ENEMY) && (actor->colChkInfo.mass == MASS_IMMOVABLE)) {
         return 0;
     }
-    // A trait row outranks the blacklist: En_Am is on both, and must stay a switch weight.
     if (Pacci_UhTraits(actor) == 0) {
         for (u32 i = 0; i < ARRAY_COUNT(sPacciBlacklist); i++) {
             if (actor->id == sPacciBlacklist[i]) {
@@ -704,15 +633,12 @@ u8 Pacci_IsLiftableEx(Actor* actor, u8 isDyna) {
     if (Pacci_UhIsStructure(actor)) {
         return 0;
     }
-    // A row's opinion overrides the size gate (e.g. a lift is deliberately large but movable).
     if ((Pacci_UhTraits(actor) == 0) && Pacci_UhTooBig(actor)) {
         return 0;
     }
-    // No draw means an invisible trigger, except on dynapoly, where the room mesh draws it.
     if (!isDyna && (actor->draw == NULL)) {
         return 0;
     }
-    // Glued parts stay targetable; the grab redirects to the root (Pacci_FuseRootOf).
     return 1;
 }
 
@@ -722,10 +648,9 @@ u8 Pacci_IsLiftable(Actor* actor) {
 
 typedef struct {
     u8 active;
-    f32 heightOff; // vertical offset from the aim line, driven by R + D-up/down
-    f32 sideOff;   // sideways offset, perpendicular to the aim, from R + D-left/right
+    f32 heightOff;
+    f32 sideOff;
     u8 prevDpad;
-    // Counts direction flips of the stick, not raw deflection, to tell a shake from just walking.
     s8 wiggleDir;
     u8 wiggleFlips;
     s16 wiggleTimer;
@@ -742,26 +667,20 @@ typedef struct {
     f32 origGravity;
     f32 origMinVelocityY;
     s16 origRoom;
-    // Pose kept relative to the object-to-Link line, so the same face stays toward him.
     Vec3s baseRot;
-    Vec3s grabRot; // orientation at the grab, for the Z reset
-    // For some actors world.rot is a heading (Bg_Haka_Ship, Bg_Hidan_Rock): saved and given back on release.
+    Vec3s grabRot;
     Vec3s grabWorldRot;
-    s16 faceOffsetYaw; // grabbed facing minus object->player yaw
-    // Chases the aim at a capped rate: it sweeps an arc instead of cutting a chord through Link.
+    s16 faceOffsetYaw;
     s16 carryYaw;
-    Vec3f carryVel; // smoothed carry velocity, handed over as release velocity
-    // railPos is the grab pose, not the spawn pose, so a slid block keeps its plane.
+    Vec3f carryVel;
     u32 traits;
     s8 flagDir;
     Vec3f railPos;
     s32 pathId;
     s32 pathCount;
-    // Where the controls want it, before the magnet: a slid block can still be pulled back off.
     Vec3f anchorPos;
-    f32 placeBlend; // 0 = controls own the body, 1 = the offered spot does; ramps, doesn't snap
+    f32 placeBlend;
     s16 vfxAge;
-    // Held objects are frozen; their own update still submits the OC collider that shoves Link.
     ActorFunc origUpdate;
 } PacciUltrahand;
 
@@ -769,11 +688,9 @@ static PacciUltrahand sUltrahand = { 0 };
 static Actor* sUhProxy = NULL;
 static Actor* sUhHighlightTarget = NULL;
 
-// nextModelGroup is cached on item-action change, so grabbing/releasing must re-latch explicitly.
 s32 Player_ActionToModelGroup(Player* this, s32 actionParam);
 void Player_SetModels(Player* this, s32 modelGroup);
 
-// Grayscale is RSP state, so an actor's own materials cannot undo it mid-list; applied by swapping draw.
 #define PACCI_UH_TINT_SLOTS 8
 #define PACCI_UH_TINT_R 110
 #define PACCI_UH_TINT_G 255
@@ -813,7 +730,6 @@ static void Pacci_UhTintedDraw(Actor* thisx, PlayState* play) {
     }
 
     OPEN_DISPS(play->state.gfxCtx);
-    // Both buffers: which one an actor draws into is its own business, and some use both.
     gDPSetGrayscaleColor(POLY_OPA_DISP++, PACCI_UH_TINT_R, PACCI_UH_TINT_G, PACCI_UH_TINT_B, PACCI_UH_TINT_MIX);
     gSPGrayscale(POLY_OPA_DISP++, true);
     gDPSetGrayscaleColor(POLY_XLU_DISP++, PACCI_UH_TINT_R, PACCI_UH_TINT_G, PACCI_UH_TINT_B, PACCI_UH_TINT_MIX);
@@ -822,7 +738,6 @@ static void Pacci_UhTintedDraw(Actor* thisx, PlayState* play) {
 
     orig(thisx, play);
 
-    // Turn it off again, or every actor drawn after this one in the same pass comes out green.
     OPEN_DISPS(play->state.gfxCtx);
     gSPGrayscale(POLY_OPA_DISP++, false);
     gSPGrayscale(POLY_XLU_DISP++, false);
@@ -859,7 +774,6 @@ static void Pacci_RefreshPlayerPose(Player* player) {
     }
 }
 
-// Colliders are pinned to owner pos + offset from the owner's own update, when they are in the lists.
 #define PACCI_ANCHOR_OWNERS 8
 #define PACCI_ANCHOR_COLS 10
 
@@ -872,7 +786,6 @@ typedef struct {
 
 typedef struct {
     Actor* owner;
-    // Taken at the grab: collection can lag a frame behind the actor having moved.
     Vec3f basePos;
     u8 active;
     u8 count;
@@ -941,7 +854,6 @@ static void Pacci_AnchorCollect(PacciAnchorSlot* slot, Collider** list, s32 coun
         if ((col == NULL) || (col->actor != slot->owner)) {
             continue;
         }
-        // One collider can be registered as AT, AC and OC in the same frame; track it once.
         for (u8 j = 0; j < slot->count; j++) {
             if (slot->cols[j].col == col) {
                 seen = 1;
@@ -960,7 +872,6 @@ static void Pacci_AnchorCollect(PacciAnchorSlot* slot, Collider** list, s32 coun
     }
 }
 
-// Must run from inside the owner's update, right after its own update.
 static void Pacci_AnchorSync(PlayState* play, Actor* actor) {
     PacciAnchorSlot* slot;
 
@@ -983,7 +894,6 @@ static void Pacci_AnchorSync(PlayState* play, Actor* actor) {
         if (!SwitchHook_GetColliderRefPos(anchor->col, &refPos)) {
             continue;
         }
-        // The owner moved it itself: adopt its answer instead of fighting it.
         if (anchor->hasLastSet &&
             ((refPos.x != anchor->lastSet.x) || (refPos.y != anchor->lastSet.y) || (refPos.z != anchor->lastSet.z))) {
             anchor->offset.x = refPos.x - actor->world.pos.x;
@@ -996,7 +906,6 @@ static void Pacci_AnchorSync(PlayState* play, Actor* actor) {
         delta.y = (actor->world.pos.y + anchor->offset.y) - refPos.y;
         delta.z = (actor->world.pos.z + anchor->offset.z) - refPos.z;
         SwitchHook_ShiftCollider(anchor->col, &delta);
-        // Where it really ended up: s16 rounding must not read as the owner moving it.
         if (SwitchHook_GetColliderRefPos(anchor->col, &anchor->lastSet)) {
             anchor->hasLastSet = 1;
         }
@@ -1025,7 +934,6 @@ static void Pacci_UltrahandHeldUpdate(Actor* thisx, PlayState* play) {
     thisx->world.pos = pos;
     thisx->shape.rot = rot;
     thisx->world.rot = worldRot;
-    // The wrapper stays through the fall: velocity is zeroed only while carried.
     if (!sUltrahand.dropping) {
         thisx->velocity.x = 0.0f;
         thisx->velocity.y = 0.0f;
@@ -1045,9 +953,7 @@ static void Pacci_UhLockedPose(PlayState* play, Actor* actor);
 static void Pacci_UhHeightInput(Actor* actor, u8 edge);
 static u8 Pacci_UhAiming(Player* player, Actor* actor);
 static void Pacci_UhHingeInput(Actor* actor, u8 edge);
-// z_bg_spot00_hanebasi.c, not static and not in any header.
 void BgSpot00Hanebasi_DrawbridgeRiseAndFall(BgSpot00Hanebasi* this, PlayState* play);
-// Not in functions.h - it is Player's own.
 extern int Player_IsZTargeting(Player* this);
 static void Pacci_UhBombTick(Actor* actor);
 static u8 Pacci_UhBombDetonate(PlayState* play);
@@ -1075,9 +981,7 @@ static void Pacci_UltrahandLetGo(void) {
         actor->colorFilterParams = 0;
         actor->world.rot = sUltrahand.grabWorldRot;
     }
-    // Stays fused: most of these actors have no gravity and would hang where released.
     Pacci_AnchorRelease(actor);
-    // Killed after its update/flags are restored, so it dies as itself.
     if ((actor != NULL) && (actor == sUhProxy)) {
         if (actor->update != NULL) {
             Actor_Kill(actor);
@@ -1096,7 +1000,6 @@ static void Pacci_UltrahandLetGo(void) {
     Pacci_RefreshPlayerPose(GET_PLAYER(gPlayState));
 }
 
-// Every way of letting go ends in a fall, whatever Link is holding by then.
 void Pacci_UltrahandDropTick(PlayState* play) {
     if ((play == NULL) || (sUltrahand.held == NULL) || !sUltrahand.dropping) {
         return;
@@ -1104,11 +1007,9 @@ void Pacci_UltrahandDropTick(PlayState* play) {
     Pacci_UpdateUltrahand(play, GET_PLAYER(play));
 }
 
-// Armed: hand out, target marked, weld offered. The mode only adds the D-pad controls.
 static u8 sUhArmed = 0;
 
 void Pacci_SetUltrahandArmed(u8 armed) {
-    // The one wipe: held body, candidate and weld ends are tinted from three places later.
     Pacci_UhTintClear();
     sUhArmed = armed;
 }
@@ -1119,11 +1020,9 @@ u8 Pacci_UltrahandArmed(void) {
 
 void Pacci_HighlightUltrahandTarget(PlayState* play) {
     sUhHighlightTarget = NULL;
-    // held, not IsHolding: a falling body still blocks a new candidate.
     if (sUltrahand.held != NULL) {
         return;
     }
-    // Cleared after the early return, or the held body's tint would be wiped outside the mode.
     Pacci_UhTintClear();
 
     Actor* target = Pacci_ResolveUltrahandTarget(play, GET_PLAYER(play));
@@ -1135,7 +1034,6 @@ void Pacci_HighlightUltrahandTarget(PlayState* play) {
     }
 }
 
-// The DynaPoly actor owning the surface on Link's aim, or NULL for scenery.
 static Actor* Pacci_UltrahandRaycastAt(PlayState* play, Player* player, s16 pitchBias) {
     Vec3f from = player->actor.world.pos;
     Vec3f to;
@@ -1146,7 +1044,7 @@ static Actor* Pacci_UltrahandRaycastAt(PlayState* play, Player* player, s16 pitc
     f32 distXZ = Math_CosS(pitch) * PACCI_UH_DIST_MAX;
     f32 distY = Math_SinS(pitch) * PACCI_UH_DIST_MAX;
 
-    from.y += 40.0f; // from the chest, not the feet
+    from.y += 40.0f;
     to.x = from.x + (Math_SinS(player->actor.focus.rot.y) * distXZ);
     to.z = from.z + (Math_CosS(player->actor.focus.rot.y) * distXZ);
     to.y = from.y - distY;
@@ -1168,16 +1066,14 @@ static Actor* Pacci_UltrahandRaycastAt(PlayState* play, Player* player, s16 pitc
         found = ((dyna != NULL) && (dyna->actor.update != NULL)) ? &dyna->actor : NULL;
 
         if (found == NULL) {
-            break; // plain scenery: whatever is behind it is behind a wall
+            break;
         }
-        // held == NULL first, or NULL != NULL rejects every surface while empty-handed.
         ours =
             (found == sUltrahand.held) || ((sUltrahand.held != NULL) && (Pacci_FuseRootOf(found) == sUltrahand.held));
         if (!ours) {
             if (Pacci_IsLiftableEx(found, 1)) {
                 return found;
             }
-            // Step past an unliftable surface instead of stopping, or it hides everything behind it.
         }
 
         dx = to.x - from.x;
@@ -1194,7 +1090,6 @@ static Actor* Pacci_UltrahandRaycastAt(PlayState* play, Player* player, s16 pitc
     return NULL;
 }
 
-// Sweeps the pitch downward: the camera cannot aim at things by Link's feet.
 static Actor* Pacci_UltrahandRaycastDyna(PlayState* play, Player* player) {
     static const s16 sPitchSweep[] = { 0, 0x0A00, 0x1600, -0x0800 };
 
@@ -1208,12 +1103,10 @@ static Actor* Pacci_UltrahandRaycastDyna(PlayState* play, Player* player) {
     return NULL;
 }
 
-// Grab and highlight both ask here, so what is marked is what A takes.
 static s32 Pacci_UhTargetFilter(Actor* actor) {
     return TargetSelect_IsCommonTarget(actor) && Pacci_IsLiftable(actor);
 }
 
-// REACHABLE rows only, within arm's reach: they sit where the camera cannot aim.
 static Actor* Pacci_UhScanReachable(PlayState* play, Player* player) {
     Actor* best = NULL;
     f32 bestD = PACCI_UH_REACH_RANGE * PACCI_UH_REACH_RANGE;
@@ -1239,7 +1132,6 @@ static Actor* Pacci_UhScanReachable(PlayState* play, Player* player) {
             if (d >= bestD) {
                 continue;
             }
-            // s16 subtraction already wraps to the shortest signed difference.
             yawOff = Math_Vec3f_Yaw(&player->actor.world.pos, &it->world.pos) - player->actor.focus.rot.y;
             if ((yawOff > PACCI_UH_REACH_CONE) || (yawOff < -PACCI_UH_REACH_CONE)) {
                 continue;
@@ -1257,7 +1149,6 @@ static Actor* Pacci_ResolveUltrahandTarget(PlayState* play, Player* player) {
     if (target == NULL) {
         target = TargetSelect_Scan(play, Pacci_UhTargetFilter);
     }
-    // Last, so nothing that already resolved starts resolving to a flame at your feet instead.
     if (target == NULL) {
         target = Pacci_UhScanReachable(play, player);
     }
@@ -1271,19 +1162,17 @@ static void Pacci_UltrahandBeginDrop(void) {
     if ((actor == NULL) || sUltrahand.dropping) {
         return;
     }
-    // Constrained and LOCKED bodies stay put on release: a fall would break the axis they are pinned to.
     if (sUltrahand.traits &
         (PACCI_UH_TRAIT_AXIS_Y | PACCI_UH_TRAIT_PLANE_XZ | PACCI_UH_TRAIT_PATH | PACCI_UH_TRAIT_LOCKED)) {
         Pacci_UltrahandLetGo();
         Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
     sUltrahand.dropping = 1;
     sUltrahand.dropTimer = PACCI_UH_DROP_TIMEOUT;
     actor->colorFilterParams = 0;
 
-    // Letting go while aiming is a throw, not a drop, and overrides carry inertia entirely.
     {
         Player* player = (gPlayState != NULL) ? GET_PLAYER(gPlayState) : NULL;
 
@@ -1311,11 +1200,10 @@ static void Pacci_UltrahandBeginDrop(void) {
         actor->velocity.y *= scale;
         actor->velocity.z *= scale;
     }
-    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
-// With Z held a plain object rides in the hand to be thrown; trait rows have a place to be.
 static u8 Pacci_UhThrowable(Actor* actor) {
     if (actor == NULL) {
         return 0;
@@ -1327,7 +1215,6 @@ static u8 Pacci_UhAiming(Player* player, Actor* actor) {
     return (Player_IsZTargeting(player) && Pacci_UhThrowable(actor)) ? 1 : 0;
 }
 
-// Too big to carry: Link braces with the vanilla pull animation and the D-pad drags it.
 static Actor* sPullActor = NULL;
 static u8 sPullStarted = 0;
 
@@ -1354,7 +1241,6 @@ static void Pacci_PullStart(PlayState* play, Player* player, Actor* target) {
     Audio_PlayActorSound2(target, NA_SE_PL_PULL_UP_BIGROCK);
 }
 
-// Pad state, not edges, since a pull is a sustained effort. D-down toward Link, D-up away.
 static void Pacci_PullTick(PlayState* play, Player* player, u8 dpad) {
     f32 dx;
     f32 dz;
@@ -1368,7 +1254,6 @@ static void Pacci_PullTick(PlayState* play, Player* player, u8 dpad) {
         Pacci_PullStop(play);
         return;
     }
-    // Asks the animation, not a frame count, so playback speed cannot desync the loop.
     if (!sPullStarted) {
         if (LinkAnimation_Update(play, &player->skelAnime)) {
             sPullStarted = 1;
@@ -1396,7 +1281,6 @@ static void Pacci_PullTick(PlayState* play, Player* player, u8 dpad) {
     }
     sPullActor->world.pos.x += (dx / len) * step;
     sPullActor->world.pos.z += (dz / len) * step;
-    // Bg_Po_Event and Bg_Hidan_Dalm both rebuild their position from home, so home comes along.
     sPullActor->home.pos.x = sPullActor->world.pos.x;
     sPullActor->home.pos.z = sPullActor->world.pos.z;
     sPullActor->prevPos = sPullActor->world.pos;
@@ -1418,9 +1302,8 @@ void Pacci_ThrowTick(PlayState* play) {
     }
     if (sUhThrowTimer > 0) {
         sUhThrowTimer--;
-        return; // still "lifted"; its Wait state is running the pickup
+        return;
     }
-    // BgHeavyBlock_Fly never sets its own speed; vanilla's throw (z_player.c) does, with these.
     {
         Player* player = GET_PLAYER(play);
 
@@ -1437,13 +1320,11 @@ u8 Pacci_IsThrowing(void) {
 }
 
 static void Pacci_ThrowArm(Player* player, Actor* target) {
-    // A few frames, so its own update sees the parent whatever the update order.
     target->parent = &player->actor;
     sUhThrowActor = target;
     sUhThrowTimer = PACCI_UH_THROW_HOLD;
 }
 
-// A real hit, so the target's own damage path runs; kept a few frames since AT meets AC in one frame.
 static ColliderCylinder sUhCutCol;
 static Actor* sUhCutTarget = NULL;
 static s16 sUhCutTimer = 0;
@@ -1486,7 +1367,6 @@ static void Pacci_CutArm(PlayState* play, Player* player, Actor* target, const P
     cfg.effect = 0;
     cfg.radius = PACCI_UH_CUT_RADIUS;
     cfg.height = PACCI_UH_CUT_HEIGHT;
-    // Owned by Link, so the target reacts to a player's boomerang hit.
     Combat_InitCylinder(play, &sUhCutCol, &player->actor, &cfg);
     sUhCutTarget = target;
     sUhCutTimer = PACCI_UH_CUT_FRAMES;
@@ -1501,7 +1381,6 @@ static s16* Pacci_UhBombTimer(Actor* actor) {
     return &((EnBom*)actor)->timer;
 }
 
-// Re-asserted every frame, since En_Bom's own update keeps counting the fuse down.
 static void Pacci_UhBombTick(Actor* actor) {
     s16* timer;
 
@@ -1526,7 +1405,7 @@ static u8 Pacci_UhBombDetonate(PlayState* play) {
         return 0;
     }
     *timer = 1;
-    sUhProxy = NULL; // it is going to kill itself; do not kill it out from under the explosion
+    sUhProxy = NULL;
     Pacci_UltrahandLetGo();
     return 1;
 }
@@ -1534,7 +1413,6 @@ static u8 Pacci_UhBombDetonate(PlayState* play) {
 static void Pacci_UltrahandTake(Player* player, Actor* target) {
     f32 dx;
 
-    // One assembly at a time: grabbing outside it releases the old one first.
     if ((Pacci_FuseCount() > 0) && (Pacci_FuseRootOf(target) != target)) {
         Pacci_FuseRelease();
     }
@@ -1570,7 +1448,6 @@ static void Pacci_UltrahandTake(Player* player, Actor* target) {
         PlayState* play = gPlayState;
 
         sUltrahand.pathId = (target->params >> row->pathShift) & row->pathMask;
-        // Not every scene has a path list: without one the constraint is dropped.
         if ((play != NULL) && (play->setupPathList != NULL)) {
             sUltrahand.pathCount = play->setupPathList[sUltrahand.pathId].count;
         }
@@ -1581,12 +1458,12 @@ static void Pacci_UltrahandTake(Player* player, Actor* target) {
     sUltrahand.faceOffsetYaw = target->shape.rot.y - Math_Vec3f_Yaw(&target->world.pos, &player->actor.world.pos);
     sUltrahand.vfxAge = 0;
     sUhHighlightTarget = NULL;
-    Pacci_AnchorTake(target); // while it is still at rest, before the carry moves it
+    Pacci_AnchorTake(target);
     sUltrahand.origUpdate = target->update;
     target->update = Pacci_UltrahandHeldUpdate;
     sUltrahand.distance = sqrtf((dx * dx) + (dy * dy) + (dz * dz));
     sUltrahand.distance = CLAMP(sUltrahand.distance, PACCI_UH_DIST_MIN, PACCI_UH_DIST_MAX);
-    target->room = -1; // held objects should survive a room change
+    target->room = -1;
 
     Audio_PlayActorSound2(target, NA_SE_SY_GET_ITEM);
     Pacci_RefreshPlayerPose(player);
@@ -1601,27 +1478,23 @@ u8 Pacci_CastUltrahand(PlayState* play, Player* player) {
     if (Pacci_BackRiderActive()) {
         Pacci_BackRiderDrop();
         Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return 1;
     }
 
-    // A falling body still owns the slot: a new grab would freeze it mid-air.
     if (sUltrahand.held != NULL) {
         return 0;
     }
 
-    // Dynapoly first: the category scan cannot see ACTORCAT_BG scenery.
     Actor* target = Pacci_ResolveUltrahandTarget(play, player);
 
     if (target == NULL) {
         return 0;
     }
-    // Parts are frozen and driven from the root, so holding a part directly would move nothing.
     if (Pacci_FuseRootOf(target) != NULL) {
         target = Pacci_FuseRootOf(target);
     }
 
-    // Sitting Ruto rides instead, since the carry only holds one thing at a time.
     if ((target->id == ACTOR_EN_RU1) && Pacci_UhCondRutoSitting(target)) {
         Pacci_BackRiderTake(play, player, target);
         return 1;
@@ -1651,7 +1524,6 @@ u8 Pacci_CastUltrahand(PlayState* play, Player* player) {
             }
             sUhProxy = copy;
             Pacci_UltrahandTake(player, copy);
-            // Traits belong to the row, not the stand-in: a spawned En_Bom has no row of its own.
             sUltrahand.traits = row->traits;
             return 1;
         }
@@ -1664,7 +1536,6 @@ u8 Pacci_CastUltrahand(PlayState* play, Player* player) {
 static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY);
 static u8 Pacci_UhAssemblyGround(PlayState* play, Actor* root, f32* outY);
 
-// Puts a constrained body back on its own axis/plane/path, after the carry places it freely.
 static void Pacci_UhConstrain(PlayState* play, Actor* actor) {
     u32 traits = sUltrahand.traits;
 
@@ -1674,7 +1545,6 @@ static void Pacci_UhConstrain(PlayState* play, Actor* actor) {
         sUltrahand.carryVel.x = 0.0f;
         sUltrahand.carryVel.z = 0.0f;
         if (traits & PACCI_UH_TRAIT_DRIVE_HOME) {
-            // The dragged-to height becomes the new floor; the actor's own update rides to it.
             actor->home.pos.y = actor->world.pos.y;
         }
     }
@@ -1683,7 +1553,6 @@ static void Pacci_UhConstrain(PlayState* play, Actor* actor) {
         sUltrahand.carryVel.y = 0.0f;
     }
     if ((traits & PACCI_UH_TRAIT_PATH) && (sUltrahand.pathCount >= 2)) {
-        // Nearest point on the polyline, not the nearest waypoint, so it slides instead of jumping.
         Path* path = &play->setupPathList[sUltrahand.pathId];
         Vec3s* pts = (Vec3s*)SEGMENTED_TO_VIRTUAL(path->points);
         Vec3f want = actor->world.pos;
@@ -1760,10 +1629,8 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         s16 playerFacingYaw;
         s16 targetFacingYaw;
         Vec3f prevWorld = actor->world.pos;
-        // No D-pad here: the mode owns the buttons, or L + D-pad would fight its rotation.
         f32 distXZ = Math_CosS(player->actor.focus.rot.x) * sUltrahand.distance;
         f32 distY = Math_SinS(player->actor.focus.rot.x) * sUltrahand.distance;
-        // sideOff runs perpendicular to the aim, so R + D-left/right slides across the view.
         s16 yawDelta = player->actor.focus.rot.y - sUltrahand.carryYaw;
         f32 sideX;
         f32 sideZ;
@@ -1777,7 +1644,6 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         }
         sUltrahand.carryYaw += yawDelta;
 
-        // From carryYaw, not the raw aim, so the anchor moves one capped step at a time.
         sideX = Math_SinS(sUltrahand.carryYaw + 0x4000) * sUhMode.sideOff;
         sideZ = Math_CosS(sUltrahand.carryYaw + 0x4000) * sUhMode.sideOff;
         targetX = (Math_SinS(sUltrahand.carryYaw) * distXZ) + player->actor.world.pos.x + sideX;
@@ -1795,7 +1661,6 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
             targetZ = hand.z + (Math_CosS(player->actor.shape.rot.y) * PACCI_UH_THROW_REACH);
         }
 
-        // Taken before easing, or the magnet-pulled position never reads as having moved.
         sUltrahand.anchorPos.x = targetX;
         sUltrahand.anchorPos.y = targetY;
         sUltrahand.anchorPos.z = targetZ;
@@ -1810,24 +1675,19 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         if ((actor->bgCheckFlags & BGCHECKFLAG_GROUND) && (actor->world.pos.y < actor->floorHeight)) {
             actor->world.pos.y = actor->floorHeight;
         }
-        // Zeroed each frame so it can't accumulate while Link stands against what he's carrying.
         actor->colChkInfo.displacement.x = 0.0f;
         actor->colChkInfo.displacement.y = 0.0f;
         actor->colChkInfo.displacement.z = 0.0f;
-        // Smoothed: the raw last-frame delta is either zero or a spike.
         sUltrahand.carryVel.x = (sUltrahand.carryVel.x * 0.65f) + ((actor->world.pos.x - prevWorld.x) * 0.35f);
         sUltrahand.carryVel.y = (sUltrahand.carryVel.y * 0.65f) + ((actor->world.pos.y - prevWorld.y) * 0.35f);
         sUltrahand.carryVel.z = (sUltrahand.carryVel.z * 0.65f) + ((actor->world.pos.z - prevWorld.z) * 0.35f);
-        // Constrained bodies run the same carry and are then put back on their axis.
         if (sUltrahand.traits & PACCI_UH_TRAIT_LOCKED) {
-            // Pinned where it was grabbed: the controls drive its flag instead.
             actor->world.pos = sUltrahand.railPos;
             sUltrahand.carryVel.x = 0.0f;
             sUltrahand.carryVel.y = 0.0f;
             sUltrahand.carryVel.z = 0.0f;
         }
         Pacci_UhConstrain(play, actor);
-        // A LOCKED body keeps its own rotation: only the axis its flag owns is touched.
         if (sUltrahand.traits & PACCI_UH_TRAIT_LOCKED) {
             Pacci_UhLockedPose(play, actor);
             actor->world.rot = actor->shape.rot;
@@ -1840,7 +1700,6 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         }
 
         if (sUltrahand.traits & PACCI_UH_TRAIT_NO_TURN) {
-            // Lifts and pushed blocks keep their grab facing: turning one drags what stands on it.
             actor->shape.rot = sUltrahand.grabRot;
             actor->world.rot = actor->shape.rot;
             Pacci_UhFlagTick(play, actor);
@@ -1857,7 +1716,6 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         if (sUltrahand.traits & PACCI_UH_TRAIT_NO_FACE) {
             actor->shape.rot = sUltrahand.baseRot;
         } else {
-            // Manual rotation is a delta from the grab pose, independent of the orbit.
             playerFacingYaw = Math_Vec3f_Yaw(&actor->world.pos, &player->actor.world.pos);
             targetFacingYaw =
                 playerFacingYaw + sUltrahand.faceOffsetYaw + (sUltrahand.baseRot.y - sUltrahand.grabRot.y);
@@ -1873,7 +1731,6 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
         Pacci_UhFireTick(play, actor);
         Pacci_UhIceTick(play, actor);
 
-        // Re-registered every frame; the table is wiped at the top of the mode's frame.
         actor->colorFilterParams = 0;
         Pacci_UhTintAdd(actor);
         if (sUltrahand.vfxAge < 0x7FFF) {
@@ -1887,16 +1744,13 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
     if (actor->velocity.y < PACCI_UH_DROP_MIN_VEL_Y) {
         actor->velocity.y = PACCI_UH_DROP_MIN_VEL_Y;
     }
-    // By hand: the engine helper drives XZ from world.rot.y, the pose, not the swing.
     actor->world.pos.y += actor->velocity.y;
     actor->world.pos.x += actor->velocity.x;
     actor->world.pos.z += actor->velocity.z;
-    // Constraint outlives the release, or inherited sideways momentum walks a lift out of its shaft.
     Pacci_UhConstrain(play, actor);
     actor->velocity.x *= PACCI_UH_DROP_DRAG;
     actor->velocity.z *= PACCI_UH_DROP_DRAG;
     Actor_UpdateBgCheckInfo(play, actor, 0.0f, 0.0f, 0.0f, 4);
-    // Parts must match the root before the footprint is measured, or the probe reads a stale shape.
     Pacci_FuseFollow(play);
 
     {
@@ -1926,18 +1780,16 @@ void Pacci_UpdateUltrahand(PlayState* play, Player* player) {
     }
 }
 
-// Parts live in the root's frame; collision is not merged, so each surface still names its part.
 #define PACCI_FUSE_MAX_PARTS 6
 typedef char PacciAnchorFitsAssembly[(PACCI_ANCHOR_OWNERS >= (PACCI_FUSE_MAX_PARTS + 1)) ? 1 : -1];
-#define PACCI_FUSE_PTS 27            // 8 corners + 12 edge mids + 6 face centres + centre
+#define PACCI_FUSE_PTS 27
 #define PACCI_FUSE_WELD_RANGE 130.0f
 #define PACCI_FUSE_NOCOL_HALF 12.0f
-#define PACCI_FUSE_NEAR_GAP 55.0f // alternate weld gate: body-to-body surface gap
-#define PACCI_FUSE_DETACH_HOLD 12 // frames of held R before a weld comes apart
-#define PACCI_UH_WIGGLE_WINDOW 14 // frames a direction flip stays "recent"
-#define PACCI_UH_WIGGLE_FLIPS 3   // reversals inside that window before it counts as a shake
+#define PACCI_FUSE_NEAR_GAP 55.0f
+#define PACCI_FUSE_DETACH_HOLD 12
+#define PACCI_UH_WIGGLE_WINDOW 14
+#define PACCI_UH_WIGGLE_FLIPS 3
 
-// Zonai green, eyeballed off the in-game glow (no published hex exists).
 #define PACCI_ZONAI_CORE_R 210
 #define PACCI_ZONAI_CORE_G 255
 #define PACCI_ZONAI_CORE_B 140
@@ -1964,20 +1816,17 @@ typedef struct {
 
 static PacciAssembly sFuse = { NULL, { { 0 } }, 0 };
 
-// What the next A press would do, recomputed every frame while you hold something.
 static struct {
     u8 valid;
     Actor* target;
     Vec3f weld;
     Vec3f snapPos;
-    // Both paired points, so which corner meets which is visible.
     Vec3f heldPt;
     Vec3f targetPt;
 } sFusePv = { 0, NULL, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f } };
 
 static s16 sFuseDetachHold = 0;
 
-// Yaw only: pitch and roll would need the full matrix, and no weld point is worth that.
 typedef struct {
     Vec3f center;
     Vec3f half;
@@ -1986,7 +1835,6 @@ typedef struct {
     u8 dyna;
 } PacciFuseBox;
 
-// Offset is stored in the root's local frame, so it's rotated by root yaw and added to root pos.
 static void Pacci_FusePlacePart(PlayState* play, PacciFusePart* slot, Actor* root) {
     Actor* part = slot->actor;
     f32 sin = Math_SinS(root->shape.rot.y);
@@ -2004,7 +1852,6 @@ static void Pacci_FusePlacePart(PlayState* play, PacciFusePart* slot, Actor* roo
     part->velocity.z = 0.0f;
 }
 
-// The part runs its own update, then the assembly transform is reimposed in the same call.
 static void Pacci_FusePartUpdate(Actor* thisx, PlayState* play) {
     for (u8 i = 0; i < sFuse.count; i++) {
         PacciFusePart* slot = &sFuse.parts[i];
@@ -2037,7 +1884,6 @@ u8 Pacci_FuseIsPart(Actor* actor) {
     return 0;
 }
 
-// Aiming at a glued piece acts on the root, the only thing the transform driver moves.
 Actor* Pacci_FuseRootOf(Actor* actor) {
     if ((actor != NULL) && (sFuse.count > 0)) {
         if (actor == sFuse.root) {
@@ -2050,7 +1896,7 @@ Actor* Pacci_FuseRootOf(Actor* actor) {
     return NULL;
 }
 
-// For scene teardown: drops bookkeeping without touching actors, whose pointers are already dead.
+// Scene teardown: the actors' pointers are already dead, so only bookkeeping is dropped.
 void Pacci_FuseForget(void) {
     for (u8 i = 0; i < PACCI_FUSE_MAX_PARTS; i++) {
         sFuse.parts[i].actor = NULL;
@@ -2107,8 +1953,6 @@ u8 Pacci_FuseDetachPart(Actor* actor) {
     return 0;
 }
 
-// Dynapoly fits from CollisionHeader bounds; everything else falls back to the collision
-// cylinder, the only size field every actor carries.
 static u8 Pacci_FuseGetBox(PlayState* play, Actor* actor, PacciFuseBox* box) {
     CollisionHeader* hdr = NULL;
 
@@ -2138,8 +1982,6 @@ static u8 Pacci_FuseGetBox(PlayState* play, Actor* actor, PacciFuseBox* box) {
         box->half.x = ((f32)hdr->maxBounds.x - (f32)hdr->minBounds.x) * 0.5f * actor->scale.x;
         box->half.y = ((f32)hdr->maxBounds.y - (f32)hdr->minBounds.y) * 0.5f * actor->scale.y;
         box->half.z = ((f32)hdr->maxBounds.z - (f32)hdr->minBounds.z) * 0.5f * actor->scale.z;
-        // The bounds are model-space, so their centre has to be carried out to world
-        // through the actor's yaw before it means anything.
         box->center.x = actor->world.pos.x + ((lx * cos) + (lz * sin));
         box->center.y = actor->world.pos.y + ly;
         box->center.z = actor->world.pos.z + ((lz * cos) - (lx * sin));
@@ -2162,8 +2004,6 @@ static u8 Pacci_FuseGetBox(PlayState* play, Actor* actor, PacciFuseBox* box) {
         return 1;
     }
 
-    // No collision at all. It still gets a nominal box so it has corners to be
-    // pinned by, but solid stays 0 and that is what triggers the corners-only rule.
     box->half.x = PACCI_FUSE_NOCOL_HALF;
     box->half.y = PACCI_FUSE_NOCOL_HALF;
     box->half.z = PACCI_FUSE_NOCOL_HALF;
@@ -2172,7 +2012,6 @@ static u8 Pacci_FuseGetBox(PlayState* play, Actor* actor, PacciFuseBox* box) {
     return 1;
 }
 
-// i/j/k over {-1,0,1}: three non-zero is a corner, one zero an edge midpoint.
 static u8 Pacci_FuseBoxPoints(PacciFuseBox* box, u8 cornersOnly, Vec3f* out) {
     f32 sin = Math_SinS(box->yaw);
     f32 cos = Math_CosS(box->yaw);
@@ -2185,7 +2024,6 @@ static u8 Pacci_FuseBoxPoints(PacciFuseBox* box, u8 cornersOnly, Vec3f* out) {
                 f32 ly;
                 f32 lz;
 
-                // Face and box centres win on overlap and weld pieces into each other, so they are skipped.
                 s32 zeros = ((i == 0) ? 1 : 0) + ((j == 0) ? 1 : 0) + ((k == 0) ? 1 : 0);
 
                 if (zeros > (cornersOnly ? 0 : 1)) {
@@ -2205,7 +2043,6 @@ static u8 Pacci_FuseBoxPoints(PacciFuseBox* box, u8 cornersOnly, Vec3f* out) {
     return n;
 }
 
-// Separation between the two bodies, yaw ignored: a proximity gate, not the solve.
 static f32 Pacci_FuseBoxGap(PacciFuseBox* a, PacciFuseBox* b) {
     f32 gx = fabsf(b->center.x - a->center.x) - (a->half.x + b->half.x);
     f32 gy = fabsf(b->center.y - a->center.y) - (a->half.y + b->half.y);
@@ -2240,8 +2077,6 @@ static u8 Pacci_FuseSolve(PlayState* play, Actor* held, Actor* target, Vec3f* we
         return 0;
     }
 
-    // Something with no collision has no face or edge to lie along, so it may only be
-    // pinned corner-to-corner, and only onto real dynapoly.
     cornersOnly = (!hb.solid || !tb.solid);
     if (cornersOnly && !hb.dyna && !tb.dyna) {
         return 0;
@@ -2267,7 +2102,6 @@ static u8 Pacci_FuseSolve(PlayState* play, Actor* held, Actor* target, Vec3f* we
     if (bh < 0) {
         return 0;
     }
-    // Either gate offers the weld: corner pairs alone miss two large boxes resting against each other.
     if ((best > (PACCI_FUSE_WELD_RANGE * PACCI_FUSE_WELD_RANGE)) &&
         (Pacci_FuseBoxGap(&hb, &tb) > PACCI_FUSE_NEAR_GAP)) {
         return 0;
@@ -2287,12 +2121,10 @@ static u8 Pacci_FuseSolve(PlayState* play, Actor* held, Actor* target, Vec3f* we
     return 1;
 }
 
-
 u8 Pacci_FusePreviewValid(void) {
     return sFusePv.valid;
 }
 
-// Must run after the carry moved the held body, or the bead lags a frame.
 void Pacci_FuseUpdatePreview(PlayState* play, Player* player) {
     Actor* held = sUltrahand.held;
     Actor* target;
@@ -2320,12 +2152,10 @@ void Pacci_FuseUpdatePreview(PlayState* play, Player* player) {
 
     sFusePv.valid = 1;
     sFusePv.target = target;
-    // Both ends light up, so the offer reads as a pair about to join.
     Pacci_UhTintAdd(target);
     Pacci_UhTintAdd(held);
 }
 
-// Registers an already-placed part at a given offset: a stored structure is rebuilt exactly.
 static u8 Pacci_FuseAdopt(Actor* root, Actor* part, Vec3f* localOff, Vec3s* relRot) {
     PacciFusePart* slot;
 
@@ -2370,13 +2200,10 @@ u8 Pacci_FuseTryAttach(PlayState* play) {
     if (sFuse.count >= PACCI_FUSE_MAX_PARTS) {
         return 0;
     }
-    // Welding onto another root starts a new structure: old offsets would describe the wrong root.
     if ((sFuse.count > 0) && (sFuse.root != root)) {
         Pacci_FuseRelease();
     }
 
-    // Snap the held piece onto the weld point BEFORE the offset is measured, so what
-    // gets recorded is the aligned pose and not where your aim happened to be.
     root->world.pos = sFusePv.snapPos;
     root->prevPos = root->world.pos;
 
@@ -2384,8 +2211,6 @@ u8 Pacci_FuseTryAttach(PlayState* play) {
     dy = part->world.pos.y - root->world.pos.y;
     dz = part->world.pos.z - root->world.pos.z;
 
-    // World delta -> the root's local frame, so the part keeps its relative place when
-    // the root turns. Negative angle because this is the inverse rotation.
     sin = Math_SinS(-root->shape.rot.y);
     cos = Math_CosS(-root->shape.rot.y);
 
@@ -2398,7 +2223,6 @@ u8 Pacci_FuseTryAttach(PlayState* play) {
     slot->rot.x = part->shape.rot.x - root->shape.rot.x;
     slot->rot.y = part->shape.rot.y - root->shape.rot.y;
     slot->rot.z = part->shape.rot.z - root->shape.rot.z;
-    // Tilt comes from the target so a structure looks built; the chosen yaw is kept.
     root->shape.rot.x = part->shape.rot.x;
     root->shape.rot.z = part->shape.rot.z;
     root->world.rot = root->shape.rot;
@@ -2426,20 +2250,16 @@ u8 Pacci_FuseTryAttach(PlayState* play) {
     part->velocity.x = 0.0f;
     part->velocity.y = 0.0f;
     part->velocity.z = 0.0f;
-    // Culling would stop the part's transform being driven while the root is still on
-    // screen, and the piece would be left behind mid-air.
     part->flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
 
     sFusePv.valid = 0;
     sFusePv.target = NULL;
 
     Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     return 1;
 }
 
-// Stick shaken left-right detaches; reversals are counted, not deflection, so running sideways
-// never triggers it.
 void Pacci_FuseWiggleDetach(PlayState* play, Player* player, Input* input) {
     s8 x = input->cur.stick_x;
     s8 dir = (x > 40) ? 1 : ((x < -40) ? -1 : 0);
@@ -2472,8 +2292,8 @@ void Pacci_FuseWiggleDetach(PlayState* play, Player* player, Input* input) {
     if (!Pacci_FuseDetachPart(Pacci_ResolveUltrahandTarget(play, player))) {
         Pacci_FuseRelease();
     }
-    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
 void Pacci_FuseHoldDetach(PlayState* play, Player* player, u8 rHeld) {
@@ -2483,7 +2303,7 @@ void Pacci_FuseHoldDetach(PlayState* play, Player* player, u8 rHeld) {
     }
     sFuseDetachHold++;
     if (sFuseDetachHold != PACCI_FUSE_DETACH_HOLD) {
-        return; // fires once per hold, not every frame it stays down
+        return;
     }
     if (sFuse.count == 0) {
         return;
@@ -2491,11 +2311,10 @@ void Pacci_FuseHoldDetach(PlayState* play, Player* player, u8 rHeld) {
     if (!Pacci_FuseDetachPart(Pacci_ResolveUltrahandTarget(play, player))) {
         Pacci_FuseRelease();
     }
-    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
-// Rebuild every part from the root. Must run AFTER the root has been positioned.
 void Pacci_FuseFollow(PlayState* play) {
     Actor* root = sFuse.root;
     u8 lit;
@@ -2504,26 +2323,21 @@ void Pacci_FuseFollow(PlayState* play) {
         return;
     }
     if (root->update == NULL) {
-        // The parts outlived it and nothing drives them any more, so hand them back to
-        // themselves rather than leaving them frozen for the rest of the scene.
         Pacci_FuseRelease();
         return;
     }
 
-    // Only in hand: this also runs every frame after the structure is set down.
     lit = Pacci_IsHoldingUltrahand() && (root == sUltrahand.held);
     for (u8 i = 0; i < sFuse.count; i++) {
         Actor* part = sFuse.parts[i].actor;
 
         if ((part == NULL) || (part->update == NULL)) {
-            // A dead part leaves the assembly, or its anchor stays alive and the count lies.
             if (part != NULL) {
                 Pacci_AnchorRelease(part);
                 sFuse.parts[i].actor = NULL;
             }
             continue;
         }
-        // Catches parts whose category updated before the root moved.
         Pacci_FusePlacePart(play, &sFuse.parts[i], root);
         if (lit) {
             Pacci_UhTintAdd(part);
@@ -2531,9 +2345,6 @@ void Pacci_FuseFollow(PlayState* play) {
     }
 }
 
-
-// An octahedron, not a cube: at bead size the silhouette is all you read, and eight
-// faces round off where six would show corners.
 static Vtx sFuseBeadVtx[] = {
     VTX(0, 1, 0, 0, 0, 0, 0, 0, 255),  VTX(0, -1, 0, 0, 0, 0, 0, 0, 255), VTX(1, 0, 0, 0, 0, 0, 0, 0, 255),
     VTX(-1, 0, 0, 0, 0, 0, 0, 0, 255), VTX(0, 0, 1, 0, 0, 0, 0, 0, 255),  VTX(0, 0, -1, 0, 0, 0, 0, 0, 255),
@@ -2545,21 +2356,18 @@ static Gfx sFuseBeadDL[] = {
     gsSP2Triangles(1, 3, 5, 0, 1, 4, 3, 0), gsSPEndDisplayList(),
 };
 
-// Floor switches: a held weight slides onto the plate. Only FLOOR_2/3 latch on a dynapoly press
-// (z_obj_switch.c:390-415). Generous range: an offer that keeps expiring never arrives.
 #define PACCI_PLACE_RANGE 140.0f
 
 static struct {
     u8 valid;
     Actor* sw;
-    Vec3f pos; // where the held actor's ORIGIN goes
+    Vec3f pos;
 } sPlacePv = { 0, NULL, { 0.0f, 0.0f, 0.0f } };
 
 u8 Pacci_PlaceOfferValid(void) {
     return sPlacePv.valid;
 }
 
-// What a floor switch pulls: a named list, since ACTOR_FLAG_CAN_PRESS_SWITCHES is on only two actors.
 static u8 Pacci_PlaceIsWeight(Actor* actor) {
     if (actor == NULL) {
         return 0;
@@ -2577,13 +2385,10 @@ static u8 Pacci_PlaceIsFloorSwitch(Actor* actor) {
     if ((actor == NULL) || (actor->update == NULL) || (actor->id != ACTOR_OBJ_SWITCH)) {
         return 0;
     }
-    // z_obj_switch.c:12-17: 0 FLOOR, 1 FLOOR_RUSTY, type = params & 7.
     type = actor->params & 7;
     return (type == 0) || (type == 1);
 }
 
-// The world Y of the TOP of a dynapoly actor's own collision bounds, or 0 with a 0 return if it
-// has none. Used to sit a body exactly on a floor switch's plate.
 static u8 Pacci_UhDynaTopY(PlayState* play, Actor* actor, f32* outY) {
     s32 i;
 
@@ -2602,7 +2407,6 @@ static u8 Pacci_UhDynaTopY(PlayState* play, Actor* actor, f32* outY) {
     return 0;
 }
 
-
 void Pacci_PlaceUpdatePreview(PlayState* play) {
     Actor* held = sUltrahand.held;
     PacciFuseBox box;
@@ -2614,8 +2418,6 @@ void Pacci_PlaceUpdatePreview(PlayState* play) {
     if ((play == NULL) || (held == NULL) || sUltrahand.dropping) {
         return;
     }
-    // The weld offer wins if there is one: gluing is the deliberate act, placing is the
-    // convenience, and one A press cannot mean both.
     if (sFusePv.valid) {
         return;
     }
@@ -2626,7 +2428,6 @@ void Pacci_PlaceUpdatePreview(PlayState* play) {
         return;
     }
 
-    // XZ from the body's centre: a block held high over a switch is still lined up with it.
     for (it = play->actorCtx.actorLists[ACTORCAT_SWITCH].head; it != NULL; it = it->next) {
         f32 dx;
         f32 dz;
@@ -2635,7 +2436,6 @@ void Pacci_PlaceUpdatePreview(PlayState* play) {
         if (!Pacci_PlaceIsFloorSwitch(it)) {
             continue;
         }
-        // From the anchor, not the body: once on the plate the body is always at zero distance.
         dx = it->world.pos.x - sUltrahand.anchorPos.x;
         dz = it->world.pos.z - sUltrahand.anchorPos.z;
         d = (dx * dx) + (dz * dz);
@@ -2648,15 +2448,12 @@ void Pacci_PlaceUpdatePreview(PlayState* play) {
         return;
     }
 
-    // Bottom face on the plate's collision top; the origin is not the plate top, and a ray from inside
-    // the plate would report the floor below.
     sPlacePv.pos.x = sPlacePv.sw->world.pos.x;
     sPlacePv.pos.z = sPlacePv.sw->world.pos.z;
     {
         f32 plateTop;
 
         if (Pacci_UhDynaTopY(play, sPlacePv.sw, &plateTop)) {
-            // Sunk a hair: resting exactly on a surface is decided by float rounding.
             sPlacePv.pos.y = plateTop - PACCI_PLACE_SINK + (held->world.pos.y - (box.center.y - box.half.y));
         } else {
             sPlacePv.pos.y = sPlacePv.sw->world.pos.y + (held->world.pos.y - (box.center.y - box.half.y));
@@ -2666,8 +2463,6 @@ void Pacci_PlaceUpdatePreview(PlayState* play) {
 }
 
 static void Pacci_FuseDrawBead(PlayState* play, Vec3f* pos, f32 scale, u8 pulsing) {
-    // Two passes: a soft halo with a brighter core inside it. One flat blob does not
-    // read as glowing, it reads as a green rock.
     f32 pulse = pulsing ? (0.85f + (0.15f * Math_SinS((s16)(play->gameplayFrames * 2200)))) : 1.0f;
 
     OPEN_DISPS(play->state.gfxCtx);
@@ -2676,8 +2471,7 @@ static void Pacci_FuseDrawBead(PlayState* play, Vec3f* pos, f32 scale, u8 pulsin
     gDPSetCombineLERP(POLY_XLU_DISP++, 0, 0, 0, PRIMITIVE, 0, 0, 0, PRIMITIVE, 0, 0, 0, PRIMITIVE, 0, 0, 0, PRIMITIVE);
     gSPClearGeometryMode(POLY_XLU_DISP++, G_LIGHTING | G_CULL_BACK);
 
-    // Halo. Components spelled out: MSVC hands a multi-value #define to a
-    // function-like macro as ONE argument, so a packed colour would not expand.
+    // Components spelled out: MSVC hands a multi-value #define to a function-like macro as one argument.
     Matrix_Translate(pos->x, pos->y, pos->z, MTXMODE_NEW);
     Matrix_Scale(scale * 1.9f * pulse, scale * 1.9f * pulse, scale * 1.9f * pulse, MTXMODE_APPLY);
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, PACCI_ZONAI_GLOW_R, PACCI_ZONAI_GLOW_G, PACCI_ZONAI_GLOW_B, 90);
@@ -2695,7 +2489,6 @@ static void Pacci_FuseDrawBead(PlayState* play, Vec3f* pos, f32 scale, u8 pulsin
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The colour filter has no green, so the Zonai mark is beads on the box corners.
 static void Pacci_FuseDrawBoxMarks(PlayState* play, Actor* actor) {
     PacciFuseBox box;
     Vec3f pts[PACCI_FUSE_PTS];
@@ -2707,13 +2500,12 @@ static void Pacci_FuseDrawBoxMarks(PlayState* play, Actor* actor) {
     if (!Pacci_FuseGetBox(play, actor, &box)) {
         return;
     }
-    n = Pacci_FuseBoxPoints(&box, 1, pts); // corners only: 8 marks, not the full 20
+    n = Pacci_FuseBoxPoints(&box, 1, pts);
     for (u8 i = 0; i < n; i++) {
         Pacci_FuseDrawBead(play, &pts[i], 3.0f, 0);
     }
 }
 
-// One bead per existing joint, plus a pulsing one on the weld being offered.
 void Pacci_FuseDrawPreview(PlayState* play) {
     Actor* root = sFuse.root;
 
@@ -2738,8 +2530,6 @@ void Pacci_FuseDrawPreview(PlayState* play) {
     if (sPlacePv.valid) {
         Vec3f mark = sPlacePv.pos;
 
-        // One bead where it will land and the body outlined, the same vocabulary the weld offer
-        // uses, so "A will do something here" reads the same way in all three cases.
         Pacci_FuseDrawBoxMarks(play, sUltrahand.held);
         if (sPlacePv.sw != NULL) {
             mark.y = sPlacePv.sw->world.pos.y;
@@ -2748,7 +2538,6 @@ void Pacci_FuseDrawPreview(PlayState* play) {
     }
 
     if (sFusePv.valid) {
-        // Both bodies outlined, then one bead per object and a dotted run between them.
         Pacci_FuseDrawBoxMarks(play, sUltrahand.held);
         Pacci_FuseDrawBoxMarks(play, sFusePv.target);
         Pacci_FuseDrawBead(play, &sFusePv.heldPt, 6.0f, 1);
@@ -2768,19 +2557,15 @@ void Pacci_FuseDrawPreview(PlayState* play) {
     }
 }
 
-
 #define PACCI_UH_VFX_POINTS 13
 #define PACCI_UH_GIZMO_SEGMENTS 20
 #define PACCI_UH_GIZMO_SHAFT_R 3.6f
 #define PACCI_UH_GIZMO_HEAD_R 10.5f
 #define PACCI_UH_GIZMO_RING_R 3.0f
-// Tether pulses, the Blender material colours, and a point light wide enough to reach floor and walls.
 #define PACCI_UH_LIGHT_R 55
 #define PACCI_UH_LIGHT_G 255
 #define PACCI_UH_LIGHT_B 160
 #define PACCI_UH_LIGHT_RADIUS 340
-
-// Solid primitives, 100 units along local +Y: scale by (r/100, len/100, r/100).
 
 static Vtx sPacciUhPrismVtx[] = {
     VTX(100, 0, 0, 0, 0, 0, 0, 0, 255),    VTX(71, 0, 71, 0, 0, 0, 0, 0, 255),
@@ -2854,7 +2639,6 @@ static void Pacci_UhGetStreamPoint(Vec3f* point, Vec3f* start, Vec3f* end, f32 t
     point->z = start->z + ((end->z - start->z) * t) + (sideZ * flutter * 3.8f);
 }
 
-// PRIMITIVE in every combiner slot: nothing binds a texture here, TEXEL0 would read a stale one.
 static void Pacci_UhSolidBegin(Gfx** gfxP) {
     Gfx* gfx = *gfxP;
 
@@ -2871,7 +2655,6 @@ static void Pacci_UhSolidEnd(Gfx** gfxP) {
     *gfxP = gfx;
 }
 
-// Draw one solid primitive spanning start -> end. Must sit between a Begin/End pair.
 static void Pacci_UhDrawSolid(PlayState* play, Gfx** gfxP, Gfx* dl, Vec3f* start, Vec3f* end, f32 radius, u8 r, u8 g,
                               u8 b, u8 alpha) {
     f32 dx = end->x - start->x;
@@ -2895,10 +2678,8 @@ static void Pacci_UhDrawSolid(PlayState* play, Gfx** gfxP, Gfx* dl, Vec3f* start
     *gfxP = gfx;
 }
 
-// A real point light, so Link and the floor catch the green spill.
 static LightInfo sUhLightInfo;
 static LightNode* sUhLightNode = NULL;
-// A scene change frees the light list; the scene tells a stale node apart.
 static s16 sUhLightScene = -1;
 
 static void Pacci_UhLightOff(PlayState* play) {
@@ -2912,8 +2693,6 @@ static void Pacci_UhLightOff(PlayState* play) {
 }
 
 static void Pacci_UhLightAt(PlayState* play, Vec3f* pos, f32 strength) {
-    // Breathes with the same period as the contact rings, so light and geometry pulse
-    // together instead of drifting in and out of phase with each other.
     f32 pulse = strength * (0.86f + (Math_SinS((s16)(play->gameplayFrames * 0x0500)) * 0.14f));
 
     Lights_PointNoGlowSetInfo(&sUhLightInfo, (s16)pos->x, (s16)pos->y, (s16)pos->z, (u8)(PACCI_UH_LIGHT_R * pulse),
@@ -2934,12 +2713,8 @@ static void Pacci_UhDrawFlowPass(PlayState* play, Gfx** gfxP, Vec3f* hand, Vec3f
 
         Pacci_UhGetStreamPoint(&points[i], hand, target, t, phase, play->gameplayFrames);
     }
-    // One Begin/End for the whole strand: twelve segments at three commands each instead of
-    // twelve full state changes.
     Pacci_UhSolidBegin(gfxP);
     for (i = 0; i < PACCI_UH_VFX_POINTS - 1; i++) {
-        // Fat in the middle, tapering to nothing at both ends, so the strand is born at the
-        // hand and dies into the object rather than being cut off flat.
         f32 edge = Math_SinS((s16)((i * 0x7FFF) / (PACCI_UH_VFX_POINTS - 2)));
 
         Pacci_UhDrawSolid(play, gfxP, sPacciUhPrismDL, &points[i], &points[i + 1], width * (0.55f + (edge * 0.45f)), r,
@@ -2975,7 +2750,6 @@ static void Pacci_UhDrawArrow(PlayState* play, Gfx** gfxP, Vec3f* center, Vec3f*
     Pacci_UhSolidEnd(gfxP);
 }
 
-// One Begin/End per ring: twenty segments cost twenty matrices, not twenty state changes.
 static void Pacci_UhDrawRotationRing(PlayState* play, Gfx** gfxP, Vec3f* center, f32 radius, s16 yaw, u8 vertical, u8 r,
                                      u8 g, u8 b) {
     Vec3f previous;
@@ -3018,7 +2792,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
     u16 buttons;
     u8 skip = 0;
 
-    // Armed is enough: the tether and the weld offer show before the mode is opened.
     if (!sUhMode.active && !sUhArmed) {
         Pacci_UhLightOff(play);
         return;
@@ -3029,20 +2802,15 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPSegment(POLY_XLU_DISP++, 0x08,
                (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, play->gameplayFrames * 2, 0x20, 0x40, 1,
-                                             play->gameplayFrames, play->gameplayFrames * -5, 0x10, 0x10, 2, 0, 1,
-                                             -8));
+                                             play->gameplayFrames, play->gameplayFrames * -5, 0x10, 0x10, 2, 0, 1, -8));
 
-    // One CLOSE_DISPS per OPEN_DISPS at the same brace level, so guards set a flag instead of returning.
     if ((held == NULL) || sUltrahand.dropping) {
-        // Nothing in hand: the tint is the whole selection feedback.
         Pacci_UhLightOff(play);
         skip = 1;
     } else if (!Pacci_FuseGetBox(play, held, &box)) {
         Pacci_UhLightOff(play);
         skip = 1;
     } else {
-        // Held: the object becomes a light source. Ramped in over the same frames the tether
-        // takes to reach it, so the room does not snap green on the grab frame.
         Pacci_UhLightAt(play, &box.center, CLAMP_MAX((f32)sUltrahand.vfxAge / 12.0f, 1.0f));
     }
 
@@ -3052,7 +2820,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
         {
             f32 reach = CLAMP_MAX((f32)sUltrahand.vfxAge / 9.0f, 1.0f);
 
-            // Halo, mid and core strands, widest first: layering is what makes a flat tube glow.
             Pacci_UhDrawFlowPass(play, &POLY_XLU_DISP, &hand, &box.center, reach, 0x2AAA, 5.0f, PACCI_UH_FLOW_HALO_R,
                                  PACCI_UH_FLOW_HALO_G, PACCI_UH_FLOW_HALO_B, 55);
             Pacci_UhDrawFlowPass(play, &POLY_XLU_DISP, &hand, &box.center, reach, 0x6AAA, 2.4f, PACCI_UH_FLOW_MID_R,
@@ -3061,7 +2828,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
                                  PACCI_UH_FLOW_CORE_G, PACCI_UH_FLOW_CORE_B, 255);
         }
 
-        // Handles only while their control is in use, and only in the mode that binds them.
         buttons = sUhMode.active ? play->state.input[0].cur.button : 0;
         forward.x = Math_SinS(player->actor.focus.rot.y);
         forward.y = 0.0f;
@@ -3073,7 +2839,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
         if (buttons & BTN_L) {
             f32 yawRadius = fmaxf(box.half.x, box.half.z) + 30.0f;
             f32 pitchRadius = fmaxf(box.half.y, box.half.z) + 30.0f;
-            // Blue follows left/right (yaw), red follows up/down (pitch).
             Pacci_UhDrawRotationRing(play, &POLY_XLU_DISP, &box.center, yawRadius, player->actor.focus.rot.y, 0, 40,
                                      135, 255);
             Pacci_UhDrawRotationRing(play, &POLY_XLU_DISP, &box.center, pitchRadius, player->actor.focus.rot.y, 1, 255,
@@ -3082,7 +2847,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
             f32 maxHalf = fmaxf(fmaxf(box.half.x, box.half.y), box.half.z);
             f32 start = maxHalf * 0.35f;
             f32 length = maxHalf + 72.0f;
-            // R owns the screen plane: red vertical, blue horizontal.
             Pacci_UhDrawArrow(play, &POLY_XLU_DISP, &box.center, &up, start, length, 255, 70, 50);
             Pacci_UhDrawArrow(play, &POLY_XLU_DISP, &box.center, &down, start, length, 255, 70, 50);
             Pacci_UhDrawArrow(play, &POLY_XLU_DISP, &box.center, &side, start, length, 45, 135, 255);
@@ -3093,7 +2857,6 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
             f32 maxHalf = fmaxf(fmaxf(box.half.x, box.half.y), box.half.z);
             f32 start = maxHalf * 0.35f;
             f32 length = maxHalf + 72.0f;
-            // Ground plane: red forward/back, blue right/left.
             Pacci_UhDrawArrow(play, &POLY_XLU_DISP, &box.center, &forward, start, length, 255, 70, 50);
             forward.x = -forward.x;
             forward.z = -forward.z;
@@ -3108,12 +2871,9 @@ void Pacci_UltrahandDrawVfx(PlayState* play, Player* player) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// DMG_FIRE (0x00020800) burns webs, lights torches and hurts enemies with no special case; our own
-// collider because those actors' fire colliders are AC-only or placed from the player.
-#define PACCI_UH_FIRE_DAMAGE 4  // two hearts, where the enemy's table defers to the toucher
-#define PACCI_UH_FIRE_EFFECT 1  // the fire slot in the vanilla damage-effect tables
-#define PACCI_UH_FIRE_PAD 12.0f // reach past the body's own surface, so it lights what it nears
-// A fire actor without collision reads as a 12-unit cube; this is the floor on its volume.
+#define PACCI_UH_FIRE_DAMAGE 4
+#define PACCI_UH_FIRE_EFFECT 1
+#define PACCI_UH_FIRE_PAD 12.0f
 #define PACCI_UH_FIRE_MIN_R 45.0f
 #define PACCI_UH_FIRE_MIN_H 90.0f
 
@@ -3121,12 +2881,9 @@ static ColliderCylinder sUhFireCol;
 static Actor* sUhFireOwner = NULL;
 
 static void Pacci_UhFireOff(void) {
-    // Collider_InitCylinder allocates nothing: dropping the owner stops the submission.
     sUhFireOwner = NULL;
 }
 
-// Red ice melts only for an En_Ice_Hono with params 0; the carried 0xFFFF flame sheds small ones,
-// which kill themselves after 44 frames.
 static void Pacci_UhIceTick(PlayState* play, Actor* actor) {
     if ((actor == NULL) || (actor->id != ACTOR_EN_ICE_HONO)) {
         return;
@@ -3138,8 +2895,6 @@ static void Pacci_UhIceTick(PlayState* play, Actor* actor) {
                 actor->shape.rot.y, 0, 0);
 }
 
-// Sitting Ruto rides on Link's back so his hands stay free to climb; the shield or the item
-// coming out again takes her off.
 static Actor* sBackRider = NULL;
 static ActorFunc sBackRiderUpdate = NULL;
 static u32 sBackRiderFlags = 0;
@@ -3149,8 +2904,6 @@ u8 Pacci_BackRiderActive(void) {
     return (sBackRider != NULL) ? 1 : 0;
 }
 
-// Hand her back to herself, wherever she currently is. She lands and sits back down on her own -
-// her update never stopped running, so nothing has to be restarted.
 void Pacci_BackRiderDrop(void) {
     Actor* rider = sBackRider;
 
@@ -3173,7 +2926,6 @@ static void Pacci_BackRiderPlace(Actor* rider, Player* player) {
     f32 cos = Math_CosS(player->actor.shape.rot.y);
     Vec3f torso = player->bodyPartsPos[PLAYER_BODYPART_TORSO];
 
-    // Placed from the torso body part, so she leans and turns with him.
     rider->world.pos.x = torso.x - (sin * PACCI_BACKRIDE_BEHIND);
     rider->world.pos.y = torso.y + PACCI_BACKRIDE_RISE;
     rider->world.pos.z = torso.z - (cos * PACCI_BACKRIDE_BEHIND);
@@ -3187,8 +2939,6 @@ static void Pacci_BackRiderPlace(Actor* rider, Player* player) {
     rider->velocity.z = 0.0f;
 }
 
-// Her own update still runs - she blinks, she talks, she offers the carry - and then she is put
-// back on the shield. Same shape as the held-object wrapper and for the same reasons.
 static void Pacci_BackRiderUpdate(Actor* thisx, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
@@ -3211,14 +2961,13 @@ static void Pacci_BackRiderTake(PlayState* play, Player* player, Actor* rider) {
     sBackRiderFlags = rider->flags;
     sBackRiderRoom = rider->room;
     rider->update = Pacci_BackRiderUpdate;
-    rider->room = -1; // she rides through doors with him
+    rider->room = -1;
     rider->flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
     Pacci_AnchorTake(rider);
     Pacci_BackRiderPlace(rider, player);
     Player_PlaySfx(rider, NA_SE_SY_GET_ITEM);
 }
 
-// Every frame, item in hand or not: the shield drops her, and death or a scene change forgets her.
 void Pacci_BackRiderTick(PlayState* play) {
     Player* player;
 
@@ -3236,8 +2985,6 @@ void Pacci_BackRiderTick(PlayState* play) {
     }
 }
 
-// A body set on a plate by the hand never ran the code that presses it, so the press is made here
-// and outlives the release until the body leaves the plate.
 static Actor* sPressBody = NULL;
 static Actor* sPressSwitch = NULL;
 
@@ -3246,13 +2993,12 @@ static void Pacci_PlacePressForget(void) {
     sPressSwitch = NULL;
 }
 
-// Remember that this body is sitting on this switch. Called once the magnet has finished arriving.
 static void Pacci_PlacePressSet(Actor* body, Actor* sw) {
     sPressBody = body;
     sPressSwitch = sw;
 }
 
-// Re-asserted every frame: the engine clears interactFlags each frame.
+// Re-asserted every frame: the engine clears interactFlags.
 void Pacci_PlacePressTick(PlayState* play) {
     DynaPolyActor* dyna;
     f32 dx;
@@ -3266,8 +3012,6 @@ void Pacci_PlacePressTick(PlayState* play) {
         Pacci_PlacePressForget();
         return;
     }
-    // Still over the plate? Measured in XZ against the switch, and in Y against the plate's own
-    // top: lifting the body off has to release the switch, and so does sliding it away.
     dx = sPressBody->world.pos.x - sPressSwitch->world.pos.x;
     dz = sPressBody->world.pos.z - sPressSwitch->world.pos.z;
     if (((dx * dx) + (dz * dz)) > (PACCI_PRESS_HOLD * PACCI_PRESS_HOLD)) {
@@ -3282,8 +3026,6 @@ void Pacci_PlacePressTick(PlayState* play) {
             return;
         }
     }
-    // The switch has to BE dynapoly for this to mean anything; it always is, but a cast to
-    // DynaPolyActor on the strength of an actor id is worth checking rather than assuming.
     dyna = DynaPoly_GetActor(&play->colCtx, ((DynaPolyActor*)sPressSwitch)->bgId);
     if ((dyna == NULL) || (&dyna->actor != sPressSwitch)) {
         Pacci_PlacePressForget();
@@ -3293,7 +3035,6 @@ void Pacci_PlacePressTick(PlayState* play) {
     DynaPolyActor_SetSwitchPressed(dyna);
 }
 
-// The jaw is a rotation (BgDodoago_Init, z_bg_dodoago.c:131-133) and its collision rides the SRT.
 static void Pacci_UhLockedPose(PlayState* play, Actor* actor) {
     const PacciUhTraitRow* row;
     s16 want;
@@ -3310,13 +3051,11 @@ static void Pacci_UhLockedPose(PlayState* play, Actor* actor) {
     want = open ? PACCI_UH_LOCKED_OPEN_X : 0;
     Math_SmoothStepToS(&actor->shape.rot.x, want, 4, 0x0400, 0x20);
 
-    // Open is the flag, the jaw and both eyes together (z_bg_dodoago.c:131-134).
     if (actor->id == ACTOR_BG_DODOAGO) {
         play->roomCtx.unk_74[0] = play->roomCtx.unk_74[1] = open ? 255 : 0;
     }
 }
 
-// The drawbridge's own animation brings its chains, timing and sounds; posing it would fight it.
 static void Pacci_UhHingeInput(Actor* actor, u8 edge) {
     BgSpot00Hanebasi* bridge;
     BgSpot00Hanebasi* chain;
@@ -3339,12 +3078,10 @@ static void Pacci_UhHingeInput(Actor* actor, u8 edge) {
         return;
     }
     bridge->destAngle = want;
-    chain->destAngle = (want != 0) ? -0xFE0 : 0; // the chain swings a fraction of the deck's arc
+    chain->destAngle = (want != 0) ? -0xFE0 : 0;
     bridge->actionFunc = BgSpot00Hanebasi_DrawbridgeRiseAndFall;
 }
 
-// D-pad on a HEIGHT body changes how BIG it is, because that is the only thing about it worth
-// changing. Same up/down gesture that raises and lowers anything else - it just grows instead.
 static void Pacci_UhHeightInput(Actor* actor, u8 edge) {
     EnSiofuki* spout;
 
@@ -3359,14 +3096,11 @@ static void Pacci_UhHeightInput(Actor* actor, u8 edge) {
     } else {
         return;
     }
-    // Clamped to something the spout can actually be. It smooth-steps currentHeight toward this,
-    // so the growing and shrinking is its own animation and not a jump.
     spout->targetHeight = CLAMP(spout->targetHeight, 0.0f, PACCI_SPOUT_HEIGHT_MAX);
-    Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
-// A LOCKED body's flag follows the D-pad: up is on, down is off.
 static void Pacci_UhLockedInput(PlayState* play, u8 edge) {
     Actor* actor = sUltrahand.held;
     const PacciUhTraitRow* row;
@@ -3375,7 +3109,7 @@ static void Pacci_UhLockedInput(PlayState* play, u8 edge) {
 
     if ((actor == NULL) || !(sUltrahand.traits & PACCI_UH_TRAIT_LOCKED) ||
         !(sUltrahand.traits & PACCI_UH_TRAIT_SETS_FLAG) || (sUltrahand.traits & PACCI_UH_TRAIT_HINGE)) {
-        return; // a hinge answers to its own animation, not to a flag
+        return;
     }
     if (edge & 1) {
         want = 1;
@@ -3398,11 +3132,9 @@ static void Pacci_UhLockedInput(PlayState* play, u8 edge) {
         Flags_UnsetSwitch(play, flag);
     }
     Audio_PlaySfxGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
-// Travel is measured from the grab, so only this carry counts; debounced on the flag itself, which
-// stays right across saves and reloads.
 static void Pacci_UhFlagTick(PlayState* play, Actor* actor) {
     const PacciUhTraitRow* row;
     f32 dy;
@@ -3438,7 +3170,6 @@ static void Pacci_UhFlagTick(PlayState* play, Actor* actor) {
         return;
     }
     flag = (actor->params >> row->pathShift) & row->pathMask;
-    // Params with bits outside the flag field mean the actor has no switch of its own.
     if ((sUltrahand.traits & PACCI_UH_TRAIT_FLAG_STRICT) && (actor->params != (s16)(flag << row->pathShift))) {
         return;
     }
@@ -3451,10 +3182,9 @@ static void Pacci_UhFlagTick(PlayState* play, Actor* actor) {
         Flags_UnsetSwitch(play, flag);
     }
     Audio_PlaySfxGeneral(want ? NA_SE_SY_GET_ITEM : NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
-// The body slides to the offered spot; measured from the anchor so walking away takes it back.
 static void Pacci_UhPlaceMagnet(Actor* actor) {
     Vec3f want;
     f32 blend;
@@ -3468,25 +3198,19 @@ static void Pacci_UhPlaceMagnet(Actor* actor) {
     if (blend <= 0.0f) {
         return;
     }
-    // sPlacePv.pos is stale by one frame - the preview runs after the carry - and that is fine at
-    // this speed. It is a fixed point in the world, not something that moves.
     want = sPlacePv.pos;
     actor->world.pos.x += (want.x - actor->world.pos.x) * blend;
     actor->world.pos.y += (want.y - actor->world.pos.y) * blend;
     actor->world.pos.z += (want.z - actor->world.pos.z) * blend;
 
-    // The slide is placement, not a throw: no inertia is handed to the release.
     sUltrahand.carryVel.x = 0.0f;
     sUltrahand.carryVel.y = 0.0f;
     sUltrahand.carryVel.z = 0.0f;
 
-    // Arrived on a switch: from here it is held down, and stays held after the release.
     if ((blend >= PACCI_PLACE_ARRIVED) && (sPlacePv.sw != NULL)) {
         Pacci_PlacePressSet(actor, sPlacePv.sw);
     }
 
-    // Squares up on the way in, so it arrives level instead of arriving and then jerking straight.
-    // A switch hands over its whole orientation; plain ground only takes the tilt out.
     if (blend > 0.5f) {
         s16 wantX = (sPlacePv.sw != NULL) ? sPlacePv.sw->shape.rot.x : 0;
         s16 wantY = (sPlacePv.sw != NULL) ? sPlacePv.sw->shape.rot.y : actor->shape.rot.y;
@@ -3515,7 +3239,6 @@ static void Pacci_UhFireTick(PlayState* play, Actor* actor) {
     cfg.dmgFlags = DMG_FIRE;
     cfg.damage = PACCI_UH_FIRE_DAMAGE;
     cfg.effect = PACCI_UH_FIRE_EFFECT;
-    // Radius from the diagonal, so a wide curtain seen corner-on burns whole.
     cfg.radius = sqrtf((box.half.x * box.half.x) + (box.half.z * box.half.z)) + PACCI_UH_FIRE_PAD;
     cfg.height = (box.half.y * 2.0f) + PACCI_UH_FIRE_PAD;
     if (cfg.radius < PACCI_UH_FIRE_MIN_R) {
@@ -3525,26 +3248,22 @@ static void Pacci_UhFireTick(PlayState* play, Actor* actor) {
         cfg.height = PACCI_UH_FIRE_MIN_H;
     }
 
-    // Re-armed whenever the body changes, because Collider_SetCylinder bakes the OWNER in and the
-    // game needs to attribute the burn to the flame rather than to whatever we held last.
+    // Collider_SetCylinder bakes the owner in, so the collider is re-armed whenever the body changes.
     if (sUhFireOwner != actor) {
         Combat_InitCylinder(play, &sUhFireCol, actor, &cfg);
         sUhFireOwner = actor;
     }
-    // A cylinder is positioned by its BASE, not its centre.
     pos.x = box.center.x;
     pos.y = box.center.y - box.half.y - (PACCI_UH_FIRE_PAD * 0.5f);
     pos.z = box.center.z;
     Combat_UpdateCylinder(&sUhFireCol, &pos, &cfg);
     Combat_RegisterCollider(play, &sUhFireCol);
-    // AT_HIT has to be cleared by hand or the collider counts as spent and stops registering
-    // hits - item_spinner.c:50-55 does the same, and for the same reason.
+    // AT_HIT must be cleared by hand or the collider counts as spent and stops registering hits.
     if (Combat_CheckHit(&sUhFireCol)) {
         sUhFireCol.base.atFlags &= ~AT_HIT;
     }
 }
 
-// Our own root and parts are live dynapoly while falling; a probe from one would hit the others.
 static u8 Pacci_UhIsOwnBody(PlayState* play, s32 bgId) {
     DynaPolyActor* dyna = DynaPoly_GetActor(&play->colCtx, bgId);
     Actor* hitActor;
@@ -3564,8 +3283,6 @@ static u8 Pacci_UhIsOwnBody(PlayState* play, s32 bgId) {
     return 0;
 }
 
-// Where the footprint lands: the engine's bg check reads one point at the origin. The probe starts
-// below the box, since our own falling surface would stop a ray from inside it.
 static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY) {
     static const f32 sProbeX[5] = { -1.0f, 1.0f, -1.0f, 1.0f, 0.0f };
     static const f32 sProbeZ[5] = { -1.0f, -1.0f, 1.0f, 1.0f, 0.0f };
@@ -3589,8 +3306,6 @@ static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY) {
     sin = Math_SinS(box.yaw);
     cos = Math_CosS(box.yaw);
 
-    // Four bottom corners and the centre. Five probes catch an edge hanging over a drop
-    // without turning every falling frame into a raycast storm.
     for (i = 0; i < 5; i++) {
         f32 lx = sProbeX[i] * box.half.x;
         f32 lz = sProbeZ[i] * box.half.z;
@@ -3602,7 +3317,6 @@ static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY) {
         to.z = from.z;
         to.y = bottom - PACCI_UH_GROUND_PROBE;
 
-        // Steps past our own pieces: the first hit under the root is often a part glued below it.
         for (u8 attempt = 0; attempt < 5; attempt++) {
             if (!BgCheck_ProjectileLineTest(&play->colCtx, &from, &to, &hit, &poly, true, true, true, true, &bgId)) {
                 break;
@@ -3614,8 +3328,6 @@ static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY) {
                 }
                 continue;
             }
-            // HIGHEST hit wins: that is the surface the body comes to rest on first, and it is
-            // why a structure straddling a step ends up on the step and not through it.
             if (!found || (hit.y > best)) {
                 best = hit.y;
                 found = 1;
@@ -3626,12 +3338,10 @@ static u8 Pacci_UhGroundUnder(PlayState* play, Actor* actor, f32* outY) {
     if (!found) {
         return 0;
     }
-    // Floor-under-the-box -> where the ORIGIN goes, since the origin is not the box bottom.
     *outY = best + (actor->world.pos.y - bottom);
     return 1;
 }
 
-// Every part is asked and the highest implied root Y wins: the first piece to touch down stops it.
 static u8 Pacci_UhAssemblyGround(PlayState* play, Actor* root, f32* outY) {
     f32 best = 0.0f;
     u8 found = 0;
@@ -3651,8 +3361,6 @@ static u8 Pacci_UhAssemblyGround(PlayState* play, Actor* root, f32* outY) {
             if (!Pacci_UhGroundUnder(play, part, &y)) {
                 continue;
             }
-            // y is where THAT PIECE'S origin would rest. The root sits a fixed distance from it,
-            // so the same landing expressed in the root's terms is y plus that distance.
             y += root->world.pos.y - part->world.pos.y;
             if (!found || (y > best)) {
                 best = y;
@@ -3667,7 +3375,6 @@ static u8 Pacci_UhAssemblyGround(PlayState* play, Actor* root, f32* outY) {
     return 1;
 }
 
-// A recipe, not geometry: the merged header is overwritten by the next weld.
 typedef struct {
     s16 actorId;
     s16 params;
@@ -3678,7 +3385,6 @@ typedef struct {
 static struct {
     u8 used;
     u8 count;
-    // Actors need their object loaded, and the object bank is per scene.
     s16 scene;
     PacciBlueprintPiece piece[PACCI_FUSE_MAX_PARTS + 1];
 } sBlueprint = { 0 };
@@ -3688,8 +3394,8 @@ u8 Pacci_BlueprintStored(void) {
 }
 
 static void Pacci_BlueprintDeny(void) {
-    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
 u8 Pacci_BlueprintSave(PlayState* play) {
@@ -3703,7 +3409,6 @@ u8 Pacci_BlueprintSave(PlayState* play) {
         Pacci_BlueprintDeny();
         return 0;
     }
-    // Dynapoly only: a piece without collision would come back as something you fall through.
     if (!Pacci_FuseGetBox(play, root, &box) || !box.dyna) {
         Pacci_BlueprintDeny();
         return 0;
@@ -3721,8 +3426,6 @@ u8 Pacci_BlueprintSave(PlayState* play) {
         }
     }
 
-    // Validated in full before anything is written or killed: a half-stored structure with
-    // half its pieces deleted is not something the player can undo.
     sBlueprint.piece[0].actorId = root->id;
     sBlueprint.piece[0].params = root->params;
     sBlueprint.piece[0].offset.x = 0.0f;
@@ -3756,7 +3459,7 @@ u8 Pacci_BlueprintSave(PlayState* play) {
     sBlueprint.count = n;
     sBlueprint.scene = play->sceneNum;
     Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     return 1;
 }
 
@@ -3776,13 +3479,11 @@ u8 Pacci_BlueprintSummon(PlayState* play, Player* player) {
         Pacci_BlueprintDeny();
         return 0;
     }
-    // Magic LAST among the checks and before the first spawn: charging for a summon that
-    // then fails to build is the one outcome with no way back.
     if (!Magic_RequestChange(play, PACCI_UH_SUMMON_COST, MAGIC_CONSUME_NOW)) {
         Pacci_BlueprintDeny();
         return 0;
     }
-    // The spend is already done; without this the meter keeps flashing and blocks every other spell.
+    // Without this the magic meter keeps flashing and blocks every other spell.
     Magic_Reset(play);
 
     base.x = player->actor.world.pos.x + (sin * PACCI_UH_DIST_MIN);
@@ -3801,8 +3502,6 @@ u8 Pacci_BlueprintSummon(PlayState* play, Player* player) {
         }
         built++;
     }
-    // The actor pool can refuse. Roll the whole thing back rather than leave a half-built
-    // structure standing in front of the player with the magic already spent.
     if (built != sBlueprint.count) {
         for (i = 0; i < built; i++) {
             Actor_Kill(spawned[i]);
@@ -3820,8 +3519,7 @@ u8 Pacci_BlueprintSummon(PlayState* play, Player* player) {
     return 1;
 }
 
-#define PACCI_UH_ROT_SNAP 0x2000 // 45 degrees per press, TotK-style snapping
-// Movement is continuous while held; rotation snaps once per press.
+#define PACCI_UH_ROT_SNAP 0x2000
 #define PACCI_UH_MOVE_RATE 6.0f
 #define PACCI_UH_DIST_RATE 8.0f
 #define PACCI_UH_SIDE_MIN -120.0f
@@ -3841,12 +3539,11 @@ void Pacci_UltrahandModeEnter(PlayState* play, Player* player) {
     sUhMode.summonHold = 0;
     sUhHighlightTarget = NULL;
     Audio_PlaySfxGeneral(NA_SE_SY_GET_ITEM, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 void Pacci_UltrahandModeExit(PlayState* play) {
     if (sUltrahand.held != NULL) {
-        // The per-frame update keeps running, so the drop finishes after the mode is gone.
         Pacci_UltrahandBeginDrop();
     }
     Pacci_UhTintClear();
@@ -3856,8 +3553,8 @@ void Pacci_UltrahandModeExit(PlayState* play) {
     sUhMode.prevDpad = 0;
     sUhMode.summonHold = 0;
     sUhHighlightTarget = NULL;
-    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_SY_CANCEL, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
 u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
@@ -3875,10 +3572,8 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
     input = &play->state.input[0];
     cur = input->cur.button;
 
-    // The tint table is wiped first; the draw runs after the whole update.
     Pacci_UhTintClear();
 
-    // Hauling owns the frame; B or A lets go.
     if (Pacci_PullActive()) {
         u8 pullPad = 0;
 
@@ -3904,14 +3599,11 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
         return 1;
     }
 
-    // L + R + A stores the structure. Tested BEFORE the plain A branch below, which would
-    // otherwise weld or drop on the same press and there would be nothing left to store.
     if (CHECK_BTN_ALL(input->press.button, BTN_A) && (cur & BTN_L) && (cur & BTN_R)) {
         Pacci_BlueprintSave(play);
         return 1;
     }
 
-    // Holding C rebuilds the stored structure: tap opens the mode, keep holding to summon.
     if (cur & (BTN_CUP | BTN_CDOWN | BTN_CLEFT | BTN_CRIGHT)) {
         if (sUhMode.summonHold < PACCI_UH_SUMMON_HOLD) {
             sUhMode.summonHold++;
@@ -3923,14 +3615,11 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
         sUhMode.summonHold = 0;
     }
 
-    // A welds what is offered, else drops, else grabs: welding first lets pieces be added without letting go.
     if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
         if (Pacci_IsHoldingUltrahand()) {
-            // A live bomb is lit by the attach button instead of welded.
             if (Pacci_UhBombDetonate(play)) {
                 Pacci_UltrahandModeExit(play);
             } else if (!Pacci_FuseTryAttach(play)) {
-                // A release ends the mode: with nothing in hand there is nothing for it to control.
                 Pacci_UltrahandModeExit(play);
             }
         } else {
@@ -3939,8 +3628,7 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
         return 1;
     }
 
-    // D-pad edges, detected here rather than read from press.button: the player
-    // actor consumes those bits for its own item handling before this runs.
+    // D-pad edges are detected here: the player actor consumes press.button bits before this runs.
     dpad = 0;
     if (cur & BTN_DUP) {
         dpad |= 1;
@@ -3957,18 +3645,14 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
     edge = dpad & ~sUhMode.prevDpad;
     sUhMode.prevDpad = dpad;
 
-    // A locked body answers the pad instead of moving, and answers only edges - a held D-up is one
-    // instruction, not sixty.
     Pacci_UhLockedInput(play, edge);
     Pacci_UhHeightInput(sUltrahand.held, edge);
     Pacci_UhHingeInput(sUltrahand.held, edge);
 
-    // Runs on any pad STATE, not just an edge: continuous moves need every frame.
     if (Pacci_IsHoldingUltrahand() && (dpad != 0)) {
         withL = (cur & BTN_L) ? 1 : 0;
         withR = (cur & BTN_R) ? 1 : 0;
 
-        // Pad alone pushes and slides, L rotates in 45-degree snaps, R raises and slides.
         if (withL) {
             if (edge & 8) {
                 sUltrahand.baseRot.y += PACCI_UH_ROT_SNAP;
@@ -4015,19 +3699,16 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
             }
             sUhMode.sideOff = CLAMP(sUhMode.sideOff, PACCI_UH_SIDE_MIN, PACCI_UH_SIDE_MAX);
         }
-        // Only the snapped rotations click; a continuous move would machine-gun it.
         if (withL && (edge & 15)) {
             Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                                   &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                                 &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         }
     }
 
-    // Z puts the orientation back to however the object was sitting when you grabbed it —
-    // TotK's ZL. Untangling a piece you have over-rotated is otherwise seven more presses.
     if (Pacci_IsHoldingUltrahand() && CHECK_BTN_ALL(input->press.button, BTN_Z)) {
         sUltrahand.baseRot = sUltrahand.grabRot;
         Audio_PlaySfxGeneral(NA_SE_SY_CURSOR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }
 
     if (!Pacci_IsHoldingUltrahand()) {
@@ -4035,25 +3716,20 @@ u8 Pacci_UltrahandModeUpdate(PlayState* play, Player* player) {
     }
 
     Pacci_UpdateUltrahand(play, player);
-    // Strict order: the carry moves the root, the formation follows it, and only then
-    // is it meaningful to ask where a new weld would land.
     Pacci_FuseFollow(play);
     Pacci_FuseUpdatePreview(play, player);
-    Pacci_PlaceUpdatePreview(play); // after the weld preview, which outranks it
+    Pacci_PlaceUpdatePreview(play);
     return 1;
 }
 
-
-// Putting the hand away drops what it carries; the fall keeps running from the per-frame ticks.
 void Pacci_DropUltrahand(void) {
     if (sUltrahand.held != NULL) {
         Pacci_UltrahandBeginDrop();
     }
 }
 
-// Full reset for a new file or scene teardown; unequip only lets go.
 void Pacci_ReleaseAll(PlayState* play) {
-    Pacci_UhTintClear(); // borrowed draw pointers must not outlive the subsystem
+    Pacci_UhTintClear();
     Pacci_UhFireOff();
     Pacci_PlacePressForget();
     Pacci_BackRiderDrop();
@@ -4067,7 +3743,6 @@ void Pacci_ReleaseAll(PlayState* play) {
     Pacci_DropUltrahand();
 }
 
-// A hit or a void-out drops the body; a scene change hands every borrowed update and draw back first.
 void Pacci_UhAbortTick(PlayState* play) {
     Player* player;
     u8 busy;
@@ -4088,10 +3763,9 @@ void Pacci_UhAbortTick(PlayState* play) {
     }
     player = GET_PLAYER(play);
     if ((player != NULL) && (player->stateFlags1 & (PLAYER_STATE1_DAMAGED | PLAYER_STATE1_DEAD))) {
-        Pacci_UltrahandModeExit(play); // drops what is held on the way out
+        Pacci_UltrahandModeExit(play);
     }
 }
-
 
 #define UH_KEY "nei.ultrahand"
 #define UH_MOD "ultrahand"
@@ -4103,7 +3777,6 @@ void Pacci_UhAbortTick(PlayState* play) {
 #define UH_REACH_PITCH 0x1800
 #define UH_GIVE_SCALE 0.17f
 #define UH_TEXT_SIZE 192
-// While the mode is up it owns these: A grabs, B leaves, R and the pad move what is held.
 #define UH_MODE_BUTTONS (BTN_A | BTN_B | BTN_R | BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT)
 
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/gItemIconUltrahandTex";
@@ -4126,7 +3799,6 @@ static const SOHModRandoOption sPiecesOption = {
     SOH_MOD_RANDO_WIDGET_SLIDER,
 };
 
-// One copy in the pool plus the option's index: the slider's "1" is index 0.
 static const SOHCustomItemRandomizer sUltrahandLogic = {
     .structSize = sizeof(SOHCustomItemRandomizer),
     .flags = SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
@@ -4171,20 +3843,22 @@ static bool IsAssembled(void) {
 
 static void RefreshTexts(void) {
     u8 required = RequiredPieces();
-    // The host opens the get-item textbox before onReceive increments the stored count.
     u8 incoming = MIN(sPieces + 1, UH_MAX_PIECES);
     if (incoming >= required) {
         snprintf(sGetItemText, UH_TEXT_SIZE,
-                 "The %%rUltrahand%%w is whole again!^Press %%y\xA1%%w to reach out: %%y\x9F%%w grabs&and %%y\xA0%%w lets go.");
+                 "The %%rUltrahand%%w is whole again!^Press %%y\xA1%%w to reach out: %%y\x9F%%w grabs&and %%y\xA0%%w "
+                 "lets go.");
     } else {
-        snprintf(sGetItemText, UH_TEXT_SIZE,
-                 "You got a piece of the&%%rUltrahand%%w! %u of %u found.", incoming, required);
+        snprintf(sGetItemText, UH_TEXT_SIZE, "You got a piece of the&%%rUltrahand%%w! %u of %u found.", incoming,
+                 required);
     }
     if (IsAssembled()) {
         snprintf(sPauseText, UH_TEXT_SIZE,
-                 "%%rUltrahand&%%w%%y\xA1%%w reaches, %%y\x9F%%w grabs, %%y\xA0%%w lets go.&D-pad moves, %%y\xA2%%w turns, %%y\xA3%%w raises.");
+                 "%%rUltrahand&%%w%%y\xA1%%w reaches, %%y\x9F%%w grabs, %%y\xA0%%w lets go.&D-pad moves, %%y\xA2%%w "
+                 "turns, %%y\xA3%%w raises.");
     } else {
-        snprintf(sPauseText, UH_TEXT_SIZE,"%%rUltrahand&%%w%u of %u pieces found.&It stirs only once it is whole.",sPieces,required);
+        snprintf(sPauseText, UH_TEXT_SIZE, "%%rUltrahand&%%w%u of %u pieces found.&It stirs only once it is whole.",
+                 sPieces, required);
     }
     Z64Items_UpdateText(sApi, UH_KEY, SOH_ITEM_TEXT_GET_ITEM, sGetItemText);
     Z64Items_UpdateText(sApi, UH_KEY, SOH_ITEM_TEXT_PAUSE, sPauseText);
@@ -4210,11 +3884,9 @@ static bool CanUseUltrahand(Player* player, PlayState* play) {
 static void TakeOutUltrahand(PlayState* play, Player* player) {
     sIsInHand = true;
     sIsReachPoseHeld = false;
-    // The press that brought the hand out is not the one that opens the mode.
     sIsWaitingForRelease = true;
 }
 
-// The press is read raw each frame in UpdateUltrahandWorld; here it only has to be consumed.
 static void PressUltrahand(Player* player, PlayState* play) {
 }
 
@@ -4228,7 +3900,6 @@ static void PutUltrahandAway(Player* player, PlayState* play) {
     sIsReachPoseHeld = false;
 }
 
-// The arm stays out toward what the hand would take, its pitch following the aim; the legs are left alone.
 static int32_t HoldReachPose(Player* player, PlayState* play) {
     if (!sIsInHand) {
         sIsReachPoseHeld = false;
@@ -4295,8 +3966,6 @@ static void UpdateHandInUse(PlayState* play, Player* player) {
     }
 }
 
-// The hand first, then the ticks that outlive it: a fall, a pressed switch, a rider or a throw keeps going
-// with the hand put away.
 static void UpdateUltrahandWorld(void) {
     PlayState* play = gPlayState;
     Player* player = play == NULL ? NULL : GET_PLAYER(play);
@@ -4324,7 +3993,6 @@ static void DrawUltrahandEffects(Actor* actor, PlayState* play) {
     Pacci_FuseDrawPreview(play);
 }
 
-// A heavy block is thrown by its own state machine, which freezes Link as if he were holding it overhead.
 static void KeepLinkFreeDuringThrow(bool* should, va_list args) {
     if (Pacci_IsThrowing()) {
         *should = false;
@@ -4357,7 +4025,7 @@ SOH_MOD_EXPORT void ModInit(void) {
         return;
     }
     sHasPiecesOption = SOH_MOD_API_HAS(sApi, RegisterRandoOption) && SOH_MOD_API_HAS(sApi, GetRandoOption) &&
-                      sApi->RegisterRandoOption(&sPiecesOption);
+                       sApi->RegisterRandoOption(&sPiecesOption);
     if (SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
         SOHModMenuWidget widget = { 0 };
         widget.structSize = sizeof(widget);
@@ -4376,7 +4044,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOHCustomItemDefinition hand = Z64Items_Define(UH_KEY, sIconTex, sNameTex);
 
     Z64Items_SetButtons(&hand, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
-    // Shares the Sheikah Slate's cell, after it.
     Z64Items_SetPlacement(&hand, 0, 15, -1);
     Z64Items_SetCanUse(&hand, CanUseUltrahand);
     Z64Items_SetAction(&hand, TakeOutUltrahand, HoldReachPose);

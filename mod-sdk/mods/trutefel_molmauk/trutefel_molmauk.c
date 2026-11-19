@@ -1,5 +1,5 @@
-// Molmauk (formerly Hammergeist), a brute with an ice hammer and a fire hammer.
-// Model @syeo501, code @trueffel; ported from NEI as a custom enemy the enemy randomizer can pick.
+// Molmauk, a brute with an ice hammer and a fire hammer.
+// Model @syeo501, code @trueffel.
 
 #include "soh/ModApi/ModApi.h"
 
@@ -260,7 +260,6 @@ static void EnMolmauk_ChangeAnimation(EnMolmauk* this, s32 index) {
     Animation_ChangeByInfo(&this->skelAnime, sAnimationInfo, index);
 }
 
-// Flickers between two textures every 16 frames so an infused hammer does not look static.
 static s16 EnMolmauk_GetHammerLook(s16 look, bool isInfused, PlayState* play) {
     if (!isInfused) {
         return MOLMAUK_HAMMER_PLAIN;
@@ -284,7 +283,6 @@ static void EnMolmauk_UpdateHammerColliders(EnMolmauk* this) {
     EnMolmauk_SetHammerToucher(&this->hammerLeftCollider, this->leftHammerInfused, 2, DMG_MAGIC_ICE);
     EnMolmauk_SetHammerToucher(&this->hammerRightCollider, this->rightHammerInfused, 1, DMG_MAGIC_FIRE);
 
-    // Two hearts, four when both elements go off together.
     this->explosionColliderItems[0].info.toucher.damage =
         (this->leftHammerInfused && this->rightHammerInfused) ? 0x40 : 0x20;
 }
@@ -348,7 +346,6 @@ static bool EnMolmauk_IsWalkPause(f32 frame) {
     return (frame >= 10.0f && frame <= 20.0f) || (frame >= 38.0f && frame <= 45.0f);
 }
 
-// Two heavy steps per walk cycle: it halts and stomps on each, and only closes in between them.
 static void EnMolmauk_WalkToPlayer(EnMolmauk* this) {
     if (this->actor.xzDistToPlayer <= MOLMAUK_STAND_RANGE) {
         EnMolmauk_EnsureAnimation(this, MOLMAUK_ANIMATION_IDLE);
@@ -374,7 +371,6 @@ static void EnMolmauk_Damage(EnMolmauk* this, PlayState* play) {
     if (!SkelAnime_Update(&this->skelAnime) || DECR(this->genericAnimationTimer) != 0) {
         return;
     }
-    // One revenge swing at most, so a player trading hits is not locked in a slam loop.
     if (Rand_ZeroOne() < 0.4f && !this->noHitAgain) {
         this->noHitAgain = true;
         if (play->gameplayFrames % 2 == 0) {
@@ -395,8 +391,8 @@ static void EnMolmauk_SetupDamage(EnMolmauk* this, PlayState* play) {
     this->faceIndex = MOLMAUK_FACE_NORMAL;
     Actor_SetColorFilter(&this->actor, COLORFILTER_RED, 255, COLORFILTER_OPA, 8);
     Actor_ApplyDamage(&this->actor);
-    Audio_PlaySfxGeneral(NA_SE_EN_STALKID_DAMAGE, &this->actor.world.pos, 4, &sDamagePitch,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(NA_SE_EN_STALKID_DAMAGE, &this->actor.world.pos, 4, &sDamagePitch, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
     EnMolmauk_ChangeAnimation(this, MOLMAUK_ANIMATION_DAMAGE);
     EnMolmauk_SetupAction(this, EnMolmauk_Damage);
 }
@@ -411,7 +407,6 @@ static void EnMolmauk_SetupStunned(EnMolmauk* this, PlayState* play) {
     EnMolmauk_SetupAction(this, EnMolmauk_Stunned);
 }
 
-// Only called in the windows where Molmauk is open to attack; the rest of the time its guard is up.
 static void EnMolmauk_CheckDamage(EnMolmauk* this, PlayState* play) {
     if (this->collider.base.acFlags & AC_HIT) {
         this->collider.base.acFlags &= ~AC_HIT;
@@ -488,7 +483,6 @@ static void EnMolmauk_Flex(EnMolmauk* this, PlayState* play) {
     }
 }
 
-// Flexing leaves it open to attack.
 static void EnMolmauk_SetupFlex(EnMolmauk* this, PlayState* play) {
     static f32 sFlexPitch = 0.7f;
 
@@ -496,7 +490,7 @@ static void EnMolmauk_SetupFlex(EnMolmauk* this, PlayState* play) {
     this->genericAnimationTimer = 10;
     this->faceIndex = MOLMAUK_FACE_LAUGH;
     Audio_PlaySfxGeneral(NA_SE_EN_FANTOM_VOICE, &this->actor.world.pos, 4, &sFlexPitch, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
     EnMolmauk_ChangeAnimation(this, MOLMAUK_ANIMATION_FLEX);
     EnMolmauk_SetupAction(this, EnMolmauk_Flex);
 }
@@ -577,7 +571,6 @@ static void EnMolmauk_Infuse(EnMolmauk* this, PlayState* play) {
     } else if (frame == 37.0f) {
         Vec3f icePos = this->hammerLeftCollider.dim.pos;
 
-        // The ice shards read better from above the hammer head.
         icePos.y += 70.0f;
         this->leftHammerInfused = true;
         EnMolmauk_BurstIce(this, play, &icePos);
@@ -598,13 +591,14 @@ static void EnMolmauk_SetupInfuse(EnMolmauk* this, PlayState* play) {
 static void EnMolmauk_ShakeGround(EnMolmauk* this, PlayState* play) {
     EnMolmauk_DefuseHammers(this, play);
     Audio_PlaySfxGeneral(NA_SE_EV_WALL_BROKEN, &GET_PLAYER(play)->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     for (s32 i = 0; i < 10; i++) {
         Actor_SpawnFloorDustRing(play, &this->actor, &this->actor.world.pos, i * 100.0f, 4, 4.0f, i * 500, i * 110,
                                  true);
     }
     if (this->actor.xzDistToPlayer < MOLMAUK_SHOCKWAVE_RANGE) {
-        Actor_SetPlayerKnockbackLarge(play, &this->actor, 20.0f, (s16)(GET_PLAYER(play)->actor.world.rot.y + 0x8000), 10.0f, 0x30);
+        Actor_SetPlayerKnockbackLarge(play, &this->actor, 20.0f, (s16)(GET_PLAYER(play)->actor.world.rot.y + 0x8000),
+                                      10.0f, 0x30);
     }
 }
 
@@ -616,7 +610,6 @@ static void EnMolmauk_HeavySlam(EnMolmauk* this, PlayState* play) {
             return;
         }
     }
-    // A hit just before the hammers land cancels the slam.
     if (this->skelAnime.curFrame >= 38.0f && this->skelAnime.curFrame <= 45.0f) {
         EnMolmauk_CheckDamage(this, play);
         if (this->actionFunc != EnMolmauk_HeavySlam) {
@@ -645,7 +638,6 @@ static void EnMolmauk_SetPlayerAblaze(Player* player) {
     player->bodyIsBurning = true;
 }
 
-// Shared by both one-handed slams; returns false once the slam has handed over to another action.
 static bool EnMolmauk_UpdateSlam(EnMolmauk* this, PlayState* play) {
     if (SkelAnime_Update(&this->skelAnime)) {
         this->faceIndex = MOLMAUK_FACE_NORMAL;
@@ -752,8 +744,8 @@ static void EnMolmauk_ApproachPlayer(EnMolmauk* this, PlayState* play) {
         EnMolmauk_SetupInfuse(this, play);
         return;
     }
-    if (this->actor.xzDistToPlayer < MOLMAUK_EXPLOSION_MAX_RANGE &&
-        this->actor.xzDistToPlayer > MOLMAUK_EXPLOSION_MIN_RANGE &&
+    if (this->actor.xzDistToPlayer<MOLMAUK_EXPLOSION_MAX_RANGE&& this->actor.xzDistToPlayer>
+            MOLMAUK_EXPLOSION_MIN_RANGE &&
         EnMolmauk_RollAttack(&this->explosionTimer, 20, 0.3f)) {
         EnMolmauk_SetupExplosion(this, play);
         return;
@@ -845,7 +837,6 @@ static void EnMolmauk_PlaceHammer(ColliderCylinder* hammer, Vec3f* auraPos, MtxF
     auraPos->z = mtx->zw;
 }
 
-// The auras are spawned on every limb, as the original did; fewer made the infused hammers look dim.
 static void EnMolmauk_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx, Gfx** gfx) {
     static Vec3f sFireAuraPos;
     static Vec3f sIceAuraPos;
@@ -907,7 +898,6 @@ static s32 EnMolmauk_GetFlamePart(s32 limbIndex) {
     }
 }
 
-// Same flame placement as the ReDead: a point 300 units along each burning limb.
 static void EnMolmauk_DeadPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx,
                                        Gfx** gfx) {
     EnMolmauk* this = (EnMolmauk*)thisx;
@@ -986,7 +976,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.destroy = EnMolmauk_Destroy;
     definition.update = EnMolmauk_Update;
     definition.draw = EnMolmauk_Draw;
-    // Sixteen hit points behind a guard that only drops between swings: too slow a fight for a timed room.
     definition.enemyFlags = SOH_ACTOR_ENEMY | SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS;
     definition.naviHint = "Molmauk&%cWatch out for its %whammers%c!&Strike when it drops its guard!%w";
 

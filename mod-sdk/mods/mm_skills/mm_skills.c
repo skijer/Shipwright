@@ -1,7 +1,3 @@
-/**
- * Shuffle Speak for Majora's Mask forms in Ocarina of Time: a form speaks its own language without its
- * Jabber Nut. Mod behaviours run after Ship's own VB_SPEAK, so they may reopen a talk Ship just refused.
- */
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -74,7 +70,6 @@ static void SpeakNatively(bool* should, va_list args) {
     }
 }
 
-// The vanilla result is "a business scrub stands within 130 units", which Ship's refusal hides.
 static bool IsBusinessScrubNearby(void) {
     for (Actor* actor = gPlayState->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
         if (actor->id == ACTOR_EN_DNS && actor->xzDistToPlayer < 130.0f) {

@@ -19,7 +19,6 @@ typedef struct MagicSoul {
     f32 flashIntensity;
 } MagicSoul; // size = 0x0164
 
-// SOH doesn't have gSaveContext.fairyTimer - use a file-static instead
 static s16 sw97FairyTimer = 0;
 
 #define THIS ((MagicSoul*)thisx)
@@ -64,7 +63,6 @@ void Sw97_MagicSoul_Init(Actor* thisx, PlayState* play) {
 }
 
 void Sw97_MagicSoul_Destroy(Actor* thisx, PlayState* play) {
-    // Fairy mode owns the camera and the magic meter once it has taken over.
     if (!Sw97_IsFairyModeActive()) {
         Camera_RequestSetting(Play_GetCamera(play, CAM_ID_MAIN), CAM_SET_NORMAL0);
         func_800876C8(play);
@@ -133,7 +131,7 @@ void Sw97_MagicSoul_OrbUpdate(Actor* thisx, PlayState* play) {
     MagicSoul* this = THIS;
     s32 pad;
     Player* player = PLAYER;
-    player->stateFlags2 |= 0x100000; // keep navi out
+    player->stateFlags2 |= 0x100000;
 
     Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_MAGIC_SOUL_BALL - SFX_FLAG);
     if (this->timer < 35) {
@@ -154,7 +152,7 @@ void Sw97_MagicSoul_OrbUpdate(Actor* thisx, PlayState* play) {
         this->timer = 0;
         this->primAlpha = 0;
 
-        player->stateFlags1 &= ~0x30000000; // unfreeze actors
+        player->stateFlags1 &= ~0x30000000;
     }
 
     this->timer++;
@@ -247,6 +245,6 @@ void Sw97_MagicSoul_Draw(Actor* thisx, PlayState* play) {
 }
 
 const Sw97ActorInfo gSw97MagicSoulInfo = {
-    "sw97.magic_soul",   "SW97 Spirit Spell",    sizeof(MagicSoul),   Sw97_MagicSoul_Init,
+    "sw97.magic_soul",      "SW97 Spirit Spell",   sizeof(MagicSoul),   Sw97_MagicSoul_Init,
     Sw97_MagicSoul_Destroy, Sw97_MagicSoul_Update, Sw97_MagicSoul_Draw,
 };

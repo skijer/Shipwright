@@ -1,9 +1,4 @@
 #include <string.h>
-/**
- * Sage's Tunic: one resistance for every medallion Link carries, and the cloth takes that medallion's colour
- * whenever the resistance absorbs something. Water: ice. Fire: heat and flame. Light: electricity.
- * Shadow: grabs and paralysis. Spirit: falls. Forest: wind.
- */
 
 #include <math.h>
 
@@ -102,14 +97,12 @@ static bool IsLocalPlayer(Actor* actor) {
     return gPlayState != NULL && actor == &GET_PLAYER(gPlayState)->actor;
 }
 
-// Heat rooms count down only while the hazard reads as heat; every frame it is resisted the flash is refreshed.
 static void ResistHeat(PlayState* play, int16_t* hazard) {
     if (*hazard == PLAYER_ENV_HAZARD_HOTROOM && Resists(SAGES_RESIST_FIRE)) {
         *hazard = PLAYER_ENV_HAZARD_NONE;
     }
 }
 
-// Skipping the assignment keeps the previous floor type, so a burning floor is walked like any other.
 static void ResistBurningFloors(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
     PlayState* play = gPlayState;
@@ -126,8 +119,6 @@ static void ResistBurningFloors(bool* should, va_list args) {
     }
 }
 
-// The hit effect is decided in the AT pass and read by the player next update; clearing it here keeps the damage
-// and drops the freeze, the shock or the flames.
 static void ResistElementalHit(Actor* victim, ColliderInfo* attack, float* damage) {
     u8 effect;
 
@@ -142,15 +133,13 @@ static void ResistElementalHit(Actor* victim, ColliderInfo* attack, float* damag
     }
 }
 
-// An enemy shoving Link with a shock (a Beamos, a Biri) leaves the same knockback without the jolt.
 static void ResistShockingKnockback(Player* player, Input* input) {
     if (player->knockbackType == PLAYER_KNOCKBACK_LARGE_ELECTRIFIED && Resists(SAGES_RESIST_THUNDER)) {
         player->knockbackType = PLAYER_KNOCKBACK_LARGE;
     }
 }
 
-// A Deku Shield only burns on the frame of the block, after this hook: the game's own fireproof switch is lent
-// for that one update and handed back at its end.
+// The shield only burns after this hook, so the game's fireproof switch is lent for one update.
 static void KeepShieldFromBurning(PlayState* play, Player* player, Actor* attacker) {
     ColliderInfo* toucher = player->shieldQuad.info.acHitInfo;
 
@@ -183,7 +172,6 @@ static void ResistParalysis(bool* should, va_list args) {
     }
 }
 
-// Wallmasters, Floormasters and Dead Hand's hands all seize Link through this one pointer.
 static s32 GrabUnlessResisted(PlayState* play, Player* player) {
     if (Resists(SAGES_RESIST_STUN)) {
         return false;
@@ -199,8 +187,6 @@ static void WrapGrabPlayer(PlayState* play) {
     play->grabPlayer = GrabUnlessResisted;
 }
 
-// The blades push Link through pushedSpeed, aimed along their own yaw, from their own update; this runs straight
-// after it.
 static void ResistFanWind(void* actorPtr) {
     PlayState* play = gPlayState;
     Actor* fan = (Actor*)actorPtr;
@@ -262,8 +248,6 @@ static void DyeTunic(bool* should, va_list args) {
     color->b = (u8)(sClothColor.b + ((s32)medallion.b - sClothColor.b) * weight / FLASH_FADE_FRAMES);
 }
 
-// The six medallions launch out of the tunic in staggered ballistic arcs, popping in and shrinking out so the
-// loop never snaps.
 static void DrawMedallionFountain(PlayState* play) {
     static const char* const sMedallionFaces[SAGES_RESIST_MAX] = {
         gGiForestMedallionFaceDL, gGiFireMedallionFaceDL,   gGiWaterMedallionFaceDL,
@@ -291,7 +275,6 @@ static void DrawMedallionFountain(PlayState* play) {
         if (scale <= 0.001f) {
             continue;
         }
-        // The medallion display lists draw nothing under setup 25.
         Gfx_SetupDL_26Opa(play->state.gfxCtx);
         Matrix_Push();
         Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
@@ -326,9 +309,9 @@ static void ClearFlash(const char* key) {
     sSages.flashTimer = 0;
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
-    "OnPlayerUpdate",          "OnPlayerFilterInput", "OnPlayerShieldBlocked", "OnCollisionResolveDamage",
-    "OnResolveEnvHazard",      "OnActorUpdate",
+static const char* const sRequiredHooks[] = {
+    "OnGameFrameUpdate",        "OnPlayerUpdate",     "OnPlayerFilterInput", "OnPlayerShieldBlocked",
+    "OnCollisionResolveDamage", "OnResolveEnvHazard", "OnActorUpdate",
 };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
@@ -356,11 +339,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.sages_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.sages_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -403,8 +387,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -415,9 +397,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -449,10 +428,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = ClearFlash;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        SAGES_TUNIC_KEY, SAGES_TUNIC_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, SAGES_TUNIC_KEY, SAGES_TUNIC_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

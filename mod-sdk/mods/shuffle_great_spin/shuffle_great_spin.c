@@ -11,9 +11,13 @@ static const char* const sHooks[] = { "ShouldActorInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sHooks, 1 };
 static const char* const sValues[] = { "Off", "On" };
 static const SOHModRandoOption sOption = {
-    sizeof(SOHModRandoOption), SPIN_OPTION, "Shuffle Great Spin Attack",
+    sizeof(SOHModRandoOption),
+    SPIN_OPTION,
+    "Shuffle Great Spin Attack",
     "Find Great Spin Attack before using a magical charged spin. Ordinary sword attacks remain available.",
-    sValues, 2, 0,
+    sValues,
+    2,
+    0,
 };
 static const SOHCustomItemRandomizer sRandomizer = {
     .structSize = sizeof(SOHCustomItemRandomizer),
@@ -55,8 +59,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!sApi->RegisterRandoOption(&sOption)) {
         return;
     }
-    SOHCustomItemDefinition item = Z64Items_Define(SPIN_KEY,
-        "__OTR__textures/icon_item_static/gItemIconSwordKokiriTex", NULL);
+    SOHCustomItemDefinition item =
+        Z64Items_Define(SPIN_KEY, "__OTR__textures/icon_item_static/gItemIconSwordKokiriTex", NULL);
     item.displayName = "Great Spin Attack";
     item.pauseText = "%rGreat Spin Attack&%wHold B to charge your sword, then release B for a magical spin.";
     item.getItemText = "You got %rGreat Spin Attack%w!&Hold B and release to unleash a magical charged spin.";

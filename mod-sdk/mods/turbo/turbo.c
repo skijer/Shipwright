@@ -76,12 +76,10 @@ static bool IsTurboActive(const Input* input) {
     return sIsToggledOn;
 }
 
-// The kaleido update loads textures and moves the cursor; it stays at normal speed.
 static bool CanRunExtraTicks(PlayState* play) {
     return play->state.running && play->pauseCtx.state == 0;
 }
 
-// Extra ticks see held buttons and the stick but no new presses, so one tap is never read N times.
 static void RunExtraTicks(PlayState* play, int32_t count) {
     uint32_t pressed[ARRAY_COUNT(play->state.input)];
     uint32_t released[ARRAY_COUNT(play->state.input)];
@@ -101,7 +99,6 @@ static void RunExtraTicks(PlayState* play, int32_t count) {
     }
 }
 
-// Runs before Play_Main, whose own update and draw make the last tick of the frame.
 static void SpeedUpFrame(void) {
     PlayState* play = gPlayState;
 

@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================================
-// Struct (merged from z_arrow_light.h)
-// ============================================================================
-
 struct ArrowLight;
 
 typedef void (*ArrowLightActionFunc)(struct ArrowLight*, PlayState*);
@@ -23,11 +19,6 @@ typedef struct ArrowLight {
     /* 0x0164 */ f32 unk_164;
     /* 0x0168 */ ArrowLightActionFunc actionFunc;
 } ArrowLight; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_light_gfx.c)
-// ============================================================================
 
 static UNK_TYPE sArrowLightTexture1[] = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -217,13 +208,8 @@ static Gfx sArrowLightVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97LightMatDL[] = "__OTR__overlays/ovl_Arrow_Light/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97LightMdlDL[] = "__OTR__overlays/ovl_Arrow_Light/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 

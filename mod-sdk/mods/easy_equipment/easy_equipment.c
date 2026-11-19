@@ -14,7 +14,6 @@
 #define EASY_TAU 6.28318531f
 #define EASY_VANILLA_COUNT 9
 
-// A vanilla shield/tunic/boot (equipKey NULL) or a custom one, which rides C as this mod's hidden holder item.
 typedef struct {
     const char* equipKey;
     char holderKey[EASY_KEY_SIZE];
@@ -91,7 +90,6 @@ static bool RegisterHolderItem(EasyPiece* piece, const SOHCustomEquipDefinition*
     return Z64Items_Register(sApi, &item);
 }
 
-// Custom equipment registers during every mod's init, so it is picked up once the registry stops growing.
 static void DiscoverCustomPieces(void) {
     uint32_t count = CustomEquipRegistry_GetCount();
     for (uint32_t i = sKnownCustomCount; i < count && sPieceCount < EASY_MAX_PIECES; ++i) {
@@ -114,7 +112,6 @@ static void DiscoverCustomPieces(void) {
     sKnownCustomCount = count;
 }
 
-// The holder items mirror ownership so the C button accepts them; they never grant the equipment.
 static void SyncHolderOwnership(void) {
     for (uint32_t i = EASY_VANILLA_COUNT; i < sPieceCount; ++i) {
         bool isOwned = IsOwned(&sPieces[i]);
@@ -147,7 +144,6 @@ static uint16_t GetBareValue(uint8_t slot) {
     return EQUIP_VALUE_SHIELD_NONE;
 }
 
-// TakeOff runs the outgoing custom piece's onUnequip before the vanilla value is written.
 static void SetVanillaValue(uint8_t slot, uint16_t value) {
     sApi->TakeOffEquipment(slot);
     Inventory_ChangeEquipment(slot, value);
@@ -245,7 +241,6 @@ static void CommitWheel(void) {
     ReleaseWheel();
 }
 
-// Multiple concentric rings keep every owned piece available even in a larger mod collection.
 static void SelectUnderStick(Input* input) {
     float x = input->cur.stick_x;
     float y = input->cur.stick_y;
@@ -315,7 +310,7 @@ static void Tick(void) {
         SelectUnderStick(input);
     }
     switch (EasyHold_UpdateMode(&sHold, isDown, isCancelled, isAllowed,
-                               CVarGetInteger("gMods.EasyEquipment.WheelMode",0)==1)) {
+                                CVarGetInteger("gMods.EasyEquipment.WheelMode", 0) == 1)) {
         case EASY_OPEN:
             OpenWheel();
             break;
@@ -337,7 +332,6 @@ static void Tick(void) {
     }
 }
 
-// Assignable Tunics and Boots would toggle the same press; this mod owns those buttons.
 static void FilterInput(Player* player, Input* input) {
     if (IsBusy(gPlayState)) {
         return;
@@ -350,7 +344,6 @@ static void FilterInput(Player* player, Input* input) {
         }
     }
     if (sPressedPiece >= 0) {
-        // The hold gesture never attacks/rolls, including its release/cancellation frame.
         input->cur.button &= ~(BTN_B | BTN_A);
         input->press.button &= ~(BTN_B | BTN_A);
     }
@@ -401,13 +394,21 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     memcpy(sPieces, sVanilla, sizeof(sVanilla));
     sPieceCount = EASY_VANILLA_COUNT;
-    if (SOH_MOD_API_HAS(sApi,RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi,RegisterMenuWidget)) {
-        static const char* modes[]={"Hold","Instant"};
-        sApi->RegisterMenuSidebar("Mods","Equipment","gMods.Menu.Page",1);
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Equipment";
-        w.type=SOH_MOD_MENU_COMBOBOX;w.label="Open equipment wheel";w.cvar="gMods.EasyEquipment.WheelMode";
-        w.values=modes;w.valueCount=ARRAY_COUNT(modes);w.defaultInt=0;
-        w.tooltip="Hold: tap toggles equipment, hold opens the wheel. Instant: press opens the wheel immediately. Release C to equip the highlighted piece; B cancels.";
+    if (SOH_MOD_API_HAS(sApi, RegisterMenuSidebar) && SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
+        static const char* modes[] = { "Hold", "Instant" };
+        sApi->RegisterMenuSidebar("Mods", "Equipment", "gMods.Menu.Page", 1);
+        SOHModMenuWidget w = { 0 };
+        w.structSize = sizeof(w);
+        w.section = "Mods";
+        w.sidebar = "Equipment";
+        w.type = SOH_MOD_MENU_COMBOBOX;
+        w.label = "Open equipment wheel";
+        w.cvar = "gMods.EasyEquipment.WheelMode";
+        w.values = modes;
+        w.valueCount = ARRAY_COUNT(modes);
+        w.defaultInt = 0;
+        w.tooltip = "Hold: tap toggles equipment, hold opens the wheel. Instant: press opens the wheel immediately. "
+                    "Release C to equip the highlighted piece; B cancels.";
         sApi->RegisterMenuWidget(&w);
     }
     SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, Tick);

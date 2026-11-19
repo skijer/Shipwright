@@ -1,30 +1,31 @@
-static const ALIGN_ASSET(2) char sCraterDL[3][80]={
- "__OTR__objects/gameplay_keep/gameplay_keep_DL_06BFE0",
- "__OTR__objects/gameplay_keep/gameplay_keep_DL_06C098",
- "__OTR__objects/gameplay_keep/gameplay_keep_DL_06C1E8"
-};
-static const ALIGN_ASSET(2) char sCraterTex[]="__OTR__objects/gameplay_keep/gameplay_keep_Tex_06C350";
+static const ALIGN_ASSET(2) char sCraterDL[3][80] = { "__OTR__objects/gameplay_keep/gameplay_keep_DL_06BFE0",
+                                                      "__OTR__objects/gameplay_keep/gameplay_keep_DL_06C098",
+                                                      "__OTR__objects/gameplay_keep/gameplay_keep_DL_06C1E8" };
+static const ALIGN_ASSET(2) char sCraterTex[] = "__OTR__objects/gameplay_keep/gameplay_keep_Tex_06C350";
 static void DrawGroundCrater(PlayState* play) {
- if(sCraterTimer<=0 || !sApi->HasResource(sCraterDL[0]))return;
- --sCraterTimer;
- Matrix_Push();Matrix_Translate(sCraterPos.x,sCraterPos.y+.3f,sCraterPos.z,MTXMODE_NEW);
- Matrix_Scale(.025f,.025f,.025f,MTXMODE_APPLY);
- OPEN_DISPS(play->state.gfxCtx);Gfx_SetupDL_25Xlu(play->state.gfxCtx);
- Gfx* material=Graph_Alloc(play->state.gfxCtx,3*sizeof(Gfx));
- gDPSetPrimColor(&material[0],0,0x80,80,60,40,MIN(sCraterTimer*8,255));
- gDPSetEnvColor(&material[1],40,30,20,MIN(sCraterTimer*8,255));
- gSPEndDisplayList(&material[2]);
- gSPSegment(POLY_XLU_DISP++,0x08,(uintptr_t)material);
- gSPSegment(POLY_XLU_DISP++,0x09,(uintptr_t)material);
- gSPSegment(POLY_XLU_DISP++,0x0A,(uintptr_t)Gfx_TexScroll(play->state.gfxCtx,0,0,32,32));
- gDPSetPrimColor(POLY_XLU_DISP++,0,0,80,60,40,MIN(sCraterTimer*8,255));
- gDPSetEnvColor(POLY_XLU_DISP++,0,0,0,MIN(sCraterTimer*8,255));
- gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
- for(int i=0;i<3;++i)gSPDisplayList(POLY_XLU_DISP++,(Gfx*)sCraterDL[i]);
- CLOSE_DISPS(play->state.gfxCtx);Matrix_Pop();
+    if (sCraterTimer <= 0 || !sApi->HasResource(sCraterDL[0]))
+        return;
+    --sCraterTimer;
+    Matrix_Push();
+    Matrix_Translate(sCraterPos.x, sCraterPos.y + .3f, sCraterPos.z, MTXMODE_NEW);
+    Matrix_Scale(.025f, .025f, .025f, MTXMODE_APPLY);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    Gfx* material = Graph_Alloc(play->state.gfxCtx, 3 * sizeof(Gfx));
+    gDPSetPrimColor(&material[0], 0, 0x80, 80, 60, 40, MIN(sCraterTimer * 8, 255));
+    gDPSetEnvColor(&material[1], 40, 30, 20, MIN(sCraterTimer * 8, 255));
+    gSPEndDisplayList(&material[2]);
+    gSPSegment(POLY_XLU_DISP++, 0x08, (uintptr_t)material);
+    gSPSegment(POLY_XLU_DISP++, 0x09, (uintptr_t)material);
+    gSPSegment(POLY_XLU_DISP++, 0x0A, (uintptr_t)Gfx_TexScroll(play->state.gfxCtx, 0, 0, 32, 32));
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 80, 60, 40, MIN(sCraterTimer * 8, 255));
+    gDPSetEnvColor(POLY_XLU_DISP++, 0, 0, 0, MIN(sCraterTimer * 8, 255));
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    for (int i = 0; i < 3; ++i)
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sCraterDL[i]);
+    CLOSE_DISPS(play->state.gfxCtx);
+    Matrix_Pop();
 }
-// Gyorg's funnel is MM's En_Water_Effect primary spray, re-emitted every 14 frames while held, as NEI's 2ship
-// branch spawns it. Each burst replays func_80A5A534; while held it is glued to the mask and kept a cone.
 #define FUNNEL_BURST_COUNT 8
 #define FUNNEL_RESPAWN_FRAMES 14
 #define FUNNEL_LAYER_COUNT 3
@@ -53,7 +54,6 @@ typedef struct {
     const u8 (*flicker)[5];
 } FunnelLayer;
 
-// object_water_effect's texture animations 0xDE0, 0xE0C and 0xE40, read from 2ship's mm.o2r.
 static const u8 sFunnelFlickerMid[2][5] = { { 255, 255, 255, 200, 128 }, { 255, 255, 255, 255, 128 } };
 static const u8 sFunnelFlickerOuter[2][5] = { { 255, 255, 255, 100, 128 }, { 255, 255, 255, 255, 128 } };
 static const FunnelLayer sFunnelLayers[FUNNEL_LAYER_COUNT] = {
@@ -120,7 +120,6 @@ static void AgeFunnelBurst(FunnelBurst* burst) {
     }
 }
 
-// Released bursts keep their last pose and flatten out, as MM's do once nothing re-aims them.
 static void UpdateWhirlpoolFunnel(PlayState* play, Player* player) {
     if (sIsWhirlpoolActive) {
         sFunnelPos = sWhirlpoolPos;

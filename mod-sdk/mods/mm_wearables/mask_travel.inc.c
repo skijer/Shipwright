@@ -1,5 +1,3 @@
-// Postman's Hat and Great Fairy's Mask travel: the pause world map redrawn as a warp menu over a stopped
-// world, the same screen the Minish Cap opens by a pod soil.
 #include "textures/icon_item_static/icon_item_static.h"
 #include "textures/icon_item_nes_static/icon_item_nes_static.h"
 #include "textures/icon_item_ger_static/icon_item_ger_static.h"
@@ -22,16 +20,17 @@ typedef enum {
     TRAVEL_FOUNTAIN,
 } TravelMode;
 
-// Where a destination sits on the pause world map, and the area name the pause screen prints for it.
 typedef struct {
     int16_t x;
     int16_t y;
     const char* nameTex[TRAVEL_LANGUAGE_COUNT];
 } MapMarker;
 
-#define POSITION_NAMES(area)                                                                                   \
-    { g##area##PositionNameENGTex, g##area##PositionNameGERTex, g##area##PositionNameFRATex,                   \
-      g##area##PositionNameJPNTex }
+#define POSITION_NAMES(area)                                                                   \
+    {                                                                                          \
+        g##area##PositionNameENGTex, g##area##PositionNameGERTex, g##area##PositionNameFRATex, \
+            g##area##PositionNameJPNTex                                                        \
+    }
 
 typedef struct {
     int16_t scene;
@@ -44,23 +43,57 @@ typedef struct {
 } MailPoint;
 
 static const MailPoint sMailPoints[] = {
-    { SCENE_KOKIRI_FOREST, -1, ENTR_KOKIRI_FOREST_0, 16774, { -1441.042f, -76.593f, -175.555f },
-      { 73, -12, POSITION_NAMES(KokiriForest) }, "skijer.mailbox.0" },
-    { SCENE_MARKET_DAY, SCENE_MARKET_NIGHT, ENTR_MARKET_SOUTH_EXIT, 0, { -4.156f, 0.0f, 124.724f },
-      { 14, 4, POSITION_NAMES(Market) }, "skijer.mailbox.1" },
-    { SCENE_KAKARIKO_VILLAGE, -1, ENTR_KAKARIKO_VILLAGE_FRONT_GATE, -21923, { -2162.320f, 138.0f, 1158.205f },
-      { 38, 15, POSITION_NAMES(KakarikoVillage) }, "skijer.mailbox.2" },
-    { SCENE_LON_LON_RANCH, -1, ENTR_LON_LON_RANCH_ENTRANCE, -16291, { 986.0f, 0.0f, -3376.015f },
-      { 10, -15, POSITION_NAMES(LonLonRanch) }, "skijer.mailbox.3" },
-    { SCENE_DEATH_MOUNTAIN_TRAIL, -1, ENTR_DEATH_MOUNTAIN_TRAIL_BOTTOM_EXIT, 8402, { -540.559f, 1194.025f, -1858.751f },
-      { 35, 44, POSITION_NAMES(DeathMountainTrail) }, "skijer.mailbox.4" },
-    { SCENE_ZORAS_RIVER, -1, ENTR_ZORAS_RIVER_WEST_EXIT, -203, { 4095.814f, 960.0f, -1684.251f },
-      { 78, 18, POSITION_NAMES(ZorasRiver) }, "skijer.mailbox.5" },
-    { SCENE_GERUDO_VALLEY, -1, ENTR_GERUDO_VALLEY_EAST_EXIT, 16342, { 427.205f, 36.0f, 7.694f },
-      { -51, 10, POSITION_NAMES(GerudoValley) }, "skijer.mailbox.6" },
+    { SCENE_KOKIRI_FOREST,
+      -1,
+      ENTR_KOKIRI_FOREST_0,
+      16774,
+      { -1441.042f, -76.593f, -175.555f },
+      { 73, -12, POSITION_NAMES(KokiriForest) },
+      "skijer.mailbox.0" },
+    { SCENE_MARKET_DAY,
+      SCENE_MARKET_NIGHT,
+      ENTR_MARKET_SOUTH_EXIT,
+      0,
+      { -4.156f, 0.0f, 124.724f },
+      { 14, 4, POSITION_NAMES(Market) },
+      "skijer.mailbox.1" },
+    { SCENE_KAKARIKO_VILLAGE,
+      -1,
+      ENTR_KAKARIKO_VILLAGE_FRONT_GATE,
+      -21923,
+      { -2162.320f, 138.0f, 1158.205f },
+      { 38, 15, POSITION_NAMES(KakarikoVillage) },
+      "skijer.mailbox.2" },
+    { SCENE_LON_LON_RANCH,
+      -1,
+      ENTR_LON_LON_RANCH_ENTRANCE,
+      -16291,
+      { 986.0f, 0.0f, -3376.015f },
+      { 10, -15, POSITION_NAMES(LonLonRanch) },
+      "skijer.mailbox.3" },
+    { SCENE_DEATH_MOUNTAIN_TRAIL,
+      -1,
+      ENTR_DEATH_MOUNTAIN_TRAIL_BOTTOM_EXIT,
+      8402,
+      { -540.559f, 1194.025f, -1858.751f },
+      { 35, 44, POSITION_NAMES(DeathMountainTrail) },
+      "skijer.mailbox.4" },
+    { SCENE_ZORAS_RIVER,
+      -1,
+      ENTR_ZORAS_RIVER_WEST_EXIT,
+      -203,
+      { 4095.814f, 960.0f, -1684.251f },
+      { 78, 18, POSITION_NAMES(ZorasRiver) },
+      "skijer.mailbox.5" },
+    { SCENE_GERUDO_VALLEY,
+      -1,
+      ENTR_GERUDO_VALLEY_EAST_EXIT,
+      16342,
+      { 427.205f, 36.0f, 7.694f },
+      { -51, 10, POSITION_NAMES(GerudoValley) },
+      "skijer.mailbox.6" },
 };
 
-// A fountain opens once its reward is claimed; Death Mountain Trail's reward is the magic meter itself.
 typedef struct {
     int16_t entrance;
     int16_t vanillaFlag;
@@ -70,17 +103,35 @@ typedef struct {
 } FountainPoint;
 
 static const FountainPoint sFountainPoints[] = {
-    { 0x315, NO_ITEMGETINF, RAND_INF_DMT_GREAT_FAIRY_REWARD, { -22.0f, 10.0f, -798.0f },
+    { 0x315,
+      NO_ITEMGETINF,
+      RAND_INF_DMT_GREAT_FAIRY_REWARD,
+      { -22.0f, 10.0f, -798.0f },
       { 32, 42, POSITION_NAMES(DeathMountainTrail) } },
-    { 0x4BE, ITEMGETINF_30, RAND_INF_DMC_GREAT_FAIRY_REWARD, { -22.0f, 10.0f, -798.0f },
+    { 0x4BE,
+      ITEMGETINF_30,
+      RAND_INF_DMC_GREAT_FAIRY_REWARD,
+      { -22.0f, 10.0f, -798.0f },
       { 42, 52, POSITION_NAMES(DeathMountainCrater) } },
-    { 0x4C2, ITEMGETINF_38, RAND_INF_OGC_GREAT_FAIRY_REWARD, { -22.0f, 10.0f, -798.0f },
+    { 0x4C2,
+      ITEMGETINF_38,
+      RAND_INF_OGC_GREAT_FAIRY_REWARD,
+      { -22.0f, 10.0f, -798.0f },
       { 12, 24, POSITION_NAMES(GanonsCastle) } },
-    { 0x371, ITEMGETINF_19, RAND_INF_ZF_GREAT_FAIRY_REWARD, { -21.0f, 10.0f, -802.0f },
+    { 0x371,
+      ITEMGETINF_19,
+      RAND_INF_ZF_GREAT_FAIRY_REWARD,
+      { -21.0f, 10.0f, -802.0f },
       { 82, 26, POSITION_NAMES(ZorasFountain) } },
-    { 0x578, ITEMGETINF_18, RAND_INF_HC_GREAT_FAIRY_REWARD, { -21.0f, 10.0f, -802.0f },
+    { 0x578,
+      ITEMGETINF_18,
+      RAND_INF_HC_GREAT_FAIRY_REWARD,
+      { -21.0f, 10.0f, -802.0f },
       { -2, 14, POSITION_NAMES(HyruleCastle) } },
-    { 0x588, ITEMGETINF_1A, RAND_INF_COLOSSUS_GREAT_FAIRY_REWARD, { -21.0f, 10.0f, -802.0f },
+    { 0x588,
+      ITEMGETINF_1A,
+      RAND_INF_COLOSSUS_GREAT_FAIRY_REWARD,
+      { -21.0f, 10.0f, -802.0f },
       { -90, 28, POSITION_NAMES(DesertColossus) } },
 };
 
@@ -93,8 +144,6 @@ static uint8_t sMailboxSpawned;
 static TravelMode sTravelMode;
 static int8_t sTravelCursor;
 static bool sHasSelectorArt;
-
-// ---- destinations ----
 
 static int32_t CountDestinations(TravelMode mode) {
     return mode == TRAVEL_MAILBOX ? ARRAY_COUNT(sMailPoints) : ARRAY_COUNT(sFountainPoints);
@@ -132,7 +181,7 @@ static int32_t FindFirstUnlocked(TravelMode mode) {
     return -1;
 }
 
-// Farore's Wind's own landing: respawnFlag 3 makes the arriving scene read respawn[RESPAWN_MODE_TOP].
+// respawnFlag 3 makes the arriving scene read respawn[RESPAWN_MODE_TOP], as Farore's Wind does.
 static void SetLanding(int16_t entrance, const Vec3f* pos, int16_t yaw) {
     gSaveContext.respawn[RESPAWN_MODE_TOP].entranceIndex = entrance;
     gSaveContext.respawn[RESPAWN_MODE_TOP].pos = *pos;
@@ -166,8 +215,6 @@ static void DepartToDestination(PlayState* play, TravelMode mode, int32_t index)
     SetLanding(fountain->entrance, &fountain->pedestal, 0);
     Sfx_PlaySfxCentered(NA_SE_EV_GREAT_FAIRY_APPEAR);
 }
-
-// ---- travel map ----
 
 static bool CanOpenTravelMap(PlayState* play, Player* player) {
     return !IsPlayerBusy(player) && play->pauseCtx.state == 0 && play->pauseCtx.debugState == 0 &&
@@ -212,7 +259,6 @@ static void CloseTravelMap(void) {
     sApi->ReleaseTimeControl(TRAVEL_OWNER);
 }
 
-// The destination whose direction on the map best matches where the stick points, nearest first.
 static int8_t FindDestinationTowardStick(int8_t from, int8_t stickX, int8_t stickY) {
     const MapMarker* origin = GetMarker(sTravelMode, from);
     f32 stickAngle = atan2f((f32)stickX, (f32)stickY);
@@ -273,7 +319,6 @@ static void MoveTravelCursor(Input* input) {
     }
 }
 
-// Reads the raw controller: the input block only covers Link's copy of it.
 static bool UpdateTravelMap(PlayState* play) {
     if (sTravelMode == TRAVEL_NONE) {
         return false;
@@ -306,17 +351,12 @@ static bool UpdateTravelMap(PlayState* play) {
     return true;
 }
 
-// START would open the real pause screen on top of the map.
 static void BlockPauseDuringTravelMap(bool* should, va_list args) {
     if (sTravelMode != TRAVEL_NONE) {
         *should = false;
     }
 }
 
-// ---- travel map drawing ----
-
-// The map page of the pause screen in its own coordinates: the frame spans 240x160 around the origin. Screen
-// is 320x240 in the 10.2 fixed point the RDP takes.
 #define MAP_ORIGIN_Y 96
 #define MAP_X(x) (640 + (s32)(x)*24 / 5)
 #define MAP_Y(y) (480 - MAP_ORIGIN_Y - (s32)(y)*24 / 5)
@@ -331,7 +371,9 @@ typedef struct {
 } TravelMapStyle;
 
 static const TravelMapStyle sMailboxStyle = { { 110, 50, 45 }, { 140, 60, 60 }, { 100, 255, 255 }, { 150, 255, 255 } };
-static const TravelMapStyle sFountainStyle = { { 80, 40, 100 }, { 110, 60, 130 }, { 150, 255, 200 }, { 200, 255, 220 } };
+static const TravelMapStyle sFountainStyle = {
+    { 80, 40, 100 }, { 110, 60, 130 }, { 150, 255, 200 }, { 200, 255, 220 }
+};
 
 static const char* sFrameTexs[TRAVEL_LANGUAGE_COUNT][15] = {
     { gPauseMap00Tex, gPauseMap01Tex, gPauseMap02Tex, gPauseMap03Tex, gPauseMap04Tex, gPauseMap10ENGTex, gPauseMap11Tex,
@@ -355,7 +397,6 @@ static const char* sCurrentPositionTexs[TRAVEL_LANGUAGE_COUNT] = {
     gPauseCurrentPositionJPNTex,
 };
 
-// Clouds cover the areas the file has not discovered yet, each with the world map flag it hides behind.
 static const char* sCloudTexs[] = {
     gWorldMapCloud16Tex, gWorldMapCloud15Tex, gWorldMapCloud14Tex, gWorldMapCloud13Tex,
     gWorldMapCloud12Tex, gWorldMapCloud11Tex, gWorldMapCloud10Tex, gWorldMapCloud9Tex,
@@ -441,7 +482,6 @@ static void DrawMapFrame(PlayState* play, s32 language) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The world map is one 216x128 CI8 image, drawn in the same strips the pause screen uses.
 static void DrawWorldMap(PlayState* play) {
     s32 left = MAP_X(-108);
     s32 right = MAP_X(108);
@@ -499,7 +539,6 @@ static void DrawClouds(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The selected box pulses from the marker colour to white; locked destinations stay grey.
 static Color_RGBA8 GetMarkerColor(int32_t index, s16 pulse) {
     const Color_RGB8* base = &GetTravelMapStyle()->marker;
     Color_RGBA8 color = { 100, 100, 100, 255 };
@@ -533,7 +572,6 @@ static void DrawMarkerBoxes(PlayState* play, s16 pulse) {
     }
 }
 
-// Stretches the texture already loaded onto a square around the cursor's marker.
 static void DrawLoadedIconAtCursor(PlayState* play, s16 texels, s16 halfExtent) {
     const MapMarker* marker = GetMarker(sTravelMode, sTravelCursor);
     s32 left = MAP_X(marker->x - halfExtent);
@@ -579,7 +617,6 @@ static void DrawStrayFairySelector(PlayState* play) {
     DrawLoadedIconAtCursor(play, 32, 10);
 }
 
-// Majora's Letter to Kafei marks the mailbox, a Stray Fairy in her glow marks the fountain.
 static void DrawSelectorIcon(PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     gDPPipeSync(OVERLAY_DISP++);
@@ -596,7 +633,6 @@ static void DrawSelectorIcon(PlayState* play) {
     }
 }
 
-// Where the pause screen writes the area you are standing in: the title, then the name on the parchment.
 static void DrawDestinationName(PlayState* play, s32 language) {
     const Color_RGB8* nameColor = &GetTravelMapStyle()->name;
     bool isUnlocked = IsDestinationUnlocked(sTravelMode, sTravelCursor);
@@ -666,8 +702,6 @@ static void DrawTravelMap(PlayState* play) {
     DrawDestinationName(play, language);
 }
 
-// ---- mailboxes ----
-
 typedef struct {
     Actor actor;
     ColliderCylinder collider;
@@ -734,7 +768,6 @@ static bool IsMailboxInScene(const MailPoint* point, int16_t sceneNum) {
     return point->scene == sceneNum || point->alternate == sceneNum;
 }
 
-// Walking up to a mailbox is what adds it to the map.
 static void UpdatePostmanMailboxes(PlayState* play, Player* player) {
     if (!sApi->IsCustomItemOwned(sMasks[MASK_POSTMAN].key) || sMailboxActorId < 0) {
         return;
@@ -745,9 +778,8 @@ static void UpdatePostmanMailboxes(PlayState* play, Player* player) {
         if (!IsMailboxInScene(point, play->sceneNum)) {
             continue;
         }
-        if (!(sMailboxSpawned & (1 << i)) &&
-            Actor_Spawn(&play->actorCtx, play, sMailboxActorId, point->pos.x, point->pos.y, point->pos.z, 0,
-                        point->yaw, 0, i) != NULL) {
+        if (!(sMailboxSpawned & (1 << i)) && Actor_Spawn(&play->actorCtx, play, sMailboxActorId, point->pos.x,
+                                                         point->pos.y, point->pos.z, 0, point->yaw, 0, i) != NULL) {
             sMailboxSpawned |= 1 << i;
         }
 
@@ -765,9 +797,17 @@ static void UpdatePostmanMailboxes(PlayState* play, Player* player) {
 }
 
 static void RegisterMaskTravel(void) {
-    SOHActorDefinition mailbox = { sizeof(SOHActorDefinition), "skijer.postman_mailbox", "Postman's mailbox",
-        ACTORCAT_PROP, ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED,
-        OBJECT_GAMEPLAY_KEEP, sizeof(MaskMailbox), MailboxInit, MailboxDestroy, MailboxUpdate, MailboxDraw };
+    SOHActorDefinition mailbox = { sizeof(SOHActorDefinition),
+                                   "skijer.postman_mailbox",
+                                   "Postman's mailbox",
+                                   ACTORCAT_PROP,
+                                   ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED,
+                                   OBJECT_GAMEPLAY_KEEP,
+                                   sizeof(MaskMailbox),
+                                   MailboxInit,
+                                   MailboxDestroy,
+                                   MailboxUpdate,
+                                   MailboxDraw };
 
     sMailboxActorId = sApi->RegisterActor(&mailbox);
     for (int32_t i = 0; i < ARRAY_COUNT(sMailPoints); i++) {

@@ -1,20 +1,14 @@
-// Majora's Mask ice magic in Ocarina of Time: anything carrying ice arrow damage that enters water raises MM's
-// Bg_Icefloe platform, and an Octorok it hits freezes inside a floating iceberg Link can stand on, as Obj_Iceblock
-// encases MM's. Arrows, the Water Medallion's shots and the Ice Rod all carry that damage.
-
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
 #include "overlays/actors/ovl_En_Okuta/z_en_okuta.h"
 
 #define ICE_PLATFORM_KEY "mm.icefloe"
 #define ICE_BERG_KEY "mm.frozen_octorok"
 #define ICE_PLATFORM_MAX 3
-// Bg_Icefloe: 20 frames growing by 0.0065, then afloat for its params (the arrow passes 300), 50 frames melting.
 #define ICE_PLATFORM_GROW_FRAMES 20
 #define ICE_PLATFORM_GROW_STEP 0.0065f
 #define ICE_PLATFORM_FLOAT_FRAMES 300
 #define ICE_MELT_FRAMES 50
 #define ICE_PLATFORM_RISE 10.0f
-// Obj_Iceblock: the block reaches scale 0.1 in steps of 0.02 and melts after 450 frames.
 #define ICE_BERG_SCALE 0.1f
 #define ICE_BERG_GROW_STEP 0.02f
 #define ICE_BERG_FLOAT_FRAMES 450
@@ -36,7 +30,7 @@ static const ALIGN_ASSET(2) char sIcePlatformDL[] = "__OTR__objects/object_icefl
 static const ALIGN_ASSET(2) char sIcePlatformCol[] = "__OTR__objects/object_icefloe/gIcefloePlatformCol";
 static const ALIGN_ASSET(2) char sIceBergDL[] = "__OTR__objects/object_ice_block/gIceBlockIceBergDL";
 static const ALIGN_ASSET(2) char sIceBergCol[] = "__OTR__objects/object_ice_block/gIceBlockCol";
-// The iceberg calls segment 8 for its sublimating-air scroll, which Obj_Iceblock fills with an AnimatedMat.
+// The iceberg calls segment 8 for its scroll, which Obj_Iceblock fills with an AnimatedMat.
 static Gfx sEmptyDL[] = { gsSPEndDisplayList() };
 
 static s16 sIcePlatformId = -1;
@@ -61,7 +55,6 @@ static void StartIceMelt(MmIce* ice) {
     Audio_PlayActorSound2(&ice->dyna.actor, NA_SE_EV_ICE_MELT);
 }
 
-// Bg_Icefloe_Init keeps three platforms; a fourth sends the oldest melting.
 static void TrackIcePlatform(MmIce* ice) {
     if (sIcePlatforms[ICE_PLATFORM_MAX - 1] == NULL) {
         for (u32 i = 0; i < ICE_PLATFORM_MAX; i++) {
@@ -112,8 +105,8 @@ static void IceDestroy(Actor* actor, PlayState* play) {
 }
 
 static void SpawnIceShards(PlayState* play, Actor* actor, f32 height) {
-    Vec3f position = { actor->world.pos.x + Rand_CenteredFloat(actor->scale.x * 450.0f),
-                       actor->world.pos.y + height, actor->world.pos.z + Rand_CenteredFloat(actor->scale.z * 450.0f) };
+    Vec3f position = { actor->world.pos.x + Rand_CenteredFloat(actor->scale.x * 450.0f), actor->world.pos.y + height,
+                       actor->world.pos.z + Rand_CenteredFloat(actor->scale.z * 450.0f) };
 
     EffectSsIcePiece_SpawnBurst(play, &position, actor->scale.x * 4.0f);
 }
@@ -127,7 +120,6 @@ static void SpawnIceSmoke(PlayState* play, Actor* actor, s16 timer) {
     EffectSsIceSmoke_Spawn(play, &position, &velocity, &accel, 200);
 }
 
-// Bg_Icefloe_Melt: smoke for the first twelve frames, then the slab thins away.
 static bool MeltIce(PlayState* play, MmIce* ice, f32 widthStep, f32 heightStep) {
     Actor* actor = &ice->dyna.actor;
 
@@ -189,7 +181,6 @@ static void IcePlatformDraw(Actor* actor, PlayState* play) {
     Gfx_DrawDListOpa(play, (Gfx*)sIcePlatformDL);
 }
 
-// The parent is the Octorok, kept still inside until the block is gone.
 static void IceBergInit(Actor* actor, PlayState* play) {
     MmIce* ice = (MmIce*)actor;
 
@@ -263,8 +254,7 @@ static void FreezeWaterUnderShot(void* actorPtr) {
     f32 surface;
 
     if (!IsIceDamage(arrow->collider.info.toucher.dmgFlags) || actor->world.pos.y >= actor->prevPos.y ||
-        !FindWaterSurface(gPlayState, actor, &surface) || actor->prevPos.y < surface ||
-        actor->world.pos.y >= surface) {
+        !FindWaterSurface(gPlayState, actor, &surface) || actor->prevPos.y < surface || actor->world.pos.y >= surface) {
         return;
     }
     f32 t = (surface - actor->prevPos.y) / (actor->world.pos.y - actor->prevPos.y);
@@ -286,12 +276,11 @@ static void EncaseOctorok(EnOkuta* octorok) {
     octorok->collider.base.acFlags &= ~AC_HIT;
     actor->colChkInfo.damage = 0;
     actor->colChkInfo.damageEffect = 0;
-    Actor_SpawnAsChild(&gPlayState->actorCtx, actor, gPlayState, sIceBergId, actor->world.pos.x,
-                       actor->world.pos.y, actor->world.pos.z, 0, actor->shape.rot.y, 0, 0);
+    Actor_SpawnAsChild(&gPlayState->actorCtx, actor, gPlayState, sIceBergId, actor->world.pos.x, actor->world.pos.y,
+                       actor->world.pos.z, 0, actor->shape.rot.y, 0, 0);
     Audio_PlayActorSound2(actor, NA_SE_PL_FREEZE_S);
 }
 
-// Before the Octorok's own update reads the hit, which in OoT always kills it.
 static void FreezeOctorok(void* actorPtr, bool* shouldUpdate) {
     EnOkuta* octorok = (EnOkuta*)actorPtr;
     Actor* actor = &octorok->actor;
@@ -319,14 +308,12 @@ static void ForgetIcePlatforms(void) {
 }
 
 static void RegisterMmIce(void) {
-    if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !sApi->HasResource(sIcePlatformDL) ||
-        !sApi->HasResource(sIceBergDL)) {
+    if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !sApi->HasResource(sIcePlatformDL) || !sApi->HasResource(sIceBergDL)) {
         return;
     }
-    sIcePlatformId = RegisterIceActor(ICE_PLATFORM_KEY, "MM ice arrow platform", IcePlatformInit,
-                                      IcePlatformUpdate, IcePlatformDraw);
-    sIceBergId = RegisterIceActor(ICE_BERG_KEY, "MM frozen Octorok iceberg", IceBergInit, IceBergUpdate,
-                                  IceBergDraw);
+    sIcePlatformId = RegisterIceActor(ICE_PLATFORM_KEY, "MM ice arrow platform", IcePlatformInit, IcePlatformUpdate,
+                                      IcePlatformDraw);
+    sIceBergId = RegisterIceActor(ICE_BERG_KEY, "MM frozen Octorok iceberg", IceBergInit, IceBergUpdate, IceBergDraw);
     if (sIcePlatformId < 0 || sIceBergId < 0) {
         return;
     }

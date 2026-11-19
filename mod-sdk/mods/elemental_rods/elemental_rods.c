@@ -1,12 +1,3 @@
-/**
- * Elemental rods: the Fire, Ice and Light rods from A Link Between Worlds.
- *
- * One core, three configs. Each rod is a held item that swings with vanilla sword mechanics (its
- * `meleeWeapon` index is what makes the engine's attack handlers accept it) and turns every swing into
- * magic: slash throws three bolts, stab throws one far, the jump slash lays a line of element on the
- * ground and the spin attack opens an expanding cylinder. Holding the item button charges that spin.
- * C-Up aims in first person. Casting without magic backfires on Link.
- */
 
 #include <math.h>
 #include <string.h>
@@ -58,7 +49,6 @@
 #define ROD_ORB_BOLT_SCALE 5.5f
 #define ROD_TRAIL_FRAMES 8
 
-/** Link's hit responses, by the value func_80837C0C takes: frozen solid and electrocuted. */
 #define ROD_HIT_RESPONSE_FROZEN 3
 #define ROD_HIT_RESPONSE_SHOCKED 4
 
@@ -142,7 +132,6 @@ struct RodConfig {
     u16 sfxHit;
     u16 sfxCast;
     u16 sfxLine;
-    /** 0 = the ignite sound is a looped sfx kept alive every frame; otherwise its period in frames. */
     u8 ignitePeriod;
     f32 lineBaseScale;
     f32 lineScaleGrow;
@@ -185,7 +174,9 @@ static const ALIGN_ASSET(2) char sRingDL[] = "__OTR__objects/gameplay_keep/gEffF
 static const u16 sItemButtons[ROD_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                     BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerPostLimbDraw", "OnPlayerUpdate", "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnPlayDrawEnd", "OnActorDrawEnd", "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",       "OnPlayerPostLimbDraw", "OnPlayerUpdate",
+                                              "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw", "OnPlayDrawEnd",
+                                              "OnActorDrawEnd",          "OnSceneInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -216,13 +207,10 @@ void Player_PlayVoiceSfx(Player* player, u16 sfxId);
 s32 Player_IsZTargeting(Player* player);
 s32 Player_UpperAction_Sword(Player* player, PlayState* play);
 
-// ---- element effects ------------------------------------------------------------------------------------
-
 static const RodColors sFireColors = { { 255, 255, 0, 255 }, { 255, 80, 0, 255 } };
 static const RodColors sIceColors = { { 200, 255, 255, 255 }, { 0, 100, 255, 255 } };
 static const RodColors sLightColors = { { 255, 255, 200, 255 }, { 255, 255, 0, 255 } };
 
-/** What NEI paints at full charge: the pale rod body washes out, so the aura goes pure gold instead. */
 static const RodColors sLightMaxChargeColors = { { 255, 255, 0, 255 }, { 255, 255, 100, 255 } };
 
 static void FreezeActor(PlayState* play, Actor* hitActor) {
@@ -296,8 +284,6 @@ static void HitFire(PlayState* play, Player* player, Actor* hitActor, Vec3f* pos
     EffectSsBomb2_SpawnLayered(play, pos, &zero, &zero, 10, 5);
 }
 
-// mm_items owns Majora's Mask's ice: the platform an ice arrow raises from water and the iceberg it locks an
-// Octorok in. Without it the bolts only splash and freeze.
 static s16 FindMmIceActor(const char* key) {
     return SOH_MOD_API_HAS(sApi, GetActorId) ? sApi->GetActorId(key) : -1;
 }
@@ -326,7 +312,6 @@ static void HitIce(PlayState* play, Player* player, Actor* hitActor, Vec3f* pos)
     if (hitActor == NULL) {
         return;
     }
-    // The generic freeze would stop the Octorok's update before mm_items reads the ice hit and encases it.
     if (hitActor->id == ACTOR_EN_OKUTA && FindMmIceActor(MM_ICE_BERG_KEY) >= 0) {
         return;
     }
@@ -339,7 +324,6 @@ static void HitLight(PlayState* play, Player* player, Actor* hitActor, Vec3f* po
         return;
     }
     if (IsUndeadActor(hitActor)) {
-        // The white filter is the Sun's Song paralysis, which is what light magic does to the undead.
         Actor_SetColorFilter(hitActor, -0x8000, 0xC8, 0, ROD_STUN_FRAMES);
         SpawnSparkles(play, &hitActor->world.pos, &sLightColors, 50.0f, 25, 1200, 12);
     } else {
@@ -353,8 +337,7 @@ static void LineFire(PlayState* play, Player* player, Vec3f* pos, f32 scale) {
     EffectSsEnFire_SpawnVec3f(play, &player->actor, pos, (s16)scale, 0, 0, -1);
 }
 
-// The shard burst takes an actor-sized scale, not the thousands EffectSsEnFire wants, so the shared line
-// scale is brought down to it. Without this the trail draws a hundred times too big.
+// The shard burst takes an actor-sized scale, not the thousands EffectSsEnFire wants.
 static void LineIce(PlayState* play, Player* player, Vec3f* pos, f32 scale) {
     EffectSsIcePiece_SpawnBurst(play, pos, scale * ROD_ICE_SHARD_SCALE);
 }
@@ -397,8 +380,6 @@ static void BackfireLight(PlayState* play, Player* player) {
 static const RodColors* ChargeColorsLight(const RodState* state, const RodConfig* cfg) {
     return state->chargeLevel >= cfg->chargeBig ? &sLightMaxChargeColors : cfg->colors;
 }
-
-// ---- colliders ------------------------------------------------------------------------------------------
 
 static ColliderCylinderInit sFireBoltCollider = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
@@ -468,8 +449,6 @@ static ColliderCylinderInit sLightLineCollider = {
     { ELEMTYPE_UNK2, { DMG_ARROW_LIGHT, 0x01, 4 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
     { 5, 10, 0, { 0, 0, 0 } },
 };
-
-// ---- rod table ------------------------------------------------------------------------------------------
 
 static void MeltRedIce(PlayState* play, const RodConfig* cfg);
 static void BeginFlameBolts(PlayState* play, const RodConfig* cfg);
@@ -652,8 +631,6 @@ static const RodConfig sLightRod = {
 
 static const RodConfig* const sRods[] = { &sFireRod, &sIceRod, &sLightRod };
 
-// ---- input and magic ------------------------------------------------------------------------------------
-
 static u16 FindButtonMask(const RodConfig* cfg) {
     for (u8 button = 0; button < ROD_BUTTON_COUNT; button++) {
         const char* equipped = sApi->GetEquippedCustomItem(button);
@@ -677,15 +654,12 @@ static bool WasButtonPressed(const RodConfig* cfg, PlayState* play) {
     return mask != 0 && (play->state.input[0].press.button & mask) != 0;
 }
 
-/**
- * Pays for a cast. Failing to pay is the whole point of the rods: it rolls the element back onto Link.
- * Consuming leaves the meter flashing and refusing every later request until the spell resets it.
- */
+// Consuming leaves the meter flashing and refusing every later request until the spell resets it.
 static bool SpendMagic(const RodConfig* cfg, Player* player, PlayState* play, s16 cost, u8 backfireChance) {
     if (gSaveContext.magic >= cost && Magic_RequestChange(play, cost, MAGIC_CONSUME_NOW)) {
         // CONSUME_NOW queues a target; resetting before settling it cancels the payment.
         if (!Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER)) {
-            gSaveContext.magic=gSaveContext.magicTarget;
+            gSaveContext.magic = gSaveContext.magicTarget;
         }
         Magic_Reset(play);
         return true;
@@ -716,8 +690,6 @@ static void SilenceRod(const RodConfig* cfg) {
     Audio_StopSfxById(cfg->sfxLine);
 }
 
-// ---- bolts ----------------------------------------------------------------------------------------------
-
 static void AimVelocity(const RodConfig* cfg, Vec3f* outVel, s16 yaw, s16 pitch) {
     Vec3f forward = { 0.0f, 0.0f, cfg->boltSpeed };
 
@@ -728,10 +700,7 @@ static void AimVelocity(const RodConfig* cfg, Vec3f* outVel, s16 yaw, s16 pitch)
     Matrix_Pop();
 }
 
-/**
- * Without this teardown the engine keeps the dead bolts' collider records, the global AT pool fills up and
- * hit registration silently dies for every custom item and the bow alike.
- */
+// Without this teardown the engine keeps the dead bolts' collider records and the global AT pool fills up.
 static void DropSetColliders(RodBoltSet* set, PlayState* play) {
     if (!set->collidersReady) {
         return;
@@ -906,10 +875,7 @@ static void UpdateBolts(const RodConfig* cfg, Player* player, PlayState* play) {
     }
 }
 
-/**
- * Red ice answers only to the blue-fire actor, never to a damage flag, so a bolt that reaches a block
- * spawns one instead of trying to break it. Bg_Ice_Shelter's own cylinder gives the block's reach.
- */
+// Red ice answers only to the blue-fire actor, never to a damage flag.
 static void MeltRedIce(PlayState* play, const RodConfig* cfg) {
     RodState* state = cfg->state;
 
@@ -952,8 +918,6 @@ static void MeltRedIce(PlayState* play, const RodConfig* cfg) {
         }
     }
 }
-
-// ---- ground line (jump slash) ---------------------------------------------------------------------------
 
 static f32 LineScaleAt(const RodConfig* cfg, s32 index) {
     return cfg->lineBaseScale + index * cfg->lineScaleGrow;
@@ -1014,8 +978,6 @@ static void UpdateLine(const RodConfig* cfg, Player* player, PlayState* play) {
     }
 }
 
-// ---- spin cylinder --------------------------------------------------------------------------------------
-
 static void StartSpin(const RodConfig* cfg, Player* player, PlayState* play, u8 isBigSpin) {
     RodState* state = cfg->state;
     s16 cost = isBigSpin ? cfg->magicSpinBig : cfg->magicSpinSmall;
@@ -1060,8 +1022,6 @@ static void StopSpin(const RodConfig* cfg) {
     cfg->state->spinRadius = 0.0f;
     Audio_StopSfxById(cfg->sfxCast);
 }
-
-// ---- swing ----------------------------------------------------------------------------------------------
 
 static bool IsSpinAnim(u8 weaponAnim) {
     return weaponAnim == PLAYER_MWA_SPIN_ATTACK_1H || weaponAnim == PLAYER_MWA_SPIN_ATTACK_2H ||
@@ -1187,8 +1147,6 @@ static void ProcessSwing(const RodConfig* cfg, Player* player, PlayState* play) 
     }
 }
 
-// ---- charge ---------------------------------------------------------------------------------------------
-
 static bool CanCharge(Player* player) {
     if (player->meleeWeaponState > 0) {
         return false;
@@ -1270,8 +1228,6 @@ static void ReleaseCharge(const RodConfig* cfg, Player* player, PlayState* play)
     Audio_PlayActorSound2(&player->actor, cfg->sfxSwing);
 }
 
-// ---- first person ---------------------------------------------------------------------------------------
-
 static void EnterAim(const RodConfig* cfg, Player* player, PlayState* play) {
     cfg->state->aiming = true;
     Z64Aiming_Request(player, play);
@@ -1314,8 +1270,6 @@ static void UpdateAim(const RodConfig* cfg, Player* player, PlayState* play) {
         ExitAim(cfg, player, play);
     }
 }
-
-// ---- held item cycle ------------------------------------------------------------------------------------
 
 static void ResetRod(const RodConfig* cfg, PlayState* play) {
     RodState* state = cfg->state;
@@ -1391,7 +1345,6 @@ static void StowRod(const RodConfig* cfg, Player* player, PlayState* play) {
     }
 }
 
-/** Shielding and swapping items are all the sword's upper action does; the swing itself is an action handler. */
 static int32_t HoldRod(Player* player, PlayState* play) {
     return Player_UpperAction_Sword(player, play);
 }
@@ -1403,8 +1356,8 @@ static void RunRodInHand(const RodConfig* cfg, Player* player, PlayState* play) 
                          PLAYER_STATE1_DAMAGED | PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_CLIMBING_LEDGE |
                          PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_HOOKSHOT_FALLING;
 
-    // The swing runs from an action func, which does not run the upper action: without this the host's
-    // watchdog reads four idle frames as an item that left the hand and stows the rod mid-attack.
+    // The swing runs from an action func, which skips the upper action; the host watchdog would stow the rod
+    // mid-attack.
     Z64Items_KeepHeld(sApi);
 
     if (state->aiming) {
@@ -1476,7 +1429,6 @@ static void DropRodsOnSceneInit(int16_t sceneNum) {
     for (s32 i = 0; i < ARRAY_COUNT(sRods); i++) {
         RodState* state = sRods[i]->state;
 
-        // The player and every collider are rebuilt across a scene, so nothing here may outlive it.
         state->blureIdx = -1;
         state->lineReady = false;
         state->spinReady = false;
@@ -1493,12 +1445,6 @@ static void DropRodsOnSceneInit(int16_t sceneNum) {
     Z64Aiming_Drop();
 }
 
-// ---- drawing --------------------------------------------------------------------------------------------
-
-/**
- * The rod follows the forearm-to-hand direction the way NEI dialled it in; the offsets and the 0.05 scale
- * are that calibration, so they only make sense against this construction.
- */
 static MtxF sWeaponHand;
 static bool sWeaponHandReady;
 static void ReplaceSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* original, Vec3f* pos) {
@@ -1514,37 +1460,44 @@ static void ReplaceSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* origin
         return;
     }
 
-    if (!(sRodInHand!=NULL) || limb!=PLAYER_LIMB_L_HAND) { return; }
-    *dl=(Gfx*)(LINK_IS_ADULT?gLinkAdultLeftHandClosedNearDL:gLinkChildLeftFistNearDL);
+    if (!(sRodInHand != NULL) || limb != PLAYER_LIMB_L_HAND) {
+        return;
+    }
+    *dl = (Gfx*)(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
 }
 static void CaptureSwordHand(PlayState* play, Player* player, int32_t limb) {
     if (gPlayState == NULL || player != GET_PLAYER(gPlayState)) {
         return;
     }
 
-    if ((sRodInHand!=NULL) && limb==PLAYER_LIMB_L_HAND) { Matrix_Get(&sWeaponHand); sWeaponHandReady=true; }
+    if ((sRodInHand != NULL) && limb == PLAYER_LIMB_L_HAND) {
+        Matrix_Get(&sWeaponHand);
+        sWeaponHandReady = true;
+    }
 }
 static void DrawSwordReplacement(Actor* actor, PlayState* play) {
     if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
         return;
     }
 
-    Player* player=(Player*)actor;
-    if (!(sRodInHand!=NULL) || !sWeaponHandReady || (player->stateFlags2&PLAYER_STATE2_DISABLE_DRAW)) { return; }
+    Player* player = (Player*)actor;
+    if (!(sRodInHand != NULL) || !sWeaponHandReady || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+        return;
+    }
     Matrix_Push();
     Matrix_Put(&sWeaponHand);
-    float unscale=player->actor.scale.x!=0?1.0f/player->actor.scale.x:1.0f;
-    Matrix_Scale(unscale,unscale,unscale,MTXMODE_APPLY);
+    float unscale = player->actor.scale.x != 0 ? 1.0f / player->actor.scale.x : 1.0f;
+    Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
     Matrix_RotateZ(DEG_TO_RAD(ROD_HELD_ROT_Z), MTXMODE_APPLY);
-    Matrix_Scale(ROD_HELD_SCALE,ROD_HELD_SCALE,ROD_HELD_SCALE,MTXMODE_APPLY);
+    Matrix_Scale(ROD_HELD_SCALE, ROD_HELD_SCALE, ROD_HELD_SCALE, MTXMODE_APPLY);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)(sRodInHand->opaqueDL));
-    if ((sRodInHand->xluDL)!=NULL) {
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)(sRodInHand->opaqueDL));
+    if ((sRodInHand->xluDL) != NULL) {
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-        gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-        gSPDisplayList(POLY_XLU_DISP++,(Gfx*)(sRodInHand->xluDL));
+        gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+        gSPDisplayList(POLY_XLU_DISP++, (Gfx*)(sRodInHand->xluDL));
     }
     CLOSE_DISPS(play->state.gfxCtx);
     Matrix_Pop();
@@ -1577,8 +1530,8 @@ static void DrawLightRodGive(PlayState* play, GetItemEntry* entry) {
     DrawRodModel(play, &sLightRod);
 }
 
-// OPEN_DISPS declares the pointer POLY_XLU_DISP writes through, so every function that emits commands opens
-// its own scope: borrowing the caller's leaves __gfxCtx as an unresolved external at link time.
+// OPEN_DISPS declares the pointer POLY_XLU_DISP writes through; borrowing the caller's leaves __gfxCtx unresolved at
+// link time.
 static void BeginFlameBolts(PlayState* play, const RodConfig* cfg) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
@@ -1606,7 +1559,6 @@ static void DrawFlameBolt(PlayState* play, const RodConfig* cfg, Vec3f* pos, f32
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Phantom Ganon's energy ball: a fixed-size orb that spins on its own axis, so it ignores the bolt's growth.
 static void BeginOrbBolts(PlayState* play, const RodConfig* cfg) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
@@ -1727,8 +1679,6 @@ static void DrawRodEffects(void) {
     }
 }
 
-// ---- registration ---------------------------------------------------------------------------------------
-
 static void TakeOutFireRod(PlayState* play, Player* player) {
     TakeOutRod(&sFireRod, play);
 }
@@ -1767,7 +1717,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.elemental_rods.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.elemental_rods.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
     if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
@@ -1810,8 +1761,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -1823,8 +1772,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawRemoteLimb);
     }
 }
-
-
 
 static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb) {
     RemoteVisualState visual;
@@ -1893,8 +1840,7 @@ static bool RegisterRod(const RodConfig* cfg, u8 slot, SOHCustomItemInitFunc tak
     Z64Items_SetHeldCallbacks(&rod, NULL, stow, NULL);
     Z64Items_SetTextbox(&rod, getItemText);
     Z64Items_SetPauseText(&rod, pauseText);
-    // The kokiri index, not the deku stick's: a stick measures zero in sMeleeWeaponLengths, so its quad would
-    // never touch anything. Group 10 is the stick's own: a closed fist, with the weapon drawn separately.
+    // The kokiri index, not the deku stick's: a stick measures zero in sMeleeWeaponLengths, so its quad never hits.
     Z64Items_SetMeleeWeapon(&rod, 2);
     rod.modelGroup = PLAYER_MODELGROUP_SWORD_AND_SHIELD;
     rod.getItemEntry.drawFunc = drawGive;
@@ -1927,7 +1873,7 @@ SOH_MOD_EXPORT void ModInit(void) {
                      "%cIce Rod&%wSwing to cast, hold %y\xA1%w to charge, %c\xA5%w&to aim.")) {
         return;
     }
-    if (!RegisterRod(&sLightRod, 16,TakeOutLightRod, StowLightRod, DrawLightRodGive,
+    if (!RegisterRod(&sLightRod, 16, TakeOutLightRod, StowLightRod, DrawLightRodGive,
                      "You got the %yLight Rod%w! A&magic weapon that channels&light.^"
                      "%ySwing%w for three light balls,&%ystab%w for one long shot, %yjump%w&"
                      "to lay a trail of light.^%rHold%w %y\xA1%w to charge a light wave,&"

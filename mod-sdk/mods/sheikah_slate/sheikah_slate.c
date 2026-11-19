@@ -24,11 +24,9 @@
 #define SLATE_HELD_OFFSET_Y -8.276f
 #define SLATE_GIVE_SCALE 0.25f
 #define SLATE_TEXT_LENGTH 512
-// Short enough to feel instant, long enough that a tap still reaches the vanilla Z-target.
 #define SLATE_WHEEL_HOLD_FRAMES 8
 #define SLATE_BUTTON_COUNT 8
 
-// Above BOTH of En_Bom's fuse thresholds: under 100 it flashes red, under 63 it sparks and hisses.
 #define REMOTE_BOMB_INERT 200
 #define REMOTE_BOMB_TINT_R 95
 #define REMOTE_BOMB_TINT_G 220
@@ -37,21 +35,15 @@
 #define CRYONIS_DIST_MIN 90.0f
 #define CRYONIS_DIST_MAX 420.0f
 #define CRYONIS_DIST_START 170.0f
-#define CRYONIS_DIST_RATE 7.0f // units per frame with the pad held
-// Slimmer and a touch shorter than a doubled block: a pillar, not a tower of ice.
+#define CRYONIS_DIST_RATE 7.0f
 #define CRYONIS_HEIGHT_MUL 1.8f
 #define CRYONIS_WIDTH_MUL 0.6f
 #define CRYONIS_SCALE 0.1f
-// How far the column reaches BELOW the surface it grew from. A slab sitting on the water line puts a ceiling
-// poly at swimming height: Link gets under it, cannot surface and drowns. A column blocks him with its walls.
 #define CRYONIS_DEPTH 200.0f
-#define CRYONIS_BREAK_SLACK 20.0f // how far off the pillar the aim may sit and still mean "break it"
-// The rise, in ticks at the 20 Hz the actor system runs at. It starts as a sliver, not at zero: a dynapoly box
-// with no height is a set of degenerate polys for as long as it lasts.
+#define CRYONIS_BREAK_SLACK 20.0f
 #define CRYONIS_GROW_TICKS 11
 #define CRYONIS_GROW_START 0.06f
 #define CRYONIS_SHARDS 12
-// The wall flag the player's climb check gates on.
 #define WALL_FLAG_CLIMBABLE (1 << 3)
 
 typedef enum {
@@ -85,7 +77,6 @@ static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/
 static const ALIGN_ASSET(2) char sSlateDL[] = "__OTR__objects/object_nei_sheikah_slate/gNeiSheikahSlateDL";
 static const ALIGN_ASSET(2) char sIceBlockCol[] = "__OTR__objects/object_ice_objects/object_ice_objects_Col_0003F0";
 
-// Entry 0 is the blank the wheel always carries: the tablet with no rune selected, which casts nothing.
 static const Z64WheelEntry sWheelEntries[SLATE_RUNE_COUNT] = {
     { sSlateIconTex, "No Rune", sSlateIconTex },      { sBombRuneTex, "Remote Bomb", sBombIconTex },
     { sStasisRuneTex, "Stasis", sStasisIconTex },     { sCryonisRuneTex, "Cryonis", sCryonisIconTex },
@@ -113,7 +104,8 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
                                               "OnActorDrawEnd",
                                               "OnSceneInit",
                                               "OnPlayerPostLimbDraw",
-                                              "OnPlayDrawEnd", "OnPlayerFilterInput",
+                                              "OnPlayDrawEnd",
+                                              "OnPlayerFilterInput",
                                               "OnActorDraw",
                                               "OnActorResolveGrayscale",
                                               "OnBgCheckResolveWallFlags",
@@ -122,7 +114,6 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate",
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// One item and one slot, found four times over: each rune pickup copies this with its own key.
 static const SOHCustomItemRandomizer sSlateLogic = {
     sizeof(SOHCustomItemRandomizer),
     SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT | SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
@@ -144,7 +135,6 @@ static char sPauseText[SLATE_TEXT_LENGTH];
 static Actor* sRemoteBomb;
 static u32 sCastFrame;
 
-// The generic held-item hoist, the one a lifted pot goes through. Not in functions.h, but exported.
 void func_80835688(Player* player, PlayState* play);
 s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 void CollisionCheck_ApplyDamage(PlayState* play, CollisionCheckContext* colChkCtx, Collider* collider,
@@ -154,8 +144,6 @@ static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
     Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
-// Which rune the tablet wears, and which ones Link has found at all, both live in the wheel, and the wheel
-// lives in the save file.
 static u8 CurrentRune(void) {
     u32 selection = Z64Wheel_GetSelection();
 
@@ -166,7 +154,6 @@ static bool IsRuneOwned(u8 rune) {
     return rune != SLATE_RUNE_NONE && Z64Wheel_IsEntryUnlocked(rune);
 }
 
-// Locked runes are not offered: the tablet turns through what it has learned, plus the blank.
 static u8 NextAvailableRune(u8 from) {
     for (u8 step = 1; step <= SLATE_RUNE_COUNT; step++) {
         u8 candidate = (from + step) % SLATE_RUNE_COUNT;
@@ -178,8 +165,6 @@ static u8 NextAvailableRune(u8 from) {
     return SLATE_RUNE_NONE;
 }
 
-// The wheel stops the world and waits for an answer, so a rune is chosen rather than cycled past. If it will
-// not open, the tablet turns to the next rune it knows instead.
 static void OpenRuneWheel(void) {
     if (Z64Wheel_Open()) {
         return;
@@ -187,7 +172,6 @@ static void OpenRuneWheel(void) {
     Z64Wheel_SetSelection(NextAvailableRune(CurrentRune()));
 }
 
-// Every button currently holding the slate.
 static u16 EquippedButtonMask(void) {
     u16 mask = 0;
 
@@ -201,18 +185,15 @@ static u16 EquippedButtonMask(void) {
     return mask;
 }
 
-// The pause screen describes the rune the tablet is wearing, because that is the one its button casts.
 static void DescribeRune(u8 rune) {
     if (sShownRune == rune) {
         return;
     }
-    snprintf(sPauseText, sizeof(sPauseText), "%%rSheikah Slate&%%w%s",
-             sRuneTexts[rune].castLine);
+    snprintf(sPauseText, sizeof(sPauseText), "%%rSheikah Slate&%%w%s", sRuneTexts[rune].castLine);
     Z64Items_UpdateText(sApi, SLATE_KEY, SOH_ITEM_TEXT_PAUSE, sPauseText);
     sShownRune = rune;
 }
 
-// Each rune is its own pickup variant of the tablet, so the seed places and the logic tracks them one by one.
 static const char* const sPickupKeys[SLATE_RUNE_COUNT] = {
     "", "nei.slate.bomb", "nei.slate.stasis", "nei.slate.cryonis", "nei.slate.master_cycle",
 };
@@ -221,7 +202,6 @@ static const u8 sRuneFlameColors[SLATE_RUNE_COUNT][3] = {
     { 0, 0, 0 }, { 100, 235, 220 }, { 255, 220, 40 }, { 175, 205, 220 }, { 255, 135, 35 },
 };
 
-// The rune the textbox just named. Taking it also makes it the live one, so the tablet comes out wearing it.
 static void ReceiveSlateRune(const char* itemKey, const char* variantKey) {
     for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
         if (strcmp(variantKey, sVariantNames[rune]) == 0) {
@@ -233,14 +213,12 @@ static void ReceiveSlateRune(const char* itemKey, const char* variantKey) {
     }
 }
 
-// The tablet itself, given outside its variants (vanilla placement, the console), comes with every rune.
 static void GrantAllRunes(const char* key) {
     for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
         Z64Wheel_SetEntryUnlocked(rune, true);
     }
 }
 
-// A rune received while another save was loaded, or before the wheel existed, still unlocks on the next frame.
 static void SyncReceivedRunes(void) {
     for (u8 rune = SLATE_RUNE_BOMB; rune < SLATE_RUNE_COUNT; rune++) {
         if (sApi->IsCustomItemOwned(sPickupKeys[rune])) {
@@ -255,7 +233,7 @@ static bool RegisterRunePickups(void) {
         SOHCustomItemRandomizer logic = sSlateLogic;
         char text[SLATE_TEXT_LENGTH];
 
-        snprintf(text, sizeof(text), "The %%rSheikah Slate%%w learned&%s!^%s^%s", sRuneTexts[rune].name,
+        snprintf(text, sizeof(text), "You unlocked %s for&the %%rSheikah Slate%%w!^%s^%s", sRuneTexts[rune].name,
                  sRuneTexts[rune].loreLine, sRuneTexts[rune].castLine);
         logic.flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT;
         logic.poolCount = 1;
@@ -276,17 +254,11 @@ static bool RegisterRunePickups(void) {
     return true;
 }
 
-// ── Remote Bomb ──────────────────────────────────────────────────────────────
-// OoT's own En_Bom with its fuse taken away: one press pulls a bomb out of the slate, the next sets it off,
-// still in Link's hands or wherever he threw it.
-
-// Stop owning the bomb without writing through the pointer: after a scene change the actor is gone, and a dead
-// one may have had its slot recycled.
+// Never write through the pointer: after a scene change the actor is gone and its slot may be recycled.
 static void ForgetRemoteBomb(void) {
     sRemoteBomb = NULL;
 }
 
-// Player_InitExplosiveIA's own sequence, minus the ammo cost: the rune makes its own bombs.
 static bool LiftRemoteBomb(PlayState* play, Player* player) {
     Actor* bomb;
 
@@ -299,8 +271,6 @@ static bool LiftRemoteBomb(PlayState* play, Player* player) {
         return false;
     }
     ((EnBom*)bomb)->timer = REMOTE_BOMB_INERT;
-    // EnBom_Init leaves the bomb at scale 0, and the frame that grows it is timer == 67, which a bomb with no
-    // fuse never reaches.
     Actor_SetScale(bomb, 0.01f);
 
     player->interactRangeActor = bomb;
@@ -315,7 +285,6 @@ static bool LiftRemoteBomb(PlayState* play, Player* player) {
     return true;
 }
 
-// En_Bom owns the flash, the sound, the damage, the quake and the debris.
 static bool DetonateRemoteBomb(void) {
     if (sRemoteBomb == NULL) {
         return false;
@@ -332,7 +301,6 @@ static bool CastRemoteBomb(PlayState* play, Player* player) {
     return DetonateRemoteBomb();
 }
 
-// The engine's colour filter has only white, red and blue, so the rune's cyan is a grayscale recolour.
 static void TintRemoteBomb(Actor* actor, PlayState* play, Color_RGBA8* grayscale) {
     if (actor != sRemoteBomb) {
         return;
@@ -343,8 +311,6 @@ static void TintRemoteBomb(Actor* actor, PlayState* play, Color_RGBA8* grayscale
     grayscale->a = 255;
 }
 
-// A carried actor is thrown by A, B or any C button, so the slate's own button would lob the bomb instead of
-// setting it off. A and B still throw it.
 static void HoldOntoRemoteBomb(bool* should, va_list args) {
     Input* input = va_arg(args, Input*);
 
@@ -356,11 +322,6 @@ static void HoldOntoRemoteBomb(bool* should, va_list args) {
     }
 }
 
-/**
- * The bomb's fuse has to be held down every frame it exists, so this runs with the tablet stowed and the wheel
- * open too. Vanilla reads no item button while Link carries something, so the press that sets the bomb off is
- * read here, skipping the one the item's own press already handled this frame.
- */
 static void RunRemoteBomb(PlayState* play, Player* player) {
     if (sRemoteBomb == NULL) {
         return;
@@ -369,15 +330,12 @@ static void RunRemoteBomb(PlayState* play, Player* player) {
         ForgetRemoteBomb();
         return;
     }
-    // Already exploding, whether we set it off, a sword blow did or an enemy did. Either way it stops being ours.
     if (sRemoteBomb->params != BOMB_BODY) {
         ForgetRemoteBomb();
         return;
     }
-    // Re-asserted every frame, not set once: En_Bom counts the fuse down inside its own update.
     ((EnBom*)sRemoteBomb)->timer = REMOTE_BOMB_INERT;
     sRemoteBomb->colorFilterParams = 0;
-    // The tablet stays in hand while a bomb of ours is out, or the host's watchdog would put it away.
     Z64Items_KeepHeld(sApi);
 
     if (play->state.frames == sCastFrame) {
@@ -388,20 +346,13 @@ static void RunRemoteBomb(PlayState* play, Player* player) {
     }
 }
 
-// ── Cryonis ──────────────────────────────────────────────────────────────────
-// A pillar of ice rises out of a water surface, taller than the Ice Cavern block it is made of and climbable on
-// every face. Only one stands at a time: raising the next shatters the last, and aiming at the one already
-// standing breaks it instead of placing another.
-
 typedef struct {
     Actor* pillar;
     s32 bgId;
-    u8 growTick; // 0..CRYONIS_GROW_TICKS, the rise out of the water
-    f32 waterY;  // the surface it grew from: the one thing the rise may not move
+    u8 growTick;
+    f32 waterY;
 } CryonisState;
 
-// What breaks the pillar. Only the two things that break ice everywhere else in the game, so a stray sword swing
-// cannot drop you in the lake off a bridge you are standing on.
 static ColliderCylinderInit sPillarColliderInit = {
     {
         COLTYPE_NONE,
@@ -440,28 +391,22 @@ static Gfx sGhostDL[] = {
 };
 
 static CryonisState sCryonis = { NULL, BGCHECK_SCENE, 0, 0.0f };
-// Actor_Spawn only allocates sizeof(BgIceObjects), which has no room for a collider, so the one
-// pillar that may exist keeps its own here.
 static ColliderCylinder sPillarCollider;
 static u8 sIsPillarColliderReady;
 static bool sIsAiming;
 static f32 sAimDistance = CRYONIS_DIST_START;
 static Vec3f sAimPos;
 static bool sAimIsValid;
-static bool sAimBreaks; // the aim sits on the standing pillar: A breaks instead of placing
+static bool sAimBreaks;
 
-// The block's own dimensions, measured once off the collision header: half-extents and the rise, in world
-// units, plus the mesh height in its own space, which is what the growth scales.
 static f32 sBlockHalfX;
 static f32 sBlockHalfZ;
 static f32 sBlockHeight;
 static f32 sBlockLocalHeight;
-static f32 sBlockMinY;       // the mesh bottom in local space: the rise rescales this
-static f32 sBlockBaseOffset; // world.pos.y - (bottom of the mesh), full grown
+static f32 sBlockMinY;
+static f32 sBlockBaseOffset;
 static bool sIsBlockMeasured;
 
-// The aim is drawn to the size of the block before any pillar exists, so the measuring reads the header itself
-// rather than waiting for the first one to be raised.
 static void MeasureIceBlock(CollisionHeader* header) {
     if (sIsBlockMeasured) {
         return;
@@ -481,21 +426,12 @@ static void MeasureIceBlock(CollisionHeader* header) {
     sIsBlockMeasured = true;
 }
 
-// Fast out of the water, easing into place: the shape of BotW's own rise.
 static f32 GrowProgress(u8 tick) {
     f32 t = (f32)tick / (f32)CRYONIS_GROW_TICKS;
 
     return CRYONIS_GROW_START + ((1.0f - CRYONIS_GROW_START) * (1.0f - SQ(1.0f - t)));
 }
 
-/**
- * One frame of the rise: the top stretches up and the base stays welded to the water it came out of. The origin
- * has to travel with the scale, because the mesh's own bottom sits sBlockMinY below it — leaving the origin
- * still is what would sink the pillar as it grew.
- *
- * The one deliberate difference from NEI: the column also reaches CRYONIS_DEPTH BELOW the surface. A slab whose
- * underside sits on the water line puts a ceiling poly at swimming height, and Link gets under it and drowns.
- */
 static void ApplyGrowth(Actor* actor, f32 progress) {
     f32 total = CRYONIS_DEPTH + (sBlockHeight * progress);
     f32 scaleY = (sBlockLocalHeight > 0.0f) ? (total / sBlockLocalHeight) : CRYONIS_SCALE;
@@ -511,8 +447,6 @@ static void ForgetPillar(void) {
     sCryonis.bgId = BGCHECK_SCENE;
 }
 
-// A pillar killed from elsewhere — a scene change, a room unload — leaves a dangling pointer and, worse, a bgId
-// the engine will hand to somebody else's collision. Both have to go together.
 static void PrunePillar(void) {
     if ((sCryonis.pillar != NULL) && (sCryonis.pillar->update == NULL)) {
         ForgetPillar();
@@ -544,14 +478,7 @@ static void ShatterPillar(PlayState* play) {
     ForgetPillar();
 }
 
-/**
- * The pillar's whole update. BgIceObjects_Update runs Ice Cavern logic — a table of hardcoded slide targets and
- * a pit check written for that one room — which would drag the pillar back to home.pos or drop it through the
- * floor. What is left is releasing the push the player's dynapoly contact registers, since nothing else lowers
- * that flag, the rise, and the break collider.
- */
 static void PillarUpdate(Actor* thisx, PlayState* play) {
-    // Only the dynapoly base is ever touched, so the overlay's own layout is not needed here.
     DynaPolyActor* dyna = (DynaPolyActor*)thisx;
 
     if (sCryonis.growTick < CRYONIS_GROW_TICKS) {
@@ -565,26 +492,19 @@ static void PillarUpdate(Actor* thisx, PlayState* play) {
     if (sPillarCollider.base.acFlags & AC_HIT) {
         sPillarCollider.base.acFlags &= ~AC_HIT;
         ShatterPillar(play);
-        return; // the actor is dead: nothing below may touch it
+        return;
     }
     Collider_UpdateCylinder(thisx, &sPillarCollider);
     CollisionCheck_SetAC(play, &play->colChkCtx, &sPillarCollider.base);
 }
 
-/**
- * The pillar's faces are climbable, and nothing else is. Answered by bgId rather than by writing a climbable
- * wall type into the collision header, which is a shared cached resource: editing it would make every Ice Cavern
- * block in the session climbable for good.
- */
 static void MakePillarClimbable(CollisionContext* colCtx, CollisionPoly* poly, int32_t bgId, uint32_t* flags) {
-    // Deliberately no prune: bgcheck asks before the slate's tick has run on the first frame of a new scene,
-    // when the pointer may already be freed memory. Comparing it against NULL is safe; reading through it is not.
+    // The pointer may already be freed on the first frame of a new scene: compare it, never read through it.
     if ((sCryonis.pillar != NULL) && (bgId == sCryonis.bgId)) {
         *flags |= WALL_FLAG_CLIMBABLE;
     }
 }
 
-// Placement follows the CAMERA, not Link's body, so the pillar lands where the player is looking.
 static s16 AimYaw(PlayState* play, Player* player) {
     Vec3f eye = play->view.eye;
     Vec3f at = play->view.lookAt;
@@ -608,7 +528,6 @@ static bool AimIsOnPillar(Vec3f* pos) {
     return (SQ(dx) + SQ(dz)) < SQ(reach);
 }
 
-// Is the water at `pos` reachable, or is there a wall between Link and it?
 static bool AimPathIsClear(PlayState* play, Player* player, Vec3f* pos) {
     Vec3f from = player->actor.world.pos;
     Vec3f to = *pos;
@@ -656,20 +575,11 @@ static void LeaveAiming(bool isCancelled) {
     }
 }
 
-/**
- * Raises the pillar with its base on the water surface `pos` sits at.
- *
- * The pillar IS the Ice Cavern block: spawning the vanilla actor is what brings its model, its texture and its
- * CollisionHeader along, and only its `update` is replaced. Building an actor of our own would mean hand-drawing
- * all three.
- */
 static bool RaisePillar(PlayState* play, Vec3f* pos) {
     Actor* actor;
 
     MeasureIceBlock(NULL);
     if (Object_GetIndex(&play->objectCtx, OBJECT_ICE_OBJECTS) < 0) {
-        // Actor_Spawn refuses an actor whose object is not in the bank. The load is synchronous, so the request
-        // placed here is honoured by the spawn on the next line.
         Object_Spawn(&play->objectCtx, OBJECT_ICE_OBJECTS);
     }
     actor =
@@ -690,14 +600,13 @@ static bool RaisePillar(PlayState* play, Vec3f* pos) {
 
     sCryonis.waterY = pos->y;
     sCryonis.growTick = 0;
-    ApplyGrowth(actor, GrowProgress(0)); // it comes out of the water as a sliver
+    ApplyGrowth(actor, GrowProgress(0));
 
     sCryonis.pillar = actor;
     sCryonis.bgId = ((DynaPolyActor*)actor)->bgId;
     return true;
 }
 
-// The cast opens the aiming mode rather than placing anything; A commits and B backs out.
 static bool CastCryonis(PlayState* play, Player* player) {
     if (sIsAiming) {
         LeaveAiming(true);
@@ -707,16 +616,11 @@ static bool CastCryonis(PlayState* play, Player* player) {
     sIsAiming = true;
     sAimDistance = CRYONIS_DIST_START;
     UpdateAim(play, player);
-    // Link keeps the stick, but the buttons the mode answers with are its own: A would roll and B would draw
-    // the sword, and either takes the tablet out of his hand.
     sApi->BlockPlayerInput(SLATE_KEY, BTN_A | BTN_B | BTN_DUP | BTN_DDOWN, false);
     PlaySfxAt(NA_SE_SY_GET_ITEM, &gSfxDefaultPos);
     return true;
 }
 
-/**
- * One frame of the aiming mode. Returns true while it owns the input, so the tablet's own handling stops.
- */
 static bool RunCryonis(PlayState* play, Player* player) {
     Input* input = &play->state.input[0];
     u16 held;
@@ -732,8 +636,6 @@ static bool RunCryonis(PlayState* play, Player* player) {
         LeaveAiming(true);
         return true;
     }
-    // Read from cur.button, never press: a held pad is a continuous move here, and the player actor consumes the
-    // D-pad press bits for its own item handling long before this runs.
     held = input->cur.button;
     if (held & BTN_DUP) {
         sAimDistance += CRYONIS_DIST_RATE;
@@ -754,9 +656,9 @@ static bool RunCryonis(PlayState* play, Player* player) {
     }
     if (!sAimIsValid) {
         PlaySfxAt(NA_SE_SY_ERROR, &player->actor.world.pos);
-        return true; // a bad aim is a miss, not a cancel
+        return true;
     }
-    ShatterPillar(play); // only one pillar stands at a time
+    ShatterPillar(play);
     if (!RaisePillar(play, &sAimPos)) {
         PlaySfxAt(NA_SE_SY_ERROR, &player->actor.world.pos);
     }
@@ -764,8 +666,6 @@ static bool RunCryonis(PlayState* play, Player* player) {
     return true;
 }
 
-// The pillar's collision took Link once already (a ceiling poly at swimming height drowned him), so if either
-// of the two engine paths that can carry him off ever fires next to one, the log says which and where.
 static void WatchPillarForTrouble(Player* player) {
     bool isCrushed = (player->actor.bgCheckFlags & 0x100) != 0;
     bool hasNoFloor = (player->stateFlags1 & PLAYER_STATE1_FLOOR_DISABLED) != 0;
@@ -808,37 +708,29 @@ static void DrawAimGhost(void) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ── Stasis ───────────────────────────────────────────────────────────────────
-// Freezes ONE body in time. What the freeze means depends on what was caught: an enemy stops and
-// banks every blow it takes until it thaws; anything else stops dead, turns solid, and flies when it
-// is let go, aimed by the last blow and as hard as everything it has taken.
-//
-// The takeover is the Cane of Pacci idiom: swap the actor's `update` for one of ours — never NULL it,
-// that is the engine's "dead" marker — snapshot every field written, and disable culling, or the
-// engine stops running our replacement the moment the player looks away.
+// Never NULL an actor's update: the engine treats it as the dead marker. Culling must be disabled or the
+// replacement stops running when the player looks away.
 
-#define STASIS_FRAMES_OBJECT 200 // ten seconds at the 20 ticks/second the actor system runs at
+#define STASIS_FRAMES_OBJECT 200
 #define STASIS_SFX_RATE_ENEMY 2.0f
 #define STASIS_FRAMES_ENEMY ((s16)(STASIS_FRAMES_OBJECT / STASIS_SFX_RATE_ENEMY))
 #define STASIS_CHAIN_FRAMES 20
 #define STASIS_CHAIN_FRAMES_ENEMY ((s16)(STASIS_CHAIN_FRAMES / STASIS_SFX_RATE_ENEMY))
 #define STASIS_FLIGHT_FRAMES 90
-#define STASIS_RANGE 520.0f // longshot reach
-#define STASIS_CONE 0x1800  // +-33.75 degrees around Link's facing
+#define STASIS_RANGE 520.0f
+#define STASIS_CONE 0x1800
 #define STASIS_MIN_DIST 30.0f
 #define STASIS_LAUNCH_BASE 8.0f
 #define STASIS_LAUNCH_PER_DAMAGE 1.8f
-#define STASIS_LAUNCH_PER_HIT 3.0f // what a blow that deals no damage at all is worth
+#define STASIS_LAUNCH_PER_HIT 3.0f
 #define STASIS_LAUNCH_MAX 42.0f
 #define STASIS_LAUNCH_VEL_Y 6.0f
 #define STASIS_GRAVITY -1.4f
-// Set explicitly rather than inherited: plenty of props leave minVelocityY at a value that cancels
-// gravity outright, because they were never meant to fall.
 #define STASIS_MIN_VELOCITY_Y -30.0f
 #define STASIS_RECOIL_SPEED 7.0f
 #define STASIS_RECOIL_HEIGHT 3.5f
 #define STASIS_SLIDE_FRICTION 0.93f
-#define STASIS_MIN_HEIGHT 25.0f // below this a body is not worth the rune
+#define STASIS_MIN_HEIGHT 25.0f
 #define STASIS_CLIMBABLE_MIN_HEIGHT 70.0f
 #define STASIS_CLIMB_MIN_HALF_HEIGHT 24.0f
 #define STASIS_MAX_OWN_COLLIDERS 4
@@ -847,9 +739,6 @@ static void DrawAimGhost(void) {
 #define STASIS_FIRE_EFFECT 1
 #define STASIS_FIRE_PAD 12.0f
 
-// The tint is a RAMP: BotW fades a body from gold toward red as it takes on energy, so the colour
-// alone says how hard it is about to go. The grayscale pass multiplies by each texel's own
-// brightness, so these are pushed near white-hot or a dark model comes out muddy.
 #define STASIS_TINT_R 255
 #define STASIS_TINT_G 235
 #define STASIS_TINT_B 90
@@ -857,7 +746,6 @@ static void DrawAimGhost(void) {
 #define STASIS_TINT_HOT_G 70
 #define STASIS_TINT_HOT_B 40
 
-// bgCheckFlags, which this fork spells as bare numbers.
 #define STASIS_BG_GROUND (1 << 0)
 #define STASIS_BG_WALL (1 << 3)
 #define STASIS_BG_CEILING (1 << 4)
@@ -866,8 +754,8 @@ typedef enum {
     STASIS_KIND_NONE,
     STASIS_KIND_ENEMY,
     STASIS_KIND_PROP,
-    STASIS_KIND_BLOCK,     // pushable blocks and platforms: shoved along the floor, never climbable
-    STASIS_KIND_CLIMBABLE, // big enough that its walls become something to hang from
+    STASIS_KIND_BLOCK,
+    STASIS_KIND_CLIMBABLE,
 } StasisKind;
 
 typedef enum {
@@ -879,20 +767,18 @@ typedef struct {
     Actor* actor;
     u8 kind;
     u8 phase;
-    s16 timer;      // stasis frames left, or flight frames once launched
-    s16 chainTimer; // the chain burst, at the start only
+    s16 timer;
+    s16 chainTimer;
     s16 age;
     u16 accumDamage;
-    // The LAST blow's damage type, so the single hit delivered on thaw is the one the player finished
-    // with: twenty of sword ended with an ice arrow arrives as ice.
     u32 lastDmgFlags;
     u8 lastDmgEffect;
     u8 lastDmgAmount;
     f32 force;
-    Vec3f hitDir; // the last blow's direction: only the magnitude accumulates, never the aim
+    Vec3f hitDir;
     u8 hasHitDir;
     s32 bgId;
-    u8 bgIsOurs; // we registered that bgId and must delete it on thaw
+    u8 bgIsOurs;
     ActorFunc origUpdate;
     u32 origFlags;
     f32 origGravity;
@@ -903,38 +789,27 @@ typedef struct {
     u8 origMass;
     ColliderCylinder collider;
     u8 colliderReady;
-    // The body's OWN colliders. They already know how to be hit — AC_HARD with COLTYPE_HARD or
-    // COLTYPE_TREE is the clonk and the sword bounce a rock gives in the vanilla game — and a frozen
-    // actor never re-registers them, so the tick submits them on its behalf. What stays gone is the
-    // BREAK, which lives in the update we silenced.
     ColliderCylinder* ownCollider[STASIS_MAX_OWN_COLLIDERS];
     u8 ownColliderCount;
-    u8 extraCollider; // ours covers the band the body's own colliders never reach
+    u8 extraCollider;
     u8 riderAttached;
     Vec3f riderOffset;
-    u8 slideLaunch; // a shove along the floor rather than a throw through the air
+    u8 slideLaunch;
 } StasisState;
 
 static StasisState sStasis;
-static Actor* sOfferActor; // what a cast would catch right now, painted so the pick can be seen
+static Actor* sOfferActor;
 static ColliderCylinder sFireCollider;
 static Actor* sFireOwner;
 
-// Arms a body so landing on a weight-driven switch presses it. Defined with the rest of the switch
-// magnet, below the freeze that reaches for it.
 static void MakePresser(Actor* actor);
 
-// The rune's own cue, mixed on the audio thread. Defined in the PCM player included at the tail.
 static void StasisSfx_Play(f32 rate, f32 volume);
 static void StasisSfx_Stop(void);
 static void StasisSfx_SeekToTail(f32 seconds);
 
-// Ambient almost white, one strong diffuse. Scene ambient sits far lower, which is why an untouched
-// model has no brightness for the tint to work with.
 static Lights1 sStasisLights = gdSPDefLights1(210, 205, 175, 255, 250, 220, 0x28, 0x28, 0x28);
 
-// AC keeps a frozen body hittable, which is the whole point: you beat on it to charge the launch. AT
-// goes live only while it flies, so a thrown block smashes what it reaches.
 static ColliderCylinderInit sStasisColliderInit = {
     {
         COLTYPE_NONE,
@@ -955,8 +830,6 @@ static ColliderCylinderInit sStasisColliderInit = {
     { 40, 60, 0, { 0, 0, 0 } },
 };
 
-// Pushable blocks, crates, platforms and lifts. Launchable, never climbable — a pushblock you can
-// climb breaks every block puzzle in the game — and shoved along the floor rather than thrown.
 static const s16 sBlockIds[] = {
     ACTOR_OBJ_OSHIHIKI,    ACTOR_OBJ_KIBAKO2,      ACTOR_OBJ_HSBLOCK,        ACTOR_OBJ_TIMEBLOCK,  ACTOR_OBJ_WARP2BLOCK,
     ACTOR_BG_JYA_BLOCK,    ACTOR_BG_GND_ICEBLOCK,  ACTOR_BG_SPOT08_ICEBLOCK, ACTOR_BG_PUSHBOX,     ACTOR_BG_HEAVY_BLOCK,
@@ -965,9 +838,6 @@ static const s16 sBlockIds[] = {
     ACTOR_BG_SPOT15_RRBOX,
 };
 
-// Rocks, breakables, things already in motion, and the small carryables. Freezing a rolling boulder
-// and sending it back the way it came is the most Stasis-shaped thing in the game; freezing a falling
-// block or a guillotine is the defensive half of the same rune.
 static const s16 sPropIds[] = {
     ACTOR_OBJ_BOMBIWA,       ACTOR_OBJ_HAMISHI,    ACTOR_BG_SPOT16_BOMBSTONE,
     ACTOR_BG_SPOT01_IDOSOKO, ACTOR_BG_HAKA,        ACTOR_BG_MENKURI_EYE,
@@ -981,21 +851,16 @@ static const s16 sPropIds[] = {
     ACTOR_BG_PO_SYOKUDAI,    ACTOR_EN_ICE_HONO,
 };
 
-// Scripted heavyweights whose AI does not survive being paused.
 static const s16 sEnemyBlacklist[] = {
     ACTOR_EN_IK, ACTOR_EN_TORCH2, ACTOR_EN_ZF, ACTOR_EN_WALLMAS, ACTOR_EN_FLOORMAS, ACTOR_EN_RD,
 };
 
-// Architecture wearing an actor's clothes: rotating wall quadrants with Link standing on them, the
-// water plane, twisted corridors, the falling ceiling. Freezing one of these moves the room.
 static const s16 sStructureIds[] = {
     ACTOR_BG_MORI_KAITENKABE, ACTOR_BG_MIZU_WATER,   ACTOR_BG_JYA_ZURERUKABE,  ACTOR_BG_JYA_AMISHUTTER,
     ACTOR_BG_HIDAN_HAMSTEP,   ACTOR_BG_MORI_HINERI,  ACTOR_BG_MORI_RAKKATENJO, ACTOR_BG_MORI_IDOMIZU,
     ACTOR_BG_MORI_HASHIRA4,   ACTOR_BG_MORI_HASHIGO, ACTOR_BG_MIZU_MOVEBG,     ACTOR_BG_HAKA_SHIP,
 };
 
-// Bodies that must come out facing the way they went in: a block the player LINED UP no longer fits
-// the slot it was meant for once it has been spun forty degrees.
 static const s16 sKeepsPoseIds[] = {
     ACTOR_OBJ_OSHIHIKI, ACTOR_EN_AM, ACTOR_BG_ICE_OBJECTS, ACTOR_BG_GND_ICEBLOCK, ACTOR_OBJ_ELEVATOR,
 };
@@ -1009,7 +874,6 @@ static u8 IsIdInList(s16 id, const s16* list, s32 count) {
     return 0;
 }
 
-// Only a lit torch sets what it touches on fire; an unlit one is a post.
 static u8 IsBodyBurning(Actor* actor) {
     if (actor->id == ACTOR_EN_ICE_HONO) {
         return 1;
@@ -1019,11 +883,6 @@ static u8 IsBodyBurning(Actor* actor) {
     }
     return 0;
 }
-
-// ── The body's shape ─────────────────────────────────────────────────────────
-// A body is a LATHE PROFILE: a stack of rings, each a (height, radius) pair, joined by frustum walls.
-// That is not an approximation of convenience — these models decode out of the archives as rings of
-// vertices sharing a y, so a profile traces the silhouette instead of boxing it.
 
 #define STASIS_MAX_RINGS 4
 #define STASIS_RING_SIDES 8
@@ -1039,8 +898,6 @@ typedef struct {
     s16 radius;
 } StasisRing;
 
-// A body can be more than one lathe: a tree is a pole with a cone hanging around it. Each stack names
-// a slice of the shared ring array and says whether its ends are closed.
 typedef struct {
     u8 first;
     u8 count;
@@ -1050,26 +907,13 @@ typedef struct {
 
 typedef struct {
     s16 id;
-    s16 paramsMax; // inclusive match on params & 0xFF, or -1 for any
+    s16 paramsMax;
     u8 ringCount;
     StasisRing ring[STASIS_MAX_RINGS];
     u8 stackCount;
     StasisStack stack[STASIS_MAX_STACKS];
 } StasisBody;
 
-/**
- * The real bounding rings of the vertices these actors draw, read out of the archives in MODEL units
- * and multiplied by the actor's own scale at build time, so every scale variant lands right for free.
- *
- * Three other sources were tried in NEI and all three lie: `colChkInfo.cylRadius/cylHeight` is often
- * zero or copy-pasted, the actor's own ColliderCylinder is deliberately far smaller than the model (a
- * tree's is 18 wide around the base of a 480-unit trunk), and hand-guessed world numbers ignore
- * `actor->scale`, which these bodies vary wildly.
- *
- * The tree crowns are left OPEN at both ends: the canopy flares from r12 to r180 over a single unit
- * of height, so capping it would put a ceiling across the trunk and end every climb a seventh of the
- * way up.
- */
 static const StasisBody sStasisBodies[] = {
     { ACTOR_EN_WOOD02,
       0x04,
@@ -1090,13 +934,10 @@ static const StasisBody sStasisBodies[] = {
       2,
       { { 0, 2, 1, 1 }, { 2, 2, 0, 0 } } },
     { ACTOR_OBJ_BOMBIWA, -1, 4, { { -123, 31 }, { 0, 405 }, { 387, 514 }, { 773, 256 } }, 1, { { 0, 4, 1, 1 } } },
-    // The same silver rock model at the same scale, drawn by both.
     { ACTOR_OBJ_HAMISHI, -1, 4, { { -111, 10 }, { -80, 101 }, { 16, 127 }, { 113, 64 } }, 1, { { 0, 4, 1, 1 } } },
     { ACTOR_EN_ISHI, -1, 4, { { -111, 10 }, { -80, 101 }, { 16, 127 }, { 113, 64 } }, 1, { { 0, 4, 1, 1 } } },
 };
 
-// The unit octagon, vertices ON the circle: a square ring overshoots by 41% at its corners, which is
-// what made frozen bodies feel bigger than they look.
 static const f32 sRingX[STASIS_RING_SIDES] = {
     1.0f, STASIS_OCT, 0.0f, -STASIS_OCT, -1.0f, -STASIS_OCT, 0.0f, STASIS_OCT
 };
@@ -1107,22 +948,14 @@ static const f32 sRingZ[STASIS_RING_SIDES] = {
 static Vec3i sStasisVtxPool[STASIS_BOX_VTX];
 static CollisionPoly sStasisPolyPool[STASIS_BOX_POLY];
 static SurfaceType sStasisSurfPool[1];
-// The camera reads colHeader->cameraDataList[camId].cameraSType with no NULL check, and every poly's
-// surface type carries a camera index. One neutral entry, and every poly points at index 0.
+// The camera reads cameraDataList[camId] with no NULL check: one neutral entry, every poly points at 0.
 static CamData sStasisCamData[1];
 static CollisionHeader sStasisHeader;
 
-/**
- * The body the collision is registered ON, which is NOT the frozen actor.
- *
- * The engine treats everything in bgActors[] as a DynaPolyActor and writes through that cast, so
- * registering a tree would put `interactFlags` and `bgId` straight inside En_Wood02's own collider
- * and leave it dangling. This carrier is ours down to the byte, parked on the frozen body every
- * frame; the real actor is never touched and gets its AI back intact.
- */
+// The engine writes through a DynaPolyActor cast on everything in bgActors[], so a foreign actor must
+// never be registered directly: this carrier is registered instead.
 static DynaPolyActor sStasisCarrier;
 
-// Never runs — the carrier is in no actor list — but a non-NULL update is the engine's "alive" mark.
 static void CarrierUpdate(Actor* thisx, PlayState* play) {
 }
 
@@ -1132,8 +965,6 @@ static void SyncCarrier(Actor* target) {
     sStasisCarrier.actor.prevPos = target->world.pos;
     sStasisCarrier.actor.shape.rot = target->shape.rot;
     sStasisCarrier.actor.world.rot = target->shape.rot;
-    // Scale is deliberately not copied: the box is authored in world units, so the carrier stays at 1
-    // and the engine's transform does not apply the target's scale a second time.
 }
 
 static void MakePoly(CollisionPoly* poly, s32 ia, s32 ib, s32 ic) {
@@ -1161,7 +992,6 @@ static void MakePoly(CollisionPoly* poly, s32 ia, s32 ib, s32 ic) {
     poly->dist = (s32) - ((n.x * a.x) + (n.y * a.y) + (n.z * a.z));
 }
 
-// Fills `rings` and `stacks` with world-space geometry and returns the ring count.
 static s32 GetBodyProfile(Actor* actor, StasisRing* rings, StasisStack* stacks, s32* stackCount) {
     PlayState* play = gPlayState;
     f32 sx = fabsf(actor->scale.x);
@@ -1185,15 +1015,12 @@ static s32 GetBodyProfile(Actor* actor, StasisRing* rings, StasisStack* stacks, 
         for (s32 j = 0; j < body->ringCount; j++) {
             rings[j].y = (s16)((f32)body->ring[j].y * sy);
             rings[j].radius = (s16)((f32)body->ring[j].radius * sx);
-            // An apex is a real part of the shape, but a zero-area ring makes polys with no usable
-            // normal, so the tip keeps the smallest radius that still builds.
             if (rings[j].radius < 3) {
                 rings[j].radius = 3;
             }
         }
         for (s32 j = 0; j < body->stackCount; j++) {
             stacks[j] = body->stack[j];
-            // Scaling can collapse two rings onto the same height on a tiny variant.
             for (s32 k = stacks[j].first + 1; k < stacks[j].first + stacks[j].count; k++) {
                 if (rings[k].y <= rings[k - 1].y) {
                     rings[k].y = rings[k - 1].y + 1;
@@ -1204,8 +1031,6 @@ static s32 GetBodyProfile(Actor* actor, StasisRing* rings, StasisStack* stacks, 
         return body->ringCount;
     }
 
-    // A body that owns dynapoly already carries an exact description of itself, which beats anything
-    // guessed: that is what a pushable block and an ice platform have instead of a table row.
     if (play != NULL) {
         for (s32 bg = 0; bg < play->colCtx.dyna.bgActorMax; bg++) {
             BgActor* bgActor = &play->colCtx.dyna.bgActors[bg];
@@ -1251,8 +1076,6 @@ static s32 GetBodyProfile(Actor* actor, StasisRing* rings, StasisStack* stacks, 
     return 2;
 }
 
-// The body's real extent in world units relative to its own position. One source for "where the blow
-// landed", "what can be climbed" and "what it bumps into in flight", so the three cannot disagree.
 static void MeasureBody(Actor* actor, f32* loY, f32* hiY, f32* maxR, f32* maxRY) {
     StasisRing ring[STASIS_MAX_RINGS];
     StasisStack stack[STASIS_MAX_STACKS];
@@ -1262,7 +1085,6 @@ static void MeasureBody(Actor* actor, f32* loY, f32* hiY, f32* maxR, f32* maxRY)
     *loY = *hiY = (f32)ring[0].y;
     *maxR = (f32)ring[0].radius;
     *maxRY = (f32)ring[0].y;
-    // Rings run bottom to top WITHIN a stack, but two stacks interleave, so scan them all.
     for (s32 i = 1; i < count; i++) {
         if ((f32)ring[i].y < *loY) {
             *loY = (f32)ring[i].y;
@@ -1277,7 +1099,6 @@ static void MeasureBody(Actor* actor, f32* loY, f32* hiY, f32* maxR, f32* maxRY)
     }
 }
 
-// Builds the lathe and registers it on the carrier. Returns the new bgId, or -1.
 static s32 BuildBodyCollision(PlayState* play, Actor* actor, u8 climbable) {
     StasisRing ring[STASIS_MAX_RINGS];
     StasisStack stack[STASIS_MAX_STACKS];
@@ -1316,9 +1137,6 @@ static s32 BuildBodyCollision(PlayState* play, Actor* actor, u8 climbable) {
         s32 base = stack[s].first;
         s32 last = base + stack[s].count - 1;
 
-        // Frustum walls between consecutive rings. The winding gives both triangles an outward
-        // normal; the engine reads normal.y to tell floor from wall from ceiling, so an inverted
-        // shell is a ceiling you fall through.
         for (s32 r = base; r < last; r++) {
             s32 lo = r * STASIS_RING_SIDES;
             s32 hi = (r + 1) * STASIS_RING_SIDES;
@@ -1344,9 +1162,7 @@ static s32 BuildBodyCollision(PlayState* play, Actor* actor, u8 climbable) {
         }
     }
 
-    // One surface type and we own it, so the climbable wall type is baked in rather than patched into
-    // a shared cached scene resource. It must be cleared for a body not meant to be climbed: the
-    // engine's own wall-flag getter reads it whatever our hook answers.
+    // The engine's wall-flag getter reads this whatever the hook answers, so clear it when not climbable.
     memset(&sStasisSurfPool[0], 0, sizeof(sStasisSurfPool[0]));
     sStasisSurfPool[0].wallType = climbable ? 4 : 0;
 
@@ -1369,8 +1185,6 @@ static s32 BuildBodyCollision(PlayState* play, Actor* actor, u8 climbable) {
     sStasisHeader.numWaterBoxes = 0;
     sStasisHeader.waterBoxes = NULL;
 
-    // Zeroed first: the engine writes bgId and interactFlags through the DynaPolyActor cast, and
-    // stale values from the last freeze would be read back as live state.
     memset(&sStasisCarrier, 0, sizeof(sStasisCarrier));
     sStasisCarrier.actor.update = CarrierUpdate;
     sStasisCarrier.actor.scale.x = sStasisCarrier.actor.scale.y = sStasisCarrier.actor.scale.z = 1.0f;
@@ -1379,13 +1193,10 @@ static s32 BuildBodyCollision(PlayState* play, Actor* actor, u8 climbable) {
     return DynaPoly_SetBgActor(play, &play->colCtx.dyna, &sStasisCarrier.actor, &sStasisHeader);
 }
 
-// ── What may be caught ───────────────────────────────────────────────────────
-
 static CollisionHeader* FindBodyBg(PlayState* play, Actor* actor, s32* bgIdOut) {
     if (play == NULL || actor == NULL) {
         return NULL;
     }
-    // The index into bgActors IS the bgId.
     for (s32 i = 0; i < play->colCtx.dyna.bgActorMax; i++) {
         BgActor* bg = &play->colCtx.dyna.bgActors[i];
 
@@ -1399,11 +1210,6 @@ static CollisionHeader* FindBodyBg(PlayState* play, Actor* actor, s32* bgIdOut) 
     return NULL;
 }
 
-/**
- * The body's own colliders, found by scanning its instance for the back-pointer every Collider keeps
- * to its owner. That is what lets this work without knowing each actor's private struct, and the real
- * allocated size comes from the ActorDB entry so the scan never runs off the end.
- */
 static s32 ScanOwnColliders(Actor* actor, ColliderCylinder** out, s32 max) {
     ActorDBEntry* entry = ActorDB_Retrieve(actor->id);
     size_t size = entry != NULL ? entry->instanceSize : 0;
@@ -1416,8 +1222,6 @@ static s32 ScanOwnColliders(Actor* actor, ColliderCylinder** out, s32 max) {
     for (size_t off = sizeof(Actor); (off + sizeof(ColliderCylinder)) <= size; off += 4) {
         ColliderCylinder* cyl = (ColliderCylinder*)(base + off);
 
-        // Three things must agree before writing through a guessed pointer: it points back at this
-        // actor, it calls itself a cylinder, and its radius is a plausible one.
         if ((cyl->base.actor != actor) || (cyl->base.shape != COLSHAPE_CYLINDER)) {
             continue;
         }
@@ -1431,11 +1235,6 @@ static s32 ScanOwnColliders(Actor* actor, ColliderCylinder** out, s32 max) {
     return count;
 }
 
-/**
- * How tall this actor is, for the "is it big enough to bother with" gate. Only really measured
- * sources count: `colChkInfo` is left at 10x10 by anyone who never calls SetInfo, and where it is
- * filled in it is copy-paste — the same literal in a pot, a crate, a boulder and a pebble.
- */
 static f32 MeasureBodyHeight(PlayState* play, Actor* actor) {
     ColliderCylinder* cyls[STASIS_MAX_OWN_COLLIDERS];
     CollisionHeader* header;
@@ -1456,7 +1255,6 @@ static f32 MeasureBodyHeight(PlayState* play, Actor* actor) {
     if (header != NULL) {
         return (f32)(header->maxBounds.y - header->minBounds.y) * fabsf(actor->scale.y);
     }
-    // Its own cylinder is already in WORLD units, so unlike the table this must not be scaled.
     count = ScanOwnColliders(actor, cyls, STASIS_MAX_OWN_COLLIDERS);
     for (s32 i = 0; i < count; i++) {
         if ((f32)cyls[i]->dim.height > tallest) {
@@ -1470,8 +1268,6 @@ static u8 IsFreezableEnemy(Actor* actor) {
     if (actor->category != ACTORCAT_ENEMY) {
         return 0;
     }
-    // MASS_IMMOVABLE inside ACTORCAT_ENEMY is how scripted minibosses mark themselves; it means
-    // something else on a prop, which is why this test is category-scoped.
     if (actor->colChkInfo.mass == MASS_IMMOVABLE) {
         return 0;
     }
@@ -1479,22 +1275,15 @@ static u8 IsFreezableEnemy(Actor* actor) {
 }
 
 static u8 IsFreezableProp(Actor* actor) {
-    // En_Ishi type 0 is the small rock Link simply picks up; only the type-1 boulder is worth a rune.
     if (actor->id == ACTOR_EN_ISHI) {
         return (actor->params & 1) == 1;
     }
-    // Wood02's bush and leaf types carry no collider at all. 0x0A is the last type that builds one.
     if (actor->id == ACTOR_EN_WOOD02) {
         return (actor->params & 0xFF) <= 0x0A;
     }
     return IsIdInList(actor->id, sPropIds, ARRAY_COUNT(sPropIds));
 }
 
-/**
- * Freezing an NPC is a gag right up until it is a softlock: the thing that walks a conversation from
- * page to page is the NPC's own update, and Player_Action_Talk only ever exits on TEXT_STATE_CLOSING.
- * So rather than a list of ids, these are the states in which no NPC may be taken.
- */
 static u8 IsNpcSafeToFreeze(PlayState* play, Actor* actor) {
     Player* player = GET_PLAYER(play);
 
@@ -1514,19 +1303,15 @@ static u8 ClassifyBody(PlayState* play, Actor* actor, s32* bgIdOut) {
     if (bgIdOut != NULL) {
         *bgIdOut = -1;
     }
-    if ((actor == NULL) || (actor->update == NULL) || (actor->id == ACTOR_PLAYER) || actor==sCryonis.pillar) {
+    if ((actor == NULL) || (actor->update == NULL) || (actor->id == ACTOR_PLAYER) || actor == sCryonis.pillar) {
         return STASIS_KIND_NONE;
     }
     if (actor->category == ACTORCAT_BOSS) {
         return STASIS_KIND_NONE;
     }
-    // Invisible triggers, spawn points and cutscene markers: freezing one moves something the player
-    // cannot see, which always reads as a bug.
     if (actor->draw == NULL) {
         return STASIS_KIND_NONE;
     }
-    // Attached to something else, so its owner decides when it dies — and Actor_Kill overwrites
-    // `update`, which is exactly where our frozen update lives.
     if ((actor->parent != NULL) || (actor->child != NULL)) {
         return STASIS_KIND_NONE;
     }
@@ -1542,7 +1327,6 @@ static u8 ClassifyBody(PlayState* play, Actor* actor, s32* bgIdOut) {
     if (IsFreezableEnemy(actor)) {
         return STASIS_KIND_ENEMY;
     }
-    // Tested before the generic dynapoly rule below, or every pushblock would come out climbable.
     if (IsIdInList(actor->id, sBlockIds, ARRAY_COUNT(sBlockIds))) {
         FindBodyBg(play, actor, bgIdOut);
         return STASIS_KIND_BLOCK;
@@ -1559,20 +1343,13 @@ static u8 ClassifyBody(PlayState* play, Actor* actor, s32* bgIdOut) {
         }
         return (halfHeight >= STASIS_CLIMB_MIN_HALF_HEIGHT) ? STASIS_KIND_CLIMBABLE : STASIS_KIND_BLOCK;
     }
-    // Visible, unattached, not architecture, not a boss and big enough to have been measured. The
-    // lists above are about HOW a body behaves, not about whether it may be taken.
     return STASIS_KIND_PROP;
 }
 
-// Deliberately absent: SWITCH (freezing a plate would stop the press), DOOR and CHEST (both own
-// transitions that softlock if paused), ITEMACTION (that is the attack, not the target), BOSS,
-// PLAYER. EXPLOSIVE is here because bombs are on the prop list and their category is their own.
 static const u8 sStasisCats[] = {
     ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG, ACTORCAT_NPC, ACTORCAT_EXPLOSIVE, ACTORCAT_MISC,
 };
 
-// The body Link is looking at: nearest in a cone around his facing, ties broken by the smaller angle
-// so "the thing you are aiming at" beats "the thing that happens to be closer".
 static Actor* ScanForBody(PlayState* play) {
     Player* player = GET_PLAYER(play);
     Actor* best = NULL;
@@ -1604,11 +1381,6 @@ static Actor* ScanForBody(PlayState* play) {
     return best;
 }
 
-// ── Freeze and thaw ──────────────────────────────────────────────────────────
-
-// The replacement update: it does the one thing a frozen body still has to do, which is nothing at
-// all. Held still ONLY while frozen — the takeover is kept through the launch, and zeroing here
-// unconditionally would cancel the throw the instant it started.
 static void FrozenUpdate(Actor* actor, PlayState* play) {
     if (!sStasis.colliderReady || (sStasis.actor != actor) || (sStasis.phase != STASIS_PHASE_FROZEN)) {
         return;
@@ -1629,9 +1401,6 @@ static void ChargeColor(f32 t, Color_RGBA8* out) {
     out->b = (u8)(STASIS_TINT_B + ((f32)(STASIS_TINT_HOT_B - STASIS_TINT_B) * t));
 }
 
-// Gold on a held body, a fainter and faster shimmer on one merely offered, so "aimed at" never reads
-// as "already frozen". The engine's colour filter has three modes and none of them is yellow, so the
-// colour comes from the grayscale pass, whose alpha is a blend weight.
 static void TintFrozenBody(Actor* actor, PlayState* play, Color_RGBA8* grayscale) {
     f32 pulse;
 
@@ -1648,12 +1417,6 @@ static void TintFrozenBody(Actor* actor, PlayState* play, Color_RGBA8* grayscale
     }
 }
 
-/**
- * The grayscale pass runs AFTER the combiner and only multiplies by each texel's own brightness, so
- * a dark model tints to olive rather than gold. The lever that reaches a foreign actor's materials is
- * the LIGHT: Actor_Draw calls Lights_Draw just before this hook, so a near-white ambient set here
- * overrides it for this model alone.
- */
 static void BrightenFrozenBody(Actor* actor, PlayState* play, bool* drawVanilla) {
     if ((actor != sStasis.actor) && (actor != sOfferActor)) {
         return;
@@ -1664,8 +1427,7 @@ static void BrightenFrozenBody(Actor* actor, PlayState* play, bool* drawVanilla)
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Only ever deletes what WE registered: deleting an actor's own bgId would leave a pushblock with no
-// collision for the rest of the scene.
+// Only delete a bgId we registered: deleting an actor's own leaves it without collision for the scene.
 static void DropBodyCollision(void) {
     PlayState* play = gPlayState;
 
@@ -1676,9 +1438,8 @@ static void DropBodyCollision(void) {
     sStasis.bgId = -1;
 }
 
-// Drop every pointer WITHOUT writing through it: the scene-change path, where the actors are already
-// gone and restoring their state would be a use-after-free. The collider survives on purpose — it is
-// initialised once and reused, and re-initialising it every freeze leaks collision list nodes.
+// Scene-change path: the actors are gone, so no pointer may be written through. The collider is kept,
+// since re-initialising it every freeze leaks collision list nodes.
 static void ForgetBody(void) {
     sStasis.actor = NULL;
     sStasis.kind = STASIS_KIND_NONE;
@@ -1697,18 +1458,11 @@ static void ForgetBody(void) {
     sStasis.bgIsOurs = 0;
     sStasis.riderAttached = 0;
     sStasis.slideLaunch = 0;
-    // These point INTO the actor's instance, so they die with it: a scene change frees that memory
-    // and a stale entry here would be submitted to the collision list.
     sStasis.ownColliderCount = 0;
     sStasis.extraCollider = 0;
     sFireOwner = NULL;
 }
 
-/**
- * A prop that never moves places its collider once in Init and never again, so a body that has been
- * thrown gets its own colliders dragged to where it landed — otherwise the boulder you SEE is not the
- * boulder you can bomb. `home` moves with it too: that is where a prop believes it belongs.
- */
 static void RelocateBody(Actor* actor) {
     actor->home.pos = actor->world.pos;
     for (s32 i = 0; i < sStasis.ownColliderCount; i++) {
@@ -1716,7 +1470,6 @@ static void RelocateBody(Actor* actor) {
     }
 }
 
-// Hand the actor back exactly as it was found.
 static void RestoreBody(void) {
     Actor* actor = sStasis.actor;
 
@@ -1724,8 +1477,6 @@ static void RestoreBody(void) {
     if ((actor == NULL) || (actor->update == NULL)) {
         return;
     }
-    // Only a body that actually flew is re-homed: an enemy that simply thawed must keep the home it
-    // patrols around.
     if (sStasis.phase == STASIS_PHASE_FLYING) {
         RelocateBody(actor);
     }
@@ -1739,13 +1490,9 @@ static void RestoreBody(void) {
     actor->colChkInfo.mass = sStasis.origMass;
     actor->speedXZ = 0.0f;
     actor->velocity.x = actor->velocity.y = actor->velocity.z = 0.0f;
-    // AFTER the flags are restored, or that line would strip the press flag right as it lands: a
-    // statue that presses switches goes on pressing switches.
     MakePresser(actor);
 }
 
-// A block does not go diagonally, and it never has: the puzzle is which way along its own grid it
-// travels, so its direction is rounded to the nearest of its four faces and flattened.
 static void LockDirToAxis(Actor* actor, Vec3f* dir) {
     s16 yaw = (s16)(Math_FAtan2F(dir->x, dir->z) * (0x8000 / M_PI));
     s16 rel = (s16)(((yaw - actor->shape.rot.y) + 0x2000) & (s16)0xC000);
@@ -1786,14 +1533,8 @@ static f32 LaunchSpeed(void) {
     return (speed > STASIS_LAUNCH_MAX) ? STASIS_LAUNCH_MAX : speed;
 }
 
-/**
- * Everything the enemy took while it was held, delivered as ONE blow carrying the LAST one's type.
- *
- * Subtracting health directly is not a hit: the enemy never notices, so it does not flinch, burn,
- * freeze, die or drop anything. Enemies read one field to choose between those (`damageEffect`), and
- * it is a nibble of the enemy's OWN table indexed by the attacker's dmgFlags — so rather than compute
- * it, a real hit is staged and CollisionCheck_ApplyDamage reads the table.
- */
+// Subtracting health directly is not a hit: damageEffect comes from the enemy's own table via
+// CollisionCheck_ApplyDamage, so a real hit is staged.
 static ColliderInfo sStoredHitInfo;
 static Collider sStoredHitCollider;
 
@@ -1805,7 +1546,6 @@ static void DeliverStoredHit(PlayState* play, Actor* actor) {
     if ((actor == NULL) || (actor->update == NULL) || (sStasis.accumDamage == 0)) {
         return;
     }
-    // Zero would send the engine's bit search off the end of the damage table.
     if ((sStasis.lastDmgFlags == 0) || (sStasis.ownColliderCount == 0)) {
         return;
     }
@@ -1817,8 +1557,7 @@ static void DeliverStoredHit(PlayState* play, Actor* actor) {
     sStoredHitInfo.toucherFlags = TOUCH_ON;
     sStoredHitCollider.actor = &player->actor;
 
-    // `ac` must be a LIVE actor: a dozen enemies dereference it with no NULL check. Link is the
-    // honest answer anyway, since he did the damage.
+    // `ac` must be a live actor: many enemies dereference it with no NULL check.
     target->base.acFlags |= AC_HIT;
     target->base.acFlags &= ~AC_BOUNCED;
     target->base.ac = &player->actor;
@@ -1832,16 +1571,10 @@ static void DeliverStoredHit(PlayState* play, Actor* actor) {
     actor->colChkInfo.damage = 0;
     CollisionCheck_ApplyDamage(play, &play->colChkCtx, &target->base, &target->info);
 
-    // ApplyDamage has filled in damageEffect from the enemy's own table for that blow's type, which
-    // is the half we cannot compute. The number it wrote is one blow's worth, so it is replaced by
-    // the running total: the effect stays, the damage becomes the bill. Health is deliberately not
-    // touched — the enemy watches its own transition to zero, and that is its "I died" signal.
     damage = (s32)sStasis.accumDamage;
     actor->colChkInfo.damage = (u8)((damage > 255) ? 255 : damage);
 }
 
-// Was Link holding on? Asked at the instant of the launch, because that is the one frame where it is
-// still answerable: his climb ends as soon as the wall he gripped moves out from under him.
 static void GrabRider(PlayState* play, Actor* actor) {
     Player* player = GET_PLAYER(play);
 
@@ -1851,9 +1584,6 @@ static void GrabRider(PlayState* play, Actor* actor) {
     }
     if ((player->actor.floorBgId != sStasis.bgId) && (player->actor.wallBgId != sStasis.bgId) &&
         !(sStasis.bgIsOurs && DynaPolyActor_IsPlayerOnTop(&sStasisCarrier))) {
-        // Climbing is the case those fields miss: once Link is IN the climb his action func drives
-        // him off its own stored wall poly and stops refreshing wallBgId, so the one state where he
-        // is most obviously holding on is the one that reported he was not. Ask geometry instead.
         if (!(player->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER)) {
             return;
         }
@@ -1868,7 +1598,7 @@ static void GrabRider(PlayState* play, Actor* actor) {
         MeasureBody(actor, &loY, &hiY, &maxR, &maxRY);
         if ((horiz > (maxR + 30.0f)) || (py < (actor->world.pos.y + loY - 20.0f)) ||
             (py > (actor->world.pos.y + hiY + 20.0f))) {
-            return; // climbing something else
+            return;
         }
     }
     sStasis.riderOffset.x = player->actor.world.pos.x - actor->world.pos.x;
@@ -1877,11 +1607,6 @@ static void GrabRider(PlayState* play, Actor* actor) {
     sStasis.riderAttached = 1;
 }
 
-/**
- * Glue him to it for the rest of the flight. This runs at the end of the player's update, so it is
- * the last word on his position for the frame: his own action func has already applied gravity and
- * given up on the wall, and we simply put him back.
- */
 static void CarryRider(PlayState* play, Actor* actor) {
     Player* player = GET_PLAYER(play);
 
@@ -1891,8 +1616,6 @@ static void CarryRider(PlayState* play, Actor* actor) {
     player->actor.world.pos.x = actor->world.pos.x + sStasis.riderOffset.x;
     player->actor.world.pos.y = actor->world.pos.y + sStasis.riderOffset.y;
     player->actor.world.pos.z = actor->world.pos.z + sStasis.riderOffset.z;
-    // prevPos too, or next frame's bg check sweeps the whole arc as one movement and snags him on the
-    // first wall along the way.
     player->actor.prevPos = player->actor.world.pos;
     player->actor.velocity.y = 0.0f;
     player->actor.speedXZ = 0.0f;
@@ -1901,7 +1624,6 @@ static void CarryRider(PlayState* play, Actor* actor) {
 static void EndStasis(PlayState* play) {
     Actor* actor = sStasis.actor;
 
-    // The cue's tail IS the release, so it is only cut short when the stasis is broken early.
     if (sStasis.timer > 0) {
         StasisSfx_Stop();
     }
@@ -1910,8 +1632,6 @@ static void EndStasis(PlayState* play) {
         return;
     }
     if (sStasis.kind == STASIS_KIND_ENEMY) {
-        // Restore FIRST, then hit it: the blow has to land on an actor that is itself again, with its
-        // own update back in place to react to it this very frame.
         RestoreBody();
         DeliverStoredHit(play, actor);
         ForgetBody();
@@ -1931,13 +1651,9 @@ static void EndStasis(PlayState* play) {
         s16 yaw;
 
         ResolveLaunchDir(play, &dir);
-        // A block is SHOVED, not thrown: it keeps its feet on the floor and travels the way the blows
-        // pushed it, which is the only motion those actors were ever built for.
         sStasis.slideLaunch = (sStasis.kind == STASIS_KIND_BLOCK);
         horiz = sqrtf(SQ(dir.x) + SQ(dir.z));
         yaw = (horiz > 0.001f) ? (s16)(Math_FAtan2F(dir.x, dir.z) * (0x8000 / M_PI)) : actor->shape.rot.y;
-        // world.rot.y is the direction of TRAVEL, which Actor_MoveXZGravity derives velocity from.
-        // shape.rot.y is which way the body FACES, and a block must keep the pose it had.
         actor->world.rot.y = yaw;
         if (!KeepsItsPose(actor)) {
             actor->shape.rot.y = yaw;
@@ -1945,7 +1661,6 @@ static void EndStasis(PlayState* play) {
         actor->gravity = STASIS_GRAVITY;
         actor->minVelocityY = STASIS_MIN_VELOCITY_Y;
         if (sStasis.slideLaunch) {
-            // The whole blow goes into the shove, so a glancing upward hit still moves it properly.
             actor->speedXZ = speed;
             actor->velocity.y = 0.0f;
         } else {
@@ -1975,16 +1690,11 @@ static void BeginStasis(PlayState* play, Actor* target, u8 kind, s32 bgId) {
     sStasis.chainTimer = (kind == STASIS_KIND_ENEMY) ? STASIS_CHAIN_FRAMES_ENEMY : STASIS_CHAIN_FRAMES;
     sStasis.bgId = (kind == STASIS_KIND_CLIMBABLE) ? bgId : -1;
 
-    // A body with no dynapoly of its own gets one built for it: that is what makes a frozen boulder
-    // read as SOLID — you stand on it, blows land where you see them, and it carries a rider through
-    // the throw — instead of a cylinder Link walks through. Blocks already own real collision.
     if ((kind != STASIS_KIND_ENEMY) && (kind != STASIS_KIND_BLOCK) && (bgId < 0)) {
         s32 newBgId;
         u8 climbable;
 
         MeasureBody(target, &loY, &hiY, &maxR, &maxRY);
-        // Every body gets the shell; only its WALLS being climbable is conditional, or a frozen jar
-        // would be a way to stand on thin air.
         climbable = (u8)((hiY - loY) >= STASIS_CLIMBABLE_MIN_HEIGHT);
         newBgId = BuildBodyCollision(play, target, climbable);
         if (newBgId >= 0) {
@@ -2012,9 +1722,6 @@ static void BeginStasis(PlayState* play, Actor* target, u8 kind, s32 bgId) {
     }
     Collider_SetCylinder(play, &sStasis.collider, target, &sStasisColliderInit);
 
-    // Ours covers the band the body's own colliders leave uncovered — a tree's is 18 wide and 60 tall
-    // around the base of a trunk carrying a crown at 480 — and borrows their character, so a swing
-    // into a frozen tree still sounds and bounces like a tree.
     {
         f32 ownTop;
 
@@ -2027,8 +1734,6 @@ static void BeginStasis(PlayState* play, Actor* target, u8 kind, s32 bgId) {
                 ownTop = top;
             }
         }
-        // Below ownTop the real collider already does the job, and a second much wider one stacked
-        // over it would land sword hits on thin air beside the trunk.
         sStasis.extraCollider = (u8)((hiY - ownTop) > 8.0f);
         if (sStasis.extraCollider) {
             sStasis.collider.dim.radius = (s16)maxR;
@@ -2045,49 +1750,27 @@ static void BeginStasis(PlayState* play, Actor* target, u8 kind, s32 bgId) {
     target->velocity.x = target->velocity.y = target->velocity.z = 0.0f;
     target->speedXZ = 0.0f;
     target->gravity = 0.0f;
-    // Without this the engine culls the actor when the player looks away and stops running OUR
-    // update with it, so the body would thaw itself off-screen.
     target->flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
-    // Armed here rather than on landing: the press is registered by the bg check of the frame it
-    // touches down, which is still ours.
     MakePresser(target);
-    target->room = -1; // survive a room change while frozen
-    // Its own OC collider is submitted again below, and a thing held out of time does not budge when
-    // Link walks into it.
+    target->room = -1;
     target->colChkInfo.mass = MASS_IMMOVABLE;
 
-    // The same recording at double speed for an enemy: a living thing straining against the field
-    // rather than a rock simply stopping.
     StasisSfx_Play((kind == STASIS_KIND_ENEMY) ? STASIS_SFX_RATE_ENEMY : 1.0f, 0.85f);
 }
 
-// ── Switch magnet ────────────────────────────────────────────────────────────
-// Aim assist for heavy things in free fall, plus the press itself. A body on its way down looks for
-// a floor switch it could press and leans into it; once it is over the plate it goes down on it
-// squarely; and while it rests there the press is re-asserted, because a frozen body's own update —
-// the thing that does this in vanilla — is switched off for as long as the rune holds it.
-
 #define SWITCHMAGNET_RANGE 700.0f
-// Both bands are measured on the PARABOLA: how far from the switch this throw was going to land if
-// nobody touched it. That one number carries "is it pointed at it" and "is it going the right
-// speed" at once, which is why neither is tested separately.
 #define SWITCHMAGNET_LOCK_MISS 110.0f
 #define SWITCHMAGNET_ASSIST_MISS 260.0f
-// Small on purpose: enough to pull a wide shot in, never enough to fly a body somewhere the player
-// did not point it.
 #define SWITCHMAGNET_TURN 0x500
 #define SWITCHMAGNET_SPEED_STEP 1.0f
 #define SWITCHMAGNET_MAX_SPEED 45.0f
 #define SWITCHMAGNET_MIN_TIME 6.0f
-// The final approach asks a different question: not "where will this land" but "is it over the
-// plate RIGHT NOW". Three Link-heights of column, 20 units wide.
 #define SWITCHMAGNET_SNAP_HEIGHT 100.0f
 #define SWITCHMAGNET_SNAP_RADIUS 20.0f
 #define SWITCHMAGNET_SNAP_CLEARANCE 20.0f
 #define SWITCHMAGNET_LEASES 8
 #define SWITCHMAGNET_HOLD_RANGE 40.0f
 
-// Bodies that ought to press a switch when they land on one, but that vanilla never gave the flag.
 static const s16 sPresserIds[] = {
     ACTOR_OBJ_OSHIHIKI, ACTOR_OBJ_LIFT,    ACTOR_EN_LIGHTBOX, ACTOR_OBJ_KIBAKO2, ACTOR_BG_HEAVY_BLOCK, ACTOR_BG_PUSHBOX,
     ACTOR_OBJ_HSBLOCK,  ACTOR_OBJ_HAMISHI, ACTOR_OBJ_BOMBIWA, ACTOR_EN_ISHI,     ACTOR_EN_WOOD02,
@@ -2103,22 +1786,12 @@ static u8 IsPresser(Actor* actor) {
     return IsIdInList(actor->id, sPresserIds, ARRAY_COUNT(sPresserIds));
 }
 
-// Arms the engine's own route: a weight-driven floor switch reads a flag that in vanilla almost
-// nothing carries.
 static void MakePresser(Actor* actor) {
     if (IsPresser(actor)) {
         actor->flags |= ACTOR_FLAG_CAN_PRESS_SWITCHES;
     }
 }
 
-/**
- * Is this switch one that weight can press, and is it still waiting to be pressed?
- *
- * Obj_Switch packs its kind into params: type in bits 0..2, subtype in bits 4..6. Only type 0 runs
- * the weight path at all — the rusty one wants a hammer, the eye and crystal ones a projectile. Of
- * its subtypes, 0 and 1 test for the PLAYER on top; 2 and 3 accept any heavy actor, and 3 turns its
- * flag back OFF, so landing on one would undo a puzzle rather than solve it.
- */
 static u8 IsPressableSwitch(Actor* actor) {
     if ((actor->id != ACTOR_OBJ_SWITCH) || ((actor->params & 7) != 0)) {
         return 0;
@@ -2126,13 +1799,6 @@ static u8 IsPressableSwitch(Actor* actor) {
     return ((actor->params >> 4) & 7) == 2;
 }
 
-/**
- * The top face of a dynapoly actor's own collision, in world Y, read from the registered header
- * rather than probed with a ray. A switch latches when the engine reports something standing on its
- * dynapoly, and an Obj_Switch's ORIGIN is not the top of its plate — so a body placed relative to
- * the origin sits slightly inside it or slightly above it, and neither presses anything. A downward
- * ray is no good either: from a body already on the plate it starts inside it.
- */
 static u8 DynaTopY(PlayState* play, Actor* actor, f32* outY) {
     for (s32 bg = 0; bg < play->colCtx.dyna.bgActorMax; bg++) {
         BgActor* bgActor = &play->colCtx.dyna.bgActors[bg];
@@ -2146,7 +1812,6 @@ static u8 DynaTopY(PlayState* play, Actor* actor, f32* outY) {
     return 0;
 }
 
-// How far below its own origin a body's underside sits. Same source, same reason.
 static f32 BodyBottom(PlayState* play, Actor* actor) {
     for (s32 bg = 0; bg < play->colCtx.dyna.bgActorMax; bg++) {
         BgActor* bgActor = &play->colCtx.dyna.bgActors[bg];
@@ -2156,15 +1821,9 @@ static f32 BodyBottom(PlayState* play, Actor* actor) {
         }
         return (f32)bgActor->colHeader->minBounds.y * actor->scale.y;
     }
-    // No collision of its own: the cylinder is measured from the actor's feet, so its underside is
-    // the origin.
     return 0.0f;
 }
 
-/**
- * How long until this body falls to `targetY`, in frames, or -1 if it never gets there. The body is
- * on a plain ballistic arc, so 0.5*g*t^2 + vy*t + dy = 0 and the future root is the answer.
- */
 static f32 TimeToFall(Actor* actor, f32 targetY) {
     f32 dy = actor->world.pos.y - targetY;
     f32 disc = SQ(actor->velocity.y) - (2.0f * actor->gravity * dy);
@@ -2177,12 +1836,6 @@ static f32 TimeToFall(Actor* actor, f32 targetY) {
     return (t > 0.0f) ? t : -1.0f;
 }
 
-/**
- * Steer a falling body toward a switch it could press. The whole judgement is one question, asked of
- * the arc rather than of the aim: fly this parabola out and see where it crosses the switch's
- * height. A body pointed straight at a switch but going twice too fast sails over it, and a cone
- * test would call that a good shot.
- */
 static void SteerToSwitch(PlayState* play, Actor* actor) {
     Actor* best = NULL;
     f32 bestMiss = SWITCHMAGNET_ASSIST_MISS;
@@ -2194,8 +1847,6 @@ static void SteerToSwitch(PlayState* play, Actor* actor) {
     if (!IsPresser(actor)) {
         return;
     }
-    // On the way DOWN only: on the way up the shot is still being thrown, and steering it then takes
-    // the throw away from the player.
     if ((actor->velocity.y >= 0.0f) || (actor->gravity >= 0.0f)) {
         return;
     }
@@ -2218,13 +1869,11 @@ static void SteerToSwitch(PlayState* play, Actor* actor) {
         }
         t = TimeToFall(actor, it->world.pos.y);
         if (t < SWITCHMAGNET_MIN_TIME) {
-            continue; // too late to correct anything without it looking like a magnet
+            continue;
         }
         travel = actor->speedXZ * t;
         miss = sqrtf(SQ(actor->world.pos.x + (Math_SinS(actor->world.rot.y) * travel) - it->world.pos.x) +
                      SQ(actor->world.pos.z + (Math_CosS(actor->world.rot.y) * travel) - it->world.pos.z));
-        // The switch this throw came CLOSEST to, not the nearest one: a shot sailing past a switch at
-        // its feet toward one across the room was aimed at the far one.
         if (miss < bestMiss) {
             bestMiss = miss;
             bestTime = t;
@@ -2236,14 +1885,11 @@ static void SteerToSwitch(PlayState* play, Actor* actor) {
     if (best == NULL) {
         return;
     }
-    // The heading and speed that put it ON the switch as it arrives. Out of reach is left out of
-    // reach: this corrects aim, it does not add range the throw never had.
     needSpeed = bestDist / bestTime;
     if (needSpeed > SWITCHMAGNET_MAX_SPEED) {
         return;
     }
     if (bestMiss <= SWITCHMAGNET_LOCK_MISS) {
-        // Re-solved every frame, so the lock holds itself with no state to keep.
         actor->world.rot.y = bestYaw;
         actor->speedXZ = needSpeed;
         return;
@@ -2252,14 +1898,6 @@ static void SteerToSwitch(PlayState* play, Actor* actor) {
     Math_StepToF(&actor->speedXZ, needSpeed, SWITCHMAGNET_SPEED_STEP);
 }
 
-/**
- * The final approach: drop the body squarely onto a switch it is already passing over. X and Z
- * first, so it is over the plate, and only then Y, so all the motion it has left is the fall —
- * the other order drops it beside the switch and slides it across, which reads as dragging.
- *
- * `alignToSwitch` squares the body up with the plate: right for a statue or a boulder, wrong for
- * anything the player lined up by hand.
- */
 static void SnapOntoSwitch(PlayState* play, Actor* actor, u8 alignToSwitch) {
     if (!IsPresser(actor)) {
         return;
@@ -2275,14 +1913,11 @@ static void SnapOntoSwitch(PlayState* play, Actor* actor, u8 alignToSwitch) {
             (fabsf(actor->world.pos.z - it->world.pos.z) > SWITCHMAGNET_SNAP_RADIUS)) {
             continue;
         }
-        // The downward ray, for free: the bg check already ran this frame, so floorHeight IS what is
-        // underneath. Well above the switch means something solid is in between.
         if (actor->floorHeight > (it->world.pos.y + SWITCHMAGNET_SNAP_CLEARANCE)) {
             continue;
         }
         actor->world.pos.x = it->world.pos.x;
         actor->world.pos.z = it->world.pos.z;
-        // prevPos along with it, or the next bg check sweeps the gap and snags on the switch's edge.
         actor->prevPos.x = actor->world.pos.x;
         actor->prevPos.z = actor->world.pos.z;
         if (alignToSwitch) {
@@ -2293,8 +1928,6 @@ static void SnapOntoSwitch(PlayState* play, Actor* actor, u8 alignToSwitch) {
         actor->velocity.x = 0.0f;
         actor->velocity.z = 0.0f;
         actor->velocity.y = 0.0f;
-        // And Y is SET rather than left to gravity: the body's underside goes on the plate's top
-        // face, because anything else is resting inside the switch or hovering over it.
         if (DynaTopY(play, it, &plateTop)) {
             actor->world.pos.y = plateTop - BodyBottom(play, actor);
             actor->prevPos.y = actor->world.pos.y;
@@ -2304,10 +1937,6 @@ static void SnapOntoSwitch(PlayState* play, Actor* actor, u8 alignToSwitch) {
     }
 }
 
-// The press has to be RE-ASSERTED, not latched: the engine wipes interactFlags every frame, so a
-// switch is down only while something keeps saying so. Normally the body says it — but a pushable
-// block only does that from one of its states, and one that was standing on the room floor when it
-// was frozen resumes in another that never looks down again. Hence a lease, ticked every frame.
 typedef struct {
     Actor* body;
     Actor* sw;
@@ -2332,17 +1961,7 @@ static void HoldSwitch(Actor* body, Actor* sw) {
     }
 }
 
-/**
- * Press whatever the body is standing on, the way the body would press it itself: vanilla's own
- * mechanism borrowed rather than reinvented. A pushable block does not press floor switches through
- * the flag — it calls DynaPolyActor_SetActorOnTop and SetSwitchPressed by hand every frame on the
- * dynapoly it rests on, found with a five-point probe (its four corners plus the middle), which is
- * how a block that only half overlaps a plate still counts as standing on it. All of that lives in
- * the update Stasis replaces.
- */
 static void PressSwitchUnder(PlayState* play, Actor* actor, f32 halfWidth, f32 bottomY) {
-    // Corners first, centre last, pulled in slightly so a probe at the very lip of the footprint does
-    // not reach past the plate it is meant to be testing.
     static const f32 sProbeX[5] = { 0.9f, -0.9f, -0.9f, 0.9f, 0.0f };
     static const f32 sProbeZ[5] = { -0.9f, -0.9f, 0.9f, 0.9f, 0.0f };
     f32 soleY = actor->world.pos.y + bottomY;
@@ -2355,8 +1974,6 @@ static void PressSwitchUnder(PlayState* play, Actor* actor, f32 halfWidth, f32 b
         Vec3f probe;
 
         probe.x = actor->world.pos.x + (sProbeX[i] * halfWidth);
-        // Cast from just ABOVE the sole: starting at or below it begins the ray inside the very plate
-        // we are looking for, misses its top face and reports the floor underneath.
         probe.y = soleY + 10.0f;
         probe.z = actor->world.pos.z + (sProbeZ[i] * halfWidth);
 
@@ -2364,26 +1981,21 @@ static void PressSwitchUnder(PlayState* play, Actor* actor, f32 halfWidth, f32 b
         if (floorY <= BGCHECK_Y_MIN) {
             continue;
         }
-        // Standing ON it, not hovering above it.
         if ((soleY - floorY) > SWITCHMAGNET_SNAP_CLEARANCE) {
             continue;
         }
         dyna = DynaPoly_GetActor(&play->colCtx, bgId);
         if (dyna == NULL) {
-            continue; // plain scene collision
+            continue;
         }
         DynaPolyActor_SetActorOnTop(dyna);
         DynaPolyActor_SetSwitchPressed(dyna);
-        // And take out a lease, so the plate stays down once the body is handed back.
         if (IsPressableSwitch(&dyna->actor)) {
             HoldSwitch(actor, &dyna->actor);
         }
     }
 }
 
-// Re-assert every held press. Called once per frame, unconditionally: it is a cheap no-op when
-// nothing is held, and it must not be tied to the slate being equipped — the whole point is a switch
-// that stays down while you walk off and use the door.
 static void RunSwitchLeases(PlayState* play) {
     for (s32 i = 0; i < SWITCHMAGNET_LEASES; i++) {
         Actor* body = sLeases[i].body;
@@ -2394,13 +2006,10 @@ static void RunSwitchLeases(PlayState* play) {
         if ((body == NULL) || (sw == NULL)) {
             continue;
         }
-        // Either one dying drops the lease. Checked before anything is read through them.
         if ((body->update == NULL) || (sw->update == NULL)) {
             sLeases[i].body = sLeases[i].sw = NULL;
             continue;
         }
-        // Still on it? XZ against the switch, Y against the plate's own top: lifting the body off has
-        // to release the switch, and so does sliding it away.
         if ((SQ(body->world.pos.x - sw->world.pos.x) + SQ(body->world.pos.z - sw->world.pos.z)) >
             SQ(SWITCHMAGNET_HOLD_RANGE)) {
             sLeases[i].body = sLeases[i].sw = NULL;
@@ -2424,10 +2033,6 @@ static void RunSwitchLeases(PlayState* play) {
     }
 }
 
-// ── Per frame ────────────────────────────────────────────────────────────────
-
-// One frame of open flame, if the body is something that burns. A lit torch held out of time is a
-// portable flame, and one launched across a room is a thrown one.
 static ColliderCylinderInit sFireColliderInit = {
     {
         COLTYPE_NONE,
@@ -2459,15 +2064,11 @@ static void RunBodyFire(PlayState* play, Actor* actor) {
         return;
     }
     MeasureBody(actor, &loY, &hiY, &maxR, &maxRY);
-    // Re-armed whenever the body changes: Collider_SetCylinder bakes the owner in, and the burn has
-    // to be attributed to the flame rather than to whatever was frozen last.
     if (sFireOwner != actor) {
         Collider_InitCylinder(play, &sFireCollider);
         Collider_SetCylinder(play, &sFireCollider, actor, &sFireColliderInit);
         sFireOwner = actor;
     }
-    // Placed by hand, not through Collider_UpdateCylinder: that one sits the cylinder on the actor's own origin,
-    // which is the middle of a boulder rather than the foot of the flame. A cylinder is positioned by its BASE.
     sFireCollider.dim.pos.x = (s16)actor->world.pos.x;
     sFireCollider.dim.pos.y = (s16)(actor->world.pos.y + loY - (STASIS_FIRE_PAD * 0.5f));
     sFireCollider.dim.pos.z = (s16)actor->world.pos.z;
@@ -2475,13 +2076,9 @@ static void RunBodyFire(PlayState* play, Actor* actor) {
     sFireCollider.dim.height = (s16)((hiY - loY) + STASIS_FIRE_PAD);
     sFireCollider.base.atFlags |= AT_ON | AT_TYPE_PLAYER;
     CollisionCheck_SetAT(play, &play->colChkCtx, &sFireCollider.base);
-    // AT_HIT has to be cleared by hand or the collider counts as spent and stops landing hits.
     sFireCollider.base.atFlags &= ~AT_HIT;
 }
 
-// Keep the body hittable while its update is off. Submitting the actor's OWN colliders is the point:
-// they carry the right colType and AC_HARD, so a sword on a frozen boulder gives the vanilla clonk
-// and the vanilla bounce for free.
 static void SubmitBodyColliders(PlayState* play, Actor* actor) {
     for (s32 i = 0; i < sStasis.ownColliderCount; i++) {
         ColliderCylinder* cyl = sStasis.ownCollider[i];
@@ -2490,7 +2087,6 @@ static void SubmitBodyColliders(PlayState* play, Actor* actor) {
         if (cyl->base.acFlags & AC_ON) {
             CollisionCheck_SetAC(play, &play->colChkCtx, &cyl->base);
         }
-        // OC too, so a frozen body is still something Link walks into instead of through.
         if (cyl->base.ocFlags1 & OC1_ON) {
             CollisionCheck_SetOC(play, &play->colChkCtx, &cyl->base);
         }
@@ -2513,11 +2109,6 @@ static ColliderCylinder* TakeHitCollider(void) {
     return NULL;
 }
 
-/**
- * Read and bank an incoming blow. This MUST run before the colliders are registered again:
- * CollisionCheck_SetAC calls the shape's reset first (`ac = NULL; acFlags &= ~AC_HIT`), so
- * registering wipes both the hit flag and the attacker.
- */
 static void CaptureBlow(PlayState* play, Actor* actor) {
     ColliderCylinder* hit = TakeHitCollider();
     Player* player = GET_PLAYER(play);
@@ -2529,13 +2120,8 @@ static void CaptureBlow(PlayState* play, Actor* actor) {
     if (hit == NULL) {
         return;
     }
-    // It is `.ac`, NOT `.at`: on a hit the engine writes the attacker into the VICTIM's `ac`, and
-    // ours is the victim. Reading `.at` returns whatever WE last hit while flying.
     attacker = (hit->base.ac != NULL) ? hit->base.ac : &player->actor;
 
-    // A hand weapon and a projectile are two different questions. For an arrow the attacker actor is
-    // the arrow, so its own flight vector is the answer; for a sword the attacker is Link, and his
-    // velocity is where his FEET were going — which is the old "it points back at me" bug.
     len = (attacker == &player->actor)
               ? 0.0f
               : sqrtf(SQ(attacker->velocity.x) + SQ(attacker->velocity.y) + SQ(attacker->velocity.z));
@@ -2544,9 +2130,6 @@ static void CaptureBlow(PlayState* play, Actor* actor) {
         dir.y = attacker->velocity.y / len;
         dir.z = attacker->velocity.z / len;
     } else {
-        // The swing's own travel: from the attacker to the point the blow actually connected at.
-        // `bumper.hitPos` is the real intersection, so swinging UP into a tree's crown answers
-        // itself instead of coming out flat.
         f32 chest = attacker->world.pos.y + 30.0f;
 
         dir.x = (f32)hit->info.bumper.hitPos.x - attacker->world.pos.x;
@@ -2569,21 +2152,14 @@ static void CaptureBlow(PlayState* play, Actor* actor) {
         }
     }
 
-    // A rock or a tree takes NO damage from a sword, so keying any of this on damage would mean
-    // hitting exactly the things Stasis exists for did nothing. Every connected blow charges the
-    // launch; damage only decides how much.
     charge = (actor->colChkInfo.damage > 0) ? ((f32)actor->colChkInfo.damage * STASIS_LAUNCH_PER_DAMAGE)
                                             : STASIS_LAUNCH_PER_HIT;
 
-    // Cleared on ALL of them: the body's own collider and ours overlap, so one swing can register
-    // twice and would charge twice.
     for (s32 i = 0; i < sStasis.ownColliderCount; i++) {
         sStasis.ownCollider[i]->base.acFlags &= ~AC_HIT;
     }
     sStasis.collider.base.acFlags &= ~AC_HIT;
 
-    // Copied BY VALUE, never the pointer: an arrow is freed within a frame or two of landing, and
-    // holding its ColliderInfo for a ten-second stasis is a dangling read.
     if ((hit->info.acHitInfo != NULL) && (hit->info.acHitInfo->toucher.dmgFlags != 0)) {
         sStasis.lastDmgFlags = hit->info.acHitInfo->toucher.dmgFlags;
         sStasis.lastDmgEffect = hit->info.acHitInfo->toucher.effect;
@@ -2591,15 +2167,11 @@ static void CaptureBlow(PlayState* play, Actor* actor) {
     }
     sStasis.accumDamage += actor->colChkInfo.damage;
     sStasis.force += charge;
-    // The last blow owns the direction outright, which is why one light tap can re-aim a fully
-    // charged rock.
     sStasis.hitDir = dir;
     sStasis.hasHitDir = 1;
     actor->colChkInfo.damage = 0;
     actor->colChkInfo.damageEffect = 0;
 
-    // Recoil only when the blow landed on OUR collider: a body carrying AC_HARD of its own already
-    // got the engine's bounce and strike sound, and doubling them is a second thud and a second shove.
     if (!(hit->base.acFlags & AC_HARD)) {
         s16 yaw = Math_Vec3f_Yaw(&actor->world.pos, &player->actor.world.pos);
 
@@ -2610,7 +2182,6 @@ static void CaptureBlow(PlayState* play, Actor* actor) {
     }
 }
 
-// One frame of flight: the body travels, collides and lands.
 static void FlyBody(PlayState* play, Actor* actor) {
     f32 loY;
     f32 hiY;
@@ -2622,17 +2193,14 @@ static void FlyBody(PlayState* play, Actor* actor) {
     s32 hide = sStasis.bgIsOurs && (sStasis.bgId >= 0);
     u16 saved = 0;
 
-    // Aim assist on the way down, but not for a shove along the floor: that one is not falling.
     if (!sStasis.slideLaunch) {
         SteerToSwitch(play, actor);
     }
     Actor_UpdateVelocityXZGravity(actor);
     MeasureBody(actor, &loY, &hiY, &maxR, &maxRY);
 
-    // The wall probe sits at the body's MIDDLE. `maxRY` degenerates on anything of even width — a
-    // block's rings tie, so it came back as the BOTTOM ring, height 0 — and BgCheck_EntitySphVsWall
-    // branches on `(checkHeight + dy) < 5.0f` into a path that line-tests FLOORS as walls, which is
-    // what killed a sliding block at every ledge.
+    // maxRY degenerates to the bottom ring on even-width bodies, and BgCheck_EntitySphVsWall then
+    // line-tests floors as walls when (checkHeight + dy) < 5.0f, so probe at the middle.
     probeY = (loY + hiY) * 0.5f;
     {
         f32 floor = (hiY - 2.0f) > 25.0f ? 25.0f : (hiY - 2.0f);
@@ -2642,9 +2210,6 @@ static void FlyBody(PlayState* play, Actor* actor) {
         }
     }
 
-    // SUB-STEPPED: every bg query is a swept test from prevPos to pos, and a sweep that jumps 46
-    // units in one go steps clean over a thin wall. Hops no longer than half the body's own width
-    // close that.
     speed = sqrtf(SQ(actor->velocity.x) + SQ(actor->velocity.y) + SQ(actor->velocity.z));
     {
         f32 maxHop = (maxR * 0.5f) < 10.0f ? 10.0f : (maxR * 0.5f);
@@ -2656,23 +2221,15 @@ static void FlyBody(PlayState* play, Actor* actor) {
     }
 
     if (hide) {
-        // Hide our own shell from the body's own check for exactly that one call, or the thing lands
-        // on itself: the carrier sits where the body was last frame, so the engine reports solid
-        // ground under it and the flight ends in mid-air.
         saved = play->colCtx.dyna.bgActorFlags[sStasis.bgId];
         play->colCtx.dyna.bgActorFlags[sStasis.bgId] &= ~1;
     }
     for (s32 i = 0; i < substeps; i++) {
-        // prevPos BY HAND: nothing in the engine maintains it — every actor updates it inside its own
-        // update, and ours is replaced. Left pinned at the spawn point, the wall sweep tests a
-        // segment from where the body was BORN, which is why it fell through walls and why gravity
-        // looked switched off.
         actor->prevPos = actor->world.pos;
         actor->world.pos.x += actor->velocity.x / (f32)substeps;
         actor->world.pos.y += actor->velocity.y / (f32)substeps;
         actor->world.pos.z += actor->velocity.z / (f32)substeps;
         Actor_UpdateBgCheckInfo(play, actor, probeY, maxR, hiY, 0x87);
-        // A shove is ALWAYS on the ground, so only a wall ends it early.
         if (actor->bgCheckFlags & (sStasis.slideLaunch ? STASIS_BG_WALL : (STASIS_BG_GROUND | STASIS_BG_WALL))) {
             break;
         }
@@ -2681,27 +2238,21 @@ static void FlyBody(PlayState* play, Actor* actor) {
         play->colCtx.dyna.bgActorFlags[sStasis.bgId] = saved;
     }
 
-    // A ceiling stops the climb, it does not end the throw.
     if ((actor->bgCheckFlags & STASIS_BG_CEILING) && (actor->velocity.y > 0.0f)) {
         actor->velocity.y = 0.0f;
     }
-    // And it comes to rest on its own UNDERSIDE: the floor snap is right for a tree, whose origin is
-    // at its base, and wrong for a boulder whose origin is at its middle.
     if ((loY < 0.0f) && (actor->floorHeight > BGCHECK_Y_MIN) && ((actor->world.pos.y + loY) <= actor->floorHeight)) {
         actor->world.pos.y = actor->floorHeight - loY;
         actor->velocity.y = 0.0f;
         actor->bgCheckFlags |= STASIS_BG_GROUND;
     }
 
-    // Final approach, then press what it is standing on, because the body's own update — the thing
-    // that does this in vanilla — is switched off for as long as the rune has it.
     SnapOntoSwitch(play, actor, !KeepsItsPose(actor));
     PressSwitchUnder(play, actor, maxR, loY);
     RunBodyFire(play, actor);
     if (sStasis.bgIsOurs) {
         SyncCarrier(actor);
-        // Force the re-expansion rather than trust the prev/cur comparison: this move lands in the
-        // player pass, after DynaPoly_Setup has already run for the frame.
+        // This move lands after DynaPoly_Setup has run for the frame, so force the re-expansion.
         play->colCtx.dyna.bitFlag |= DYNAPOLY_INVALIDATE_LOOKUP;
     }
     CarryRider(play, actor);
@@ -2731,8 +2282,6 @@ static void FlyBody(PlayState* play, Actor* actor) {
     }
 }
 
-// Paint what a cast would catch. Called every frame with a flag rather than gated by the caller, so
-// the shimmer comes off cleanly the moment the tablet stops being out on this rune.
 static void OfferBody(PlayState* play, u8 allowed) {
     sOfferActor = NULL;
     if (!allowed || (sStasis.actor != NULL)) {
@@ -2747,7 +2296,6 @@ static void RunStasis(PlayState* play, Player* player) {
     if (actor == NULL) {
         return;
     }
-    // Died, despawned, or the scene took it: drop it without writing through the pointer.
     if (actor->update == NULL) {
         ForgetBody();
         return;
@@ -2761,7 +2309,6 @@ static void RunStasis(PlayState* play, Player* player) {
         return;
     }
 
-    // Bank last frame's blow FIRST: re-registering below erases it.
     CaptureBlow(play, actor);
     if (sStasis.bgIsOurs) {
         SyncCarrier(actor);
@@ -2773,7 +2320,6 @@ static void RunStasis(PlayState* play, Player* player) {
         f32 maxR;
         f32 maxRY;
 
-        // Freezing a body that was already sitting on a plate must not let the plate pop back up.
         MeasureBody(actor, &loY, &hiY, &maxR, &maxRY);
         PressSwitchUnder(play, actor, maxR, loY);
     }
@@ -2787,19 +2333,12 @@ static void RunStasis(PlayState* play, Player* player) {
     }
 }
 
-// ── What Stasis looks like ───────────────────────────────────────────────────
-// CHAINS pin the body along the three world axes for one second as the field takes hold; an ARROW
-// out of the body shows where the stored energy will send it. Both are flat prim colour: a gizmo has
-// to read as a control, not as a spell.
-
 #define STASIS_ARROW_SHAFT_R 4.5f
 #define STASIS_ARROW_HEAD_R 13.0f
 #define STASIS_ARROW_HEAD_LEN 22.0f
 #define STASIS_ARROW_MIN_LEN 34.0f
 #define STASIS_ARROW_GROWTH 110.0f
 #define STASIS_CHAIN_COUNT 6
-// Brighter than the body tint: a thin chain over open scenery needs the headroom to still read as
-// glowing.
 #define STASIS_CHAIN_R 255
 #define STASIS_CHAIN_G 240
 #define STASIS_CHAIN_B 110
@@ -2807,7 +2346,6 @@ static void RunStasis(PlayState* play, Player* player) {
 
 static const ALIGN_ASSET(2) char sChainDL[] = "__OTR__objects/object_link_boy/gLinkAdultHookshotChainDL";
 
-// Modelled at radius and length 100, so a draw scales by (want / 100).
 static Vtx sPrismVtx[] = {
     VTX(100, 0, 0, 0, 0, 0, 0, 0, 255),    VTX(71, 0, 71, 0, 0, 0, 0, 0, 255),
     VTX(0, 0, 100, 0, 0, 0, 0, 0, 255),    VTX(-71, 0, 71, 0, 0, 0, 0, 0, 255),
@@ -2850,18 +2388,11 @@ static Gfx sConeDL[] = {
 static Gfx sChainCopy[STASIS_CHAIN_DL_MAX];
 static u8 sIsChainCopyReady;
 
-// Some display list commands occupy TWO Gfx entries, the second being payload that must never be read
-// as an opcode.
 static u8 IsGfxTwoWord(u8 op) {
     return (op == 0x20) || (op == 0x24) || (op == 0x25) || (op == 0x27) || (op == 0x31) || (op == 0x32) ||
            (op == 0x33) || (op == 0x35) || (op == 0x36) || (op == 0x42);
 }
 
-/**
- * The vanilla chain will not take a colour from outside: its display list sets its own combiner and a
- * white prim colour before it draws, so anything set beforehand is overwritten. So the list is copied
- * once and those two commands are NOP'd out, and then the combiner is ours.
- */
 static Gfx* GetTintableChainDL(void) {
     Gfx* srcDL;
     s32 i = 0;
@@ -2869,8 +2400,6 @@ static Gfx* GetTintableChainDL(void) {
     if (sIsChainCopyReady) {
         return sChainCopy;
     }
-    // The copy walks the source command by command, so a resolved Gfx* is required: an OTR path
-    // handed to this would be read as opcodes.
     srcDL = ResourceMgr_FileExists(sChainDL) ? ResourceMgr_LoadGfxByName(sChainDL) : NULL;
     if (srcDL == NULL) {
         return NULL;
@@ -2892,15 +2421,9 @@ static Gfx* GetTintableChainDL(void) {
             i++;
         }
     }
-    return NULL; // longer than the buffer: draw nothing rather than run off the end
+    return NULL;
 }
 
-/**
- * One chain, drawn the way the hookshot draws its own: a single stretched display list rather than a
- * loop of links, which comes out doll-sized. The chain texture averages 90/255, so ENVIRONMENT lifts
- * the near-black texels before the grayscale pass flattens the blue-grey metal and multiplies by
- * yellow — that pass runs after the combiner, which is why the order matters.
- */
 static void DrawChain(PlayState* play, Vec3f* start, Vec3f* end, u8 alpha) {
     Gfx* tintable = GetTintableChainDL();
     f32 dx = end->x - start->x;
@@ -2930,16 +2453,12 @@ static void DrawChain(PlayState* play, Vec3f* start, Vec3f* end, u8 alpha) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Six spokes along the three world axes, both ways: the body reads as pinned from every direction
-// rather than decorated.
 static void DrawChains(PlayState* play) {
     static const Vec3f sChainAxis[STASIS_CHAIN_COUNT] = {
         { 1.0f, 0.0f, 0.0f },  { -1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f },
         { 0.0f, -1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f },  { 0.0f, 0.0f, -1.0f },
     };
     Actor* actor = sStasis.actor;
-    // The burst runs at the cue's rate, so its span is per-kind: normalising by the object one would
-    // start an enemy burst already half faded.
     f32 span = (f32)((sStasis.kind == STASIS_KIND_ENEMY) ? STASIS_CHAIN_FRAMES_ENEMY : STASIS_CHAIN_FRAMES);
     f32 grow = 1.0f - ((f32)sStasis.chainTimer / span);
     u8 alpha = (u8)(255.0f * ((f32)sStasis.chainTimer / span));
@@ -2959,7 +2478,6 @@ static void DrawChains(PlayState* play) {
     }
 }
 
-// One shape stretched from `start` to `end`: the model's +Y becomes the segment's axis.
 static void DrawSolid(PlayState* play, Gfx** gfxP, Gfx* dl, Vec3f* start, Vec3f* end, f32 radius, Color_RGBA8* color,
                       u8 alpha) {
     Gfx* gfx = *gfxP;
@@ -2983,9 +2501,6 @@ static void DrawSolid(PlayState* play, Gfx** gfxP, Gfx* dl, Vec3f* start, Vec3f*
     *gfxP = gfx;
 }
 
-// ONE straight arrow out of the body, pointing where the last blow will send it, longer and redder as
-// the stored energy rises. Straight, not a parabola: it is a direction readout, and an arc would
-// promise a landing spot the physics does not.
 static void DrawLaunchArrow(PlayState* play, Gfx** gfxP) {
     Actor* actor = sStasis.actor;
     f32 charge = ChargeFraction();
@@ -3026,9 +2541,10 @@ static void DrawLaunchArrow(PlayState* play, Gfx** gfxP) {
     *gfxP = gfx;
 }
 
-// The chains and the arrow are world geometry, not part of any actor, so they draw after the scene.
 static void DrawStasis(void) {
-    PlayState* play=gPlayState;if(!play)return;
+    PlayState* play = gPlayState;
+    if (!play)
+        return;
     Actor* actor = sStasis.actor;
     Gfx* gfx;
 
@@ -3041,7 +2557,6 @@ static void DrawStasis(void) {
         CLOSE_DISPS(play->state.gfxCtx);
         DrawChains(play);
     }
-    // The arrow only means something while the body is still holding still and can be charged.
     if ((sStasis.phase == STASIS_PHASE_FROZEN) && (sStasis.kind != STASIS_KIND_ENEMY)) {
         OPEN_DISPS(play->state.gfxCtx);
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
@@ -3057,9 +2572,6 @@ static bool CastStasis(PlayState* play, Player* player) {
     s32 bgId = -1;
     u8 kind;
 
-    // A second cast releases what is already held: the hold is skipped and the launch happens now.
-    // The cue skips with it, to its own release, so the sound of the thing coming out of stasis lands
-    // on the frame it actually does.
     if (sStasis.actor != NULL) {
         if (sStasis.phase != STASIS_PHASE_FLYING) {
             StasisSfx_SeekToTail(STASIS_SFX_RELEASE_SECONDS);
@@ -3079,9 +2591,6 @@ static bool CastStasis(PlayState* play, Player* player) {
     return true;
 }
 
-// Only the frozen body's own bgId, and only while it is a climbable kind, so it reverts by itself the
-// moment the stasis ends. The shell we build bakes the wall type in; this is for a body that already
-// owned its dynapoly when it was caught.
 static void MakeFrozenBodyClimbable(int32_t bgId, uint32_t* flags) {
     if ((sStasis.actor != NULL) && (sStasis.kind == STASIS_KIND_CLIMBABLE) && (sStasis.bgId == bgId) &&
         (sStasis.bgId >= 0)) {
@@ -3089,17 +2598,13 @@ static void MakeFrozenBodyClimbable(int32_t bgId, uint32_t* flags) {
     }
 }
 
-// The engine asks for a wall's flags once, so the two runes that answer meet here.
 static void ResolveRuneWallFlags(CollisionContext* colCtx, CollisionPoly* poly, int32_t bgId, uint32_t* flags) {
     MakePillarClimbable(colCtx, poly, bgId, flags);
     MakeFrozenBodyClimbable(bgId, flags);
 }
 
-// ── The tablet ───────────────────────────────────────────────────────────────
-
 static void TakeOutSlate(PlayState* play, Player* player) {
     sIsSlateDrawn = true;
-    // The press that draws the tablet never also casts, same as the cane: the bomb below reads presses too.
     sCastFrame = play->state.frames;
     PlaySfxAt(NA_SE_PL_CHANGE_ARMS, &player->actor.world.pos);
 }
@@ -3110,7 +2615,6 @@ static void StowSlate(Player* player, PlayState* play) {
     LeaveAiming(true);
 }
 
-// Each rune's own cast lands here as it is ported; a rune with nothing behind it yet answers that it cannot.
 #include "master_cycle.inc.c"
 
 static void CastRune(Player* player, PlayState* play) {
@@ -3130,7 +2634,7 @@ static void CastRune(Player* player, PlayState* play) {
             cast = CastStasis(play, player);
             break;
         case SLATE_RUNE_MASTER_CYCLE:
-            cast = MasterCycle_Cast(play,player);
+            cast = MasterCycle_Cast(play, player);
             break;
         case SLATE_RUNE_CRYONIS:
             cast = CastCryonis(play, player);
@@ -3147,8 +2651,6 @@ static int32_t HoldSlate(Player* player, PlayState* play) {
     return 0;
 }
 
-// Read from cur.button, never press: L is Z-target and the player consumes its press bit long before item code
-// runs. Only while the tablet is out, so L is left alone for every other item.
 static void ReadWheelHold(PlayState* play) {
     if (!sIsSlateDrawn || !(play->state.input[0].cur.button & BTN_L)) {
         sWheelHoldTimer = 0;
@@ -3170,7 +2672,7 @@ static void RunSlate(void) {
     if (play == NULL || player == NULL) {
         return;
     }
-    MasterCycle_Tick(play,player);
+    MasterCycle_Tick(play, player);
     SyncReceivedRunes();
     if (!sApi->IsCustomItemOwned(SLATE_KEY)) {
         return;
@@ -3178,18 +2680,12 @@ static void RunSlate(void) {
     DescribeRune(CurrentRune());
     RunSwitchLeases(play);
     RunRemoteBomb(play, player);
-    // Stasis drives whatever it holds every frame, and must keep doing so with the tablet stowed or
-    // the wheel open: it owns another actor's update until it lets go.
     RunStasis(play, player);
-    // The pillar is a real actor and the scene unload takes it with no word to us, so this is where the
-    // slate learns its pointer — and the bgId the engine hands straight back out — has gone stale.
     PrunePillar();
     WatchPillarForTrouble(player);
     if (Z64Wheel_IsOpen()) {
         return;
     }
-    // Paint what a cast would catch, but only while the tablet is out on this rune, or everything
-    // Link walks past would shimmer.
     OfferBody(play, sIsSlateDrawn && (CurrentRune() == SLATE_RUNE_STASIS));
     if (RunCryonis(play, player)) {
         return;
@@ -3197,7 +2693,6 @@ static void RunSlate(void) {
     ReadWheelHold(play);
 }
 
-// The scene took everything the runes owned with it.
 static void ForgetRunes(int16_t sceneNum) {
     sMcSceneChanged = 1;
     MasterCycle_Forget();
@@ -3208,8 +2703,6 @@ static void ForgetRunes(int16_t sceneNum) {
     sOfferActor = NULL;
 }
 
-// Nothing touches the matrix between the hand limb and the end of the post-limb pass while the slate is out, so
-// this is the hand bone's own matrix: position and full orientation.
 static void CaptureHandMatrix(PlayState* play, Player* player, int32_t limbIndex) {
     if (limbIndex != PLAYER_LIMB_R_HAND) {
         return;
@@ -3222,25 +2715,20 @@ static void DrawSlateInHand(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     f32 unscale = player->actor.scale.x != 0.0f ? 1.0f / player->actor.scale.x : 1.0f;
 
-    // Before the gate below: these are world geometry, not part of the tablet, and they have to keep
-    // drawing on any frame the tablet itself declines to.
     DrawAimGhost();
 
     if (!sIsSlateDrawn || !sHasHandMatrix || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
-    // Both hands are on whatever Link is carrying, and the tablet is not in either of them.
     if (player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) {
         return;
     }
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Put(&sHandMatrix);
-    // That matrix carries Link's own 0.01 body scale: dividing it back out leaves the offsets in world units.
     Matrix_Scale(unscale, unscale, unscale, MTXMODE_APPLY);
     Matrix_RotateY(DEG_TO_RAD(SLATE_HELD_ROT_Y), MTXMODE_APPLY);
     Matrix_RotateX(DEG_TO_RAD(SLATE_HELD_ROT_X), MTXMODE_APPLY);
-    // The offsets come after the rotations, so each slides the tablet along its OWN axis.
     Matrix_Translate(0.0f, SLATE_HELD_OFFSET_Y, 0.0f, MTXMODE_APPLY);
     Matrix_Scale(SLATE_HELD_SCALE, SLATE_HELD_SCALE, SLATE_HELD_SCALE, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
@@ -3248,25 +2736,31 @@ static void DrawSlateInHand(Actor* actor, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+static const ALIGN_ASSET(2) char sSoulFlameDL[] = "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL";
 
 static void DrawPickupFlameWithModel(PlayState* play, GetItemEntry* entry) {
-    const SOHCustomItemDefinition* item=CustomItemRegistry_FindByRuntimeId(entry->tableId);
-    const SOHCustomPickupVariant* variant=item?CustomItemRegistry_GetPickupVariant(item->key):NULL;
+    const SOHCustomItemDefinition* item = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const SOHCustomPickupVariant* variant = item ? CustomItemRegistry_GetPickupVariant(item->key) : NULL;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++,8,(uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx,0,0,0,16,32,1,play->state.frames,-8*play->state.frames,16,32));
-    Matrix_Push();Matrix_Scale(2.0f,2.0f,2.0f,MTXMODE_APPLY);
+    gSPSegment(POLY_XLU_DISP++, 8,
+               (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
+                                           -8 * play->state.frames, 16, 32));
+    Matrix_Push();
+    Matrix_Scale(2.0f, 2.0f, 2.0f, MTXMODE_APPLY);
     Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_MODELVIEW|G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++,variant?variant->flameRed:160,variant?variant->flameGreen:230,variant?variant->flameBlue:255,255);
-    gSPGrayscale(POLY_XLU_DISP++,true);
-    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)"__OTR__objects/object_gi_fire/gGiBlueFireFlameDL");
-    gSPGrayscale(POLY_XLU_DISP++,false);Matrix_Pop();
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
+    gDPSetGrayscaleColor(POLY_XLU_DISP++, variant ? variant->flameRed : 160, variant ? variant->flameGreen : 230,
+                         variant ? variant->flameBlue : 255, 255);
+    gSPGrayscale(POLY_XLU_DISP++, true);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sSoulFlameDL);
+    gSPGrayscale(POLY_XLU_DISP++, false);
+    Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawPickupFlameWithModel(play,getItemEntry);
+    DrawPickupFlameWithModel(play, getItemEntry);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Scale(SLATE_GIVE_SCALE, SLATE_GIVE_SCALE, SLATE_GIVE_SCALE, MTXMODE_APPLY);
@@ -3276,11 +2770,7 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ── The rune's own cue ───────────────────────────────────────────────────────
-// A one-voice PCM player. The sequence player cannot express a recording, and the only seam that can
-// is the host's audio-thread mix. The game thread only ever writes the request fields; the audio
-// thread owns the cursor. One writer each, one voice, no lock — the worst a race can do is start the
-// cue one buffer early or late.
+// No lock: a race can only start the cue one buffer early or late.
 
 #include "stasis_sfx_pcm.inc.c"
 
@@ -3290,10 +2780,10 @@ typedef struct {
     volatile u8 wantPlay;
     volatile u8 wantSeek;
     volatile u8 playing;
-    volatile f32 rate; // 1.0 as recorded, 2.0 for the strained enemy variant
+    volatile f32 rate;
     volatile f32 volume;
-    volatile f32 seekTail; // seconds of cue to leave ahead of the cursor
-    f32 pos;               // audio thread only
+    volatile f32 seekTail;
+    f32 pos;
 } StasisSfxState;
 
 static StasisSfxState sSfx;
@@ -3309,18 +2799,11 @@ static void StasisSfx_Stop(void) {
     sSfx.playing = 0;
 }
 
-/**
- * Jump the cursor so exactly `seconds` of cue remain: the release at the end of the recording. This
- * is for the early cancel — casting again on a held body fires the launch right then, and cutting the
- * cue off instead would drop the one part of it that sells the release.
- */
 static void StasisSfx_SeekToTail(f32 seconds) {
     sSfx.seekTail = seconds;
     sSfx.wantSeek = 1;
 }
 
-// True whenever Play_Update is frozen — the pause menu, and the rune wheel, which stops the world the
-// same way. The cursor is left alone, so the cue resumes where it stopped.
 static u8 StasisSfx_IsGameFrozen(void) {
     return (gPlayState == NULL) || (gPlayState->pauseCtx.state != 0) || (gPlayState->pauseCtx.debugState != 0);
 }
@@ -3338,8 +2821,6 @@ static void StasisSfx_Mix(s16* samples, u32 frameCount) {
         f32 p = (f32)STASIS_SFX_SAMPLES - (sSfx.seekTail * (f32)STASIS_SFX_RATE);
 
         sSfx.wantSeek = 0;
-        // Seeking a cue that already ran out restarts it at the tail, so the release is heard even
-        // when the hold outlasted the recording.
         sSfx.playing = 1;
         sSfx.pos = (p > 0.0f) ? p : 0.0f;
     }
@@ -3347,8 +2828,7 @@ static void StasisSfx_Mix(s16* samples, u32 frameCount) {
         return;
     }
     advance = (sSfx.rate * (f32)STASIS_SFX_RATE) / STASIS_SFX_OUT_RATE;
-    // Read per buffer rather than cached, so a slider moved mid-cue is heard at once.
-    volume = sSfx.volume; // The host applies master and SFX gains to this mix group.
+    volume = sSfx.volume;
 
     for (u32 i = 0; i < frameCount; i++) {
         s32 index = (s32)sSfx.pos;
@@ -3360,8 +2840,6 @@ static void StasisSfx_Mix(s16* samples, u32 frameCount) {
             sSfx.playing = 0;
             return;
         }
-        // Interpolated between neighbours: at double rate every other sample is skipped, and without
-        // this the cue picks up an audible buzz.
         {
             f32 frac = sSfx.pos - (f32)index;
             f32 a = (f32)sStasisSfxPcm[index];
@@ -3385,10 +2863,13 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
-static bool IsCryonisPillar(Actor* actor){return actor!=NULL && actor==sCryonis.pillar;}
+static bool IsCryonisPillar(Actor* actor) {
+    return actor != NULL && actor == sCryonis.pillar;
+}
 
 SOH_MOD_EXPORT void ModInit(void) {
-    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.slate.is_cryonis_pillar",(void*)IsCryonisPillar);
+    if (SOH_MOD_API_HAS(sApi, PublishService))
+        sApi->PublishService("nei.slate.is_cryonis_pillar", (void*)IsCryonisPillar);
     if (!SOH_MOD_API_HAS(sApi, SetCustomItemText)) {
         return;
     }
@@ -3411,7 +2892,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     slate.appearance.scale = SLATE_HELD_SCALE;
     slate.getItemEntry.drawFunc = DrawGetItem;
     slate.onReceive = GrantAllRunes;
-    // The seed places the runes, never the bare tablet; logic asking for the tablet is met by any rune.
     SOHCustomItemRandomizer slateLogic = sSlateLogic;
     slateLogic.poolCount = 0;
     Z64Items_SetLogic(&slate, &slateLogic);
@@ -3425,8 +2905,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     sApi->RegisterVB(VB_THROW_OR_PUT_DOWN_HELD_ITEM, HoldOntoRemoteBomb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, RunSlate);
-    SOH_REGISTER_HOOK(sApi,OnPlayDrawEnd,DrawStasis);
-    SOH_REGISTER_HOOK(sApi,OnPlayerFilterInput,MasterCycle_FilterInput);
+    SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, DrawStasis);
+    SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, MasterCycle_FilterInput);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetRunes);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureHandMatrix);
     SOH_REGISTER_HOOK(sApi, OnBgCheckResolveWallFlags, ResolveRuneWallFlags);

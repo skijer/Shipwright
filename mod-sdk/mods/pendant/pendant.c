@@ -1,8 +1,4 @@
 #include <string.h>
-/**
- * Pendant of Memories: Mortal Draw and aerial ground pound on B; hop, roll, hop and a timed B after
- * Navi's cue launch the parry arc. A on the pendant's pause cell toggles the moves.
- */
 
 #include <math.h>
 
@@ -87,12 +83,18 @@ static bool sComboLandingPending;
 static bool sComboWasAirborne;
 static f32 sSavedGravity;
 static ColliderJntSphElementInit sParryElementInit = {
-    { ELEMTYPE_UNK2, { DMG_JUMP_SLASH, 0x00, 0x08 }, { 0, 0, 0 },
-      TOUCH_ON | TOUCH_NEAREST | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK2,
+      { DMG_JUMP_SLASH, 0x00, 0x08 },
+      { 0, 0, 0 },
+      TOUCH_ON | TOUCH_NEAREST | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 0, { { 0, 0, 0 }, 36 }, 100 },
 };
 static ColliderJntSphInit sParryInit = {
-    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_JNTSPH }, 1, &sParryElementInit,
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_JNTSPH },
+    1,
+    &sParryElementInit,
 };
 
 static ColliderCylinderInit sStrikeColliderInit = {
@@ -135,12 +137,12 @@ static bool IsBPressed(PlayState* play) {
 }
 
 static void PlaySfx(Player* player, u16 sfxId) {
-    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
-static void ChangeAnim(PlayState* play, Player* player, const char* anim, f32 playSpeed, f32 startFrame,
-                       f32 endFrame, u8 mode, f32 morph) {
+static void ChangeAnim(PlayState* play, Player* player, const char* anim, f32 playSpeed, f32 startFrame, f32 endFrame,
+                       u8 mode, f32 morph) {
     LinkAnimation_Change(play, &player->skelAnime, (LinkAnimationHeader*)anim, playSpeed, startFrame, endFrame, mode,
                          morph);
 }
@@ -149,7 +151,6 @@ static f32 GetLastFrame(const char* anim) {
     return Animation_GetLastFrame((void*)anim);
 }
 
-// The actor lists are the only proof a remembered pointer still names a live actor.
 static bool IsActorAlive(PlayState* play, Actor* actor) {
     if (actor == NULL) {
         return false;
@@ -222,8 +223,6 @@ static void ShakeCamera(PlayState* play, s16 speed, s16 y, s16 x, s16 zoom, s16 
     Quake_SetCountdown(quake, frames);
 }
 
-// ---- Mortal Draw ----
-
 static Actor* FindMortalDrawTarget(Player* player, PlayState* play) {
     Actor* best = NULL;
     f32 closest = MORTAL_DRAW_RANGE;
@@ -255,7 +254,6 @@ static void StartMortalDraw(Player* player, PlayState* play, Actor* target) {
     player->linearVelocity = 0.0f;
     player->actor.velocity.x = 0.0f;
     player->actor.velocity.z = 0.0f;
-    // The swing brings its own clip, so the iaijutsu draw goes on after it.
     func_80837948(play, player, PLAYER_MWA_JUMPSLASH_START);
     ChangeAnim(play, player, gPlayerAnim_link_fighter_power_kiru_start, 2.0f, 0.0f,
                GetLastFrame(gPlayerAnim_link_fighter_power_kiru_start), ANIMMODE_ONCE, -3.0f);
@@ -265,8 +263,8 @@ static void StartMortalDraw(Player* player, PlayState* play, Actor* target) {
 }
 
 static void UpdateMortalDraw(Player* player, PlayState* play) {
-    bool hasHit = (player->meleeWeaponQuads[0].base.atFlags & AT_HIT) ||
-                  (player->meleeWeaponQuads[1].base.atFlags & AT_HIT);
+    bool hasHit =
+        (player->meleeWeaponQuads[0].base.atFlags & AT_HIT) || (player->meleeWeaponQuads[1].base.atFlags & AT_HIT);
 
     sPendant.timer++;
     player->linearVelocity = 0.0f;
@@ -284,7 +282,6 @@ static void UpdateMortalDraw(Player* player, PlayState* play) {
     }
 }
 
-// Link freezes for the hitstop; the enemy's own hit reaction freezes it.
 static void UpdateHitstop(Player* player) {
     player->skelAnime.playSpeed = 0.0f;
     player->linearVelocity = 0.0f;
@@ -297,15 +294,12 @@ static void UpdateHitstop(Player* player) {
     }
 }
 
-// The sword stays drawn afterwards, as in Twilight Princess.
 static void UpdateDrawRecovery(Player* player) {
     player->linearVelocity = 0.0f;
     if (++sPendant.timer >= MORTAL_DRAW_RECOVERY) {
         ReturnToIdle();
     }
 }
-
-// ---- Ground Pound ----
 
 static bool CanGroundPound(Player* player, PlayState* play) {
     return !IsGrounded(player) && Player_GetMeleeWeaponHeld(player) != 0 && IsBPressed(play);
@@ -321,12 +315,12 @@ static void HoldStill(Player* player) {
 
 static void PlantSwordPose(Player* player, PlayState* play, f32 playSpeed, f32 morph) {
     LinkAnimationHeader* clip = ResourceMgr_LoadPlayerAnimAsHeader(sGroundPoundAnim);
-    if (clip == NULL) return;
-    LinkAnimation_Change(play, &player->skelAnime, clip, playSpeed, 89.0f,
-                         playSpeed < 0.0f ? 0.0f : 89.0f, playSpeed < 0.0f ? ANIMMODE_ONCE : ANIMMODE_LOOP, morph);
+    if (clip == NULL)
+        return;
+    LinkAnimation_Change(play, &player->skelAnime, clip, playSpeed, 89.0f, playSpeed < 0.0f ? 0.0f : 89.0f,
+                         playSpeed < 0.0f ? ANIMMODE_ONCE : ANIMMODE_LOOP, morph);
 }
 
-// MM's return-to-the-past clip is held on frame 89 until the landing starts its reverse playback.
 static void StartGroundPound(Player* player, PlayState* play) {
     sPendant.state = PENDANT_GPOUND_STALL;
     sPendant.timer = 0;
@@ -367,10 +361,8 @@ static void UpdateGroundPoundFall(Player* player, PlayState* play) {
     sPendant.timer++;
     player->actor.gravity = GPOUND_FALL_GRAVITY;
     player->linearVelocity = 0.0f;
-    // One held pose throughout the fall; playback begins only on impact, in reverse.
     PlantSwordPose(player, play, 0.0f, 0.0f);
     LinkAnimation_Update(play, &player->skelAnime);
-    // Last frame's hit is read before the collider is registered again: a pogo off whatever it struck.
     if (ConsumeStrikeHit()) {
         player->actor.velocity.y = GPOUND_BOUNCE_VELOCITY;
         player->actor.gravity = sSavedGravity;
@@ -435,7 +427,8 @@ static void TickPendant(void) {
         ResetMoves();
         return;
     }
-    if (sSecondHopPending && sPendant.state == PENDANT_IDLE) ConfigureSecondHopAnimation(player);
+    if (sSecondHopPending && sPendant.state == PENDANT_IDLE)
+        ConfigureSecondHopAnimation(player);
     switch (sPendant.state) {
         case PENDANT_IDLE:
             StartMoveFromIdle(player, play);
@@ -454,7 +447,6 @@ static void TickPendant(void) {
         case PENDANT_GPOUND_LANDING:
         case PENDANT_PARRY_ARC:
         case PENDANT_PARRY_LANDING:
-            // These run in place of the native action, before physics, rather than fighting its poses afterward.
             break;
         default:
             ReturnToIdle();
@@ -467,20 +459,24 @@ static bool OwnsPendantAction(void) {
 }
 
 static void ReleasePendantAction(Player* player) {
-    if (!OwnsPendantAction()) return;
+    if (!OwnsPendantAction())
+        return;
     player->actor.gravity = sSavedGravity;
     player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
     player->stateFlags2 &= ~PLAYER_STATE2_HOPPING;
     player->cylinder.base.ocFlags1 |= OC1_ON;
     player->skelAnime.playSpeed = 1.0f;
-    if (sParryReady) sParryCollider.base.atFlags &= ~(AT_ON | AT_HIT);
-    if (sPendant.isColliderReady) sStrikeCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+    if (sParryReady)
+        sParryCollider.base.atFlags &= ~(AT_ON | AT_HIT);
+    if (sPendant.isColliderReady)
+        sStrikeCollider.base.atFlags &= ~(AT_ON | AT_HIT);
 }
 
 static void DrivePendantAction(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
     PlayState* play = gPlayState;
-    if (play == NULL || !OwnsPendantAction()) return;
+    if (play == NULL || !OwnsPendantAction())
+        return;
     if (!IsActive() || IsPlayerBusy(player)) {
         ReleasePendantAction(player);
         ResetMoves();
@@ -489,15 +485,24 @@ static void DrivePendantAction(bool* should, va_list args) {
     *should = false;
     SilenceSwordQuads(player);
     switch (sPendant.state) {
-        case PENDANT_GPOUND_STALL: UpdateGroundPoundStall(player,play); break;
-        case PENDANT_GPOUND_FALLING: UpdateGroundPoundFall(player,play); break;
-        case PENDANT_GPOUND_LANDING: UpdateGroundPoundLanding(player,play); break;
-        case PENDANT_PARRY_ARC: UpdateParryArc(player,play); break;
+        case PENDANT_GPOUND_STALL:
+            UpdateGroundPoundStall(player, play);
+            break;
+        case PENDANT_GPOUND_FALLING:
+            UpdateGroundPoundFall(player, play);
+            break;
+        case PENDANT_GPOUND_LANDING:
+            UpdateGroundPoundLanding(player, play);
+            break;
+        case PENDANT_PARRY_ARC:
+            UpdateParryArc(player, play);
+            break;
         case PENDANT_PARRY_LANDING:
-            LinkAnimation_Update(play,&player->skelAnime);
+            LinkAnimation_Update(play, &player->skelAnime);
             UpdateParryLanding(player);
             break;
-        default: break;
+        default:
+            break;
     }
 }
 
@@ -511,7 +516,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The collider is bound to the player actor, and a new scene brings a new one.
 static void ForgetSceneState(int16_t sceneNum) {
     ResetMoves();
     sPendant.isColliderReady = false;
@@ -520,12 +524,14 @@ static void ForgetSceneState(int16_t sceneNum) {
 }
 
 static void TurnOff(const char* key) {
-    if (gPlayState != NULL) ReleasePendantAction(GET_PLAYER(gPlayState));
+    if (gPlayState != NULL)
+        ReleasePendantAction(GET_PLAYER(gPlayState));
     ResetMoves();
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnSceneInit", "OnPlayerResolveAnimSite",
-    "OnPlayerFilterInput", "OnActorUpdate", "OnPlayerPostLimbDraw", "OnActorResolveMotionScale" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",       "OnPlayerUpdate",           "OnSceneInit",
+                                              "OnPlayerResolveAnimSite", "OnPlayerFilterInput",      "OnActorUpdate",
+                                              "OnPlayerPostLimbDraw",    "OnActorResolveMotionScale" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -544,11 +550,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.pendant.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.pendant.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -570,10 +577,9 @@ static void PublishRemoteVisual(void) {
         Player* player = GET_PLAYER(play);
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
-        visual.active = (IsActive() && sPendant.isLeapArmed && sPendant.hopTimer > 0 && Player_GetMeleeWeaponHeld(player) != 0);
-        if (visual.active) {
-
-        }
+        visual.active =
+            (IsActive() && sPendant.isLeapArmed && sPendant.hopTimer > 0 && Player_GetMeleeWeaponHeld(player) != 0);
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -587,8 +593,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -599,9 +603,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -634,10 +635,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = TurnOff;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        PENDANT_KEY, PENDANT_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, PENDANT_KEY, PENDANT_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

@@ -19,17 +19,14 @@
 
 #define ZORA_MASK_KEY "nei.zora_form_mask"
 #define ZORA_FORM_KEY "nei.zora"
-// No resources live here: a model path is what turns on the host's root scaling, as for Deku.
 #define ZORA_MODEL_PATH "objects/forms/zora"
 #define ZORA_HAZARD_OWNER "nei.zora"
 #define ZORA_MASK_PAGE 1
 #define ZORA_MASK_SLOT 17
 
 #define BG_ON_GROUND 1
-#define BG_TOUCHING_WALL 8
 #define MM_ANIM_VALUES_PER_FRAME 67
 #define MM_ANIM_BASE_TRANSL_X (-57)
-// Rest height of the Zora root (3600) over the height Link's animations carry the root to.
 #define ZORA_ROOT_SCALE_ADULT 1.066f
 #define ZORA_ROOT_SCALE_CHILD 1.515f
 #define ZORA_HEIGHT 68.0f
@@ -53,17 +50,27 @@
 #define SWIM_EXIT_DEPTH 30.0f
 #define SWIM_ENTER_DEPTH 45.0f
 #define SWIM_BUOYANCY_DEPTH 44.8f
-#define SWIM_SURFACE_DEPTH 36.0f
-#define SWIM_DEEP_DEPTH 68.0f
+#define SWIM_SURFACE_DEPTH (SWIM_EXIT_DEPTH + 10.0f)
+#define SWIM_DEEP_DEPTH (SWIM_ENTER_DEPTH + 12.0f)
 #define SWIM_GRAVITY 0.0f
 #define FAST_SWIM_SPEED 9.0f
 #define FAST_SWIM_KICK_SPEED 12.0f
 #define FAST_SWIM_BURST 16.0f
 #define FAST_SWIM_KICK_FRAME 13.0f
+#define FAST_SWIM_RESTART_FRAME 5.0f
+#define ROLL_HOLD_FRAMES 5
+#define ROLL_STEER_STEP 0x640
+#define BANK_SFX_ANGLE 0x3A98
+#define BANK_SFX_TURN 0xFA0
+#define FLOOR_SKIM_HEIGHT 20.0f
+#define WALL_FACING_YAW 0x1C00
+#define BONK_SPEED_SCALE 0.2f
+#define BONK_RECOVER_SPEED 10.0f
 #define DOLPHIN_PITCH (-0x1555)
 #define DOLPHIN_MAX_SPEED 13.5f
-#define DOLPHIN_MIN_SPEED 2.0f
 #define DOLPHIN_GRAVITY -1.0f
+#define DOLPHIN_REENTRY_FALL -2.0f
+#define DASH_EXIT_DEPTH -10000.0f
 #define DOLPHIN_STEEP_PITCH 0x36B0
 #define DOLPHIN_STEEP_DAMAGE 0x10
 #define DOLPHIN_WATERLINE ((SWIM_ENTER_DEPTH + SWIM_EXIT_DEPTH) * 0.5f)
@@ -82,9 +89,11 @@
 #define GUARD_TOP 75.0f
 
 #define OCARINA_NOTE_NONE 0xFF
-// MM's adjusted clips advance one source frame per gameplay update (2/3 * 1.5).
+#define FACE_NEUTRAL 0
+#define FACE_OPENING 13
+#define FACE_HURT 8
 #define MM_ANIM_ADJUSTED_SPEED (2.0f / 3.0f)
-// Fin throws use MM's normal rate, rather than its adjusted combat/swim rate.
+#define DASH_CLIP_SPEED (MM_ANIM_ADJUSTED_SPEED * 2.0f)
 #define CLIP_FRAMES_PER_UPDATE 1.5f
 #define LINK_VOICE_ACTIONS 0x20
 #define MM_ZORA_VOICE_OFFSET 0xA0
@@ -94,6 +103,7 @@
 #define MM_CATCH_BOOMERANG 0x0836
 #define MM_FACE_UP 0x0863
 #define MM_ZORA_SWIM_DASH 0x08EC
+#define MM_ZORA_SWIM_ROLL 0x08EE
 // MM asks for its loops as `id - SFX_FLAG` every frame: without the flag its scheduler plays the sound for as
 // long as it keeps being asked for, with it every request starts the sample over.
 #define MM_SFX_FLAG 0x800
@@ -191,7 +201,6 @@ static const char* const sZoraLimbDL[PLAYER_LIMB_MAX] = {
 static const ALIGN_ASSET(2) char sLeftOpenHandDL[] = OBJ_ZORA "gLinkZoraLeftHandOpenDL";
 static const ALIGN_ASSET(2) char sRightOpenHandDL[] = OBJ_ZORA "gLinkZoraRightHandOpenDL";
 
-// Joint translations of gLinkZoraSkel, read from mm.o2r; same limb order as OoT Link.
 static const Vec3f sZoraJointPos[PLAYER_LIMB_MAX] = {
     { 0, 0, 0 },       { 0, 0, 0 },       { 0, 0, 0 },         { 945, 0, 0 },  { -442, -5, -350 }, { 1100, 0, 0 },
     { 1500, 0, 0 },    { -442, -5, 350 }, { 1100, 0, 0 },      { 1500, 0, 0 }, { 0, 21, -7 },      { 1806, 0, 0 },
@@ -210,8 +219,6 @@ static const ALIGN_ASSET(2) char sMouthHalfTex[] = OBJ_ZORA "gLinkZoraMouthHalfT
 static const ALIGN_ASSET(2) char sMouthOpenTex[] = OBJ_ZORA "gLinkZoraMouthOpenTex";
 static const ALIGN_ASSET(2) char sMouthSmileTex[] = OBJ_ZORA "gLinkZoraMouthSmileTex";
 
-// MM's Zora strike anchors (z_player_lib.c D_801C0A00/D_801C09DC on the forearm fins and
-// D_801C0A48/D_801C0A24 on the right shin), in the space of the limb that strikes.
 static Vec3f sFinTips[3] = { { -2500, 1400, 1100 }, { -2900, 1000, 1500 }, { -2100, 1800, 700 } };
 static Vec3f sFinBases[3] = { { 900, 300, 100 }, { 1300, 700, -300 }, { 500, -100, 500 } };
 static Vec3f sKickTips[3] = { { 2000, 0, 0 }, { 2800, -800, -800 }, { 2800, 800, 800 } };
@@ -225,7 +232,8 @@ static const char* const sRequiredHooks[] = {
     "OnPlayerPostLimbDraw",  "OnPlayerResolveFaceTextures",
     "OnPlayerFilterInput",   "OnActorPlaySfx",
     "OnActorDraw",           "OnOcarinaNote",
-    "OnOcarinaPlaybackNote", "OnSceneInit", "OnPlayerUpdate", "OnActorDrawEnd",
+    "OnOcarinaPlaybackNote", "OnSceneInit",
+    "OnPlayerUpdate",        "OnActorDrawEnd",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -250,6 +258,7 @@ typedef enum {
     SWIM_PHASE_ROLL,
     SWIM_PHASE_CRUISE,
     SWIM_PHASE_EXIT,
+    SWIM_PHASE_BONK,
 } SwimPhase;
 
 typedef enum {
@@ -271,20 +280,18 @@ s32 Player_GetMovementSpeedAndYaw(Player* player, f32* outSpeedTarget, s16* outY
                                   PlayState* play);
 GetItemEntry ItemTable_RetrieveEntry(s16 modIndex, s16 getItemID);
 s32 Player_ActionHandler_2(Player* player, PlayState* play);
+void Player_RequestQuake(PlayState* play, s32 speed, s32 y, s32 countdown);
+void Player_RequestRumble(Player* player, s32 sourceStrength, s32 duration, s32 decreaseRate, s32 distSq);
+void Player_PlayVoiceSfx(Player* player, u16 sfxId);
 
 #define SPEED_MODE_LINEAR 0.0f
+
+static const ALIGN_ASSET(2) char sSwimHitAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_swimer_swim_hit";
 
 static const SOHModApi* sApi;
 static bool sBorrowedGyorgSwim;
 static void HumanGyorgSwim(PlayState* play, Player* player, bool enabled);
 static void StartFastSwim(PlayState* play, Player* player, f32 fromFrame);
-extern bool FormRegistry_ApplyActive(const char* key);
-static bool ToggleConfiguredForm(const char* key) {
-    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
-        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
-    }
-    return sApi->ToggleForm(key);
-}
 
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
@@ -316,14 +323,17 @@ static s16 sSwimPitch;
 static s16 sSwimRoll;
 static s16 sSwimRollSmoothed;
 static bool sSwimExitQueued;
+static s16 sRollHoldFrames;
+static bool sIsDashing;
 static u32 sWaterFrames;
 static PlayerAgeProperties sZoraBody;
+static f32 sWaterExitDepth = SWIM_EXIT_DEPTH;
 static s16 sSwimTurn;
 static s16 sSwimFloorTimer;
 static f32 sSwimSpeed;
-// Pre-action water transitions can install an OoT clip during a dolphin breach.
 static LinkAnimationHeader* sSwimAnim;
 static f32 sSwimAnimFrame;
+static f32 sSwimAnimSpeed;
 static u8 sSwimAnimMode;
 
 static bool sBarrierHeld;
@@ -384,7 +394,6 @@ static bool IsStriking(void) {
     return sMove == ZORA_MOVE_PUNCH || sMove == ZORA_MOVE_JUMP_KICK;
 }
 
-// A shuffled swim is granted at file creation when the setting is off, so the flag alone answers it.
 static bool HasSwimAbility(void) {
     return !IS_RANDO || Flags_GetRandomizerInf(RAND_INF_CAN_SWIM);
 }
@@ -393,9 +402,6 @@ static bool IsSwimMove(void) {
     return sMove == ZORA_MOVE_FAST_SWIM || sMove == ZORA_MOVE_DOLPHIN;
 }
 
-// ---- sound ----
-
-// Looked up on use rather than in ModInit: mm_assets may load after this mod.
 static MmSfxPlayFunc GetMmSfxPlayer(void) {
     if (sPlayMmSfx == NULL && SOH_MOD_API_HAS(sApi, FindService)) {
         sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
@@ -408,7 +414,7 @@ static void PlayMmSfx(u16 mmSfx, u16 fallback, Vec3f* pos) {
 
     if (play == NULL || !play(mmSfx, pos)) {
         Audio_PlaySfxGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultReverb);
+                             &gSfxDefaultReverb);
     }
 }
 
@@ -428,8 +434,6 @@ static void StopMmSfx(u16 mmSfx) {
         sStopMmSfx(mmSfx);
     }
 }
-
-// ---- animations ----
 
 static void LoadMmAnim(s32 slot) {
     LinkAnimationHeader* source = ResourceMgr_LoadPlayerAnimAsHeader(sAnimPaths[slot]);
@@ -470,15 +474,15 @@ static f32 MmAnimSpeed(s32 slot) {
         case ANIM_PUNCH_C:
         case ANIM_JUMP_KICK:
         case ANIM_JUMP_KICK_END:
-        case ANIM_WATER_ROLL:
-        case ANIM_FISH_SWIM:
-        case ANIM_SWIM_TO_WAIT:
         case ANIM_GUITAR_RAISE:
         case ANIM_GUITAR_PLAY:
         case ANIM_WAIT:
             return MM_ANIM_ADJUSTED_SPEED;
+        case ANIM_WATER_ROLL:
+        case ANIM_FISH_SWIM:
+        case ANIM_SWIM_TO_WAIT:
+            return DASH_CLIP_SPEED;
         default:
-            // MM's melee recoveries and fin clips use the normal rate.
             return 1.0f;
     }
 }
@@ -489,16 +493,15 @@ static void PlayAnim(PlayState* play, Player* player, s32 slot, f32 startFrame, 
     if (anim == NULL) {
         return;
     }
-    LinkAnimation_Change(play, &player->skelAnime, anim, MmAnimSpeed(slot), startFrame,
-                         Animation_GetLastFrame(anim), mode, morph);
+    LinkAnimation_Change(play, &player->skelAnime, anim, MmAnimSpeed(slot), startFrame, Animation_GetLastFrame(anim),
+                         mode, morph);
     if (IsSwimMove()) {
         sSwimAnim = anim;
         sSwimAnimFrame = startFrame;
+        sSwimAnimSpeed = MmAnimSpeed(slot);
         sSwimAnimMode = mode;
     }
 }
-
-// ---- body ----
 
 static const char* HandDL(Player* player, int32_t limbIndex) {
     if (limbIndex == PLAYER_LIMB_L_HAND) {
@@ -507,7 +510,6 @@ static const char* HandDL(Player* player, int32_t limbIndex) {
     return player->rightHandType == PLAYER_MODELTYPE_RH_OPEN ? sRightOpenHandDL : sZoraLimbDL[PLAYER_LIMB_R_HAND];
 }
 
-// MM's torpedo pose: the body pitches and banks around the root, lifted so the pivot sits at the chest.
 static void PitchSwimmingBody(Vec3f* pos) {
     Matrix_Translate(pos->x, pos->y + (Math_CosS(sSwimPitch) - 1.0f) * 200.0f, pos->z, MTXMODE_APPLY);
     Matrix_RotateX(BINANG_TO_RAD(sSwimPitch), MTXMODE_APPLY);
@@ -518,7 +520,6 @@ static void PitchSwimmingBody(Vec3f* pos) {
 }
 
 static void ResolveZoraBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
-    // Gyorg borrows the swim, never the Zora skeleton or its equipment.
     if (sBorrowedGyorgSwim && !IsZora() && limbIndex == PLAYER_LIMB_ROOT && IsSwimMove() && pos != NULL) {
         PitchSwimmingBody(pos);
     }
@@ -609,8 +610,6 @@ static void GrantZoraSwim(bool* should, va_list args) {
     }
 }
 
-// ---- input ----
-
 // Runs before Player_UpdateCommon consumes the hit, after CollisionCheck_Damage wrote it.
 static void ScaleFireDamage(Player* player) {
     u8 damage = player->actor.colChkInfo.damage;
@@ -627,10 +626,8 @@ static void ScaleFireDamage(Player* player) {
     player->actor.colChkInfo.damage = sScaledDamage;
 }
 
-// In water A is the fast swim and B the heavy toggle; vanilla would dive and swing with them.
 static void FilterZoraInput(Player* player, Input* input) {
     if (!IsZora()) {
-        // Claim A before OoT can select its dive (also on the first frame wearing the tunic).
         if (gPlayState != NULL) {
             HumanGyorgSwim(gPlayState, player, false);
         }
@@ -650,13 +647,10 @@ static void FilterZoraInput(Player* player, Input* input) {
     if (!IsInWater(player) || player->interactRangeActor != NULL) {
         return;
     }
-    // On the seabed B is a punch and Z-targeted A the side hop, both vanilla's.
     u16 taken = IsGrounded(player) ? (Player_IsZTargeting(player) ? 0 : BTN_A) : (BTN_A | BTN_B);
     input->press.button &= ~taken;
     input->cur.button &= ~taken;
 }
-
-// ---- strikes ----
 
 static void StartTrail(PlayState* play) {
     EffectBlureInit2 blure = {
@@ -676,7 +670,6 @@ static void StopTrail(PlayState* play) {
     }
 }
 
-// MM's D_8085D30C: the fin wakes of the fast swim.
 static void StartSwimTrails(PlayState* play) {
     EffectBlureInit2 blure = {
         0, 8, 0, { 255, 255, 255, 255 }, { 255, 255, 255, 64 }, { 255, 255, 255, 0 }, { 255, 255, 255, 0 }, 4,
@@ -716,8 +709,6 @@ static void ArmStrike(PlayState* play, Player* player, u32 dmgFlags, u8 damage) 
     StartTrail(play);
 }
 
-// func_8012669C from MM: point 0 feeds meleeWeaponInfo[0] (the trail, and the wall probe of func_80842DF4) and
-// points 1-2 are the two attack quads.
 static void PlaceStrike(PlayState* play, Player* player, Vec3f* tips, Vec3f* bases) {
     Vec3f tip;
     Vec3f base;
@@ -750,7 +741,6 @@ static void StartPunchStep(PlayState* play, Player* player, s32 step) {
     sPunchQueued = false;
     player->meleeWeaponState = 0;
     PlayAnim(play, player, ANIM_PUNCH_A + step, 0.0f, ANIMMODE_ONCE, -3.0f);
-    // MM's func_8082FA5C swings the final kick with the Goron's heavy thud, not a sword whoosh.
     if (step == PUNCH_STEPS - 1) {
         PlayMmSfx(MM_GORON_PUNCH_SWING, NA_SE_IT_SWORD_SWING_HARD, &player->actor.projectedPos);
     } else {
@@ -774,8 +764,6 @@ static void StartPunchRecovery(PlayState* play, Player* player) {
 
 static void ZoraStrikeAction(Player* player, PlayState* play);
 
-// A fresh press is a combo; only an unbroken hold readies the fins, the way MM times it. The first punch is
-// shorter than the hold, so the count carries on through its recovery.
 static bool IsFinHoldDone(Input* input) {
     if (CHECK_BTN_ALL(input->press.button, BTN_B)) {
         sHoldFrames = 0;
@@ -838,7 +826,6 @@ static void UpdateJumpKick(PlayState* play, Player* player, bool finished) {
     }
 }
 
-// The same call vanilla's sword actions make: shield rebounds, wall sparks and taking damage come with it.
 static void ZoraStrikeAction(Player* player, PlayState* play) {
     Input* input = &play->state.input[0];
 
@@ -901,7 +888,6 @@ static void StartJumpKick(PlayState* play, Player* player, bool fromGround) {
     RefreshMmSfx(MM_VO_ZORA_SWORD_N, &player->actor.projectedPos);
 }
 
-// Z-target's A keeps the side hop and back flip; forward, where Link would jump-slash, the Zora kicks.
 static int32_t HandleZTargetA(PlayState* play, Player* player) {
     const s8 direction = player->controlStickDirections[player->controlStickDataIndex];
 
@@ -916,7 +902,6 @@ static int32_t HandleZTargetA(PlayState* play, Player* player) {
     return SOH_FORM_ACTION_STARTED;
 }
 
-// Vanilla never reads item buttons in the air, so the aerial kick is launched from the end of the frame.
 static void TryAirKick(PlayState* play, Player* player) {
     if (IsZoraBusy(player) || IsGrounded(player) || IsInWater(player) || !CanAct(player) ||
         sAnims[ANIM_JUMP_KICK] == NULL || !(player->stateFlags1 & PLAYER_STATE1_JUMPING) ||
@@ -939,8 +924,6 @@ static void DrawStrikeLimb(PlayState* play, Player* player, int32_t limbIndex) {
     }
     PlaceStrike(play, player, isKick ? sKickTips : sFinTips, isKick ? sKickBases : sFinBases);
 }
-
-// ---- fin boomerangs ----
 
 static bool IsFinAlive(PlayState* play, Actor* fin) {
     if (fin == NULL) {
@@ -981,11 +964,9 @@ static Actor* GetLockOnTarget(Player* player) {
     return Player_IsZTargeting(player) && target != NULL && target->update != NULL ? target : NULL;
 }
 
-// The lock-on stride stays vanilla's: only the arms take the Zora's pose, over the step already in jointTable.
 static void PoseArms(PlayState* play, Player* player, LinkAnimationHeader* anim, s32 frame) {
     static const s32 sArmLimbs[] = { PLAYER_LIMB_L_SHOULDER, PLAYER_LIMB_L_FOREARM, PLAYER_LIMB_L_HAND,
                                      PLAYER_LIMB_R_SHOULDER, PLAYER_LIMB_R_FOREARM, PLAYER_LIMB_R_HAND };
-    // SetLoadFrame copies the face channel after the limbs, hence the extra entry.
     Vec3s pose[PLAYER_LIMB_MAX + 1];
 
     if (anim == NULL) {
@@ -1005,7 +986,6 @@ static void StartLockedFins(PlayState* play, Player* player) {
     }
 }
 
-// MM aims the fins like the bow: first person when nothing is locked on.
 static void ZoraFinsAction(Player* player, PlayState* play) {
     bool finished = LinkAnimation_Update(play, &player->skelAnime);
 
@@ -1064,7 +1044,6 @@ static void ThrowLockedFins(PlayState* play, Player* player) {
     ThrowFins(play, player, yaw, pitch, target);
 }
 
-// Runs after vanilla's lock-on step, which is what keeps the Zora strafing with the fins out.
 static void UpdateLockedFins(PlayState* play, Player* player) {
     LinkAnimationHeader* ready = sAnims[ANIM_FINS_READY];
     LinkAnimationHeader* release = sAnims[ANIM_FINS_THROW];
@@ -1121,7 +1100,6 @@ static void TrackFins(PlayState* play, Player* player) {
     RefreshMmSfx(MM_VO_ZORA_SWORD_N, &player->actor.projectedPos);
 }
 
-// MM's En_Boom draw with the Zora fins: the collider and the trail are placed here, since vanilla's draw is skipped.
 static void DrawFlyingFin(Actor* actor, PlayState* play, bool* drawVanilla) {
     s32 fin = actor == sFins[0] ? 0 : (actor == sFins[1] ? 1 : -1);
     EnBoom* boom = (EnBoom*)actor;
@@ -1150,10 +1128,6 @@ static void DrawFlyingFin(Actor* actor, PlayState* play, bool* drawVanilla) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- guard ----
-
-// The Zora guards with his fins, never with the equipped shield: a fixed metal quad in front of his chest,
-// with shieldMf turned so reflected projectiles fly back where they came from.
 static void PlantGuard(PlayState* play, Player* player) {
     s16 yaw = player->actor.shape.rot.y;
     f32 sinYaw = Math_SinS(yaw);
@@ -1174,7 +1148,6 @@ static void PlantGuard(PlayState* play, Player* player) {
     CollisionCheck_SetAT(play, &play->colChkCtx, &player->shieldQuad.base);
 }
 
-// A blocked hit pushes the Zora back like a shield would; the guard lets that speed bleed off.
 static void ZoraGuardAction(Player* player, PlayState* play) {
     LinkAnimation_Update(play, &player->skelAnime);
     Math_StepToF(&player->linearVelocity, 0.0f, 2.0f);
@@ -1192,7 +1165,6 @@ static bool IsGuarding(void) {
     return sMove == ZORA_MOVE_GUARD || sMove == ZORA_MOVE_GUARD_WALK;
 }
 
-// Locked on, vanilla guards through the upper body so Link keeps strafing; the standing guard is only for free aim.
 static int32_t StartGuard(PlayState* play, Player* player) {
     LinkAnimationHeader* defense = (LinkAnimationHeader*)gPlayerAnim_link_normal_defense;
 
@@ -1213,7 +1185,6 @@ static int32_t StartGuard(PlayState* play, Player* player) {
     return SOH_FORM_ACTION_STARTED;
 }
 
-// Vanilla's lock-on guard (func_80834758) needs a shield in hand, so the fins raise the same pose themselves.
 static void UpdateGuardWalk(PlayState* play, Player* player) {
     bool wantsGuard = (sMove == ZORA_MOVE_NONE || sMove == ZORA_MOVE_GUARD_WALK) && !IsZoraBusy(player) &&
                       Player_IsZTargeting(player) && CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_R) &&
@@ -1238,9 +1209,6 @@ static void UpdateGuardWalk(PlayState* play, Player* player) {
     PlantGuard(play, player);
 }
 
-// ---- fins on the forearms ----
-
-// MM's func_80126BD0 ramp: the guard grows the blades with an overshoot (D_801C07F0), strikes snap them out.
 static void GetFinScale(Vec3f* scale) {
     static const Vec3f sKeys[] = {
         { 0.40f, 0.60f, 0.70f }, { 0.75f, 0.90f, 0.85f }, { 1.10f, 1.20f, 1.00f }, { 1.00f, 1.00f, 1.00f }
@@ -1276,7 +1244,6 @@ typedef struct {
     f32 scale;
 } FinKey;
 
-// MM's func_80124618: a keyframed uniform scale, linear between keys.
 static f32 InterpFinKeys(const FinKey* keys, s32 keyCount, f32 frame) {
     for (s32 i = 1; i < keyCount; i++) {
         if (frame <= keys[i].frame) {
@@ -1291,7 +1258,6 @@ static bool IsPlaying(Player* player, s32 slot) {
     return sAnims[slot] != NULL && player->skelAnime.animation == sAnims[slot];
 }
 
-// D_801C05A8 and D_801C05D8: the blade folds into the arm for the dash and comes back out after it.
 static bool GetDashBladeScale(Player* player, f32* scale) {
     static const FinKey sFold[] = { { 0, 1.0f }, { 6, 1.0f }, { 7, 0.0f }, { 17, 0.0f } };
     static const FinKey sReturn[] = { { 0, 0.0f }, { 5, 0.0f }, { 9, 1.0f } };
@@ -1307,8 +1273,6 @@ static bool GetDashBladeScale(Player* player, f32* scale) {
     return false;
 }
 
-// D_801C05C8/D_801C05F0: the long swimming fins open during the roll, follow the turn while cruising, and fold
-// from wherever they were when the dash ends.
 static bool GetSwimFinScale(Player* player, f32* scale) {
     static const FinKey sGrow[] = { { 0, 0.0f }, { 17, 0.5f } };
 
@@ -1359,7 +1323,6 @@ static void DrawForearmFin(PlayState* play, Player* player, int32_t limbIndex) {
     Vec3f scale = { 1.0f, 1.0f, 1.0f };
     f32 dashScale;
 
-    // The fins ARE the boomerangs: while they fly, the forearms are bare.
     if (sFinsOut) {
         return;
     }
@@ -1385,15 +1348,12 @@ static void DrawForearmFin(PlayState* play, Player* player, int32_t limbIndex) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- water ----
-
 static void SetHeavy(PlayState* play, Player* player, bool heavy) {
     sIsHeavy = heavy;
     player->currentBoots = heavy ? PLAYER_BOOTS_IRON : PLAYER_BOOTS_KOKIRI;
     Player_SetBootData(play, player);
 }
 
-// Player_SetEquipmentData puts the saved boots back whenever it runs; the Zora's weight is his own.
 static void KeepWeight(PlayState* play, Player* player) {
     if (!IsInWater(player) && sIsHeavy && !IsSwimMove()) {
         SetHeavy(play, player, false);
@@ -1406,7 +1366,6 @@ static void KeepWeight(PlayState* play, Player* player) {
     }
 }
 
-// MM's func_808475B4: float to the surface, or sink at a steady pace when heavy.
 static void ApplyBuoyancy(Player* player) {
     f32 terminal = -5.0f;
     f32 restDepth = sBorrowedGyorgSwim ? player->ageProperties->unk_28 : SWIM_BUOYANCY_DEPTH;
@@ -1431,15 +1390,23 @@ static void ApplyBuoyancy(Player* player) {
     player->actor.gravity = SWIM_GRAVITY;
 }
 
-// Vanilla's func_8083D53C re-seats its swim idle every frame on anyone deep in water whose action is not one of
-// its own swims, so the dash cannot own the action func: it keeps vanilla's swim idle installed and runs in its
-// place through VB_EXECUTE_PLAYER_ACTION_FUNC, the way NEI paused it.
+// OoT's func_8083D53C lifts a dashing Zora out of shallow water at unk_24, ending dashes before they can breach.
+static void SetWaterExitDepth(f32 depth) {
+    sWaterExitDepth = depth;
+    sZoraBody.unk_24 = depth;
+}
+
+// func_8083D53C re-seats vanilla's swim idle every frame, so the dash runs in its place via
+// VB_EXECUTE_PLAYER_ACTION_FUNC.
 static void StartFastSwim(PlayState* play, Player* player, f32 fromFrame) {
     if (sIsHeavy) {
         SetHeavy(play, player, false);
     }
     sMove = ZORA_MOVE_FAST_SWIM;
+    SetWaterExitDepth(DASH_EXIT_DEPTH);
     sSwimPhase = SWIM_PHASE_ROLL;
+    sRollHoldFrames = ROLL_HOLD_FRAMES;
+    sIsDashing = false;
     sSwimSpeed = player->linearVelocity;
     sSwimRoll = 0;
     sSwimRollSmoothed = 0;
@@ -1458,6 +1425,8 @@ static void LeaveSwimMove(PlayState* play, Player* player) {
     StopMmSfx(MM_ZORA_SWIM_LV);
     StopSwimTrails(play);
     sMove = ZORA_MOVE_NONE;
+    SetWaterExitDepth(SWIM_EXIT_DEPTH);
+    sIsDashing = false;
     sSwimAnim = NULL;
     sSwimPitch = 0;
     sSwimRoll = 0;
@@ -1476,8 +1445,6 @@ static void ReturnToSwimming(PlayState* play, Player* player) {
     func_80838F18(play, player);
 }
 
-// func_8083D53C re-seats the swim idle on a dry body deeper than unk_2C and drops a wet one shallower than unk_24
-// into a fall; func_8083AA10 does the same to any airborne body without MIDAIR. Both would take the arc's pose.
 static void KeepDolphinArc(Player* player) {
     f32 nextDepth = player->actor.yDistToWater - player->actor.velocity.y;
 
@@ -1491,34 +1458,47 @@ static void KeepDolphinArc(Player* player) {
     player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
 }
 
-// MM's func_8083B3B4: breaching near the surface with the nose up throws the Zora into the air.
 static bool TryDolphinJump(PlayState* play, Player* player) {
-    if (sSwimPitch >= DOLPHIN_PITCH || player->actor.yDistToWater - player->actor.velocity.y >= SWIM_DEEP_DEPTH) {
+    if (!sIsDashing || sSwimPitch >= DOLPHIN_PITCH ||
+        player->actor.yDistToWater - player->actor.velocity.y >= SWIM_DEEP_DEPTH) {
         return false;
     }
     f32 launch = MIN(sSwimSpeed * 1.5f, DOLPHIN_MAX_SPEED);
-    if (launch < DOLPHIN_MIN_SPEED) {
-        return false;
-    }
     sMove = ZORA_MOVE_DOLPHIN;
+    SetWaterExitDepth(SWIM_EXIT_DEPTH);
     player->linearVelocity = Math_CosS(sSwimPitch) * launch;
     player->actor.velocity.y = -Math_SinS(sSwimPitch) * launch;
-    player->actor.gravity = DOLPHIN_GRAVITY;
+    player->actor.gravity = SWIM_GRAVITY;
     player->actor.bgCheckFlags &= ~BG_ON_GROUND;
     KeepDolphinArc(player);
-    PlayAnim(play, player, ANIM_FISH_SWIM, 0.0f, ANIMMODE_LOOP, -3.0f);
     StopMmSfx(MM_ZORA_SWIM_LV);
     Audio_PlayActorSound2(&player->actor, NA_SE_EV_JUMP_OUT_WATER);
     return true;
 }
 
+static void DiveBackIntoDash(PlayState* play, Player* player) {
+    LinkAnimationHeader* clip = player->skelAnime.animation;
+    f32 clipFrame = player->skelAnime.curFrame;
+    f32 clipSpeed = player->skelAnime.playSpeed;
+    u8 clipMode = player->skelAnime.mode;
+
+    sMove = ZORA_MOVE_FAST_SWIM;
+    SetWaterExitDepth(DASH_EXIT_DEPTH);
+    sSwimPhase = SWIM_PHASE_CRUISE;
+    sSwimSpeed = sqrtf(SQ(player->linearVelocity) + SQ(player->actor.velocity.y));
+    player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
+    player->stateFlags1 |= PLAYER_STATE1_IN_WATER;
+    player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
+    func_80838F18(play, player);
+    LinkAnimation_Change(play, &player->skelAnime, clip, clipSpeed, clipFrame, Animation_GetLastFrame(clip), clipMode,
+                         0.0f);
+}
+
 static void UpdateDolphin(PlayState* play, Player* player) {
     LinkAnimation_Update(play, &player->skelAnime);
     Math_SmoothStepToS(&sSwimRoll, 0, 6, 0x7D0, 0x190);
-    if (player->actor.yDistToWater > SWIM_EXIT_DEPTH && player->actor.velocity.y <= 0.0f) {
-        player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
-        player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
-        StartFastSwim(play, player, 4.0f);
+    if (player->actor.yDistToWater > SWIM_ENTER_DEPTH && player->actor.velocity.y < DOLPHIN_REENTRY_FALL) {
+        DiveBackIntoDash(play, player);
         return;
     }
     if (IsGrounded(player) && player->actor.velocity.y <= 0.0f) {
@@ -1549,17 +1529,77 @@ static void SteerFastSwim(PlayState* play, Player* player, f32 speedTarget) {
     player->actor.velocity.y = -Math_SinS(sSwimPitch) * sSwimSpeed;
 }
 
+static bool CanStartDash(PlayState* play) {
+    return CHECK_BTN_ALL(play->state.input[0].cur.button, BTN_A) && !sIsHeavy && sAnims[ANIM_WATER_ROLL] != NULL &&
+           HasSwimAbility();
+}
+
+static void StirSilt(PlayState* play, Player* player) {
+    static Vec3f sAccel = { 0.0f, 0.04f, 0.0f };
+    static Color_RGBA8 sWhite = { 255, 255, 255, 255 };
+    Vec3f* origin = &player->actor.world.pos;
+    Vec3f pos = { origin->x + Rand_CenteredFloat(40.0f), origin->y + Rand_CenteredFloat(10.0f),
+                  origin->z + Rand_CenteredFloat(40.0f) };
+    Vec3f velocity = { Rand_CenteredFloat(3.0f), 0.0f, Rand_CenteredFloat(3.0f) };
+
+    EffectSsDust_Spawn(play, 0, &pos, &velocity, &sAccel, &sWhite, &sWhite, 160, 20, 42, 0);
+}
+
+static void LeaveDash(PlayState* play, Player* player) {
+    sSwimPhase = SWIM_PHASE_EXIT;
+    sIsDashing = false;
+    PlayAnim(play, player, ANIM_SWIM_TO_WAIT, 0.0f, ANIMMODE_ONCE, 0.0f);
+    StopMmSfx(MM_ZORA_SWIM_LV);
+}
+
+static void RollIntoDash(PlayState* play, Player* player, bool finished, f32* speedTarget) {
+    Input* input = &play->state.input[0];
+
+    if (!CHECK_BTN_ALL(input->cur.button, BTN_A)) {
+        sSwimExitQueued = true;
+    }
+    if (finished && --sRollHoldFrames <= 0) {
+        if (sSwimExitQueued) {
+            LeaveDash(play, player);
+        } else {
+            sSwimPhase = SWIM_PHASE_CRUISE;
+            PlayAnim(play, player, ANIM_FISH_SWIM, 0.0f, ANIMMODE_LOOP, 0.0f);
+        }
+    } else {
+        f32 stickSpeed;
+        s16 stickYaw;
+        Player_GetMovementSpeedAndYaw(player, &stickSpeed, &stickYaw, SPEED_MODE_LINEAR, play);
+        Math_ScaledStepToS(&player->yaw, stickYaw, ROLL_STEER_STEP);
+        if (player->skelAnime.curFrame >= FAST_SWIM_KICK_FRAME) {
+            *speedTarget = FAST_SWIM_KICK_SPEED;
+            if (LinkAnimation_OnFrame(&player->skelAnime, FAST_SWIM_KICK_FRAME)) {
+                sSwimSpeed = FAST_SWIM_BURST;
+            }
+            sIsDashing = true;
+        }
+    }
+    Math_SmoothStepToS(&sSwimRoll, (s16)(input->rel.stick_x * 0xC8), 0xA, 0x3E8, 0x64);
+}
+
+static void BankFastSwim(Player* player, s16 turn) {
+    s32 rollBefore = sSwimRoll;
+    s32 ringAngle = turn < 0 ? -BANK_SFX_ANGLE : BANK_SFX_ANGLE;
+    s32 distanceAfter = rollBefore + turn - ringAngle;
+    s32 distanceBefore = rollBefore - ringAngle;
+    bool isCrossing = (distanceAfter <= 0 && distanceBefore >= 0) || (distanceAfter >= 0 && distanceBefore <= 0);
+
+    sSwimRoll += turn;
+    if (ABS(turn) > BANK_SFX_TURN && isCrossing) {
+        RefreshMmSfx(MM_ZORA_SWIM_ROLL, &player->actor.projectedPos);
+    }
+}
+
 static void CruiseFastSwim(PlayState* play, Player* player, f32* speedTarget) {
     Input* input = &play->state.input[0];
     s16 pitchTarget = (s16)(input->rel.stick_y * 0xC8);
 
-    if (player->actor.bgCheckFlags & BG_TOUCHING_WALL) {
-        sSwimSpeed *= 0.5f;
-    }
     if (!CHECK_BTN_ALL(input->cur.button, BTN_A)) {
-        sSwimPhase = SWIM_PHASE_EXIT;
-        PlayAnim(play, player, ANIM_SWIM_TO_WAIT, 0.0f, ANIMMODE_ONCE, -6.0f);
-        StopMmSfx(MM_ZORA_SWIM_LV);
+        LeaveDash(play, player);
         return;
     }
     *speedTarget = FAST_SWIM_SPEED;
@@ -1568,7 +1608,7 @@ static void CruiseFastSwim(PlayState* play, Player* player, f32* speedTarget) {
         sSwimFloorTimer--;
         pitchTarget = MIN(pitchTarget, (s16)(player->floorPitch - 0xFA0));
     }
-    if (sSwimPitch >= DOLPHIN_PITCH && player->actor.yDistToWater < SWIM_SURFACE_DEPTH + 10.0f) {
+    if (sSwimPitch >= DOLPHIN_PITCH && player->actor.yDistToWater < SWIM_SURFACE_DEPTH) {
         pitchTarget = MAX(pitchTarget, 0x7D0);
     }
     Math_SmoothStepToS(&sSwimPitch, pitchTarget, 4, 0xFA0, 0x190);
@@ -1576,18 +1616,64 @@ static void CruiseFastSwim(PlayState* play, Player* player, f32* speedTarget) {
     if (Math_ScaledStepToS(&sSwimTurn, rollTarget, 0x384) && rollTarget == 0) {
         Math_SmoothStepToS(&sSwimRoll, 0, 4, 0x5DC, 0x64);
     } else {
-        sSwimRoll += sSwimTurn;
+        BankFastSwim(player, sSwimTurn);
     }
-    if (sSwimFloorTimer < 8 && IsGrounded(player)) {
-        sSwimPitch += (s16)((-player->floorPitch - sSwimPitch) * 2);
-        sSwimFloorTimer = 15;
-        EffectSsGRipple_Spawn(play, &player->actor.world.pos, 50, 300, 0);
+    if (player->actor.world.pos.y - player->actor.floorHeight < FLOOR_SKIM_HEIGHT) {
+        StirSilt(play, player);
     }
 }
 
-// MM's Player_Action_56 in three phases: the barrel roll into the dash, the cruise, and the exit.
+static bool EaseOutOfDash(PlayState* play, Player* player, bool finished) {
+    Math_SmoothStepToS(&sSwimRoll, 0, 4, 0xFA0, 0x190);
+    if (player->skelAnime.curFrame > FAST_SWIM_RESTART_FRAME && CanStartDash(play)) {
+        StartFastSwim(play, player, 4.0f);
+        return true;
+    }
+    if (finished) {
+        ReturnToSwimming(play, player);
+        return true;
+    }
+    return false;
+}
+
+static bool TryWallBonk(PlayState* play, Player* player) {
+    s16 yawToWall = player->yaw - (s16)(player->actor.wallYaw + 0x8000);
+
+    if (!sIsDashing || !(player->actor.bgCheckFlags & BGCHECKFLAG_PLAYER_WALL_INTERACT) ||
+        ABS(yawToWall) >= WALL_FACING_YAW) {
+        return false;
+    }
+    sSwimPhase = SWIM_PHASE_BONK;
+    sIsDashing = false;
+    StopMmSfx(MM_ZORA_SWIM_LV);
+    LinkAnimation_Change(play, &player->skelAnime, (LinkAnimationHeader*)sSwimHitAnim, MM_ANIM_ADJUSTED_SPEED, 0.0f,
+                         Animation_GetLastFrame((void*)sSwimHitAnim), ANIMMODE_ONCE, 0.0f);
+    player->linearVelocity *= -BONK_SPEED_SCALE;
+    Player_RequestQuake(play, 33267, 3, 12);
+    Player_RequestRumble(player, 255, 20, 150, 0);
+    Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_HIT);
+    Player_PlayVoiceSfx(player, NA_SE_VO_LI_CLIMB_END);
+    return true;
+}
+
+static void RecoverFromBonk(PlayState* play, Player* player, bool finished) {
+    Math_StepToF(&player->linearVelocity, 0.0f, 0.4f);
+    if (finished && player->linearVelocity < BONK_RECOVER_SPEED) {
+        ReturnToSwimming(play, player);
+    }
+}
+
+static void GlanceOffFloor(PlayState* play, Player* player) {
+    if (sSwimFloorTimer >= 8 || !IsGrounded(player)) {
+        return;
+    }
+    sSwimPitch += (s16)((-player->floorPitch - sSwimPitch) * 2);
+    sSwimFloorTimer = 15;
+    StirSilt(play, player);
+    Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_BOUND);
+}
+
 static void RunSwimMove(Player* player, PlayState* play) {
-    Input* input = &play->state.input[0];
     f32 speedTarget = 0.0f;
 
     if (sMove == ZORA_MOVE_DOLPHIN) {
@@ -1598,49 +1684,43 @@ static void RunSwimMove(Player* player, PlayState* play) {
     if (TryDolphinJump(play, player)) {
         return;
     }
-    if (player->actor.yDistToWater <= 0.0f && IsGrounded(player)) {
+    bool isBeached = player->actor.yDistToWater < SWIM_EXIT_DEPTH && IsGrounded(player);
+    if (isBeached || player->actor.yDistToWater <= 0.0f) {
         LeaveSwimMove(play, player);
-        func_80839FFC(player, play);
+        if (isBeached) {
+            func_80839FFC(player, play);
+        }
         return;
     }
     bool finished = LinkAnimation_Update(play, &player->skelAnime);
-    if (sSwimPhase == SWIM_PHASE_ROLL) {
-        // Letting go of A at any point of the roll commits to leaving, as in MM, even if it is pressed again.
-        if (!CHECK_BTN_ALL(input->cur.button, BTN_A)) {
-            sSwimExitQueued = true;
-        }
-        if (finished) {
-            bool keepGoing = !sSwimExitQueued;
-            sSwimPhase = keepGoing ? SWIM_PHASE_CRUISE : SWIM_PHASE_EXIT;
-            PlayAnim(play, player, keepGoing ? ANIM_FISH_SWIM : ANIM_SWIM_TO_WAIT, 0.0f,
-                     keepGoing ? ANIMMODE_LOOP : ANIMMODE_ONCE, -6.0f);
-            sSwimRoll = 0;
-        } else if (player->skelAnime.curFrame >= FAST_SWIM_KICK_FRAME) {
-            speedTarget = FAST_SWIM_KICK_SPEED;
-            if (LinkAnimation_OnFrame(&player->skelAnime, FAST_SWIM_KICK_FRAME)) {
-                sSwimSpeed = FAST_SWIM_BURST;
+    if (sSwimPhase == SWIM_PHASE_BONK) {
+        RecoverFromBonk(play, player, finished);
+        return;
+    }
+    if (TryWallBonk(play, player)) {
+        return;
+    }
+    switch (sSwimPhase) {
+        case SWIM_PHASE_ROLL:
+            RollIntoDash(play, player, finished, &speedTarget);
+            break;
+        case SWIM_PHASE_CRUISE:
+            CruiseFastSwim(play, player, &speedTarget);
+            break;
+        case SWIM_PHASE_EXIT:
+            if (EaseOutOfDash(play, player, finished)) {
+                return;
             }
-        }
-        Math_SmoothStepToS(&sSwimRoll, (s16)(input->rel.stick_x * 0xC8), 0xA, 0x3E8, 0x64);
-    } else if (sSwimPhase == SWIM_PHASE_CRUISE) {
-        CruiseFastSwim(play, player, &speedTarget);
-    } else {
-        Math_SmoothStepToS(&sSwimRoll, 0, 4, 0xFA0, 0x190);
-        if (player->skelAnime.curFrame <= 5.0f && CHECK_BTN_ALL(input->press.button, BTN_A)) {
-            StartFastSwim(play, player, 4.0f);
-            return;
-        }
-        if (finished) {
+            break;
+        default:
             ReturnToSwimming(play, player);
             return;
-        }
     }
-    // MM keeps a smoothed copy of the bank (unk_B8E) only for the barrier; the body uses the raw one.
+    GlanceOffFloor(play, player);
     Math_SmoothStepToS(&sSwimRollSmoothed, sSwimRoll, 2, 0x5DC, 0x64);
     SteerFastSwim(play, player, speedTarget);
 }
 
-// Swimming belongs to vanilla; only A (the dash) and B (the weight) are the Zora's, read at the end of the frame.
 static void UpdateWaterButtons(PlayState* play, Player* player) {
     Input* input = &play->state.input[0];
 
@@ -1648,14 +1728,12 @@ static void UpdateWaterButtons(PlayState* play, Player* player) {
         return;
     }
     bool isOnSeabed = IsGrounded(player) && sIsHeavy;
-    // On the seabed A lets go of the weight and floats up; Z-targeted, it stays vanilla's side hop.
     if (isOnSeabed && CHECK_BTN_ALL(input->press.button, BTN_A) && !Player_IsZTargeting(player)) {
         SetHeavy(play, player, false);
         RefreshMmSfx(MM_FACE_UP, &player->actor.projectedPos);
         return;
     }
-    if (!isOnSeabed && CHECK_BTN_ALL(input->press.button, BTN_A) && sAnims[ANIM_WATER_ROLL] != NULL &&
-        player->actor.yDistToWater > SWIM_EXIT_DEPTH && HasSwimAbility()) {
+    if (CanStartDash(play) && player->actor.yDistToWater > SWIM_EXIT_DEPTH) {
         StartFastSwim(play, player, 4.0f);
         return;
     }
@@ -1664,7 +1742,6 @@ static void UpdateWaterButtons(PlayState* play, Player* player) {
     }
 }
 
-// MM's z_player.c:9985: how fast the body cuts through the water, a dash counting its speed and its turn.
 static s32 CountSwimBubbles(Player* player) {
     f32 drive =
         sMove == ZORA_MOVE_FAST_SWIM ? ABS(sSwimTurn) * -0.004f + sSwimSpeed * -0.38f : player->actor.velocity.y;
@@ -1676,7 +1753,6 @@ static s32 CountSwimBubbles(Player* player) {
     return MIN((s32)(drive * -0.3f), 8);
 }
 
-// The limbs that break the surface while dashing throw their own spray, as MM's z_player.c:9120 does.
 static void SplashLimbsAtSurface(PlayState* play, Player* player, f32 surfaceY) {
     static const s32 sLimbs[] = { PLAYER_BODYPART_L_HAND, PLAYER_BODYPART_R_HAND, PLAYER_BODYPART_L_FOOT,
                                   PLAYER_BODYPART_R_FOOT };
@@ -1690,7 +1766,6 @@ static void SplashLimbsAtSurface(PlayState* play, Player* player, f32 surfaceY) 
     }
 }
 
-// NEI's MmForm_SwimEffects, on top of vanilla's own water effects.
 static void SpawnSwimEffects(PlayState* play, Player* player) {
     f32 surfaceY = player->actor.world.pos.y + player->actor.yDistToWater;
     Vec3f surface = { player->actor.world.pos.x, surfaceY, player->actor.world.pos.z };
@@ -1715,8 +1790,6 @@ static void SpawnSwimEffects(PlayState* play, Player* player) {
     }
 }
 
-// Swimming hides the offer from Player_ActionHandler_2 (it refuses UNDERWATER), and the dash never runs it:
-// NEI's MmForm_HandleFormInteractions hands it the offer with those flags lifted for the call.
 static void AcceptUnderwaterItem(PlayState* play, Player* player) {
     u32 hiddenFlags = player->stateFlags2 & (PLAYER_STATE2_UNDERWATER | PLAYER_STATE2_DIVING);
 
@@ -1733,19 +1806,15 @@ static void AcceptUnderwaterItem(PlayState* play, Player* player) {
     }
 }
 
-// Link's own depths (swim from 56, wade from 36) suit his height; NEI's Zora swims from 45 and wades back at 30.
-// The copy follows the player: a new scene or an age change rebuilds his properties.
 static void KeepZoraBody(Player* player) {
     if (player->ageProperties == &sZoraBody) {
         return;
     }
     sZoraBody = *player->ageProperties;
     sZoraBody.unk_2C = SWIM_ENTER_DEPTH;
-    sZoraBody.unk_24 = SWIM_EXIT_DEPTH;
+    sZoraBody.unk_24 = sWaterExitDepth;
     player->ageProperties = &sZoraBody;
 }
-
-// ---- barrier ----
 
 static void ReleaseBarrierLight(PlayState* play) {
     if (sBarrierLight != NULL) {
@@ -1801,19 +1870,17 @@ static void StrikeWithBarrier(PlayState* play, Player* player) {
     sBarrierCollider.dim.pos.y = (s16)player->actor.world.pos.y;
     sBarrierCollider.dim.pos.z = (s16)player->actor.world.pos.z;
     CollisionCheck_SetAT(play, &play->colChkCtx, &sBarrierCollider.base);
-    // MM turns the Zora's own cylinder off while the barrier is up: nothing reaches him through it.
     player->cylinder.base.acFlags &= ~(AC_ON | AC_HIT);
 }
 
-// MM's func_8082F164/func_8082F1AC: a flag beside whatever the Zora is doing, R in water and R+B on guard.
 static void UpdateBarrier(PlayState* play, Player* player) {
     Input* input = &play->state.input[0];
     u16 buttons = IsInWater(player) ? BTN_R : (BTN_R | BTN_B);
     bool wasHeld = sBarrierHeld;
     s16 previous = sBarrierIntensity;
 
-    sBarrierHeld = (IsZora() || sBorrowedGyorgSwim) && CHECK_BTN_ALL(input->cur.button, buttons) && gSaveContext.magic > 0 &&
-                   (IsInWater(player) || IsGuarding()) && CanAct(player);
+    sBarrierHeld = (IsZora() || sBorrowedGyorgSwim) && CHECK_BTN_ALL(input->cur.button, buttons) &&
+                   gSaveContext.magic > 0 && (IsInWater(player) || IsGuarding()) && CanAct(player);
     if (sBarrierHeld && !wasHeld) {
         sBarrierDrainTimer = BARRIER_DRAIN_INTERVAL;
     }
@@ -1871,7 +1938,7 @@ static void DrawBarrier(PlayState* play, Player* player) {
     Matrix_Scale(scale, scale, scale, MTXMODE_APPLY);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    // Segments 0x0A/0x0B carry the two scrolling layers of MM's object_link_zora_Matanimheader_012A80.
+    // Segments 0x0A/0x0B carry the two scrolling layers of object_link_zora_Matanimheader_012A80.
     gSPSegment(POLY_XLU_DISP++, 0x0A,
                (uintptr_t)Gfx_TwoTexScroll(play->state.gfxCtx, 0, -(s32)frames, (s32)(frames * 20), 0x20, 0x40, 1,
                                            -(s32)(frames * 2), (s32)(frames * 10), 0x20, 0x40));
@@ -1882,8 +1949,6 @@ static void DrawBarrier(PlayState* play, Player* player) {
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
-
-// ---- guitar ----
 
 static bool IsHoldingOcarina(Player* player) {
     return player->rightHandType == PLAYER_MODELTYPE_RH_OCARINA || player->rightHandType == PLAYER_MODELTYPE_RH_OOT;
@@ -1902,8 +1967,7 @@ static MmOcarinaNoteFunc FindGuitarVoice(void) {
     return (MmOcarinaNoteFunc)sApi->FindService(MM_OCARINA_NOTE_SERVICE);
 }
 
-// MM's guitar sings through Sequence_0's ocarina channel. The hook runs right after Ocarina triggered its own
-// voice, so stopping that here always lands.
+// Runs right after Ocarina triggered its own voice, so stopping it here always lands.
 static void VoiceGuitar(uint8_t note, float bendFreq) {
     MmOcarinaNoteFunc voice = sGuitarVoice;
 
@@ -1919,7 +1983,6 @@ static void VoiceGuitar(uint8_t note, float bendFreq) {
     }
 }
 
-// Runs inside the ocarina's own update; the pose consumes the edge on the game frame.
 static void NoteStruck(uint8_t note, float modulator, int8_t bend) {
     (void)bend;
     if (note != OCARINA_NOTE_NONE && note != sLastNote) {
@@ -1950,8 +2013,6 @@ static void ChangeGuitarClip(PlayState* play, Player* player, s32 slot, f32 spee
                          speed >= 0.0f ? last : 0.0f, mode, morph);
 }
 
-// Vanilla's ocarina action waits for the end of its intro and outro clips; the guitar's own clips take their
-// place, so that wait is what raises and lowers it, as MM's Player_Action_63 does.
 static bool SwapOcarinaClip(PlayState* play, Player* player) {
     if (IsPlayingOcarinaClip(player, "okarina_start")) {
         ChangeGuitarClip(play, player, ANIM_GUITAR_RAISE, 1.0f, ANIMMODE_ONCE, -6.0f);
@@ -1966,30 +2027,54 @@ static bool SwapOcarinaClip(PlayState* play, Player* player) {
     return false;
 }
 
-// The strum loops: that same action reopens the ocarina whenever a clip reports its end, which would wipe
-// the notes of the song being played.
+static bool IsReplayingSong(PlayState* play) {
+    return play->msgCtx.msgMode >= MSGMODE_SONG_PLAYED && play->msgCtx.msgMode <= MSGMODE_DISPLAY_SONG_PLAYED;
+}
+
+static void LeanIntoGuitar(PlayState* play, Player* player) {
+    Input* input = &play->state.input[0];
+    f32 lean = MIN(sqrtf(SQ((f32)input->rel.stick_x) + SQ((f32)input->rel.stick_y)), 60.0f);
+    s16 turn = lean > 0.0f ? Math_Atan2S(input->cur.stick_y, -input->cur.stick_x) : 0;
+
+    if ((s16)(turn + 0x4000) < 0) {
+        turn = (s16)(turn - 0x8000);
+        lean = -lean;
+    }
+    turn = CLAMP(turn, -0x1F40, 0x2EE0);
+    s16 bend = MIN((s16)(lean * -100.0f), 0xFA0);
+    Math_SmoothStepToS(&player->upperLimbRot.x, bend, 4, 0x7D0, 0);
+    Math_SmoothStepToS(&player->upperLimbRot.y, turn, 4, 0x7D0, 0);
+    player->headLimbRot.x = -player->upperLimbRot.x;
+    player->unk_6AE_rotFlags |= UNK6AE_ROT_HEAD_X | UNK6AE_ROT_UPPER_X | UNK6AE_ROT_UPPER_Y;
+    s16 strain = ABS(player->upperLimbRot.x);
+    player->actor.shape.face = strain < 0x7D0 ? FACE_NEUTRAL : (strain < 0xFA0 ? FACE_OPENING : FACE_HURT);
+}
+
+// The ocarina action reopens whenever a clip reports its end and would wipe the notes, so free play parks short of it.
 static void PoseGuitar(PlayState* play, Player* player) {
     LinkAnimationHeader* strum = sAnims[ANIM_GUITAR_PLAY];
     f32 strumEnd = Animation_GetLastFrame(strum) - MM_ANIM_ADJUSTED_SPEED * CLIP_FRAMES_PER_UPDATE;
+    bool isReplaying = IsReplayingSong(play);
 
     if (player->skelAnime.animation != strum) {
         ChangeGuitarClip(play, player, ANIM_GUITAR_PLAY, 1.0f, ANIMMODE_LOOP, -4.0f);
         player->skelAnime.playSpeed = 0.0f;
         sGuitarPhase = GUITAR_PLAYING;
     }
-    bool isStrumDone = player->skelAnime.curFrame >= strumEnd;
-    if (sWasNoteStruck) {
-        if (isStrumDone) {
-            player->skelAnime.curFrame = 0.0f;
-        }
+    if (isReplaying) {
         player->skelAnime.playSpeed = MM_ANIM_ADJUSTED_SPEED;
-    } else if (isStrumDone) {
+    } else if (sWasNoteStruck) {
+        player->skelAnime.curFrame = 0.0f;
+        player->skelAnime.playSpeed = MM_ANIM_ADJUSTED_SPEED;
+    } else if (player->skelAnime.curFrame >= strumEnd) {
         player->skelAnime.playSpeed = 0.0f;
     }
     sWasNoteStruck = false;
+    if (!isReplaying) {
+        LeanIntoGuitar(play, player);
+    }
 }
 
-// The ocarina stays out across the message session, so the latch only lets go once no message is up.
 static void UpdateGuitar(PlayState* play, Player* player) {
     bool isSessionOpen = play->msgCtx.msgMode != MSGMODE_NONE;
 
@@ -2015,7 +2100,6 @@ static void UpdateGuitar(PlayState* play, Player* player) {
     if (isRaising || sGuitarPhase == GUITAR_LOWERING) {
         return;
     }
-    // A raise that ended hands over to the strum even before an actor opens the session it was played for.
     if (isSessionOpen || sGuitarPhase == GUITAR_RAISING) {
         PoseGuitar(play, player);
     }
@@ -2027,8 +2111,6 @@ static void DrawGuitar(PlayState* play) {
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sGuitarDL);
     CLOSE_DISPS(play->state.gfxCtx);
 }
-
-// ---- drawing ----
 
 static void DrawZoraLimbExtras(PlayState* play, Player* player, int32_t limbIndex) {
     if (!IsZora()) {
@@ -2053,7 +2135,6 @@ static void DrawZora(PlayState* play, Player* player) {
     }
 }
 
-// A Zora never speaks with Link's voice, even for a grunt MM's bank has no sample for.
 static void SpeakWithZoraVoice(Actor* actor, uint16_t sfxId) {
     const uint16_t action = (uint16_t)(sfxId - NA_SE_VO_LI_SWORD_N);
     MmSfxPlayFunc play = GetMmSfxPlayer();
@@ -2063,7 +2144,6 @@ static void SpeakWithZoraVoice(Actor* actor, uint16_t sfxId) {
     }
 }
 
-// MM's Player_GetFloorSfxByAge: the floor offset plus the form's own block of the player bank.
 static bool StepWithZoraFeet(Actor* actor) {
     Player* player = (Player*)actor;
     MmSfxPlayFunc play = GetMmSfxPlayer();
@@ -2086,38 +2166,43 @@ static void ResolveZoraSfx(Actor* actor, int32_t kind, uint16_t* sfxId, bool* ha
 
 static bool HasHumanSwimProvider(bool requested) {
     typedef bool (*SwimCapability)(void);
-    SwimCapability tunic=SOH_MOD_API_HAS(sApi,FindService)?
-        (SwimCapability)sApi->FindService("nei.zora_tunic.swim_enabled"):NULL;
-    return requested || (SOH_MOD_API_HAS(sApi,IsCustomItemWorn) &&
-        sApi->IsCustomItemWorn("mm.remains.gyorg")) || (tunic && tunic());
+    SwimCapability tunic =
+        SOH_MOD_API_HAS(sApi, FindService) ? (SwimCapability)sApi->FindService("nei.zora_tunic.swim_enabled") : NULL;
+    return requested || (SOH_MOD_API_HAS(sApi, IsCustomItemWorn) && sApi->IsCustomItemWorn("mm.remains.gyorg")) ||
+           (tunic && tunic());
 }
 
-static void HumanGyorgSwim(PlayState* play,Player* player,bool enabled) {
-    if(IsZora()){sBorrowedGyorgSwim=false;return;}
-    // Multiple providers share one swim driver; an inactive provider must not stop another.
-    enabled=HasHumanSwimProvider(enabled);
+static void HumanGyorgSwim(PlayState* play, Player* player, bool enabled) {
+    if (IsZora()) {
+        sBorrowedGyorgSwim = false;
+        return;
+    }
+    enabled = HasHumanSwimProvider(enabled);
     const char* form = sApi->GetActiveForm();
-    if(!enabled || (form != NULL && form[0] != '\0') || player->currentBoots == PLAYER_BOOTS_IRON ||
-       !CanAct(player) || !HasSwimAbility()) {
-        if(sBorrowedGyorgSwim && IsSwimMove())LeaveSwimMove(play,player);
-        sBorrowedGyorgSwim=false;return;
+    if (!enabled || (form != NULL && form[0] != '\0') || player->currentBoots == PLAYER_BOOTS_IRON || !CanAct(player) ||
+        !HasSwimAbility()) {
+        if (sBorrowedGyorgSwim && IsSwimMove())
+            LeaveSwimMove(play, player);
+        sBorrowedGyorgSwim = false;
+        return;
     }
     if (!sBorrowedGyorgSwim) {
         sSwimPitch = sSwimRoll = sSwimRollSmoothed = sSwimTurn = 0;
         sSwimFloorTimer = 0;
     }
-    sBorrowedGyorgSwim=true;
+    sBorrowedGyorgSwim = true;
 }
 
-// Providers can call the compatibility service more than once. Effects and magic drain
-// belong to this single update, not to the number of providers that happen to be loaded.
 static void UpdateHumanSwim(void) {
-    if (gPlayState == NULL || IsZora()) return;
+    if (gPlayState == NULL || IsZora())
+        return;
     Player* player = GET_PLAYER(gPlayState);
     HumanGyorgSwim(gPlayState, player, false);
     sWaterFrames = sBorrowedGyorgSwim && IsInWater(player) ? sWaterFrames + 1 : 0;
-    if (sWaterFrames != 0) SpawnSwimEffects(gPlayState, player);
-    if (sBorrowedGyorgSwim || sBarrierIntensity > 0) UpdateBarrier(gPlayState, player);
+    if (sWaterFrames != 0)
+        SpawnSwimEffects(gPlayState, player);
+    if (sBorrowedGyorgSwim || sBarrierIntensity > 0)
+        UpdateBarrier(gPlayState, player);
 }
 
 static void DrawHumanSwim(Actor* actor, PlayState* play) {
@@ -2126,14 +2211,19 @@ static void DrawHumanSwim(Actor* actor, PlayState* play) {
     }
 }
 
-// ---- lifetime ----
-
 static bool IsZoraBusy(Player* player) {
     return player->actionFunc == ZoraStrikeAction || player->actionFunc == ZoraFinsAction ||
            player->actionFunc == ZoraGuardAction || IsSwimMove();
 }
 
-// Anything that takes the player (a hit, a textbox, an item, a cutscene) gets vanilla's action back.
+// Assignable Tunics and Boots runs the action itself from VB_EXECUTE_PLAYER_ACTION_FUNC, ahead of every mod, unless
+// the action is paused; vanilla's swim idle then caps the arc at 2 units a frame. Player_UpdateCommon clears the flag.
+static void HoldVanillaActionDuringSwimMove(void) {
+    if (gPlayState != NULL && IsSwimMove()) {
+        GET_PLAYER(gPlayState)->stateFlags3 |= PLAYER_STATE3_PAUSE_ACTION_FUNC;
+    }
+}
+
 static void DriveSwimMove(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
 
@@ -2142,25 +2232,26 @@ static void DriveSwimMove(bool* should, va_list args) {
     }
     if (!CanAct(player)) {
         LeaveSwimMove(gPlayState, player);
+        *should = true;
         return;
     }
-    // func_8083D53C runs before the action and lifts Link out of water once he is shallower than unk_24; a dash
-    // caught there breaches as a dolphin jump if it is nosing up, and otherwise hands the body back to vanilla.
     if (sMove == ZORA_MOVE_FAST_SWIM && !IsInWater(player) && !TryDolphinJump(gPlayState, player)) {
         LeaveSwimMove(gPlayState, player);
+        *should = true;
         return;
     }
     *should = false;
     // Player_UpdateCommon clears this flag immediately before dispatching this hook.
     player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_ALWAYS;
     if (sSwimAnim != NULL && player->skelAnime.animation != sSwimAnim) {
-        LinkAnimation_Change(gPlayState, &player->skelAnime, sSwimAnim, MM_ANIM_ADJUSTED_SPEED, sSwimAnimFrame,
+        LinkAnimation_Change(gPlayState, &player->skelAnime, sSwimAnim, sSwimAnimSpeed, sSwimAnimFrame,
                              Animation_GetLastFrame(sSwimAnim), sSwimAnimMode, -3.0f);
     }
     RunSwimMove(player, gPlayState);
     if (IsSwimMove()) {
         sSwimAnim = player->skelAnime.animation;
         sSwimAnimFrame = player->skelAnime.curFrame;
+        sSwimAnimSpeed = player->skelAnime.playSpeed;
         sSwimAnimMode = player->skelAnime.mode;
     }
 }
@@ -2193,7 +2284,6 @@ static void ResetState(PlayState* play, Player* player) {
     sScaledDamage = 0;
 }
 
-// Preserve equipment-specific damage while the form borrows Link's melee quads.
 static u8 sHumanMeleeDamage[2] = { 1, 1 };
 
 static void EnterZora(PlayState* play, Player* player) {
@@ -2204,6 +2294,35 @@ static void EnterZora(PlayState* play, Player* player) {
     sIsHeavy = false;
     sFinsOut = false;
     sFins[0] = sFins[1] = NULL;
+}
+
+static const s16 sZoraBootRow[17] = { 200, 1000, 300, 700, 550, 270, 700, 300, 800,
+                                      600, -100, 600, 590, 750, 125, 200, 130 };
+
+static void WearZoraBoots(PlayState* play, Player* player) {
+    if (player->currentBoots != PLAYER_BOOTS_KOKIRI) {
+        return;
+    }
+    REG(19) = sZoraBootRow[0];
+    REG(30) = sZoraBootRow[1];
+    REG(32) = sZoraBootRow[2];
+    REG(34) = sZoraBootRow[3];
+    REG(35) = sZoraBootRow[4];
+    REG(36) = sZoraBootRow[5];
+    REG(37) = sZoraBootRow[6];
+    REG(38) = sZoraBootRow[7];
+    REG(43) = sZoraBootRow[8];
+    REG(45) = sZoraBootRow[9];
+    REG(68) = sZoraBootRow[10];
+    REG(69) = sZoraBootRow[11];
+    IREG(66) = sZoraBootRow[12];
+    IREG(67) = sZoraBootRow[13];
+    IREG(68) = sZoraBootRow[14];
+    IREG(69) = sZoraBootRow[15];
+    MREG(95) = sZoraBootRow[16];
+    if (play->roomCtx.curRoom.behaviorType1 == ROOM_BEHAVIOR_TYPE1_2) {
+        REG(45) = 500;
+    }
 }
 
 static void ExitZora(PlayState* play, Player* player) {
@@ -2220,6 +2339,7 @@ static void ExitZora(PlayState* play, Player* player) {
     if (sIsHeavy) {
         SetHeavy(play, player, false);
     }
+    Player_SetBootData(play, player);
     if (wasBusy) {
         func_80839FFC(player, play);
     }
@@ -2235,14 +2355,13 @@ static void ExitZora(PlayState* play, Player* player) {
     }
 }
 
-// These ride vanilla's lock-on step instead of an action func of their own.
 static bool IsUpperBodyMove(void) {
     return sMove == ZORA_MOVE_FINS_LOCKED_READY || sMove == ZORA_MOVE_FINS_LOCKED_THROW ||
            sMove == ZORA_MOVE_GUARD_WALK;
 }
 
 static void UpdateZora(PlayState* play, Player* player) {
-    // The host resolves MM's idle through OoT's animation table, whose default speed is 1.0.
+    WearZoraBoots(play, player);
     if (sAnims[ANIM_WAIT] != NULL && player->skelAnime.animation == sAnims[ANIM_WAIT]) {
         player->skelAnime.playSpeed = MmAnimSpeed(ANIM_WAIT);
     }
@@ -2255,7 +2374,6 @@ static void UpdateZora(PlayState* play, Player* player) {
         StopTrail(play);
         sMove = ZORA_MOVE_NONE;
     }
-    // Only in water: the claim waives every hazard, and a hot room still burns a Zora.
     if (IsInWater(player)) {
         sApi->RequestHazard(ZORA_HAZARD_OWNER, 0, PLAYER_ENV_HAZARD_NONE, EQUIP_VALUE_TUNIC_KOKIRI);
     } else {
@@ -2280,7 +2398,6 @@ static void UpdateZora(PlayState* play, Player* player) {
     UpdateGuitar(play, player);
 }
 
-// Colliders remember their actor, and a new scene brings a new player; its lights are rebuilt too.
 static void ForgetScene(int16_t sceneNum) {
     (void)sceneNum;
     Z64Aiming_Drop();
@@ -2296,18 +2413,15 @@ static void ForgetScene(int16_t sceneNum) {
     sBorrowedGyorgSwim = false;
 }
 
-// ---- mask ----
-
 static bool CanWearMask(Player* player, PlayState* play) {
     return (IsGrounded(player) || IsInWater(player)) &&
            !(player->stateFlags1 & (PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE));
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    ToggleConfiguredForm(ZORA_FORM_KEY);
+    sApi->ToggleForm(ZORA_FORM_KEY);
 }
 
-// A vanilla GetItemEntry has no draw callback of its own, and the registry reads NULL as "no model".
 static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     (void)entry;
     OPEN_DISPS(play->state.gfxCtx);
@@ -2317,7 +2431,6 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, ZORA_MASK_KEY, ZORA_MASK_KEY, "",
 };
@@ -2351,22 +2464,23 @@ static const SOHFormActionOverride sActions[] = {
     { SOH_PLAYER_ACTION_SHIELD, StartGuard },
 };
 
-// Standing still the Zora takes MM's own stance; walking, running and surface swimming stay Link's, as in NEI.
 static SOHFormAnimOverride sAnimOverrides[] = {
     { PLAYER_ANIMGROUP_wait, -1, NULL },
 };
 
 static uint16_t ResolveZoraEquipment(int32_t equipType, uint16_t value) {
-    if (equipType == EQUIP_TYPE_SWORD) {
-        return EQUIP_VALUE_SWORD_NONE;
+    switch (equipType) {
+        case EQUIP_TYPE_SWORD:
+            return EQUIP_VALUE_SWORD_NONE;
+        case EQUIP_TYPE_SHIELD:
+            return EQUIP_VALUE_SHIELD_NONE;
+        case EQUIP_TYPE_TUNIC:
+            return EQUIP_VALUE_TUNIC_KOKIRI;
+        case EQUIP_TYPE_BOOTS:
+            return EQUIP_VALUE_BOOTS_KOKIRI;
+        default:
+            return value;
     }
-    if (equipType == EQUIP_TYPE_SHIELD) {
-        return EQUIP_VALUE_SHIELD_NONE;
-    }
-    if (equipType == EQUIP_TYPE_BOOTS) {
-        return EQUIP_VALUE_BOOTS_KOKIRI;
-    }
-    return value;
 }
 
 static bool IsFormMask(const char* customKey) {
@@ -2415,7 +2529,6 @@ static void RegisterForm(void) {
     zora.transformOffAnim = sAnims[ANIM_MASK_OFF];
     zora.transformMask = sMaskDL;
     zora.transformVoiceSfx = NA_SE_VO_LI_FALL_L;
-    // MM D_801C0E40[PLAYER_FORM_ZORA], drawn at 0.7 by the head limb.
     zora.transformGlowOffset = (Vec3f){ -189.5f, -594.87f, 0.0f };
     zora.transformGlowScale = 0.7f;
     sAnimOverrides[0].anim = sAnims[ANIM_WAIT];
@@ -2439,7 +2552,8 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
 }
 
 SOH_MOD_EXPORT void ModInit(void) {
-    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.zora.human_gyorg_swim",(void*)HumanGyorgSwim);
+    if (SOH_MOD_API_HAS(sApi, PublishService))
+        sApi->PublishService("nei.zora.human_gyorg_swim", (void*)HumanGyorgSwim);
     LoadAnims();
     RegisterMask();
     RegisterForm();
@@ -2453,6 +2567,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnOcarinaPlaybackNote, PlaybackNoteStruck);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateHumanSwim);
+    SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, HoldVanillaActionDuringSwimMove);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawHumanSwim);
     sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, ResolveZoraStrength);
     sApi->RegisterVB(VB_PREVENT_STRENGTH, ResolveZoraGrab);

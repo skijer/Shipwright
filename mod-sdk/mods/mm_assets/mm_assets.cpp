@@ -4,6 +4,7 @@
 #include "soh/ModApi/ModApi.h"
 #include "sfx/mm_sfx_service.h"
 #include "Utils/VirtualFileSystem.h"
+#include "shared_asset_archive.h"
 
 #include <atomic>
 #include <cstdint>
@@ -322,6 +323,51 @@ void ExtractFromRom() {
     sApi->RequestRestart(INSTALLED_ARCHIVE_NAME " is ready, and the mods waiting for it load on the next start");
 }
 
+struct SharedAsset {
+    const char* target;
+    const char* source;
+};
+
+const SharedAsset kSharedAssets[] = {
+#include "shared_assets.inc.h"
+};
+
+bool KeepResource(const char*, const uint8_t* data, uint64_t size, void* userData) {
+    static_cast<std::vector<uint8_t>*>(userData)->assign(data, data + size);
+    return false;
+}
+
+std::vector<uint8_t> ReadResource(const char* path) {
+    std::vector<uint8_t> resource;
+    sApi->ReadArchiveFiles(path, KeepResource, &resource);
+    return resource;
+}
+
+// Fleet's seed generator has no window to ask from, so only a game opened on its own writes this archive.
+void CreateSharedAssets() {
+    if (SOH_MOD_API_HAS(sApi, FindService) && sApi->FindService("fleet.hosted") != nullptr) {
+        return;
+    }
+    static const std::vector<SharedAssetArchive::SongTint> kQuestSongTints = {
+        { "SonataOfAwakening", 150, 255, 100 }, { "GoronLullaby", 255, 80, 40 },  { "NewWaveBossaNova", 100, 150, 255 },
+        { "ElegyOfEmptiness", 255, 160, 0 },    { "OathToOrder", 255, 100, 255 }, { "SongOfHealing", 255, 255, 255 },
+        { "SongOfSoaring", 255, 255, 255 },     { "FugueOfHome", 255, 255, 255 }, { "BalladOfHero", 255, 255, 255 },
+    };
+    bool isAssetMissing = !sApi->HasResource("textures/mm_song_notes/gItemIconSongOfHealingTex");
+    std::vector<SharedAssetArchive::ArchiveFile> files = SharedAssetArchive::MakeSongNoteIcons(
+        ReadResource("icon_item_static_yar/gItemIconSongNoteTex"), "textures/mm_song_notes/gItemIcon", kQuestSongTints);
+    for (const SharedAsset& asset : kSharedAssets) {
+        if (sApi->HasResource(asset.source)) {
+            isAssetMissing = isAssetMissing || !sApi->HasResource(asset.target);
+            files.push_back({ asset.target, ReadResource(asset.source) });
+        }
+    }
+    if (isAssetMissing && !files.empty()) {
+        const std::vector<uint8_t> archive = SharedAssetArchive::BuildStoredZip(files);
+        sApi->SaveToModsFolder("mm_shared_assets.o2r", archive.data(), archive.size());
+    }
+}
+
 } // namespace
 
 extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
@@ -331,6 +377,7 @@ extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
 extern "C" SOH_MOD_EXPORT void ModInit(void) {
     MmSfxService_Init(sApi);
     if (HasExtractedAssets()) {
+        CreateSharedAssets();
         return;
     }
     if (!SOH_MOD_API_HAS(sApi, ReadArchiveFiles)) {

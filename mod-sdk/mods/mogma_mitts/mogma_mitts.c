@@ -58,8 +58,7 @@ static s8 sPreviousInvincibility;
 u8 Randomizer_GetSettingValue(RandomizerSettingKey randoSettingKey);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static bool HasClimbAbility(void) {
@@ -124,7 +123,6 @@ static void ToggleGrip(PlayState* play, Player* player) {
     StartGripping(player);
 }
 
-// Without the climb ability the randomizer zeroes the stick; the mitts hand the real one back.
 static void GrantClimbing(bool* should, va_list args) {
     PlayState* play = gPlayState;
     s32* stickX = va_arg(args, s32*);
@@ -181,9 +179,10 @@ static void StopGrippingOnLoad(int32_t fileNum) {
     StopGripping();
 }
 
-// Register directly: changing a CVar does not rerun the host's conditional hook installer.
 static void GripAnySurface(bool* should, va_list args) {
-    if (sIsGripping) { *should = true; }
+    if (sIsGripping) {
+        *should = true;
+    }
 }
 static void KeepGripOnLedge(bool* should, va_list args) {
     if (sIsGripping && gPlayState != NULL) {
@@ -202,11 +201,10 @@ static void DrawGauntlets(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
 
     RemoteVisualState visual;
-    bool visible = player == GET_PLAYER(play) ?
-                       sIsGripping && !IsShowingVanillaGauntlets() &&
-                           !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
-                           !(player->stateFlags2 & PLAYER_STATE2_CRAWLING) :
-                       ReadRemoteVisual(player, &visual);
+    bool visible = player == GET_PLAYER(play) ? sIsGripping && !IsShowingVanillaGauntlets() &&
+                                                    !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
+                                                    !(player->stateFlags2 & PLAYER_STATE2_CRAWLING)
+                                              : ReadRemoteVisual(player, &visual);
     if (!visible || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
@@ -232,7 +230,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, MITTS_KEY, MITTS_KEY, "",
 };
@@ -251,11 +248,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.mogma_mitts.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.mogma_mitts.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -277,10 +275,10 @@ static void PublishRemoteVisual(void) {
         Player* player = GET_PLAYER(play);
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
-        visual.active = (sIsGripping && !IsShowingVanillaGauntlets() && !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) && !(player->stateFlags2 & PLAYER_STATE2_CRAWLING));
-        if (visual.active) {
-
-        }
+        visual.active =
+            (sIsGripping && !IsShowingVanillaGauntlets() && !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
+             !(player->stateFlags2 & PLAYER_STATE2_CRAWLING));
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -293,8 +291,6 @@ static void PublishRemoteVisual(void) {
         }
     }
 }
-
-
 
 static void DrawRemotePlayer(Actor* actor, PlayState* play) {
     if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
@@ -313,9 +309,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;

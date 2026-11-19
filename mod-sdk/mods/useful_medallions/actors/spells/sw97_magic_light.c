@@ -142,8 +142,6 @@ static InitChainEntry sLightInitChain[] = {
     ICHAIN_F32(uncullZoneForward, 1500, ICHAIN_STOP),
 };
 
-// Paralysis is for ReDeads and Gibdos only: a wider undead list stunned the Skull Kid NPC and killed it
-// through the AT collider's double damage.
 static u8 Sw97_MagicLight_IsUndeadActor(Actor* actor) {
     switch (actor->id) {
         case ACTOR_EN_RD:
@@ -158,8 +156,8 @@ static void Sw97_MagicLight_StunAllUndead(PlayState* play) {
     while (enemy != NULL) {
         Actor* next = enemy->next;
         if (Sw97_MagicLight_IsUndeadActor(enemy)) {
-            enemy->freezeTimer = 600;                          // 30 sec (same as Sun's Song)
-            Actor_SetColorFilter(enemy, -0x8000, 200, 0, 255); // white flash
+            enemy->freezeTimer = 600;
+            Actor_SetColorFilter(enemy, -0x8000, 200, 0, 255);
         }
         enemy = next;
     }
@@ -252,8 +250,7 @@ void Sw97_MagicLight_Update(Actor* thisx, PlayState* play) {
     if (this->unk_174 >= 0.0f) {
         Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_ARROW_CHARGE_LIGHT - SFX_FLAG);
 
-        // The 3250-unit AT cylinder would "hit" every door and warp in the room, so it is kept updated but never
-        // registered: the stun above already reaches the ReDeads directly.
+        // The 3250-unit AT cylinder would hit every door and warp in the room, so it is updated but never registered.
         Collider_UpdateCylinder(&this->actor, &this->collider);
 
         temp = (1.0f - cosf(this->unk_174 * M_PI)) * 0.5f;

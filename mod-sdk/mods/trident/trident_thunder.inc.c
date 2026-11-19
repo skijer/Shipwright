@@ -49,10 +49,10 @@ static void DrawTridentThunder(Actor* thisx, PlayState* play2) {
     Matrix_Mult(&player->mf_9E0, MTXMODE_NEW);
 
     ApplyLanceMatrix();
-    Matrix_RotateY(-M_PI/2.0f,MTXMODE_APPLY);
-    Matrix_Translate(2000.0f,0.0f,0.0f,MTXMODE_APPLY);
-    Matrix_Scale(-2.4f,-2.0f,-1.4f,MTXMODE_APPLY);
-    Matrix_RotateX(16384.0f,MTXMODE_APPLY);
+    Matrix_RotateY(-M_PI / 2.0f, MTXMODE_APPLY);
+    Matrix_Translate(2000.0f, 0.0f, 0.0f, MTXMODE_APPLY);
+    Matrix_Scale(-2.4f, -2.0f, -1.4f, MTXMODE_APPLY);
+    Matrix_RotateX(16384.0f, MTXMODE_APPLY);
 
     if (this->spinChargePercent >= 0.85f) {
         phi_f14 = (sSpinChargeScale[(play->gameplayFrames & 7)] * 6.0f) + 1.0f;
@@ -94,15 +94,19 @@ static void DrawTridentThunder(Actor* thisx, PlayState* play2) {
 
     gSPSegment(POLY_XLU_DISP++, 0x09,
                (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, (play->gameplayFrames * 5) & 0xFF, 0, 0x20, 0x20, 1,
-                                  (play->gameplayFrames * 20) & 0xFF, (play->gameplayFrames * phi_t1) & 0xFF, 8, 8, 5,
-                                  0, 20, phi_t1));
+                                             (play->gameplayFrames * 20) & 0xFF, (play->gameplayFrames * phi_t1) & 0xFF,
+                                             8, 8, 5, 0, 20, phi_t1));
 
     gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gSpinAttackChargingDL);
 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-static void ReplaceTridentThunder(Actor* actor,PlayState* play,bool* draw) {
-    if(!*draw || !IsWielding(GET_PLAYER(play)))return;
-    *draw=false;Matrix_Push();DrawTridentThunder(actor,play);Matrix_Pop();
+static void ReplaceTridentThunder(Actor* actor, PlayState* play, bool* draw) {
+    if (!*draw || !IsWielding(GET_PLAYER(play)))
+        return;
+    *draw = false;
+    Matrix_Push();
+    DrawTridentThunder(actor, play);
+    Matrix_Pop();
 }

@@ -1,4 +1,3 @@
-// Circus Leader tax interactions adapted from NEI, using the existing mod API.
 #include <unordered_map>
 #include <string>
 #include <cstring>
@@ -8,7 +7,7 @@ extern "C" {
 #include "variables.h"
 #include "functions.h"
 #include "macros.h"
-#define GLOBAL_H // The mod already imports z64, functions and variables without engine C++ globals.
+#define GLOBAL_H
 #include "overlays/actors/ovl_En_Diving_Game/z_en_diving_game.h"
 bool MmWearables_IsCircusLeaderWorn(void);
 bool GameInteractor_Should(GIVanillaBehavior behavior, uint32_t result, ...);
@@ -16,46 +15,34 @@ GetItemEntry Randomizer_GetItemFromKnownCheck(RandomizerCheck check, GetItemID v
 RandomizerInf Randomizer_GetRandomizerInfFromCheck(RandomizerCheck check);
 }
 static const SOHModApi* sTaxApi;
-// ── Custom text IDs (0x9310–0x933F reserved for CLM) ────────────────────────
 enum CLMTextId : uint16_t {
-    // Shooting Gallery
     CLM_TEXT_SYATEKI_CHILD_FIRST = 0x9310,
     CLM_TEXT_SYATEKI_CHILD_REPEAT = 0x9311,
     CLM_TEXT_SYATEKI_ADULT_FIRST = 0x9312,
     CLM_TEXT_SYATEKI_ADULT_REPEAT = 0x9313,
-    // Bombchu Bowling
     CLM_TEXT_BOWLING_FIRST = 0x9314,
     CLM_TEXT_BOWLING_REPEAT = 0x9315,
-    // Ingo
     CLM_TEXT_INGO_CHILD = 0x9316,
     CLM_TEXT_INGO_ADULT_PRETALON = 0x9317,
     CLM_TEXT_INGO_ADULT_POSTTALON = 0x9318,
     CLM_TEXT_INGO_ALREADY = 0x9319,
-    // Talon (cucco game, child)
     CLM_TEXT_TALON_FIRST = 0x931A,
     CLM_TEXT_TALON_ASLEEP = 0x931B,
-    // Adult Malon (sells cow)
     CLM_TEXT_MALON_BUY = 0x931C,
     CLM_TEXT_MALON_BROKE = 0x931D,
     CLM_TEXT_MALON_REPEAT = 0x931E,
-    // HBA Gerudo
     CLM_TEXT_HBA_FIRST = 0x931F,
     CLM_TEXT_HBA_REPEAT = 0x9320,
-    // Fishing
     CLM_TEXT_FISHING_FIRST = 0x9321,
     CLM_TEXT_FISHING_REPEAT = 0x9322,
-    // Treasure Chest
     CLM_TEXT_TAKARA_FIRST = 0x9323,
     CLM_TEXT_TAKARA_REPEAT = 0x9324,
-    // Diving
     CLM_TEXT_DIVING_FIRST = 0x9325,
     CLM_TEXT_DIVING_REPEAT = 0x9326,
 };
 
-// HBA discriminator
 #define GE1_TYPE_HORSEBACK_ARCHERY 0x45
 
-// Bribe amounts for repeat CLM visits (per plan)
 #define CLM_BRIBE_SYATEKI_CHILD 5
 #define CLM_BRIBE_SYATEKI_ADULT 10
 #define CLM_BRIBE_BOWLING 20
@@ -65,20 +52,16 @@ enum CLMTextId : uint16_t {
 #define CLM_BRIBE_DIVING 15
 #define CLM_MALON_COW_PRICE 100
 
-// ── CLM detection ───────────────────────────────────────────────────────────
-
 static bool CLM_IsWorn() {
     return MmWearables_IsCircusLeaderWorn();
 }
 
-// ── Per-actor interaction state ─────────────────────────────────────────────
-
 enum class CLMPhase : uint8_t {
-    TextShowing,     // CLM textbox visible
-    WaitingForClose, // Player advanced; waiting for textbox to fully close (NONE state)
-    TextClosed,      // Textbox fully gone; safe to grant reward
-    RewardOffered,   // Vanilla Actor_OfferGetItem made; waiting for player to accept
-    Done,            // Cleanup
+    TextShowing,
+    WaitingForClose,
+    TextClosed,
+    RewardOffered,
+    Done,
 };
 
 typedef void (*ActorUpdateFunc)(Actor*, PlayState*);
@@ -95,30 +78,13 @@ struct CLMState {
 
 static std::unordered_map<Actor*, CLMState> gStates;
 
-// Per-actor snapshot of "last known good actionFunc" for actors whose vanilla
-// state machine can get stuck on broken function pointers after CLM intercept
-// (notably Diving Game). Captured each frame the actor is in a known-idle state
-// (player not talking, no active CLM hijack), and restored in Done phase so the
-// actor returns to its idle/Talk state for future interactions.
 static std::unordered_map<Actor*, EnDivingGameActionFunc> gDivingSafeActionFunc;
-
-// ── Direct rando delivery ───────────────────────────────────────────────────
-//
-// The rando system delivers items via two mechanisms:
-//   1. OnFlagSet → RC queue → Item_DropCollectible (only fires when SkipGetItem-
-//      Animation is enabled, AND excludes bombchu bowling explicitly).
-//   2. GiveItemEntryWithoutActor on player update (gated by player state).
-//
-// To make CLM rando-weighted reliably for ALL checks (including bombchu bowling),
-// we look up the RC's shuffled GetItemEntry and call GiveItemEntryFromActor
-// directly. This triggers the standard item-get cutscene with the rando item.
 
 static RandomizerCheck CLM_ResolveRandoCheck(const CLMState& s) {
     switch (s.actorId) {
         case ACTOR_EN_SYATEKI_MAN:
             return s.isChild ? RC_MARKET_SHOOTING_GALLERY_REWARD : RC_KAK_SHOOTING_GALLERY_REWARD;
         case ACTOR_EN_BOM_BOWL_MAN:
-            // Progressive: first prize then second prize
             return Flags_GetItemGetInf(ITEMGETINF_11) ? RC_MARKET_BOMBCHU_BOWLING_SECOND_PRIZE
                                                       : RC_MARKET_BOMBCHU_BOWLING_FIRST_PRIZE;
         case ACTOR_EN_TA:
@@ -136,7 +102,6 @@ static RandomizerCheck CLM_ResolveRandoCheck(const CLMState& s) {
     }
 }
 
-// Returns true if a rando item-get cutscene was started (caller waits for accept).
 static bool CLM_TryDirectRandoDelivery(Actor* actor, PlayState* play, CLMState& s) {
     if (!IS_RANDO)
         return false;
@@ -146,33 +111,20 @@ static bool CLM_TryDirectRandoDelivery(Actor* actor, PlayState* play, CLMState& 
         return false;
 
     RandomizerInf flag = Randomizer_GetRandomizerInfFromCheck(rc);
-    if (Flags_GetRandomizerInf(flag)) return false;
+    if (Flags_GetRandomizerInf(flag))
+        return false;
     GetItemEntry entry = Randomizer_GetItemFromKnownCheck(rc, (GetItemID)s.getItemId);
     GiveItemEntryFromActor(actor, play, entry, 2000.0f, 1000.0f);
     return true;
 }
 
-// ── Adapter ─────────────────────────────────────────────────────────────────
-
 struct CLMAdapter {
     int16_t actorId;
     bool (*shouldIntercept)(Actor* actor);
     uint16_t (*resolveTextId)(Actor* actor, CLMState& outState);
-    // Returns true if a vanilla `Actor_OfferGetItem` was actually made (need to
-    // wait for the player to accept it). Returns false otherwise (rando intercepted
-    // the VB hook, or the reward is purely flag/rupee-based, or the adapter triggers
-    // a scene transition). Returning false skips RewardOffered phase to avoid
-    // doubling rewards in randomizer mode.
     bool (*grantReward)(Actor* actor, PlayState* play, CLMState& state);
-    // If true, vanilla update is passed through during CLM dialogue (keeps
-    // animations/blink working). Set false for actors with complex CS-locking
-    // talk handlers (e.g. Diving Game) where vanilla update can softlock.
     bool passVanillaUpdate;
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 1. Shooting Gallery (En_Syateki_Man) — child & adult
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Syateki_ShouldIntercept(Actor* actor) {
     return true;
@@ -215,27 +167,17 @@ static bool Syateki_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 2. Bombchu Bowling (En_Bom_Bowl_Man)
-// ─────────────────────────────────────────────────────────────────────────────
-
 static bool Bowling_ShouldIntercept(Actor* actor) {
     return true;
 }
 
 static uint16_t Bowling_ResolveTextId(Actor* actor, CLMState& s) {
-    // Vanilla bowling has two distinct rewards:
-    //   ITEMGETINF_11 — bomb bag (first prize slot, prize 0)
-    //   ITEMGETINF_12 — heart piece (second prize slot, prize 1)
-    // Progressive: first CLM visit grants the bomb bag, second grants the heart piece,
-    // subsequent visits give a bribe.
     bool gotBag = Flags_GetItemGetInf(ITEMGETINF_11);
     bool gotHP = Flags_GetItemGetInf(ITEMGETINF_12);
     bool bothDone = gotBag && gotHP;
@@ -243,7 +185,6 @@ static uint16_t Bowling_ResolveTextId(Actor* actor, CLMState& s) {
     s.bribeRupees = CLM_BRIBE_BOWLING;
 
     if (!gotBag) {
-        // First reward path: bomb bag upgrade based on current capacity
         if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 0)
             s.getItemId = GI_BOMB_BAG_20;
         else if (CUR_UPG_VALUE(UPG_BOMB_BAG) == 1)
@@ -253,7 +194,6 @@ static uint16_t Bowling_ResolveTextId(Actor* actor, CLMState& s) {
         else
             s.getItemId = GI_RUPEE_PURPLE;
     } else if (!gotHP) {
-        // Second reward path: heart piece
         s.getItemId = GI_HEART_PIECE;
     } else {
         s.getItemId = 0;
@@ -268,16 +208,11 @@ static bool Bowling_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 3. Ingo (En_In) — special: grants Epona permanently
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Ingo_ShouldIntercept(Actor* actor) {
     return true;
@@ -297,29 +232,19 @@ static uint16_t Ingo_ResolveTextId(Actor* actor, CLMState& s) {
     if (alreadyHasEpona)
         return CLM_TEXT_INGO_ALREADY;
 
-    s.firstTime = true; // signal grantReward to set the flag
+    s.firstTime = true;
     return talonReturned ? CLM_TEXT_INGO_ADULT_POSTTALON : CLM_TEXT_INGO_ADULT_PRETALON;
 }
 
 static bool Ingo_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
     if (s.firstTime) {
-        // Set the "free ranch" flags: Talon returned (ranch is no longer Ingo's)
-        // and Epona obtained. The entrance cutscene system also sets EPONA_OBTAINED
-        // automatically when Link arrives at one of the Epona-jump entrances, but
-        // setting it manually here is harmless (the table accepts EPONA_OBTAINED
-        // even if already set — see z_demo.c:2198).
         Flags_SetEventChkInf(EVENTCHKINF_EPONA_OBTAINED);
         Flags_SetEventChkInf(EVENTCHKINF_TALON_RETURNED_FROM_CASTLE);
 
-        // Random Epona-jumping-fence entrance into Hyrule Field. These 3 entrances
-        // are listed in z_demo.c:70-72 as `gHyruleField{South,East,West}EponaJumpCs`
-        // and trigger the Epona-jumping cutscene that drops Link into Hyrule Field
-        // riding Epona. Picking randomly mimics the vanilla "exit ranch on Epona"
-        // workflow but at a random side of the ranch.
         static const s16 kEponaExits[] = {
-            ENTR_HYRULE_FIELD_11, // south
-            ENTR_HYRULE_FIELD_12, // west
-            ENTR_HYRULE_FIELD_13, // east
+            ENTR_HYRULE_FIELD_11,
+            ENTR_HYRULE_FIELD_12,
+            ENTR_HYRULE_FIELD_13,
         };
         s16 pick = kEponaExits[Rand_Next() % 3];
 
@@ -327,15 +252,10 @@ static bool Ingo_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         play->transitionType = TRANS_TYPE_FADE_WHITE;
         play->transitionTrigger = TRANS_TRIGGER_START;
         gSaveContext.timerState = TIMER_STATE_OFF;
-        // Do NOT set nextCutsceneIndex — keep it < 0xFFF0 so the entrance cutscene
-        // table (z_demo.c:2197) fires the Epona-jump cinematic.
+        // nextCutsceneIndex must stay below 0xFFF0 so the entrance cutscene table fires the Epona jump.
     }
     return false;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 4. Talon (En_Ta) — cucco game, child era, Lon Lon ranch house
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Talon_ShouldIntercept(Actor* actor) {
     return !LINK_IS_ADULT && gPlayState->sceneNum == SCENE_LON_LON_BUILDINGS;
@@ -351,18 +271,13 @@ static uint16_t Talon_ResolveTextId(Actor* actor, CLMState& s) {
 
 static bool Talon_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
     if (!s.firstTime)
-        return false; // asleep; no reward
+        return false;
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 5. Adult Malon (En_Ma3) — sells Link's Cow for 100 rupees
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Malon_ShouldIntercept(Actor* actor) {
     return LINK_IS_ADULT;
@@ -383,8 +298,6 @@ static uint16_t Malon_ResolveTextId(Actor* actor, CLMState& s) {
         return CLM_TEXT_MALON_BROKE;
     }
     s.firstTime = true;
-    // Vanilla Malon doesn't grant an item — the cow is "given" by setting the
-    // EVENTCHKINF_WON_COW_IN_MALONS_RACE flag (enables the cow to be milkable in ranch).
     s.getItemId = 0;
     return CLM_TEXT_MALON_BUY;
 }
@@ -394,23 +307,14 @@ static bool Malon_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         Rupees_ChangeBy(-CLM_MALON_COW_PRICE);
         Flags_SetEventChkInf(EVENTCHKINF_WON_COW_IN_MALONS_RACE);
     }
-    return false; // flag-only, no item-get cutscene
+    return false;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 6. Horseback Archery Gerudo (En_Ge1)
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool HBA_ShouldIntercept(Actor* actor) {
     return (actor->params & 0xFF) == GE1_TYPE_HORSEBACK_ARCHERY;
 }
 
 static uint16_t HBA_ResolveTextId(Actor* actor, CLMState& s) {
-    // Vanilla HBA has two distinct score-gated rewards:
-    //   1000 score → INFTABLE_190 (heart piece)
-    //   1500 score → ITEMGETINF_0F (quiver upgrade)
-    // Progressive: first CLM visit gives heart piece, second gives quiver,
-    // subsequent visits give a bribe.
     bool gotHP = Flags_GetInfTable(INFTABLE_190);
     bool gotQuiver = Flags_GetItemGetInf(ITEMGETINF_0F);
     bool bothDone = gotHP && gotQuiver;
@@ -444,16 +348,11 @@ static bool HBA_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 7. Fishing Pond Owner (Fishing actor with params == 1)
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Fishing_ShouldIntercept(Actor* actor) {
     return actor->params == 1;
@@ -476,26 +375,17 @@ static bool Fishing_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// 8. Treasure Chest Game (En_Takara_Man) — child only
-// ─────────────────────────────────────────────────────────────────────────────
-
 static bool Takara_ShouldIntercept(Actor* actor) {
     return !LINK_IS_ADULT;
 }
 
 static uint16_t Takara_ResolveTextId(Actor* actor, CLMState& s) {
-    // The treasure-chest-game's actual rando check is the heart piece reward
-    // (RC_MARKET_TREASURE_CHEST_GAME_REWARD → ItemGetInf(0x1B)). The door key is
-    // just an access gate. CLM grants the heart piece as the "tax" so the check
-    // is rando-weighted.
     s.firstTime = !Flags_GetItemGetInf(ITEMGETINF_1B);
     s.bribeRupees = CLM_BRIBE_TAKARA;
     s.getItemId = s.firstTime ? GI_HEART_PIECE : 0;
@@ -508,16 +398,11 @@ static bool Takara_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// 9. Diving Game (En_Diving_Game) — adult, Zora's Domain
-// ─────────────────────────────────────────────────────────────────────────────
 
 static bool Diving_ShouldIntercept(Actor* actor) {
     return true;
@@ -537,14 +422,11 @@ static bool Diving_GrantReward(Actor* actor, PlayState* play, CLMState& s) {
         return false;
     }
     if (IS_RANDO) {
-        // Keep offering the shuffled item until Actor_HasParent confirms acceptance.
         return CLM_TryDirectRandoDelivery(actor, play, s);
     }
     Actor_OfferGetItem(actor, play, s.getItemId, 2000.0f, 1000.0f);
     return true;
 }
-
-// ── Adapter table ───────────────────────────────────────────────────────────
 
 static const CLMAdapter kAdapters[] = {
     { ACTOR_EN_SYATEKI_MAN, Syateki_ShouldIntercept, Syateki_ResolveTextId, Syateki_GrantReward, true },
@@ -555,9 +437,7 @@ static const CLMAdapter kAdapters[] = {
     { ACTOR_EN_GE1, HBA_ShouldIntercept, HBA_ResolveTextId, HBA_GrantReward, true },
     { ACTOR_FISHING, Fishing_ShouldIntercept, Fishing_ResolveTextId, Fishing_GrantReward, true },
     { ACTOR_EN_TAKARA_MAN, Takara_ShouldIntercept, Takara_ResolveTextId, Takara_GrantReward, true },
-    // Diving Game: vanilla EnDivingGame_Talk has a CS-locking talk-accept branch
-    // and a HandlePlayChoice handler that mismatches our EVENT-type message.
-    // Skip vanilla update entirely during CLM dialogue to avoid softlock.
+    // Diving Game: vanilla update must not run during CLM dialogue or its CS-locking talk branch softlocks.
     { ACTOR_EN_DIVING_GAME, Diving_ShouldIntercept, Diving_ResolveTextId, Diving_GrantReward, false },
 };
 
@@ -569,12 +449,11 @@ static const CLMAdapter* FindAdapter(int16_t actorId) {
     return nullptr;
 }
 
-// ── Post-accept flag setting (called after Actor_HasParent flips true) ──────
-
 static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
     if (IS_RANDO) {
         RandomizerCheck check = CLM_ResolveRandoCheck(s);
-        if (check != RC_UNKNOWN_CHECK) Flags_SetRandomizerInf(Randomizer_GetRandomizerInfFromCheck(check));
+        if (check != RC_UNKNOWN_CHECK)
+            Flags_SetRandomizerInf(Randomizer_GetRandomizerInfFromCheck(check));
     }
     switch (s.actorId) {
         case ACTOR_EN_SYATEKI_MAN:
@@ -585,9 +464,6 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
             }
             break;
         case ACTOR_EN_BOM_BOWL_MAN:
-            // Flag-based progression: set whichever bowling-prize flag is missing.
-            // This works regardless of whether s.getItemId is the bomb bag, heart
-            // piece, or a fallback purple rupee (for maxed-out players).
             if (!Flags_GetItemGetInf(ITEMGETINF_11)) {
                 Flags_SetItemGetInf(ITEMGETINF_11);
             } else {
@@ -615,9 +491,6 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
             }
             break;
         case ACTOR_EN_TAKARA_MAN:
-            // ITEMGETINF_1B (=27) is the treasure-chest-game reward check (vanilla
-            // heart piece for winning the chest game). Setting this flag also
-            // triggers rando's OnFlagSet → queue → shuffled item drop.
             Flags_SetItemGetInf(ITEMGETINF_1B);
             break;
         case ACTOR_EN_DIVING_GAME:
@@ -626,13 +499,10 @@ static void CLM_PostAcceptItem(Actor* actor, CLMState& s) {
     }
 }
 
-// ── Hijacked actor->update — runs in place of vanilla update during dialogue ──
-
 static bool CLM_HasMorePrizes(const CLMState& s) {
-    return (s.actorId==ACTOR_EN_BOM_BOWL_MAN &&
-            (!Flags_GetItemGetInf(ITEMGETINF_11)||!Flags_GetItemGetInf(ITEMGETINF_12))) ||
-           (s.actorId==ACTOR_EN_GE1 &&
-            (!Flags_GetInfTable(INFTABLE_190)||!Flags_GetItemGetInf(ITEMGETINF_0F)));
+    return (s.actorId == ACTOR_EN_BOM_BOWL_MAN &&
+            (!Flags_GetItemGetInf(ITEMGETINF_11) || !Flags_GetItemGetInf(ITEMGETINF_12))) ||
+           (s.actorId == ACTOR_EN_GE1 && (!Flags_GetInfTable(INFTABLE_190) || !Flags_GetItemGetInf(ITEMGETINF_0F)));
 }
 
 static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
@@ -646,12 +516,7 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
 
     switch (state.phase) {
         case CLMPhase::TextShowing: {
-            // Pass through vanilla update so the NPC keeps animating (skel/blink/etc).
-            // Vanilla Talk's textId/numTextBox checks won't match our CLM EVENT message,
-            // so the inner state-machine guards no-op while text is up. Skipped for
-            // actors flagged unsafe (e.g. Diving Game) — they stay in idle pose.
             if (passVanilla && state.savedUpdate != nullptr) {
-                // Keep ACTOR_FLAG_TALK cleared every frame in case anything sets it
                 actor->flags &= ~ACTOR_FLAG_TALK;
                 state.savedUpdate(actor, play);
             }
@@ -660,7 +525,6 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
                 Message_CloseTextbox(play);
                 state.phase = CLMPhase::WaitingForClose;
             } else if (ms == TEXT_STATE_NONE && play->msgCtx.msgMode == MSGMODE_NONE) {
-                // Already closed (e.g. external close)
                 state.phase = CLMPhase::TextClosed;
             }
             break;
@@ -676,43 +540,39 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
             break;
         }
         case CLMPhase::TextClosed: {
-            // Both vanilla and shuffled items wait for Actor_HasParent before recording completion.
             bool offeredItem = adapter ? adapter->grantReward(actor, play, state) : false;
-            // Flag-only rewards (Ingo/Malon), or a shuffled check already collected elsewhere.
             if (!offeredItem && state.firstTime) {
                 CLM_PostAcceptItem(actor, state);
             }
 
-            if(!offeredItem && state.firstTime && CLM_HasMorePrizes(state) && adapter!=nullptr) {
-                adapter->resolveTextId(actor,state);state.phase=CLMPhase::WaitingForClose;
-            } else state.phase = offeredItem ? CLMPhase::RewardOffered : CLMPhase::Done;
+            if (!offeredItem && state.firstTime && CLM_HasMorePrizes(state) && adapter != nullptr) {
+                adapter->resolveTextId(actor, state);
+                state.phase = CLMPhase::WaitingForClose;
+            } else
+                state.phase = offeredItem ? CLMPhase::RewardOffered : CLMPhase::Done;
             break;
         }
         case CLMPhase::RewardOffered: {
             if (Actor_HasParent(actor, play)) {
                 CLM_PostAcceptItem(actor, state);
                 actor->parent = NULL;
-                // Collect every distinct prize from this minigame in the same tax visit.
-                bool more=CLM_HasMorePrizes(state);
-                if(more && adapter!=nullptr) {
-                    adapter->resolveTextId(actor,state);state.phase=CLMPhase::WaitingForClose;
-                } else state.phase = CLMPhase::Done;
+                bool more = CLM_HasMorePrizes(state);
+                if (more && adapter != nullptr) {
+                    adapter->resolveTextId(actor, state);
+                    state.phase = CLMPhase::WaitingForClose;
+                } else
+                    state.phase = CLMPhase::Done;
             } else if (IS_RANDO) {
                 CLM_TryDirectRandoDelivery(actor, play, state);
             } else {
                 Actor_OfferGetItem(actor, play, state.getItemId, 2000.0f, 1000.0f);
             }
-            // Rando: GiveItemEntryFromActor already set up the cutscene; player is locked in.
             break;
         }
         case CLMPhase::Done: {
             if (state.savedUpdate != nullptr) {
                 actor->update = state.savedUpdate;
             }
-            // Safety net: some actors (e.g. Diving Game) call Player_SetCsAction-
-            // WithHaltedActors which sets player->csAction = N and halts actors.
-            // If anything in vanilla flow set this, fully release it so the
-            // player isn't softlocked.
             Player* player = GET_PLAYER(play);
             if (player != nullptr && player->csAction != 0) {
                 player->csAction = 0;
@@ -720,9 +580,6 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
                 player->cv.haltActorsDuringCsAction = false;
             }
 
-            // Diving Game: vanilla flow may have set actionFunc to HandlePlayChoice
-            // before our intercept, leaving the actor stuck in a state that doesn't
-            // offer further talks. Restore the snapshot so future interactions work.
             if (state.actorId == ACTOR_EN_DIVING_GAME) {
                 auto safeIt = gDivingSafeActionFunc.find(actor);
                 if (safeIt != gDivingSafeActionFunc.end()) {
@@ -730,7 +587,7 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
                     dg->actionFunc = safeIt->second;
                     dg->state = ENDIVINGGAME_STATE_NOTPLAYING;
                     dg->phase = 0;
-                    dg->unk_292 = 0; // TEXT_STATE_NONE
+                    dg->unk_292 = 0;
                 }
             }
             gStates.erase(it);
@@ -738,8 +595,6 @@ static void CLM_HijackedUpdate(Actor* actor, PlayState* play) {
         }
     }
 }
-
-// ── Global OnOpenText hook: the speak-intercept point ───────────────────────
 
 static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
     if (!CLM_IsWorn())
@@ -759,7 +614,6 @@ static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
     if (!adapter->shouldIntercept(talkActor))
         return;
 
-    // Don't double-intercept if already hijacked
     if (gStates.find(talkActor) != gStates.end())
         return;
 
@@ -770,15 +624,9 @@ static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
 
     *textId = adapter->resolveTextId(talkActor, state);
 
-    // Clear ACTOR_FLAG_TALK so vanilla actor update doesn't see the talk request
-    // and enter its talk-accept branch (which for some actors like Diving Game
-    // calls Player_SetCsActionWithHaltedActors and locks the player). Our CLM
-    // dialog flow handles the talk entirely on its own.
+    // Clearing ACTOR_FLAG_TALK keeps the vanilla talk-accept branch from locking the player.
     talkActor->flags &= ~ACTOR_FLAG_TALK;
 
-    // If vanilla update already ran THIS frame (before my hook fired) and set
-    // a CS action that would lock the player, release it now so the player can
-    // advance our CLM dialog freely.
     Player* player = GET_PLAYER(play);
     if (player != nullptr && player->csAction != 0) {
         player->csAction = 0;
@@ -789,37 +637,45 @@ static void CLM_OnAnyTextOpens(uint16_t* textId, bool* loadFromMessageTable) {
     talkActor->update = CLM_HijackedUpdate;
 }
 
-// ── OnOpenText handlers: build each custom CLM message ──────────────────────
-
-// Build into the engine font buffer, with the same page and event controls as NEI.
 static void CLM_LoadText(const char* body) {
     std::string text;
     size_t column = 0, line = 0;
     for (const char* p = body; *p;) {
-        if (*p == '^') { text += '\x04'; column = line = 0; ++p; continue; }
+        if (*p == '^') {
+            text += '\x04';
+            column = line = 0;
+            ++p;
+            continue;
+        }
         if (*p == ' ') {
             const char* end = p + 1;
-            while (*end && *end != ' ' && *end != '^') ++end;
+            while (*end && *end != ' ' && *end != '^')
+                ++end;
             if (column + (end - p) > 32) {
                 text += (++line == 4 ? '\x04' : '\x01');
-                if (line == 4) line = 0;
-                column = 0; ++p; continue;
+                if (line == 4)
+                    line = 0;
+                column = 0;
+                ++p;
+                continue;
             }
         }
-        text += *p++; ++column;
+        text += *p++;
+        ++column;
     }
-    text += '\x0B'; text += '\x02';
+    text += '\x0B';
+    text += '\x02';
     Font* font = &gPlayState->msgCtx.font;
     size_t length = text.size() < sizeof(font->msgBuf) - 1 ? text.size() : sizeof(font->msgBuf) - 1;
     std::memcpy(font->msgBuf, text.data(), length);
     font->msgBuf[length] = 0;
-    font->charTexBuf[0] = 0; // black textbox, automatic position
+    font->charTexBuf[0] = 0;
     gPlayState->msgCtx.msgLength = font->msgLength = length;
 }
-#define CLM_BUILD_MSG(name, body) \
+#define CLM_BUILD_MSG(name, body)                                    \
     static void name(uint16_t* textId, bool* loadFromMessageTable) { \
-        CLM_LoadText(body); \
-        *loadFromMessageTable = false; \
+        CLM_LoadText(body);                                          \
+        *loadFromMessageTable = false;                               \
     }
 
 CLM_BUILD_MSG(BuildSyatekiChildFirst,
@@ -925,35 +781,22 @@ CLM_BUILD_MSG(
 CLM_BUILD_MSG(BuildDivingRepeat, "Still compliant. Leave the fountain be.^"
                                  "A small token for your troubles, collector.")
 
-// ── Diving Game actionFunc snapshot ─────────────────────────────────────────
-//
-// Vanilla EnDivingGame_Talk transitions actionFunc to EnDivingGame_HandlePlayChoice
-// when ProcessTalkRequest fires. After CLM bypasses the dialog, vanilla can be
-// left in HandlePlayChoice indefinitely — actor stops offering talks. We snapshot
-// the safe Talk actionFunc each frame the actor is idle, then restore on Done.
-
 static void CLM_OnDivingActorUpdate(void* actorRef) {
     EnDivingGame* dg = static_cast<EnDivingGame*>(actorRef);
     Player* player = (gPlayState != nullptr) ? GET_PLAYER(gPlayState) : nullptr;
     if (player == nullptr)
         return;
-    // Skip if dialog is happening or our CLM is intercepting — actionFunc is
-    // probably HandlePlayChoice or a transient state we don't want to capture.
     if (player->stateFlags1 & PLAYER_STATE1_TALKING)
         return;
     if (gStates.find(&dg->actor) != gStates.end())
         return;
-    // Skip if state isn't NOTPLAYING (could be in minigame)
     if (dg->state != ENDIVINGGAME_STATE_NOTPLAYING)
         return;
-    // Skip if a talk request is mid-flight
     if (dg->actor.flags & ACTOR_FLAG_TALK)
         return;
 
     gDivingSafeActionFunc[&dg->actor] = dg->actionFunc;
 }
-
-// ── Scene change cleanup (avoid dangling actor* in gStates after scene reload) ──
 
 static void CLM_OnSceneInit(int16_t sceneNum) {
     if (!gStates.empty()) {
@@ -962,14 +805,11 @@ static void CLM_OnSceneInit(int16_t sceneNum) {
     gDivingSafeActionFunc.clear();
 }
 
-// ── Registration ────────────────────────────────────────────────────────────
-
 extern "C" void MmTax_Init(const SOHModApi* api) {
     sTaxApi = api;
 
     SOH_REGISTER_HOOK(api, OnOpenText, CLM_OnAnyTextOpens);
     SOH_REGISTER_HOOK(api, OnSceneInit, CLM_OnSceneInit);
-    // Snapshot Diving Game's safe actionFunc each frame for post-CLM recovery
     SOH_REGISTER_HOOK_FOR_ID(api, OnActorUpdate, ACTOR_EN_DIVING_GAME, CLM_OnDivingActorUpdate);
 
     auto reg = [](uint16_t id, void (*fn)(uint16_t*, bool*)) {
@@ -1000,7 +840,3 @@ extern "C" void MmTax_Init(const SOHModApi* api) {
     reg(CLM_TEXT_DIVING_FIRST, BuildDivingFirst);
     reg(CLM_TEXT_DIVING_REPEAT, BuildDivingRepeat);
 }
-
-
-
-

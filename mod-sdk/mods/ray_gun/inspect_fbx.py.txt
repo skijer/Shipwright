@@ -5,7 +5,7 @@ from pathlib import Path
 report={}
 for label in ('Drawing Gun','Shooting'):
     bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
-    bpy.ops.import_scene.fbx(filepath=f'C:/Users/LENOVO/Downloads/{label}.fbx')
+    bpy.ops.import_scene.fbx(filepath=f'{label}.fbx')
     rigs=[obj for obj in bpy.context.scene.objects if obj.type=='ARMATURE']
     report[label]=dict(objects=[dict(name=o.name,type=o.type,dimensions=list(o.dimensions)) for o in bpy.context.scene.objects],
         rigs=[dict(name=o.name,bones=[dict(name=b.name,parent=b.parent.name if b.parent else None,head=list(b.head_local),tail=list(b.tail_local)) for b in o.data.bones],

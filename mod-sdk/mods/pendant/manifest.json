@@ -1,5 +1,6 @@
 {
     "name": "pendant",
+  "dependencies": ["mm_assets"],
     "author": "Skijer",
     "version": "1.0.1",
     "description": "Pendant of Memories: Mortal Draw, ground pound and hop-roll-hop into a timed B parry with Navi and sword-glow cues.",

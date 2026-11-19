@@ -1,60 +1,65 @@
 # PAK Loader for Unbound
 
-Experimental appearance mod. Open **Mods > PAK Loader** after restarting Unbound.
+ModLoader64 packs in Unbound: bodies, equipment pieces, voices and emotes. Open **Mods > PAK Loader** after
+restarting Unbound.
 
-Three independent selections change the appearance of ordinary Child Link, ordinary Adult Link,
-and the `nei.fierce_deity` form. Other forms keep their own models. No form is activated or replaced:
-the Fierce Deity mod retains its actions, damage, beams, equipment restrictions, movement and actor scale.
+The same mod exists for 2Ship (`2ship-unbound-mod-nei/mod-sdk/mods/pak_loader`). Both share `archive.h`, `model.h`,
+`names.h`, `library.h`, `equipment.h`, `sounds.h`, `emotes.h`, `session.h`, `catalog.h`, `keep_textures.h`,
+`vorbis.c` and `third_party/`; keep the copies identical.
 
-With `mm.o2r` loaded, **Apply MM Child / MM FD / OoT Adult** selects:
+## Page
 
-1. Child Link: `objects/object_link_child/gLinkHumanSkel`.
-2. Adult Link: `objects/object_link_boy/gLinkFierceDeitySkel`.
-3. Fierce Deity: `objects/object_link_boy/gLinkAdultSkel`.
+- **Models and voices** (column 1): one model and one voice for Child Link, Adult Link and the `nei.fierce_deity`
+  form. Abilities stay with the current form. With `mm.o2r` loaded, **Apply MM Child / MM FD / OoT Adult** selects
+  the MM models. **Restore Defaults** clears models, voices, equipment and root adjustments.
+- **Equipment and Items** (column 2): Kokiri/Master/Biggoron Sword, Deku/Hylian/Mirror Shield, Bow, Hookshot,
+  Slingshot, Boomerang, Megaton Hammer, Fairy Ocarina and Ocarina of Time. Each lists every piece of its kind from
+  every imported pack, bodies included ("Saria (OoT Adult) - Master Sword", "Claymore (SC3) (Biggoron Sword)").
+- **Emotes** (column 2): choose one, then hold L and press D-Pad Down, or press **Play Emote**. Moving or acting
+  stops it.
+- **Pack Library** (column 3): import PAK/ZOBJ, install O2R/OTR, root height per appearance, status.
 
-Selections and root adjustments are saved in configuration. Default restores each slot independently.
-Root height is estimated from bind-pose proportions and can be adjusted per slot; it does not alter gameplay
-height or the Fierce Deity actor's 1.5 scale.
+`.pak` and `.zobj` files anywhere under the mods folder, subfolders included, are read at start (host
+`ReadModsFolderFiles`). **Import PAK / ZOBJ** copies the chosen file there under a plain name; hosts without that
+row get it wrapped as `pakloader_import_<hash>.o2r` instead. Restart to update the lists.
 
-## Menu
+## What each pack provides
 
-The two-column page uses native `SOH_MOD_MENU_CHECKBOX`, `SOH_MOD_MENU_COMBOBOX` and
-`SOH_MOD_MENU_FLOAT_SLIDER` registrations. The host renders them through `mSohMenu->AddWidget`,
-with its native options, spacing, reset controls and tooltips. Model selectors are no longer drawn in a
-custom panel. The left column contains enable, three model selectors, preset and restore; the right
-column contains library installation, root adjustments and status. Labels for built-in models omit paths.
+- **Bodies**: OoT adult, OoT child and MM human ZOBJs in either game. Kind from the ZOBJ header.
+- **Equipment**: Z64Online equipment ZOBJs (`EQUIPMANIFEST`) and the pieces inside every body (universal aliases
+  or the zzplayas lookup tables). A held item is rebuilt as hand + pieces, as Z64Online's combined lists are; the
+  hand is the selected body's own fist, else the game's. The sheath limb is rebuilt from sheath, sheathed hilt
+  (back matrix) and back shield; parts not replaced keep the game's own lists.
+- **Voices**: `sounds/<sfx id>/*.ogg`, one clip picked at random per effect. Player effects are silenced through
+  `OnActorPlaySfx` and the clip is mixed through `AudioMix` (SFX group, "Voice Pack Volume").
+- **Emotes**: `package.json` `emote` entry; raw link_animetion frames (134 bytes each) posed over Link at draw
+  time, optional Ogg sound, optional loop.
 
-The current ModApi has no native button type or operation for updating a registered combobox. Individual
-action rows therefore use the host's themed `ModUI_Button`; importing/installing models populates the
-native lists on the next launch. A restart action appears after a successful save. Stable model keys are
-mapped to the native integer combo values each launch, preserving selections when catalog order changes.
+## Names
 
-## Model sources
+Catalog names and authors come from `catalog.h`: `python gen_catalog.py.txt catalog.h models.json audio.json` with
+`https://modloader64.com/assets/data/models.json` and `audio.json`. Other packs use their `package.json` name or a
+cleaned-up file name. `keep_textures.h` comes from `gen_keep_textures.py.txt` and OoT's N64 NTSC 1.0
+`gameplay_keep.xml`.
 
-- Mounted O2R/OTR archives: the catalog lists OoT Adult/Child and MM Human/Fierce Deity skeleton paths,
-  including models under custom directories using those skeleton names. Models must retain the 21-limb
-  human Link hierarchy and the original flex matrix slots. Meshes, joints, matching equipment variants,
-  and face textures are resolved from the selected model directory.
-- **Install O2R / OTR** copies the archive into the game's mods folder through the host file picker
-  and save confirmation. Restart to load it and populate the native model lists. The host mounts archives
-  globally: a pack replacing original resource paths also replaces base-game resources for other consumers.
-  Use unique resource directories for independent packs.
-- **Import PAK / ZOBJ** reads ModLoader64 UNCO and zlib DEFL entries in memory. It accepts human Link
-  bodies with a MODLOADER64 manifest and segment-06 skeleton. Native vertices are expanded to Unbound's
-  s32 format, fixed-point matrices become floats, and display lists/embedded face textures remain alive
-  for the session. Old adult zzplayas and universal equipment aliases have partial support.
-- Importing offers the host's save dialog for an asset-only `pakloader_import_<hash>.o2r` containing
-  the original file. Saved imports are restored through the archive API next launch. Restart updates the native model selectors. Declining the save
-  leaves the lists unchanged; import again and allow saving to install it. Standalone ZOBJ source age is inferred from its filename:
-  name child/MM Human files accordingly. Every imported body can be selected in every destination slot.
+## Formats
+
+- zzplayas: skeleton at `0x500C`, or the fixed `0x5380` / `0x53A8` / `0x5420` (adult / child / MM) when exporters
+  blank it. Body kind at `0x500B`: 0 adult, 1 child, 4 or 0x68 MM human. Back matrices at `0x5010`.
+- Z64O universal: skeleton section at `0x501C`, kind at `0x501B`, 256 aliases from `0x5020`, back matrices at
+  `0x5890` (swords) and `0x5950` (shields).
+- Segment `0x0C` (cull list) passes through. Segment 4 textures are OoT `gameplay_keep` textures by offset; a
+  texture the running game lacks is drawn white.
+- Matrix references (`0x0D`) are renumbered: exporters count the model's own meshed limbs, SkelAnime the base
+  skeleton's. Meshes on joint-only limbs (root, lower, upper) are dropped.
 
 ## Boundaries
 
-This is not full parity with NEI's engine-integrated loader. It does not import voices, equipment-only
-packs, per-item equipment mixes, arbitrary rigs, external display lists, or Z64Online environment segments.
-An unsupported body is rejected with a status message. Hands and sheaths fall back to the correct OoT
-equipment when the chosen pack lacks a matching variant. Nested weapon/boot display lists are not globally
-intercepted. The mod changes the local player; it does not distribute appearances over multiplayer.
+Items drawn by other actors (flying boomerang, hookshot chain, arrows, deku stick, bottles) keep the game's models.
+Other forms (Deku/Goron/Zora ZOBJs) and PlayAs work files are skipped. O2R/OTR archives replace resources as a
+whole. The mod changes the local player only.
+
+Ship's menu throws on `SOH_MOD_MENU_TEXT`; text rows are custom widgets.
 
 Fierce Deity lazily asks these optional services, regardless of mod load order:
 
@@ -62,12 +67,8 @@ Fierce Deity lazily asks these optional services, regardless of mod load order:
 - `nei.pak_loader.fd_face.v1`: `bool(const char**, const char**)`.
 - `nei.pak_loader.fd_active.v1`: `bool(void)`; suppresses FD's additional original sword drawing.
 
-Without the provider or a valid selection, the existing Fierce Deity rendering remains active.
-
 ## Validation
 
-Built against Unbound's headers/import library with `build-all.local.ps1 -Only Mods -Reconfigure`.
-Native checks use actual `oot.o2r` and `mm.o2r` skeleton data: all four supported base skeletons share the
-21-limb topology and flex matrix slots. Archive checks cover stored/fixed/dynamic DEFL streams, corrupt
-input, native s32 vertex conversion and recursive display-list rejection. Visual validation in gameplay,
-including individual third-party PAKs, remains required.
+The shared library was run (MSVC, AddressSanitizer) over the ModLoader64 catalog: 263 body packs, 46 equipment
+packs, 19 emotes and sample voice packs all import (549 bodies, 3459 pieces), and every voice decodes. In-game
+drawing, voices and emotes remain to be checked.

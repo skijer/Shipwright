@@ -6,12 +6,17 @@
 
 #define EASY_HOLD_FRAMES 10
 typedef enum { EASY_NONE, EASY_TAP, EASY_OPEN, EASY_COMMIT, EASY_CANCEL } EasyGesture;
-typedef struct { uint16_t frames; bool open; bool waitRelease; } EasyHold;
+typedef struct {
+    uint16_t frames;
+    bool open;
+    bool waitRelease;
+} EasyHold;
 
-// Cancellation consumes the entire gesture, even when C remains held after B.
 static inline EasyGesture EasyHold_Update(EasyHold* hold, bool down, bool cancel, bool allowed) {
     if (hold->waitRelease) {
-        if (!down) { hold->waitRelease = false; }
+        if (!down) {
+            hold->waitRelease = false;
+        }
         return EASY_NONE;
     }
     if (!allowed || cancel) {
@@ -27,7 +32,9 @@ static inline EasyGesture EasyHold_Update(EasyHold* hold, bool down, bool cancel
         hold->open = false;
         return result;
     }
-    if (hold->frames < EASY_HOLD_FRAMES) { ++hold->frames; }
+    if (hold->frames < EASY_HOLD_FRAMES) {
+        ++hold->frames;
+    }
     if (hold->frames == EASY_HOLD_FRAMES && !hold->open) {
         hold->open = true;
         return EASY_OPEN;
@@ -37,8 +44,8 @@ static inline EasyGesture EasyHold_Update(EasyHold* hold, bool down, bool cancel
 
 static inline EasyGesture EasyHold_UpdateMode(EasyHold* hold, bool down, bool cancel, bool allowed, bool instant) {
     if (instant && down && allowed && !cancel && !hold->open && !hold->waitRelease)
-        hold->frames=EASY_HOLD_FRAMES;
-    return EasyHold_Update(hold,down,cancel,allowed);
+        hold->frames = EASY_HOLD_FRAMES;
+    return EasyHold_Update(hold, down, cancel, allowed);
 }
 
 #endif

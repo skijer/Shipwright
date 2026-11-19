@@ -1,9 +1,5 @@
 #include <string.h>
 #include <math.h>
-/**
- * Climb Boots: full traction. Ice keeps no momentum, a steep slope neither slides Link down nor slows him
- * climbing it, and A still jumps from one.
- */
 
 #include "z64items.h"
 
@@ -63,7 +59,6 @@ static bool IsOnSteepSlope(Player* player, PlayState* play) {
     return floor != NULL && SurfaceType_GetFloorEffect(&play->colCtx, floor, player->actor.floorBgId) == SLOPE_STEEP;
 }
 
-// Skipping the assignment keeps the previous, non-ice floor type: that is what stops the skid.
 static void KeepGripOnIce(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
     PlayState* play = gPlayState;
@@ -76,8 +71,6 @@ static void KeepGripOnIce(bool* should, va_list args) {
     }
 }
 
-// The slide starts inside the scene collision; ending it here, after the whole update, costs no frame. Walking
-// downhill restarts it every frame, so the walk's own speed and heading are handed back each time.
 static void KeepFootingOnSlopes(void) {
     PlayState* play = gPlayState;
     Player* player;
@@ -102,8 +95,7 @@ static void KeepFootingOnSlopes(void) {
     }
 }
 
-// Player_ActionHandler_10 without its steep-slope gate, which is the only thing standing between a slope
-// and the hop, backflip or jump slash.
+// Player_ActionHandler_10 without its steep-slope gate.
 static bool StartSlopeJump(Player* player, PlayState* play) {
     s32 stickDirection = player->controlStickDirections[player->controlStickDataIndex];
 
@@ -134,7 +126,6 @@ static void JumpFromSteepSlope(PlayState* play, Player* player, int32_t action, 
     *startedAction = StartSlopeJump(player, play);
 }
 
-// The iron boots' get-item model, recoloured per section: warm leather turns yellow, cool iron silver.
 static u32 YellowIronRamp(u32 rgba) {
     u8 r = (rgba >> 24) & 0xFF;
     u8 g = (rgba >> 16) & 0xFF;
@@ -150,11 +141,10 @@ static u32 YellowIronRamp(u32 rgba) {
 }
 
 static bool IsTwoWordCommand(u8 opcode) {
-    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 ||
-           opcode == 0x32 || opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
+    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 || opcode == 0x32 ||
+           opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
 }
 
-// A local copy, never the shared resource: the vanilla Iron Boots must keep their own colours.
 static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built, bool gray) {
     Gfx* source;
     s32 count = 0;
@@ -185,7 +175,9 @@ static Gfx* BuildRecoloredDL(const char* path, Gfx* out, bool* built, bool gray)
                 u32 lum = (((rgba >> 24) & 255) * 3 + ((rgba >> 16) & 255) * 6 + ((rgba >> 8) & 255)) / 10;
                 lum = CLAMP_MAX(lum * 1.15f + 30.0f, 255.0f);
                 out[count - 1].words.w1 = (lum << 24) | (lum << 16) | (lum << 8) | (rgba & 255);
-            } else { out[count - 1].words.w1 = YellowIronRamp(rgba); }
+            } else {
+                out[count - 1].words.w1 = YellowIronRamp(rgba);
+            }
         }
     }
     *built = true;
@@ -214,35 +206,38 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Keep the exact env colour emitted for this player, including custom tunics and cosmetics.
 static u32 CurrentPlayerEnv(PlayState* play) {
-    Gfx* begin=play->state.gfxCtx->polyOpa.bufp;
-    Gfx* cursor=play->state.gfxCtx->polyOpa.p;
-    while (cursor>begin) {
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
         --cursor;
-        if (((cursor->words.w0>>24)&255)==G_SETENVCOLOR) { return (u32)cursor->words.w1; }
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR) {
+            return (u32)cursor->words.w1;
+        }
     }
     return 0xFFFFFFFF;
 }
-// Visual-only iron boot overlays; currentBoots and vanilla equipment remain Kokiri boots.
 static void DrawClimbBootsOnFeet(PlayState* play, Player* player, int32_t limbIndex) {
     RemoteVisualState visual;
     bool visible = player == GET_PLAYER(gPlayState) ? IsWorn() : ReadRemoteVisual(player, &visual);
-    if (!visible || (limbIndex != PLAYER_LIMB_L_FOOT && limbIndex != PLAYER_LIMB_R_FOOT)) { return; }
-    u32 savedEnv=CurrentPlayerEnv(play);
+    if (!visible || (limbIndex != PLAYER_LIMB_L_FOOT && limbIndex != PLAYER_LIMB_R_FOOT)) {
+        return;
+    }
+    u32 savedEnv = CurrentPlayerEnv(play);
     const char* path = limbIndex == PLAYER_LIMB_L_FOOT ? gLinkAdultLeftIronBootDL : gLinkAdultRightIronBootDL;
-    // Scope both the model transform and the tint; never leave Link's tunic env colour white.
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     gDPSetGrayscaleColor(POLY_OPA_DISP++, 205, 210, 220, 150);
     gSPGrayscale(POLY_OPA_DISP++, true);
     Matrix_Push();
-    if (!LINK_IS_ADULT) { Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY); }
+    if (!LINK_IS_ADULT) {
+        Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY);
+    }
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
     Matrix_Pop();
     gSPGrayscale(POLY_OPA_DISP++, false);
-    gDPSetEnvColor(POLY_OPA_DISP++, savedEnv>>24, (savedEnv>>16)&255, (savedEnv>>8)&255, savedEnv&255);
+    gDPSetEnvColor(POLY_OPA_DISP++, savedEnv >> 24, (savedEnv >> 16) & 255, (savedEnv >> 8) & 255, savedEnv & 255);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
@@ -252,7 +247,9 @@ static void KeepBootDrawValid(Actor* actor, PlayState* play, bool* drawVanilla) 
         return;
     }
 
-    if (actor != &GET_PLAYER(play)->actor) { return; }
+    if (actor != &GET_PLAYER(play)->actor) {
+        return;
+    }
     if (CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) < EQUIP_VALUE_BOOTS_KOKIRI ||
         CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) >= EQUIP_VALUE_BOOTS_MAX) {
         Inventory_ChangeEquipment(EQUIP_TYPE_BOOTS, EQUIP_VALUE_BOOTS_KOKIRI);
@@ -260,7 +257,8 @@ static void KeepBootDrawValid(Actor* actor, PlayState* play, bool* drawVanilla) 
     }
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerActionHandler", "OnPlayerPostLimbDraw", "OnActorDraw" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerActionHandler",
+                                              "OnPlayerPostLimbDraw", "OnActorDraw" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -279,11 +277,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.climb_boots.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.climb_boots.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -306,9 +305,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (IsWorn());
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -322,8 +319,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -334,9 +329,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -366,10 +358,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.vanillaBase = EQUIP_VALUE_BOOTS_KOKIRI;
     definition.toggles = 1;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        CLIMB_BOOTS_KEY, CLIMB_BOOTS_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, CLIMB_BOOTS_KEY, CLIMB_BOOTS_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

@@ -17,7 +17,6 @@
 
 #define GORON_MASK_KEY "nei.goron_form_mask"
 #define GORON_FORM_KEY "nei.goron"
-// No resources live here: a model path is what turns on the host's root scaling, as for Deku.
 #define GORON_MODEL_PATH "objects/forms/goron"
 #define GORON_HAZARD_OWNER "nei.goron"
 #define GORON_MASK_PAGE 1
@@ -30,10 +29,8 @@
 #define BALL_HUG_TOLERANCE 0.5f
 #define MM_ANIM_VALUES_PER_FRAME 67
 #define MM_ANIM_BASE_TRANSL_X (-57)
-// Rest height of the Goron root (2700) over the height Link's animations carry the root to.
 #define GORON_ROOT_SCALE_ADULT 0.800f
 #define GORON_ROOT_SCALE_CHILD 1.136f
-// MM plays every Goron clip at this root scale, so its root motion is in these units.
 #define GORON_ANIM_SCALE 0.74f
 #define GORON_HEIGHT 80.0f
 #define GORON_CURLED_HEIGHT 34.0f
@@ -45,7 +42,7 @@
 #define PUNCH_RECOIL_SPEED -18.0f
 #define BUTT_IMPACT_FRAME 8.0f
 
-#define CURL_PLAY_SPEED 0.67f
+#define MM_ANIM_ADJUSTED_SPEED (2.0f / 3.0f)
 #define BALL_MAX_SPEED 18.0f
 #define BALL_BOUNCE_SPEED 12.0f
 #define BALL_STICK_SPEED (8.0f * 2.6f)
@@ -80,9 +77,6 @@
 #define SINK_DEPTH 30.0f
 #define SINK_BALL_FRAMES 17
 
-// LinkAnimation advances R_UPDATE_RATE * 0.5 clip frames per update, and the rate is always 3.
-#define CLIP_FRAMES_PER_UPDATE 1.5f
-
 #define OCARINA_NOTE_NONE 0xFF
 #define LINK_VOICE_ACTIONS 0x20
 #define MM_GORON_VOICE_OFFSET 0xC0
@@ -94,8 +88,7 @@
 #define MM_GORON_TO_BALL 0x08E6
 #define MM_BALL_TO_GORON 0x08E7
 #define MM_GORON_PUNCH 0x08E8
-// MM asks for its loops as `id - SFX_FLAG` every frame: without the flag its scheduler plays the sound for as
-// long as it keeps being asked for, with it every request starts the sample over.
+// MM asks for its loops as `id - SFX_FLAG` every frame: with the flag every request would restart the sample.
 #define MM_SFX_FLAG 0x800
 #define MM_GORON_BALL_CHARGE_LOOP (0x08EB - MM_SFX_FLAG)
 #define MM_GORON_SLIP_LOOP (0x09AD - MM_SFX_FLAG)
@@ -130,10 +123,11 @@ static const ALIGN_ASSET(2) char sPunchEffectDL[] = OBJ_GORON "gLinkGoronGoronPu
 static const ALIGN_ASSET(2) char sDrumDL[] = OBJ_GORON "object_link_goron_DL_00FC18";
 static const ALIGN_ASSET(2) char sShieldingSkelPath[] = OBJ_GORON "gLinkGoronShieldingSkel";
 static const ALIGN_ASSET(2) char sShieldingAnimPath[] = OBJ_GORON "gLinkGoronShieldingAnim";
-static const char* const sDrumPieceDLs[] = {
-    OBJ_GORON "object_link_goron_DL_00FCF0", OBJ_GORON "object_link_goron_DL_00FF18",
-    OBJ_GORON "object_link_goron_DL_010140", OBJ_GORON "object_link_goron_DL_010368",
-    OBJ_GORON "object_link_goron_DL_010590",
+#define DRUM_COUNT 5
+static const char* const sDrumPieceDLs[DRUM_COUNT] = {
+    OBJ_GORON "object_link_goron_DL_010590", OBJ_GORON "object_link_goron_DL_010368",
+    OBJ_GORON "object_link_goron_DL_010140", OBJ_GORON "object_link_goron_DL_00FF18",
+    OBJ_GORON "object_link_goron_DL_00FCF0",
 };
 
 #define MM_ANIM_PATH(name) "__OTR__misc/link_animetion/gPlayerAnim_" name "_Data"
@@ -153,6 +147,9 @@ typedef enum {
     ANIM_MASK_ON,
     ANIM_WAIT,
     ANIM_MASK_OFF,
+    ANIM_DRUM_WAIT,
+    ANIM_DRUM_HIT_FIRST,
+    ANIM_DRUM_HIT_LAST = ANIM_DRUM_HIT_FIRST + DRUM_COUNT - 1,
     ANIM_COUNT,
 } GoronAnim;
 
@@ -162,6 +159,8 @@ static const char* const sAnimPaths[ANIM_COUNT] = {
     MM_ANIM_PATH("pg_punchAendR"),  MM_ANIM_PATH("pg_punchBendR"), MM_ANIM_PATH("pg_punchCendR"),
     MM_ANIM_PATH("pg_maru_change"), MM_ANIM_PATH("pg_gakkistart"), MM_ANIM_PATH("pg_gakkiplay"),
     MM_ANIM_PATH("cl_setmask"),     MM_ANIM_PATH("pg_wait"),       MM_ANIM_PATH("pg_maskoffstart"),
+    MM_ANIM_PATH("pg_gakkiwait"),   MM_ANIM_PATH("pg_gakkiplayA"), MM_ANIM_PATH("pg_gakkiplayL"),
+    MM_ANIM_PATH("pg_gakkiplayD"),  MM_ANIM_PATH("pg_gakkiplayU"), MM_ANIM_PATH("pg_gakkiplayR"),
 };
 
 static const char* const sGoronLimbDL[PLAYER_LIMB_MAX] = {
@@ -191,7 +190,6 @@ static const char* const sGoronLimbDL[PLAYER_LIMB_MAX] = {
 static const ALIGN_ASSET(2) char sLeftFistDL[] = OBJ_GORON "gLinkGoronLeftHandClosedDL";
 static const ALIGN_ASSET(2) char sRightFistDL[] = OBJ_GORON "gLinkGoronRightHandClosedDL";
 
-// Joint translations of gLinkGoronSkel, read from mm.o2r; same limb order as OoT Link.
 static const Vec3f sGoronJointPos[PLAYER_LIMB_MAX] = {
     { 0, 0, 0 },        { 0, 0, 0 },     { 0, 0, 0 },           { 945, 0, 0 },  { -835, 218, -799 },
     { 1156, 0, 0 },     { 1056, 5, 11 }, { -835, 218, 799 },    { 1154, 0, 0 }, { 1057, 6, 3 },
@@ -247,6 +245,7 @@ typedef enum {
 } DrumPhase;
 
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
+void Player_SetBootData(PlayState* play, Player* player);
 void func_80839FFC(Player* player, PlayState* play);
 s32 func_80842DF4(PlayState* play, Player* player);
 void func_80837918(Player* player, s32 quadIndex, u32 dmgFlags);
@@ -256,13 +255,6 @@ void Player_RequestRumble(Player* player, s32 sourceStrength, s32 duration, s32 
 GetItemEntry ItemTable_RetrieveEntry(s16 modIndex, s16 getItemID);
 
 static const SOHModApi* sApi;
-extern bool FormRegistry_ApplyActive(const char* key);
-static bool ToggleConfiguredForm(const char* key) {
-    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
-        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
-    }
-    return sApi->ToggleForm(key);
-}
 
 static MmSfxPlayFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
@@ -310,10 +302,14 @@ static s16 sSinkTimer;
 static bool sSinkCurled;
 
 static u8 sDrumPhase;
+static f32 sDrumHitFrame[DRUM_COUNT];
+static s8 sDrumOfHand[2] = { -1, -1 };
+static Vec3s sDrumArmFrame[2][PLAYER_LIMB_BUF_COUNT];
+static Vec3f sDrumScale = { 1.0f, 1.0f, 1.0f };
 static bool sIsOcarinaOut;
 static bool sWasNoteStruck;
 static u8 sLastNote = OCARINA_NOTE_NONE;
-// Set on the game thread while the drums are out; the note hook runs on the audio thread and only reads it.
+// Written on the game thread; the note hook runs on the audio thread and only reads it.
 static MmOcarinaNoteFunc sDrumVoice;
 static f32 sDrumBend = 1.0f;
 
@@ -354,9 +350,6 @@ static bool IsPunchLive(Player* player) {
     return sMove == GORON_MOVE_PUNCH && player->meleeWeaponState != 0;
 }
 
-// ---- sound ----
-
-// Looked up on use rather than in ModInit: mm_assets may load after this mod.
 static MmSfxPlayFunc GetMmSfxPlayer(void) {
     if (sPlayMmSfx == NULL && SOH_MOD_API_HAS(sApi, FindService)) {
         sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
@@ -369,7 +362,7 @@ static void PlayMmSfx(u16 mmSfx, u16 fallback, Vec3f* pos) {
 
     if (play == NULL || !play(mmSfx, pos)) {
         Audio_PlaySfxGeneral(fallback, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultReverb);
+                             &gSfxDefaultReverb);
     }
 }
 
@@ -390,8 +383,6 @@ static void StopMmSfx(u16 mmSfx) {
     }
 }
 
-// The loops fade on their own once nobody asks for them; the rolling thuds (one per floor type) are cut here so
-// uncurling does not leave the last one ringing.
 static void StopRollSfx(void) {
     StopMmSfx(MM_GORON_BALL_CHARGE_LOOP);
     StopMmSfx(MM_GORON_SLIP_LOOP);
@@ -406,10 +397,6 @@ static bool IsOnIce(Player* player) {
     return player->floorSfxOffset == (NA_SE_PL_WALK_ICE - SFX_FLAG);
 }
 
-// ---- animations ----
-
-// MM clips are read with Link's root pinned to the base translation; the Z channel is kept aside so
-// the punches can still move the body the way their root motion does in MM.
 static void LoadMmAnim(s32 slot) {
     LinkAnimationHeader* source = ResourceMgr_LoadPlayerAnimAsHeader(sAnimPaths[slot]);
 
@@ -463,7 +450,6 @@ static void PlayAnim(PlayState* play, Player* player, s32 slot, f32 speed, u8 mo
     sRootMotionFrame = (s32)start;
 }
 
-// Moves the body by the clip's root Z delta, which LoadMmAnim flattened out of the pose.
 static void ApplyRootMotion(Player* player) {
     const s16* rootZ = sAnimRootZ[sAnimSlot];
 
@@ -478,8 +464,6 @@ static void ApplyRootMotion(Player* player) {
     player->linearVelocity = delta * player->actor.scale.z * GORON_ANIM_SCALE;
     player->yaw = player->actor.shape.rot.y;
 }
-
-// ---- body ----
 
 static const char* HandDL(Player* player, int32_t limbIndex) {
     bool isFist = sMove == GORON_MOVE_PUNCH || sMove == GORON_MOVE_PUNCH_END;
@@ -499,7 +483,6 @@ static void ResolveGoronBody(Player* player, int32_t limbIndex, Gfx** dList, Gfx
     if (limbIndex != PLAYER_LIMB_ROOT && pos != NULL) {
         *pos = sGoronJointPos[limbIndex];
     }
-    // The ball and the guard are drawn in place of the body, never over it.
     if (IsBallShape() || sMove == GORON_MOVE_GUARD) {
         *dList = NULL;
         return;
@@ -551,7 +534,6 @@ static void ResolveGoronGrab(bool* should, va_list args) {
     Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_GORON);
 }
 
-// Runs before Player_UpdateCommon consumes the hit, after CollisionCheck_Damage wrote it.
 static void ScaleIncomingDamage(Player* player, Input* input) {
     (void)input;
     u8 damage = player->actor.colChkInfo.damage;
@@ -570,8 +552,6 @@ static void ScaleIncomingDamage(Player* player, Input* input) {
     player->actor.colChkInfo.damage = sScaledDamage;
 }
 
-// ---- punches ----
-
 static void EndMove(PlayState* play, Player* player) {
     player->meleeWeaponState = 0;
     sMove = GORON_MOVE_NONE;
@@ -584,7 +564,7 @@ static void StartPunchStep(PlayState* play, Player* player, s32 step) {
     sPunchStep = step;
     sPunchQueued = false;
     player->meleeWeaponState = 0;
-    PlayAnim(play, player, ANIM_PUNCH_A + step, 1.0f, ANIMMODE_ONCE, -3.0f);
+    PlayAnim(play, player, ANIM_PUNCH_A + step, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -3.0f);
     PlayMmSfx(MM_GORON_PUNCH_SWING, NA_SE_IT_SWORD_SWING_HARD, &player->actor.projectedPos);
     RefreshMmSfx(step == PUNCH_STEPS - 1 ? MM_VO_GORON_SWORD_L : MM_VO_GORON_SWORD_N, &player->actor.projectedPos);
 }
@@ -618,7 +598,6 @@ static void StrikeGroundWithButt(PlayState* play, Player* player) {
     Actor_SpawnFloorDustRing(play, &player->actor, &player->actor.world.pos, 30.0f, 6, 6.0f, 300, 10, 1);
 }
 
-// A blocked or walled punch knocks the Goron back like a hammer that hits stone.
 static void StartRecoil(PlayState* play, Player* player) {
     player->meleeWeaponState = 0;
     player->meleeWeaponQuads[0].base.atFlags &= ~(AT_ON | AT_BOUNCED);
@@ -682,7 +661,6 @@ static void GoronPunchAction(Player* player, PlayState* play) {
 static bool IsGoronBusy(Player* player);
 
 static int32_t StartPunch(PlayState* play, Player* player) {
-    // A worn mask that dances or marches on B blocks it for the player, and the punch gives way.
     if (!CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B) || (PlayerInput_GetBlockedButtons() & BTN_B)) {
         return SOH_FORM_ACTION_VANILLA;
     }
@@ -698,8 +676,8 @@ static int32_t StartPunch(PlayState* play, Player* player) {
     return SOH_FORM_ACTION_STARTED;
 }
 
-// func_8012669C from MM: point 0 feeds meleeWeaponInfo[0], which func_80842DF4 walks for walls, and points 1-2
-// are the two attack quads.
+// func_8012669C from MM: point 0 feeds meleeWeaponInfo[0], which func_80842DF4 walks for walls; points 1-2 are the
+// quads.
 static void PlaceStrike(PlayState* play, Player* player, Vec3f* tips, Vec3f* bases) {
     Vec3f tip;
     Vec3f base;
@@ -732,8 +710,6 @@ static void DrawPunchEffect(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- roll ----
-
 static void SetRollAttack(Player* player, u32 dmgFlags, u8 damage, s16 radius) {
     player->cylinder.base.atFlags = AT_ON | AT_TYPE_PLAYER;
     player->cylinder.base.ocFlags1 = radius > ROLL_RADIUS + 5 ? OC1_NONE : OC1_ON | OC1_TYPE_ALL;
@@ -742,7 +718,6 @@ static void SetRollAttack(Player* player, u32 dmgFlags, u8 damage, s16 radius) {
     player->cylinder.info.toucher.dmgFlags = dmgFlags;
     player->cylinder.info.toucher.damage = damage;
     player->cylinder.dim.radius = radius;
-    // MM leaves the slam untouchable: its cylinder stops receiving hits for as long as it is out.
     if (radius > ROLL_RADIUS + 5) {
         player->cylinder.base.acFlags = AC_NONE;
     }
@@ -792,7 +767,7 @@ static void LeaveBall(Player* player) {
 }
 
 // MM's BGCHECKFLAG_PLAYER_800: OoT's func_8002E234 keeps an actor "on the ground" over drops of up to 11 units,
-// which glues the ball to ramps and lips. This undoes that hug the same frame, as NEI's patch there did.
+// which glues the ball to ramps and lips. This undoes that hug the same frame.
 static void LaunchOffLedges(Player* player) {
     bool isHugging = (player->actor.bgCheckFlags & BG_ON_GROUND) &&
                      player->actor.world.pos.y > player->actor.floorHeight + BALL_HUG_TOLERANCE;
@@ -828,9 +803,8 @@ static void StartUncurl(PlayState* play, Player* player) {
     player->actor.world.pos = player->actor.prevPos;
     PlayMmSfx(MM_BALL_TO_GORON, NA_SE_PL_BODY_HIT, &player->actor.projectedPos);
     sMove = GORON_MOVE_UNCURL;
-    // The roll action reads any non-ROLL move as the pound, which ends by rolling again.
     Player_SetupAction(play, player, GoronCurlAction, 0);
-    PlayAnim(play, player, ANIM_CURL, -CURL_PLAY_SPEED, ANIMMODE_ONCE, 0.0f);
+    PlayAnim(play, player, ANIM_CURL, -MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, 0.0f);
 }
 
 static void GoronCurlAction(Player* player, PlayState* play) {
@@ -856,12 +830,11 @@ static int32_t StartCurl(PlayState* play, Player* player) {
     }
     sMove = GORON_MOVE_CURL;
     Player_SetupAction(play, player, GoronCurlAction, 0);
-    PlayAnim(play, player, ANIM_CURL, CURL_PLAY_SPEED, ANIMMODE_ONCE, -3.0f);
+    PlayAnim(play, player, ANIM_CURL, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -3.0f);
     PlayMmSfx(MM_GORON_TO_BALL, NA_SE_PL_CHANGE_ARMS, &player->actor.projectedPos);
     return SOH_FORM_ACTION_STARTED;
 }
 
-// Z-target's A also owns the side hop and back flip, which a Goron keeps; only the forward roll curls.
 static int32_t HandleZTargetA(PlayState* play, Player* player) {
     const s8 direction = player->controlStickDirections[player->controlStickDataIndex];
 
@@ -882,7 +855,6 @@ static void StepSpinRate(s32 target) {
     }
 }
 
-// Squash and stretch from MM's func_808577E0: the ball bulges while it spins up and settles after.
 static void UpdateSquash(void) {
     f32 target = (f32)ABS(sSpinRate) * 0.00004f;
 
@@ -922,7 +894,6 @@ static void BounceOffWall(PlayState* play, Player* player) {
         PlayMmSfx(MM_GORON_ROLLING_REFLECTION, NA_SE_PL_BODY_HIT, &player->actor.projectedPos);
         return;
     }
-    // A breakable wall the ball is already hitting keeps it, so its own AC handler gets to shatter it.
     if (player->actor.wallBgId != BGCHECK_SCENE) {
         DynaPolyActor* dyna = DynaPoly_GetActor(&play->colCtx, player->actor.wallBgId);
         if (dyna != NULL && (player->cylinder.base.atFlags & AT_HIT) && player->cylinder.base.at == &dyna->actor) {
@@ -942,7 +913,7 @@ static void BounceOffWall(PlayState* play, Player* player) {
     PlayMmSfx(MM_GORON_ROLLING_REFLECTION, NA_SE_PL_BODY_HIT, &player->actor.projectedPos);
 }
 
-// Magic is drained raw, as in NEI: the spikes never open a magicState, so there is nothing to Magic_Reset.
+// Magic is drained raw: the spikes never open a magicState, so there is nothing to Magic_Reset.
 static void UpdateSpikes(PlayState* play, Player* player, f32* speedTarget) {
     Input* input = &play->state.input[0];
 
@@ -1016,7 +987,6 @@ static void LandPound(PlayState* play, Player* player) {
     sPoundStruck = false;
     player->actor.gravity = GRAVITY_NORMAL;
     player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
-    // The same impact Link's hammer leaves: tektites flip and hammer-rusted switches respond.
     play->actorCtx.unk_02 = 4;
     ShakeGround(play, 20);
     PlayMmSfx(MM_GORON_PUNCH, NA_SE_IT_HAMMER_HIT, &player->actor.projectedPos);
@@ -1064,14 +1034,11 @@ static void UpdatePound(PlayState* play, Player* player) {
     player->actor.shape.rot.x += sSpinRate;
 }
 
-// MM's Audio_PlaySfx_AtPosWithSyncedFreqAndVolume (code_8019AF00.c): full pitch and volume from speed 6 up,
-// and a step down of both for every unit below it.
 static void PlayRollingSound(Player* player, bool isCharged) {
     static f32 sRollFreq;
     static f32 sRollVolume;
     static MmSfxPlayScaledFunc sPlayScaled;
     f32 shortfall = sBallSpeed >= 6.0f ? 0.0f : 6.0f - sBallSpeed;
-    // Player_GetFloorSfx: MM's bank holds one rolling thud per floor type, right after the base one.
     u16 sfx = (isCharged ? MM_GORON_CHG_ROLL : MM_GORON_ROLL) + player->floorSfxOffset;
 
     sRollFreq = MAX(1.1f - shortfall * 0.0333f, 0.5f);
@@ -1157,8 +1124,6 @@ static void TiltWithGround(PlayState* play, Player* player, s16 lean) {
     Math_ScaledStepToS(&player->actor.shape.rot.z, target, 0x190);
 }
 
-// MM's Player_Action_96 grounded core: the ball keeps a trajectory (home yaw + speed) separate from
-// a sideways drift, and steering only bends the trajectory.
 static void RollOnGround(PlayState* play, Player* player, f32 speedTarget, s16 yawTarget, s32* spinFloor,
                          bool* reverseBrake) {
     s16 visualYaw = player->yaw;
@@ -1263,8 +1228,8 @@ static void GoronRollAction(Player* player, PlayState* play) {
 
     sRollFrames++;
     player->actor.bgCheckFlags |= BG_LEAVE_LEDGES;
-    // Without MIDAIR, func_8083AA10 reads the ball leaving the ground as Link stepping off an edge: it swaps in
-    // the fall, the running jump or the ledge grab (MM's restricted handler list never lets that happen).
+    LaunchOffLedges(player);
+    // Without MIDAIR, func_8083AA10 reads the ball leaving the ground as Link stepping off an edge.
     player->stateFlags3 |= PLAYER_STATE3_MIDAIR;
     if (player->actor.floorPoly != NULL &&
         SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) == 1) {
@@ -1373,8 +1338,6 @@ static void DrawBall(PlayState* play, Player* player) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- guard ----
-
 static bool PrepareShieldingSkeleton(PlayState* play) {
     if (sShieldingReady) {
         return true;
@@ -1399,7 +1362,6 @@ static void SubmitGuard(PlayState* play, Player* player) {
         sGuardCollider.base.acFlags &= ~AC_HIT;
         Audio_PlayActorSound2(&player->actor, NA_SE_IT_SHIELD_BOUND);
     }
-    // Link's own cylinder sits inside the shell: while it keeps its AC, every blocked hit still lands.
     player->cylinder.base.acFlags &= ~(AC_ON | AC_HIT);
     sGuardCollider.base.acFlags |= AC_ON;
     sGuardCollider.dim.pos.x = (s16)player->actor.world.pos.x;
@@ -1455,9 +1417,6 @@ static void DrawGuard(PlayState* play, Player* player) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- deep water ----
-
-// Link only takes the curling pose and holds it while he sinks: the ball itself never comes out.
 static void RunSink(Player* player, PlayState* play) {
     Player_ZeroSpeedXZ(player);
     if (!sSinkCurled) {
@@ -1472,9 +1431,8 @@ static void RunSink(Player* player, PlayState* play) {
     }
 }
 
-// A Goron cannot swim: MM curls him up and lets him sink until the scene voids him out. Vanilla's func_8083D53C
-// re-seats its swim on anyone deep in water whose action is not a swim, so the sink keeps that swim installed
-// and runs in its place through VB_EXECUTE_PLAYER_ACTION_FUNC, which is how NEI's hook kept OoT out.
+// Vanilla's func_8083D53C re-seats its swim on anyone deep in water whose action is not a swim, so the sink keeps
+// that swim installed and runs in its place through VB_EXECUTE_PLAYER_ACTION_FUNC.
 static void TrySink(PlayState* play, Player* player) {
     if (sMove == GORON_MOVE_SINK || !(player->stateFlags1 & PLAYER_STATE1_IN_WATER) ||
         player->actor.yDistToWater <= SINK_DEPTH ||
@@ -1505,8 +1463,6 @@ static void DriveSink(bool* should, va_list args) {
     RunSink(player, gPlayState);
 }
 
-// ---- drum ----
-
 static bool IsHoldingOcarina(Player* player) {
     return player->rightHandType == PLAYER_MODELTYPE_RH_OCARINA || player->rightHandType == PLAYER_MODELTYPE_RH_OOT;
 }
@@ -1524,8 +1480,7 @@ static MmOcarinaNoteFunc FindDrumVoice(void) {
     return (MmOcarinaNoteFunc)sApi->FindService(MM_OCARINA_NOTE_SERVICE);
 }
 
-// MM's drums sing through Sequence_0's ocarina channel. The hook runs right after Ocarina triggered its own
-// voice, so stopping that here always lands.
+// The hook runs right after Ocarina triggered its own voice, so stopping that here always lands.
 static void VoiceDrum(uint8_t note, float bendFreq) {
     MmOcarinaNoteFunc voice = sDrumVoice;
 
@@ -1541,7 +1496,6 @@ static void VoiceDrum(uint8_t note, float bendFreq) {
     }
 }
 
-// Runs inside the ocarina's own update; the pose consumes the edge on the game frame.
 static void NoteStruck(uint8_t note, float modulator, int8_t bend) {
     (void)bend;
     if (note != OCARINA_NOTE_NONE && note != sLastNote) {
@@ -1572,46 +1526,137 @@ static void ChangeDrumClip(PlayState* play, Player* player, s32 slot, f32 speed,
                          speed >= 0.0f ? last : 0.0f, mode, morph);
 }
 
-// Vanilla's ocarina action waits for the end of its intro and outro clips; the drums' own clips take their
-// place, so that wait is what raises and lowers them, as MM's Player_Action_63 does.
 static bool SwapOcarinaClip(PlayState* play, Player* player) {
     if (IsPlayingOcarinaClip(player, "okarina_start")) {
-        ChangeDrumClip(play, player, ANIM_DRUM_RAISE, 1.0f, ANIMMODE_ONCE, -6.0f);
+        ChangeDrumClip(play, player, ANIM_DRUM_RAISE, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -6.0f);
         sDrumPhase = DRUM_RAISING;
         return true;
     }
     if (IsPlayingOcarinaClip(player, "okarina_end")) {
-        ChangeDrumClip(play, player, ANIM_DRUM_RAISE, -1.0f, ANIMMODE_ONCE, -6.0f);
+        ChangeDrumClip(play, player, ANIM_DRUM_RAISE, -MM_ANIM_ADJUSTED_SPEED, ANIMMODE_ONCE, -6.0f);
         sDrumPhase = DRUM_LOWERING;
         return true;
     }
     return false;
 }
 
-// The beat loops: that same action reopens the ocarina whenever a clip reports its end, which would wipe
-// the notes of the song being played.
-static void PoseDrum(PlayState* play, Player* player) {
-    LinkAnimationHeader* beat = sAnims[ANIM_DRUM_PLAY];
-    f32 beatEnd = Animation_GetLastFrame(beat) - CLIP_FRAMES_PER_UPDATE;
+typedef struct {
+    s16 frame;
+    Vec3s scale;
+} DrumKey;
 
-    if (player->skelAnime.animation != beat) {
-        ChangeDrumClip(play, player, ANIM_DRUM_PLAY, 1.0f, ANIMMODE_LOOP, -4.0f);
-        player->skelAnime.playSpeed = 0.0f;
-        sDrumPhase = DRUM_PLAYING;
+static const DrumKey sDrumRaiseKeys[] = {
+    { 0, { 0, 0, 0 } },      { 6, { 0, 0, 0 } },        { 7, { 60, 60, 50 } },     { 8, { 120, 130, 100 } },
+    { 9, { 100, 120, 80 } }, { 11, { 100, 100, 100 } }, { 13, { 100, 100, 100 } },
+};
+static const DrumKey sDrumHitKeys[] = {
+    { 0, { 100, 100, 100 } }, { 4, { 100, 100, 100 } }, { 5, { 90, 110, 100 } },
+    { 6, { 110, 105, 100 } }, { 8, { 100, 100, 100 } },
+};
+static const DrumKey sDrumReplayKeys[] = {
+    { 0, { 100, 100, 100 } },  { 1, { 100, 100, 100 } },  { 2, { 90, 100, 105 } },  { 4, { 110, 100, 100 } },
+    { 5, { 90, 100, 105 } },   { 6, { 100, 100, 100 } },  { 7, { 90, 100, 105 } },  { 8, { 100, 100, 100 } },
+    { 9, { 90, 100, 105 } },   { 10, { 100, 100, 100 } }, { 11, { 90, 100, 105 } }, { 12, { 110, 100, 100 } },
+    { 13, { 100, 100, 100 } }, { 14, { 90, 100, 105 } },  { 15, { 90, 100, 105 } }, { 17, { 100, 100, 100 } },
+};
+static const s8 sDrumHand[DRUM_COUNT] = { 1, 1, 1, 0, 0 };
+static u8 sDrumArmLimbs[2][PLAYER_LIMB_MAX] = {
+    { [PLAYER_LIMB_L_SHOULDER] = true, [PLAYER_LIMB_L_FOREARM] = true, [PLAYER_LIMB_L_HAND] = true },
+    { [PLAYER_LIMB_R_SHOULDER] = true, [PLAYER_LIMB_R_FOREARM] = true, [PLAYER_LIMB_R_HAND] = true },
+};
+
+#define DRUM_HIT_START_FRAME 3.0f
+#define DRUM_HIT_REST_FRAME 8.0f
+
+static void BlendDrumKeys(const DrumKey* keys, s32 count, f32 frame, Vec3f* scale) {
+    s32 next = 1;
+
+    while (next < count - 1 && keys[next].frame < frame) {
+        next++;
     }
-    bool isBeatDone = player->skelAnime.curFrame >= beatEnd;
-    if (sWasNoteStruck) {
-        if (isBeatDone) {
-            player->skelAnime.curFrame = 0.0f;
-        }
-        player->skelAnime.playSpeed = 1.0f;
-    } else if (isBeatDone) {
-        player->skelAnime.playSpeed = 0.0f;
-    }
-    sWasNoteStruck = false;
+    const DrumKey* from = &keys[next - 1];
+    const DrumKey* to = &keys[next];
+    f32 span = (f32)(to->frame - from->frame);
+    f32 t = span > 0.0f ? CLAMP((frame - from->frame) / span, 0.0f, 1.0f) : 1.0f;
+    scale->x = (from->scale.x + (to->scale.x - from->scale.x) * t) * 0.01f;
+    scale->y = (from->scale.y + (to->scale.y - from->scale.y) * t) * 0.01f;
+    scale->z = (from->scale.z + (to->scale.z - from->scale.z) * t) * 0.01f;
 }
 
-// The ocarina stays out across the message session, so the latch only lets go once no message is up.
+static bool IsReplayingSong(PlayState* play) {
+    return play->msgCtx.msgMode >= MSGMODE_SONG_PLAYED && play->msgCtx.msgMode <= MSGMODE_DISPLAY_SONG_PLAYED;
+}
+
+static void RestDrums(void) {
+    for (s32 drum = 0; drum < DRUM_COUNT; drum++) {
+        sDrumHitFrame[drum] = DRUM_HIT_REST_FRAME;
+    }
+    sDrumOfHand[0] = -1;
+    sDrumOfHand[1] = -1;
+}
+
+static void StrikeDrum(void) {
+    u8 button = AudioOcarina_GetPlayingStaff()->buttonIndex;
+
+    if (button == OCARINA_BTN_C_RIGHT_OR_C_LEFT) {
+        button = OCARINA_BTN_C_RIGHT;
+    }
+    if (button >= DRUM_COUNT) {
+        return;
+    }
+    sDrumOfHand[sDrumHand[button]] = (s8)button;
+    sDrumHitFrame[button] = DRUM_HIT_START_FRAME;
+}
+
+static void SwingDrumArms(PlayState* play, Player* player) {
+    s32 limbCount = player->skelAnime.limbCount;
+
+    for (s32 hand = 0; hand < 2; hand++) {
+        s8 drum = sDrumOfHand[hand];
+        LinkAnimationHeader* hit = drum >= 0 ? sAnims[ANIM_DRUM_HIT_FIRST + drum] : NULL;
+        if (hit == NULL) {
+            continue;
+        }
+        AnimationContext_SetLoadFrame(play, hit, (s32)sDrumHitFrame[drum], limbCount, sDrumArmFrame[hand]);
+        AnimationContext_SetCopyTrue(play, limbCount, player->skelAnime.jointTable, sDrumArmFrame[hand],
+                                     sDrumArmLimbs[hand]);
+    }
+    for (s32 drum = 0; drum < DRUM_COUNT; drum++) {
+        sDrumHitFrame[drum] += 1.0f;
+        if (sDrumHitFrame[drum] <= DRUM_HIT_REST_FRAME) {
+            continue;
+        }
+        sDrumHitFrame[drum] = DRUM_HIT_REST_FRAME;
+        if (sDrumOfHand[0] == drum) {
+            sDrumOfHand[0] = -1;
+        } else if (sDrumOfHand[1] == drum) {
+            sDrumOfHand[1] = -1;
+        }
+    }
+}
+
+// Both clips loop, so the ocarina action never sees a clip end.
+static void PoseDrum(PlayState* play, Player* player) {
+    sDrumPhase = DRUM_PLAYING;
+    if (IsReplayingSong(play)) {
+        if (player->skelAnime.animation != sAnims[ANIM_DRUM_PLAY]) {
+            ChangeDrumClip(play, player, ANIM_DRUM_PLAY, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_LOOP, 0.0f);
+        }
+        BlendDrumKeys(sDrumReplayKeys, ARRAY_COUNT(sDrumReplayKeys), player->skelAnime.curFrame, &sDrumScale);
+        sWasNoteStruck = false;
+        return;
+    }
+    if (player->skelAnime.animation != sAnims[ANIM_DRUM_WAIT]) {
+        ChangeDrumClip(play, player, ANIM_DRUM_WAIT, MM_ANIM_ADJUSTED_SPEED, ANIMMODE_LOOP, 0.0f);
+        RestDrums();
+    }
+    if (sWasNoteStruck) {
+        StrikeDrum();
+    }
+    sWasNoteStruck = false;
+    SwingDrumArms(play, player);
+}
+
 static void UpdateDrum(PlayState* play, Player* player) {
     bool isSessionOpen = play->msgCtx.msgMode != MSGMODE_NONE;
 
@@ -1630,37 +1675,51 @@ static void UpdateDrum(PlayState* play, Player* player) {
     if (sDrumVoice == NULL) {
         sDrumVoice = FindDrumVoice();
     }
-    if (sAnims[ANIM_DRUM_RAISE] == NULL || sAnims[ANIM_DRUM_PLAY] == NULL || SwapOcarinaClip(play, player)) {
+    if (sAnims[ANIM_DRUM_RAISE] == NULL || sAnims[ANIM_DRUM_PLAY] == NULL || sAnims[ANIM_DRUM_WAIT] == NULL ||
+        SwapOcarinaClip(play, player)) {
         return;
     }
     bool isRaising = sDrumPhase == DRUM_RAISING && player->skelAnime.animation == sAnims[ANIM_DRUM_RAISE];
     if (isRaising || sDrumPhase == DRUM_LOWERING) {
         return;
     }
-    // A raise that ended hands over to the beat even before an actor opens the session it was played for.
     if (isSessionOpen || sDrumPhase == DRUM_RAISING) {
         PoseDrum(play, player);
     }
 }
 
-static void DrawDrum(PlayState* play) {
+static void DrawScaledDrum(PlayState* play, const char* dList, const Vec3f* scale) {
     OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+    Matrix_Scale(scale->x, scale->y, scale->z, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sDrumDL);
-    for (u32 i = 0; i < ARRAY_COUNT(sDrumPieceDLs); i++) {
-        gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sDrumPieceDLs[i]);
-    }
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)dList);
+    Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// ---- drawing ----
+static void DrawDrum(PlayState* play, Player* player) {
+    bool isWaiting = player->skelAnime.animation == sAnims[ANIM_DRUM_WAIT];
+
+    if (player->skelAnime.animation == sAnims[ANIM_DRUM_RAISE]) {
+        BlendDrumKeys(sDrumRaiseKeys, ARRAY_COUNT(sDrumRaiseKeys), player->skelAnime.curFrame, &sDrumScale);
+    }
+    DrawScaledDrum(play, sDrumDL, &sDrumScale);
+    for (s32 drum = 0; drum < DRUM_COUNT; drum++) {
+        Vec3f scale = sDrumScale;
+        if (isWaiting) {
+            BlendDrumKeys(sDrumHitKeys, ARRAY_COUNT(sDrumHitKeys), sDrumHitFrame[drum], &scale);
+        }
+        DrawScaledDrum(play, sDrumPieceDLs[drum], &scale);
+    }
+}
 
 static void DrawGoronLimbExtras(PlayState* play, Player* player, int32_t limbIndex) {
     if (!IsGoron()) {
         return;
     }
     if (limbIndex == PLAYER_LIMB_TORSO && sIsOcarinaOut && sDrumPhase != DRUM_IDLE) {
-        DrawDrum(play);
+        DrawDrum(play, player);
     }
     if (sMove != GORON_MOVE_PUNCH || limbIndex != sPunchLimb[sPunchStep]) {
         return;
@@ -1685,7 +1744,6 @@ static void DrawGoron(PlayState* play, Player* player) {
     }
 }
 
-// A Goron never speaks with Link's voice, even for a grunt MM's bank has no sample for.
 static void SpeakWithGoronVoice(Actor* actor, uint16_t sfxId) {
     const uint16_t action = (uint16_t)(sfxId - NA_SE_VO_LI_SWORD_N);
     MmSfxPlayFunc play = GetMmSfxPlayer();
@@ -1695,7 +1753,6 @@ static void SpeakWithGoronVoice(Actor* actor, uint16_t sfxId) {
     }
 }
 
-// MM's Player_GetFloorSfxByAge: the floor offset plus the form's own block of the player bank.
 static bool StepWithGoronFeet(Actor* actor) {
     Player* player = (Player*)actor;
     MmSfxPlayFunc play = GetMmSfxPlayer();
@@ -1707,7 +1764,6 @@ static bool StepWithGoronFeet(Actor* actor) {
            play((uint16_t)(NA_SE_PL_WALK_GROUND + player->floorSfxOffset + MM_GORON_STEP_OFFSET), &actor->projectedPos);
 }
 
-// Thrown to the floor, a Goron lands with MM's heavy impact instead of Link's bounce.
 static bool LandWithGoronWeight(Actor* actor, uint16_t sfxId) {
     Player* player = (Player*)actor;
     MmSfxPlayFunc play = GetMmSfxPlayer();
@@ -1729,8 +1785,6 @@ static void ResolveGoronSfx(Actor* actor, int32_t kind, uint16_t* sfxId, bool* h
         *handled = LandWithGoronWeight(actor, *sfxId);
     }
 }
-
-// ---- lifetime ----
 
 static bool IsGoronBusy(Player* player) {
     return player->actionFunc == GoronPunchAction || player->actionFunc == GoronCurlAction ||
@@ -1755,7 +1809,6 @@ static void ResetState(Player* player) {
     StopRollSfx();
 }
 
-// Preserve equipment-specific damage while the form borrows Link's melee quads.
 static u8 sHumanMeleeDamage[2] = { 1, 1 };
 
 static void EnterGoron(PlayState* play, Player* player) {
@@ -1766,17 +1819,51 @@ static void EnterGoron(PlayState* play, Player* player) {
     sApi->RequestHazard(GORON_HAZARD_OWNER, 0, PLAYER_ENV_HAZARD_NONE, EQUIP_VALUE_TUNIC_KOKIRI);
 }
 
+// MM's func_80123140 rows for the Goron, in OoT's Player_SetBootData order (REG(39) has no OoT reader).
+static const s16 sGoronBootRows[2][17] = {
+    { 200, 1000, 300, 700, 550, 270, 700, 200, 800, 600, -140, 600, 590, 750, 125, 200, 130 },
+    { 80, 800, 150, 700, 480, 270, 600, 50, 800, 300, -40, 400, 540, 270, 25, 0, 80 },
+};
+
+static void WearGoronBoots(PlayState* play, Player* player) {
+    if (player->currentBoots != PLAYER_BOOTS_KOKIRI) {
+        return;
+    }
+    const s16* row = sGoronBootRows[(player->stateFlags1 & PLAYER_STATE1_IN_WATER) ? 1 : 0];
+    REG(19) = row[0];
+    REG(30) = row[1];
+    REG(32) = row[2];
+    REG(34) = row[3];
+    REG(35) = row[4];
+    REG(36) = row[5];
+    REG(37) = row[6];
+    REG(38) = row[7];
+    REG(43) = row[8];
+    REG(45) = row[9];
+    REG(68) = row[10];
+    REG(69) = row[11];
+    IREG(66) = row[12];
+    IREG(67) = row[13];
+    IREG(68) = row[14];
+    IREG(69) = row[15];
+    MREG(95) = row[16];
+    REG(48) = 200;
+    if (play->roomCtx.curRoom.behaviorType1 == ROOM_BEHAVIOR_TYPE1_2) {
+        REG(45) = 500;
+    }
+}
+
 static void ExitGoron(PlayState* play, Player* player) {
     bool wasBusy = IsGoronBusy(player) && sMove != GORON_MOVE_SINK;
 
     sApi->ReleaseHazard(GORON_HAZARD_OWNER);
     SilenceDrum();
     ResetState(player);
+    Player_SetBootData(play, player);
     if (wasBusy) {
         func_80839FFC(player, play);
     }
-    // OoT keeps AT_ON enabled and gates sword attacks with meleeWeaponState.
-    // Leaving it cleared makes every subsequent human sword swing miss.
+    // OoT keeps AT_ON enabled and gates sword attacks with meleeWeaponState; leaving it cleared makes every swing miss.
     player->meleeWeaponState = 0;
     player->meleeWeaponInfo[0].active = 0;
     for (s32 quad = 0; quad < 2; quad++) {
@@ -1787,7 +1874,6 @@ static void ExitGoron(PlayState* play, Player* player) {
     }
 }
 
-// A slope slide or a stray vanilla action can take the ball's action func without anything having hit it.
 static void KeepBallRolling(PlayState* play, Player* player) {
     if (!IsRolling() || player->actionFunc == GoronRollAction) {
         return;
@@ -1801,6 +1887,7 @@ static void KeepBallRolling(PlayState* play, Player* player) {
 }
 
 static void UpdateGoron(PlayState* play, Player* player) {
+    WearGoronBoots(play, player);
     KeepBallRolling(play, player);
     LaunchOffLedges(player);
     if (sMove != GORON_MOVE_NONE && !IsRolling() && !IsGoronBusy(player)) {
@@ -1811,7 +1898,6 @@ static void UpdateGoron(PlayState* play, Player* player) {
     if (sMove == GORON_MOVE_GUARD) {
         SubmitGuard(play, player);
     }
-    // In water the hazard claim would also waive drowning, and a Goron sinks there anyway.
     if (player->stateFlags1 & PLAYER_STATE1_IN_WATER) {
         sApi->ReleaseHazard(GORON_HAZARD_OWNER);
     } else {
@@ -1821,7 +1907,6 @@ static void UpdateGoron(PlayState* play, Player* player) {
     UpdateDrum(play, player);
 }
 
-// Colliders remember their actor, and a new scene brings a new player.
 static void ForgetScene(int16_t sceneNum) {
     (void)sceneNum;
     sGuardColliderReady = false;
@@ -1831,18 +1916,15 @@ static void ForgetScene(int16_t sceneNum) {
     ResetState(NULL);
 }
 
-// ---- mask ----
-
 static bool CanWearMask(Player* player, PlayState* play) {
     return IsGrounded(player) &&
            !(player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE));
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    ToggleConfiguredForm(GORON_FORM_KEY);
+    sApi->ToggleForm(GORON_FORM_KEY);
 }
 
-// A vanilla GetItemEntry has no draw callback of its own, and the registry reads NULL as "no model".
 static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     (void)entry;
     OPEN_DISPS(play->state.gfxCtx);
@@ -1852,7 +1934,6 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GORON_MASK_KEY, GORON_MASK_KEY, "",
 };
@@ -1887,22 +1968,23 @@ static const SOHFormActionOverride sActions[] = {
     { SOH_PLAYER_ACTION_SHIELD, StartGuard },
 };
 
-// Standing still the Goron takes MM's own stance; walking and running stay Link's, as in NEI.
 static SOHFormAnimOverride sAnimOverrides[] = {
     { PLAYER_ANIMGROUP_wait, -1, NULL },
 };
 
 static uint16_t ResolveGoronEquipment(int32_t equipType, uint16_t value) {
-    if (equipType == EQUIP_TYPE_SWORD) {
-        return EQUIP_VALUE_SWORD_NONE;
+    switch (equipType) {
+        case EQUIP_TYPE_SWORD:
+            return EQUIP_VALUE_SWORD_NONE;
+        case EQUIP_TYPE_SHIELD:
+            return EQUIP_VALUE_SHIELD_NONE;
+        case EQUIP_TYPE_TUNIC:
+            return EQUIP_VALUE_TUNIC_KOKIRI;
+        case EQUIP_TYPE_BOOTS:
+            return EQUIP_VALUE_BOOTS_KOKIRI;
+        default:
+            return value;
     }
-    if (equipType == EQUIP_TYPE_SHIELD) {
-        return EQUIP_VALUE_SHIELD_NONE;
-    }
-    if (equipType == EQUIP_TYPE_BOOTS) {
-        return EQUIP_VALUE_BOOTS_KOKIRI;
-    }
-    return value;
 }
 
 static bool IsFormMask(const char* customKey) {

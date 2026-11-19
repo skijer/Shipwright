@@ -16,10 +16,10 @@
 #define ROCS_CAPE_GIVE_SCALE 0.6f
 #define ROCS_BUTTON_COUNT 8
 
-#define ROCS_BLOCKING_STATES                                                                                     \
-    (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS |          \
-     PLAYER_STATE1_TALKING | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_HANGING_OFF_LEDGE |                       \
-     PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_ON_HORSE |                      \
+#define ROCS_BLOCKING_STATES                                                                             \
+    (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS | \
+     PLAYER_STATE1_TALKING | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_HANGING_OFF_LEDGE |              \
+     PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_CLIMBING_LADDER | PLAYER_STATE1_ON_HORSE |             \
      PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_CARRYING_ACTOR)
 
 static const ALIGN_ASSET(2) char sFeatherIconTex[] = "__OTR__textures/icon_item_custom/gItemIconRocsFeatherTex";
@@ -84,8 +84,6 @@ static void Jump(Player* player, PlayState* play, const char* animation) {
 }
 
 static bool CanJumpFromGround(Player* player, PlayState* play) {
-    // A transformation which allows Roc owns its form-specific animation and
-    // movement. This item mod supplies vanilla Link's behavior only.
     return sApi->GetActiveForm() == NULL && (player->actor.bgCheckFlags & 1) &&
            !(player->stateFlags1 & ROCS_BLOCKING_STATES);
 }
@@ -174,6 +172,11 @@ static void ResolveProgressive(Actor* actor, PlayState* play, GetItemEntry* entr
     *key = HasAnyTier() ? ROCS_CAPE_KEY : ROCS_FEATHER_KEY;
 }
 
+static void ReceiveProgressive(const char* key) {
+    sApi->SetCustomItemOwned(HasAnyTier() ? ROCS_CAPE_KEY : ROCS_FEATHER_KEY, true);
+    sApi->SetCustomItemOwned(ROCS_PROGRESSIVE_KEY, false);
+}
+
 static void DrawSpinningModel(PlayState* play, const char* displayList, f32 scale) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -210,10 +213,15 @@ static bool RegisterTier(SOHCustomItemDefinition* tier, CustomDrawFunc draw, int
     return Z64Items_Register(sApi, tier);
 }
 
-// The randomizer shuffles the progressive item twice: the first copy is the feather, the second the cape.
 static const SOHCustomItemRandomizer sProgressiveRandomizer = {
-    sizeof(SOHCustomItemRandomizer), SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 2,
-    ROCS_PROGRESSIVE_KEY, ROCS_PROGRESSIVE_KEY, "",
+    sizeof(SOHCustomItemRandomizer),
+    SOH_CUSTOM_ITEM_RANDO_PROGRESSIVE,
+    SOH_CUSTOM_ITEM_TYPE_ITEM,
+    0,
+    2,
+    ROCS_PROGRESSIVE_KEY,
+    ROCS_PROGRESSIVE_KEY,
+    "",
 };
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
@@ -245,6 +253,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     progressive.displayName = "Progressive Roc's Feather";
     progressive.presentationFlags |= SOH_ITEM_HIDE_FROM_SAVE_EDITOR | SOH_ITEM_HIDE_FROM_KALEIDO;
     progressive.getItemEntry.drawFunc = DrawProgressive;
+    progressive.onReceive = ReceiveProgressive;
     Z64Items_SetLogic(&progressive, &sProgressiveRandomizer);
 
     if (!RegisterTier(&feather, DrawFeather, 0) || !RegisterTier(&cape, DrawCape, 1) ||

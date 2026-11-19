@@ -7,10 +7,6 @@
 
 #include <math.h>
 
-// ============================================================================
-// Struct (merged from z_arrow_ice.h)
-// ============================================================================
-
 struct ArrowIce;
 
 typedef void (*ArrowIceActionFunc)(struct ArrowIce*, PlayState*);
@@ -25,11 +21,6 @@ typedef struct ArrowIce {
     /* 0x0164 */ f32 unk_164;
     /* 0x0168 */ ArrowIceActionFunc actionFunc;
 } ArrowIce; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_ice_gfx.c)
-// ============================================================================
 
 static UNK_TYPE sArrowIceTexture1[] = {
     0x00061507, 0x00000000, 0x295A2B08, 0x10030F03, 0x0D070006, 0x00031625, 0x3F230012, 0x79590000, 0x00102C2A,
@@ -219,13 +210,8 @@ static Gfx sArrowIceVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97IceMatDL[] = "__OTR__overlays/ovl_Arrow_Ice/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97IceMdlDL[] = "__OTR__overlays/ovl_Arrow_Ice/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 
@@ -297,10 +283,6 @@ static void Sw97_ArrowIce_LerpPos(Vec3f* unkPos, Vec3f* icePos, f32 scale) {
     unkPos->z += ((icePos->z - unkPos->z) * scale);
 }
 
-// Melts every BgIceShelter (red ice) within `radius` (XZ distance) of `center`.
-// Same direct approach used by MagicIce (z_magic_ice.inc.c) and the Ice Rod
-// (item_rod_ice.c) — bypasses the collider/damage-flag path so SW97 ice always
-// melts red ice regardless of the BlueFireArrows cheat state.
 static void Sw97_ArrowIce_MeltIceShelters(PlayState* play, Vec3f* center, f32 radius) {
     Actor* actor;
     for (actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
@@ -385,7 +367,6 @@ void Sw97_ArrowIce_Fly(ArrowIce* this, PlayState* play) {
     }
     Sw97_ArrowIce_LerpPos(&this->unkPos, &this->actor.world.pos, 0.05f);
 
-    // Melt any red ice the arrow flies through or impacts.
     Sw97_ArrowIce_MeltIceShelters(play, &this->actor.world.pos, 50.0f);
 
     if (arrow->hitFlags & 1) {
@@ -393,8 +374,6 @@ void Sw97_ArrowIce_Fly(ArrowIce* this, PlayState* play) {
         Sw97_ArrowIce_SetupAction(this, Sw97_ArrowIce_Hit);
         this->timer = 32;
         this->alpha = 255;
-        // On impact, sweep a wider radius so a near-miss still melts the block
-        // (mirrors how MagicIce's growing aura covers a region rather than a point).
         Sw97_ArrowIce_MeltIceShelters(play, &this->actor.world.pos, 80.0f);
     } else if (arrow->timer < 34) {
         if (this->alpha < 35) {

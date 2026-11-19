@@ -32,7 +32,7 @@ void Sw97_MagicDark_DiamondDraw(Actor* thisx, PlayState* play);
 void Sw97_MagicDark_DimLighting(PlayState* play, f32 intensity);
 
 static u64 sDiamondTex[] = {
-    0x0000000000000000, /* placeholder - needs actual SW97 diamond texture data */
+    0x0000000000000000,
 };
 
 static Vtx sDiamondVerts[] = {
@@ -164,11 +164,11 @@ void Sw97_MagicDark_DiamondUpdate(Actor* thisx, PlayState* play) {
     if (nayrusLoveTimer < 1100) {
         Sw97_MagicDark_DimLighting(play, 1.0f);
         Audio_PlaySfxGeneral(NA_SE_EV_FANTOM_WARP_L - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     } else {
         Sw97_MagicDark_DimLighting(play, -0.0075f * (-1199.0f + nayrusLoveTimer));
         Audio_PlaySfxGeneral(NA_SE_EV_FANTOM_WARP_S - SFX_FLAG, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
     }
 }
 

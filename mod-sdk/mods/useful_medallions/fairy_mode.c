@@ -1,6 +1,3 @@
-// The Spirit spell's fairy: Link leaves his body and flies as Ivan (SoH's EnPartner) through walls until the
-// Spirit Medallion is pressed again. NEI's Hylia's Grace "Ivan" state, carried here so the mod stands alone.
-
 #include "z64items.h"
 
 #include <string.h>
@@ -33,8 +30,7 @@ bool Sw97_IsFairyModeActive(void) {
     return sFairy.isActive;
 }
 
-// NEI's possession flag opens the same doors in the engine that Ivan's co-op option does (his hover, his
-// boomerang, his damage scale) and grants noclip, so the mod borrows both switches for the flight.
+// Borrows the engine's Ivan co-op and noclip switches for the flight.
 static void BorrowIvanSwitches(void) {
     sFairy.savedIvanCoop = CVarGetInteger(SW97_CVAR_IVAN_COOP, 0);
     sFairy.savedNoClip = CVarGetInteger(SW97_CVAR_NO_CLIP, 0);
@@ -89,7 +85,6 @@ static void EndFairyMode(void) {
     sFairy.isActive = false;
 }
 
-// A hit or deep water throws Link back quietly, as HGrace_Stop does.
 static void BreakFairyMode(Player* player, PlayState* play) {
     RestoreLink(player, play);
     player->cylinder.base.atFlags |= AT_ON;
@@ -116,7 +111,6 @@ static void SpawnIvan(Player* player, PlayState* play) {
     Audio_PlayActorSound2(&player->actor, NA_SE_EV_TRIFORCE_FLASH);
 }
 
-// Link stays in the world, invisible and frozen on Ivan, so the camera follows the fairy and a hit still lands.
 static void HoldLinkOnIvan(Player* player) {
     player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
     player->linearVelocity = 0.0f;
@@ -182,7 +176,6 @@ static void TickFairyMode(void) {
     sFairy.timer++;
 }
 
-// Leaving the scene ends the flight before the next one loads, or its Play_Init would spawn a co-op Ivan.
 static void EndFairyModeWithScene(void) {
     if (!sFairy.isActive) {
         return;

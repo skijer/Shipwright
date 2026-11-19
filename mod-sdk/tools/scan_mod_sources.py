@@ -33,7 +33,7 @@ KNOWN_PERMISSIONS = {"microphone", "files"}
 SERVICE_PERMISSIONS = {
     "OpenMicrophone": "microphone", "ReadMicrophone": "microphone", "CloseMicrophone": "microphone",
     "Microphone_Open": "microphone", "Microphone_Read": "microphone", "Microphone_Close": "microphone",
-    "PickUserFile": "files", "SaveToModsFolder": "files", "UserFiles_Pick": "files", "UserFiles_SaveToMods": "files",
+    "PickUserFile": "files", "SaveToModsFolder": "files", "ReadModsFolderFiles": "files", "UserFiles_ReadMods": "files", "UserFiles_Pick": "files", "UserFiles_SaveToMods": "files",
     "ExportArchiveFiles": "files", "O2rExtractor_ExportFiles": "files",
 }
 BUILD_SETTINGS = {"includeDirectories", "definitions"}

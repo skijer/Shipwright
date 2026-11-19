@@ -1,7 +1,3 @@
-// The elemental shots: the bow and the slingshot each carry a primed element, the shot flies as its vanilla
-// arrow type and wears the SW97 arrow actor as its effect. Dark shots drain life, ice shots crack mud walls, and
-// light shots wake sun switches, as NEI's SW97 mode does.
-
 #include "z64items.h"
 #include "z64wheel.h"
 #include "textures/icon_item_static/icon_item_static.h"
@@ -62,12 +58,10 @@ static const uint8_t sElementQuest[SW97_ELEM_COUNT] = {
     QUEST_MEDALLION_FOREST,
 };
 
-// A vanilla elemental arrow unlocks its element too, so fire arrows alone still give the fire entry.
 static const int16_t sElementVanillaArrow[SW97_ELEM_COUNT] = {
     -1, ITEM_ARROW_FIRE, ITEM_ARROW_ICE, ITEM_ARROW_LIGHT, -1, -1, -1,
 };
 
-// Vanilla's own damage table for ARROW_FIRE..ARROW_0E, which the elemental seeds borrow.
 static const u32 sElementDamage[SW97_ELEM_COUNT] = {
     0, 0x00000800, 0x00001000, 0x00002000, 0x00010000, 0x00004000, 0x00008000,
 };
@@ -162,7 +156,6 @@ static void StoreElements(void) {
     gSw97Api->StorageSet(SW97_MOD_NAME, ELEMENTS_STORAGE_FIELD, &sElements, sizeof(sElements));
 }
 
-// A medallion can be lost after its element was primed, so a stale flag falls back to the plain shot.
 Sw97Element Sw97_GetElement(bool isSling) {
     uint8_t* stored = isSling ? &sElements.slingshot : &sElements.bow;
 
@@ -213,7 +206,6 @@ static void ResolveBowItemAction(int32_t item, int8_t* itemAction) {
     }
 }
 
-// SW97 shots cost no magic in NEI: the fire, ice and light ones ride vanilla's paid arrow types here.
 static void WaiveElementalShotCost(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
 
@@ -250,7 +242,6 @@ static EffectBlureInit2* ElementBlure(Sw97Element element) {
     return element == SW97_ELEM_WIND ? &sBlureWind : NULL;
 }
 
-// Which element a freshly spawned arrow belongs to, or none when it is not a SW97 shot at all.
 static Sw97Element ElementOfNewArrow(EnArrow* arrow, Player* player) {
     s16 params = arrow->actor.params;
 
@@ -269,7 +260,6 @@ static void SpawnElementEffect(PlayState* play, TrackedArrow* tracked) {
                        tracked->arrow->actor.world.pos.z, 0, 0, 0, 0);
 }
 
-// Vanilla's ARROW_0C..0E get no trail at all, so the three SW97-only elements bring their own.
 static void TrackNewArrow(Actor* actor) {
     PlayState* play = gPlayState;
     EnArrow* arrow = (EnArrow*)actor;
@@ -295,7 +285,6 @@ static void TrackNewArrow(Actor* actor) {
     SpawnElementEffect(play, tracked);
 }
 
-// Vanilla respawns its own effect whenever the child is gone, so the SW97 one takes its place every time.
 static void KeepElementEffect(PlayState* play, TrackedArrow* tracked) {
     Actor* child = tracked->arrow->actor.child;
 
@@ -321,7 +310,6 @@ static void AnnounceShot(PlayState* play, TrackedArrow* tracked) {
     }
 }
 
-// Vanilla zeroes a seed's rotation when it is shot; the SW97 cone orients itself off it, so it follows the arc.
 static void AimSeedEffect(TrackedArrow* tracked) {
     Actor* seed = &tracked->arrow->actor;
 
@@ -381,8 +369,7 @@ static bool IsSamePoint(Vec3f* a, Vec3f* b) {
     return a->x == b->x && a->y == b->y && a->z == b->z;
 }
 
-// Runs right after EnArrow_Draw, while the arrow's own matrix is still current: vanilla's trail samples the
-// same two points there.
+// Runs right after EnArrow_Draw, while the arrow's own matrix is still current.
 static void AddTrailVertex(Actor* actor, PlayState* play) {
     TrackedArrow* tracked = FindTrackedArrow(actor);
     Vec3f tip;
@@ -420,7 +407,6 @@ static void Drain(Lifesteal* lifesteal) {
     s16 drain = MIN(target->colChkInfo.health, LIFESTEAL_DAMAGE_PER_TICK);
 
     target->colChkInfo.health -= drain;
-    // Drained to nothing, the actor's own update has to see a lethal hit to run its death.
     if (target->colChkInfo.health <= 0) {
         target->colChkInfo.health = 0;
         target->colChkInfo.damage = 8;
@@ -436,7 +422,6 @@ static void EndLifesteal(Lifesteal* lifesteal) {
     sLifestealCount--;
 }
 
-// Ticked from the drained actor's own update, so a frozen or culled target stops bleeding too.
 static void TickLifesteal(Actor* actor) {
     if (sLifestealCount == 0) {
         return;
@@ -488,7 +473,8 @@ static void OpenSunSwitchToLight(Actor* actor) {
 }
 
 static bool AreVanillaLightArrowsSunlit(void) {
-    return CVarGetInteger(SW97_CVAR_SUNLIGHT_ARROWS, 0) || (IS_RANDO && Randomizer_GetSettingValue(RSK_SUNLIGHT_ARROWS));
+    return CVarGetInteger(SW97_CVAR_SUNLIGHT_ARROWS, 0) ||
+           (IS_RANDO && Randomizer_GetSettingValue(RSK_SUNLIGHT_ARROWS));
 }
 
 static bool IsElementalLightShot(Actor* shot) {
@@ -497,8 +483,6 @@ static bool IsElementalLightShot(Actor* shot) {
     return tracked != NULL && tracked->element == SW97_ELEM_LIGHT;
 }
 
-// Runs before the switch's own update, so a refused hit is gone by the time it looks: without the Sunlight Arrows
-// option only the SW97 light shots wake it, while mirrors and real sunlight still do.
 static void NoteSunSwitchHit(void* actor, bool* result) {
     ObjLightswitch* sunSwitch = (ObjLightswitch*)actor;
     SunSwitch* slot = FindSunSwitch((Actor*)actor);
@@ -523,7 +507,6 @@ static void KeepArrowLitSwitchOn(bool* should, va_list args) {
     }
 }
 
-// An arrow only lends the sun for the visit: leaving the room puts the switch out again.
 static void ForgetSunSwitch(Actor* actor) {
     SunSwitch* slot = FindSunSwitch(actor);
     s32 type = (actor->params >> 4) & 3;
@@ -555,19 +538,28 @@ static bool BombAvailable(void) {
 }
 static void BombSelect(bool selected) {
     void (*select)(bool) = (void (*)(bool))gSw97Api->FindService("nei.bomb_arrows.select");
-    if (select != NULL) { select(selected); }
+    if (select != NULL) {
+        select(selected);
+    }
 }
-// A seed is already attached while aiming; switching its element must affect this shot too.
 static void RefreshHeldSeed(Player* player) {
-    Actor* held=player->heldActor;
-    if(held==NULL || held->id!=ACTOR_EN_ARROW || held->params!=ARROW_SEED)return;
-    TrackedArrow* tracked=FindTrackedArrow(held);
-    Sw97Element element=Sw97_GetElement(true);
-    if(tracked!=NULL && tracked->element==element)return;
-    if(held->child!=NULL) {Actor_Kill(held->child);held->child=NULL;}
-    if(tracked!=NULL)tracked->arrow=NULL;
-    ((EnArrow*)held)->collider.info.toucher.dmgFlags=element==SW97_ELEM_NONE?DMG_SLINGSHOT:sElementDamage[element];
-    if(element!=SW97_ELEM_NONE)TrackNewArrow(held);
+    Actor* held = player->heldActor;
+    if (held == NULL || held->id != ACTOR_EN_ARROW || held->params != ARROW_SEED)
+        return;
+    TrackedArrow* tracked = FindTrackedArrow(held);
+    Sw97Element element = Sw97_GetElement(true);
+    if (tracked != NULL && tracked->element == element)
+        return;
+    if (held->child != NULL) {
+        Actor_Kill(held->child);
+        held->child = NULL;
+    }
+    if (tracked != NULL)
+        tracked->arrow = NULL;
+    ((EnArrow*)held)->collider.info.toucher.dmgFlags =
+        element == SW97_ELEM_NONE ? DMG_SLINGSHOT : sElementDamage[element];
+    if (element != SW97_ELEM_NONE)
+        TrackNewArrow(held);
 }
 static void CloseArrowWheel(bool commit) {
     if (sArrowWheelOpen && commit && gPlayState != NULL && sArrowChoiceCount != 0) {
@@ -575,7 +567,6 @@ static void CloseArrowWheel(bool commit) {
         uint8_t chosen = sArrowChoices[sArrowHighlight];
         Sw97_SetElement(sArrowWheelIsSling, chosen == 7 ? SW97_ELEM_NONE : (Sw97Element)chosen);
         const uint8_t weapon = sArrowWheelIsSling ? ITEM_SLINGSHOT : ITEM_BOW;
-        // Keep the equipped weapon when selecting normal, elemental, or explosive ammunition.
         if (player->heldItemButton > 0 && player->heldItemButton < 4) {
             gSw97Api->UnequipCustomItem(player->heldItemButton);
             gSaveContext.equips.buttonItems[player->heldItemButton] = weapon;
@@ -583,7 +574,8 @@ static void CloseArrowWheel(bool commit) {
         }
         Player_UseItem(gPlayState, player, weapon);
         BombSelect(chosen == 7);
-        if(sArrowWheelIsSling)RefreshHeldSeed(player);
+        if (sArrowWheelIsSling)
+            RefreshHeldSeed(player);
         Z64Wheel_PlaySfx(NA_SE_SY_DECIDE);
     }
     gSw97Api->ReleasePlayerInput(ARROW_WHEEL_OWNER);
@@ -592,70 +584,99 @@ static void CloseArrowWheel(bool commit) {
 }
 static void TickArrowWheel(void) {
     PlayState* play = gPlayState;
-    if (play == NULL || play->pauseCtx.state != 0 || play->msgCtx.msgMode != MSGMODE_NONE) { CloseArrowWheel(false); return; }
+    if (play == NULL || play->pauseCtx.state != 0 || play->msgCtx.msgMode != MSGMODE_NONE) {
+        CloseArrowWheel(false);
+        return;
+    }
     Player* player = GET_PLAYER(play);
     bool isSling = player->heldItemAction == PLAYER_IA_SLINGSHOT;
     bool aiming = (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) &&
-        (isSling || (player->heldItemAction >= PLAYER_IA_BOW && player->heldItemAction <= PLAYER_IA_BOW_0E));
+                  (isSling || (player->heldItemAction >= PLAYER_IA_BOW && player->heldItemAction <= PLAYER_IA_BOW_0E));
     Input* input = &play->state.input[0];
-    if (!aiming || (sArrowWheelOpen && isSling != sArrowWheelIsSling)) { CloseArrowWheel(false); return; }
+    if (!aiming || (sArrowWheelOpen && isSling != sArrowWheelIsSling)) {
+        CloseArrowWheel(false);
+        return;
+    }
     if (!sArrowWheelOpen && (input->press.button & BTN_L)) {
         sArrowWheelIsSling = isSling;
-        sArrowChoiceCount = 0; sArrowHighlight = 0;
+        sArrowChoiceCount = 0;
+        sArrowHighlight = 0;
         for (uint8_t element = 0; element < SW97_ELEM_COUNT; ++element) {
             if (IsElementOwned((Sw97Element)element)) {
-                if (element == Sw97_GetElement(sArrowWheelIsSling)) { sArrowHighlight = sArrowChoiceCount; }
+                if (element == Sw97_GetElement(sArrowWheelIsSling)) {
+                    sArrowHighlight = sArrowChoiceCount;
+                }
                 sArrowChoices[sArrowChoiceCount++] = element;
             }
         }
-        if (BombAvailable()) { sArrowChoices[sArrowChoiceCount++] = 7; }
+        if (BombAvailable()) {
+            sArrowChoices[sArrowChoiceCount++] = 7;
+        }
         sArrowWheelOpen = true;
         gSw97Api->BlockPlayerInput(ARROW_WHEEL_OWNER, Z64WHEEL_BLOCKED_BUTTONS, true);
         gSw97Api->RequestTimeControl(ARROW_WHEEL_OWNER, 1000, 0.0f, true);
         Z64Wheel_PlaySfx(NA_SE_SY_WIN_OPEN);
     }
-    if (!sArrowWheelOpen) { return; }
-    if (input->press.button & BTN_B) { CloseArrowWheel(false); return; }
-    float x = input->cur.stick_x, y = input->cur.stick_y;
-    if (x*x+y*y > 400.0f) {
-        int slot = (int)lroundf(atan2f(x,y) * sArrowChoiceCount / 6.28318531f) % sArrowChoiceCount;
-        if (slot < 0) { slot += sArrowChoiceCount; }
-        if (slot != sArrowHighlight) { sArrowHighlight = slot; Z64Wheel_PlaySfx(NA_SE_SY_CURSOR); }
+    if (!sArrowWheelOpen) {
+        return;
     }
-    if (!(input->cur.button & BTN_L) || (input->press.button & BTN_A)) { CloseArrowWheel(true); }
+    if (input->press.button & BTN_B) {
+        CloseArrowWheel(false);
+        return;
+    }
+    float x = input->cur.stick_x, y = input->cur.stick_y;
+    if (x * x + y * y > 400.0f) {
+        int slot = (int)lroundf(atan2f(x, y) * sArrowChoiceCount / 6.28318531f) % sArrowChoiceCount;
+        if (slot < 0) {
+            slot += sArrowChoiceCount;
+        }
+        if (slot != sArrowHighlight) {
+            sArrowHighlight = slot;
+            Z64Wheel_PlaySfx(NA_SE_SY_CURSOR);
+        }
+    }
+    if (!(input->cur.button & BTN_L) || (input->press.button & BTN_A)) {
+        CloseArrowWheel(true);
+    }
 }
 static void DrawArrowWheel(PlayState* play) {
-    if (!sArrowWheelOpen) { return; }
-    static const ALIGN_ASSET(2) char icons[8][80] = {
-        "__OTR__textures/icon_item_static/gItemIconBowTex", "__OTR__textures/icon_item_static/gItemIconArrowFireTex",
-        "__OTR__textures/icon_item_static/gItemIconArrowIceTex", "__OTR__textures/icon_item_static/gItemIconArrowLightTex",
-        "__OTR__textures/icon_item_custom/gItemIconMedallionShadowTex", "__OTR__textures/icon_item_custom/gItemIconMedallionSpiritTex",
-        "__OTR__textures/icon_item_custom/gItemIconMedallionForestTex", "__OTR__textures/icon_item_custom/gItemIconBombArrowsTex"
-    };
+    if (!sArrowWheelOpen) {
+        return;
+    }
+    static const ALIGN_ASSET(2) char icons[8][80] = { "__OTR__textures/icon_item_static/gItemIconBowTex",
+                                                      "__OTR__textures/icon_item_static/gItemIconArrowFireTex",
+                                                      "__OTR__textures/icon_item_static/gItemIconArrowIceTex",
+                                                      "__OTR__textures/icon_item_static/gItemIconArrowLightTex",
+                                                      "__OTR__textures/icon_item_custom/gItemIconMedallionShadowTex",
+                                                      "__OTR__textures/icon_item_custom/gItemIconMedallionSpiritTex",
+                                                      "__OTR__textures/icon_item_custom/gItemIconMedallionForestTex",
+                                                      "__OTR__textures/icon_item_custom/gItemIconBombArrowsTex" };
     Z64Wheel_DimScreen(play, 110);
     for (uint8_t i = 0; i < sArrowChoiceCount; ++i) {
         uint8_t element = sArrowChoices[i];
         static const ALIGN_ASSET(2) char slingIcon[] = "__OTR__textures/icon_item_static/gItemIconSlingshotTex";
         const char* icon = element == 0 && sArrowWheelIsSling ? slingIcon : icons[element];
-        // Medallion icons take priority; vanilla arrows still unlock their entry when no medallion is owned.
         if (element > 0 && element < SW97_ELEM_COUNT && CHECK_QUEST_ITEM(sElementQuest[element])) {
-            static const ALIGN_ASSET(2) char medallionIcons[7][80] = {
-                "", "__OTR__textures/icon_item_custom/gItemIconMedallionFireTex",
-                "__OTR__textures/icon_item_custom/gItemIconMedallionWaterTex",
-                "__OTR__textures/icon_item_custom/gItemIconMedallionLightTex",
-                "__OTR__textures/icon_item_custom/gItemIconMedallionShadowTex",
-                "__OTR__textures/icon_item_custom/gItemIconMedallionSpiritTex",
-                "__OTR__textures/icon_item_custom/gItemIconMedallionForestTex"
-            };
+            static const ALIGN_ASSET(
+                2) char medallionIcons[7][80] = { "",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionFireTex",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionWaterTex",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionLightTex",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionShadowTex",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionSpiritTex",
+                                                  "__OTR__textures/icon_item_custom/gItemIconMedallionForestTex" };
             icon = medallionIcons[element];
         }
         float angle = 6.28318531f * i / sArrowChoiceCount;
         int size = i == sArrowHighlight ? 32 : 24;
-        Z64Wheel_DrawIcon(play, icon, (int16_t)(SCREEN_WIDTH/2 + sinf(angle)*52-size/2),
-            (int16_t)(SCREEN_HEIGHT/2 - cosf(angle)*52-size/2), size, 255, i==sArrowHighlight?255:170);
+        Z64Wheel_DrawIcon(play, icon, (int16_t)(SCREEN_WIDTH / 2 + sinf(angle) * 52 - size / 2),
+                          (int16_t)(SCREEN_HEIGHT / 2 - cosf(angle) * 52 - size / 2), size, 255,
+                          i == sArrowHighlight ? 255 : 170);
     }
 }
-static void ForgetArrowWheel(void) { CloseArrowWheel(false); }
+static void ForgetArrowWheel(void) {
+    CloseArrowWheel(false);
+}
 
 void Sw97_RegisterArrows(void) {
     SOH_REGISTER_HOOK(gSw97Api, OnGameFrameUpdate, TickArrowWheel);

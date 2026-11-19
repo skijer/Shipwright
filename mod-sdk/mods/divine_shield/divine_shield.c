@@ -1,9 +1,5 @@
 #include <string.h>
 #include <math.h>
-/**
- * Divine Shield: a wooden shield fire cannot burn. A block inside the first frames of raising it freezes every
- * enemy in the room, the way a Deku Nut would.
- */
 
 #include "z64items.h"
 
@@ -20,7 +16,6 @@
 #define PARRY_WINDOW 10
 #define FREEZE_FRAMES 40
 #define SPARKLES_PER_ENEMY 6
-// The model is authored in the shield limb's own space, about 6000 units across.
 #define SHIELD_SCALE 44.2f
 #define SHIELD_ROT_X (-95.0f * (M_PI / 180.0f))
 #define SHIELD_ROT_Y (-27.0f * (M_PI / 180.0f))
@@ -104,7 +99,7 @@ static void FreezeRoom(Player* player, PlayState* play) {
         }
     }
     Audio_PlaySfxGeneral(NA_SE_IT_SHIELD_REFLECT_SW, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void ParryOnBlock(PlayState* play, Player* player, Actor* attacker) {
@@ -113,7 +108,6 @@ static void ParryOnBlock(PlayState* play, Player* player, Actor* attacker) {
     }
 }
 
-// The vanilla shield leaves the hand and the back; the custom one is drawn in its place after the limb.
 static void HideVanillaShield(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
     RemoteVisualState visual;
     bool visible = player == GET_PLAYER(gPlayState) ? IsWorn() : ReadRemoteVisual(player, &visual);
@@ -125,7 +119,6 @@ static void HideVanillaShield(Player* player, int32_t limbIndex, Gfx** dList, Gf
     if (limbIndex == PLAYER_LIMB_R_HAND && IsShieldInHand(player)) {
         *dList = ResourceMgr_LoadGfxByName(sOpenRightHandDL[age]);
     } else if (limbIndex == PLAYER_LIMB_SHEATH && IsShieldOnBack(player)) {
-        // Sheath 18 still carries the sword; only 19 is the empty sheath.
         *dList = ResourceMgr_LoadGfxByName(player->sheathType == PLAYER_MODELTYPE_SHEATH_18 ? sSheathedSwordDL[age]
                                                                                             : sBareSheathDL[age]);
     }
@@ -146,7 +139,6 @@ static void DrawShield(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The vanilla base is the Hylian Shield, which collides as metal; this one is wood.
 static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
     RemoteVisualState visual;
     bool visible = player == GET_PLAYER(gPlayState) ? IsWorn() : ReadRemoteVisual(player, &visual);
@@ -179,8 +171,8 @@ static void ForgetRaise(const char* key) {
     sDivine.wasShielding = false;
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerShieldBlocked", "OnPlayerResolveLimbDraw",
-                                              "OnPlayerPostLimbDraw" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerShieldBlocked",
+                                              "OnPlayerResolveLimbDraw", "OnPlayerPostLimbDraw" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -199,11 +191,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.divine_shield.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.divine_shield.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -226,9 +219,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (IsWorn());
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -242,8 +233,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -254,9 +243,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -288,10 +274,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = ForgetRaise;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        DIVINE_SHIELD_KEY, DIVINE_SHIELD_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, DIVINE_SHIELD_KEY, DIVINE_SHIELD_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

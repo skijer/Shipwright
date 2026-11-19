@@ -1,0 +1,7 @@
+{ "objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_4",
+  "objects/object_link_child/object_link_child_Tex_005E00" },
+    { "objects/forms/keaton/object_link_boy/gLinkAdultSkel_tex_8", "objects/gameplay_keep/gDekuMaskFaceTex" },
+    { "objects/forms/rito/object_link_boy/gLinkAdultSkel_tex_1", "objects/object_link_child/gLinkHumanBeltClaspTex" },
+    { "objects/forms/rito/object_link_boy/gLinkAdultSkel_tex_10",
+      "objects/object_link_child/object_link_child_Tex_006B00" },
+    { "objects/forms/rito/object_link_boy/gLinkAdultSkel_tex_2", "objects/object_link_child/gLinkHumanBeltTex" },

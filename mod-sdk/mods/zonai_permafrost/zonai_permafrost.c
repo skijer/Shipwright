@@ -21,8 +21,8 @@
 #define ZONAI_GIVE_SCALE 1.0f
 #define ZONAI_BUTTON_COUNT 8
 
-#define ZONAI_BLOCKING_STATES                                                                                     \
-    (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS |          \
+#define ZONAI_BLOCKING_STATES                                                                            \
+    (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS | \
      PLAYER_STATE1_TALKING | PLAYER_STATE1_GETTING_ITEM)
 
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/gItemIconZonaiPermafrostTex";
@@ -47,21 +47,19 @@ static f32 sReleasePitch = ZONAI_RELEASE_PITCH_END;
 static void PlayOwnSfx(Player* player, u16 sfxId) {
     sSfxPos = player->actor.world.pos;
     Audio_PlaySfxGeneral(sfxId - SFX_FLAG, &sSfxPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
 }
 
-// The sound bank rereads the pitch pointer every audio frame, so walking it down bends a cue already ringing.
 static void PlayReleaseChime(void) {
     sReleasePitch = ZONAI_RELEASE_PITCH_START;
     Audio_PlaySfxGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &sReleasePitch, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
 }
 
 static void BendReleaseChimeDown(void) {
     sReleasePitch = MAX(sReleasePitch - ZONAI_RELEASE_PITCH_STEP, ZONAI_RELEASE_PITCH_END);
 }
 
-// The same register a Deku Nut writes on impact: the transition fade runs the white-out back down by itself.
 static void FlashScreen(void) {
     iREG(50) = -1;
 }
@@ -129,7 +127,7 @@ static void StartTime(Player* player, PlayState* play) {
 static void StopTime(Player* player, PlayState* play) {
     if (!HasMagic(ZONAI_MAGIC_TO_START)) {
         Audio_PlaySfxGeneral(NA_SE_SY_ERROR, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                               &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                             &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         return;
     }
     gSaveContext.magic -= ZONAI_MAGIC_TO_START;
@@ -143,7 +141,7 @@ static void StopTime(Player* player, PlayState* play) {
     Audio_StopSfxByPos(&sSfxPos);
     PlayOwnSfx(player, NA_SE_EV_ICE_FREEZE);
     Audio_PlaySfxGeneral(NA_SE_SY_SET_ICE_ARROW, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void ToggleTime(PlayState* play, Player* player) {
@@ -188,7 +186,6 @@ static void KeepTimeStopped(Player* player, PlayState* play) {
     }
 }
 
-// Vanilla stops reading item buttons in midair or while swimming; the time stop keeps answering there.
 static bool WasToggledOutsideItemButtons(Player* player, PlayState* play, s32 button) {
     return button >= 0 && (play->state.input[0].press.button & sItemButtons[button]) &&
            play->state.frames != sToggleFrame && !(player->stateFlags1 & ZONAI_BLOCKING_STATES) &&
@@ -235,7 +232,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, ZONAI_KEY, ZONAI_KEY, "",
 };

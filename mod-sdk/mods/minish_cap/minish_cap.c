@@ -1,7 +1,4 @@
-/**
- * The Minish Cap: by a pod soil the item opens a warp map over the world map, away from one it shrinks Link to
- * Minish size. A pod soil is a destination once its Gold Skulltula is dead.
- */
+// The Minish Cap: opens a warp map by a pod soil, shrinks Link to Minish size elsewhere.
 
 #include <math.h>
 
@@ -54,8 +51,6 @@ static const char* const sRequiredHooks[] = {
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// A bean spot: where the warp lands and where its box sits on the pause world map. gsMask 0 = no skulltula
-// guards it. Positions, params and rooms read off the scene actor lists.
 typedef struct {
     s16 sceneId;
     s16 entranceIndex;
@@ -215,7 +210,6 @@ typedef enum {
     MINISH_WARP_ARRIVING,
 } MinishWarpPhase;
 
-// The host's own state, declared here because GameInteractor.h is C++: borrowed and handed back like a cheat.
 u8 GameInteractor_GetDisableLedgeGrabsActive(void);
 void GameInteractor_SetDisableLedgeGrabsActive(u8 state);
 
@@ -233,8 +227,6 @@ static s16 sCrawlspaceTimer;
 static s16 sLastScene = -1;
 static u32 sLastFrames;
 
-// Link's own properties with a Minish-sized wall radius; the vanilla ones are only resolved when the player is
-// created, so the mod swaps the pointer on him and hands it back when it is done.
 static PlayerAgeProperties sTinyAgeProperties;
 static PlayerAgeProperties* sVanillaAgeProperties;
 static s16 sVanillaCylinderRadius;
@@ -242,7 +234,7 @@ static u8 sVanillaLedgeGrabState;
 
 static void PlaySfx(u16 sfxId) {
     Audio_PlaySfxGeneral(sfxId, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
 }
 
 static bool IsTiny(void) {
@@ -283,8 +275,6 @@ static bool IsPlayerAtSoil(Player* player, PlayState* play) {
     return false;
 }
 
-// ── Minish size ──────────────────────────────────────────────────────────────
-
 static void ApplyTinyProperties(Player* player) {
     sVanillaAgeProperties = player->ageProperties;
     sTinyAgeProperties = *player->ageProperties;
@@ -293,7 +283,6 @@ static void ApplyTinyProperties(Player* player) {
 
     sVanillaCylinderRadius = player->cylinder.dim.radius;
     sVanillaLedgeGrabState = GameInteractor_GetDisableLedgeGrabsActive();
-    // The vault thresholds are world units: at a tenth of his size every step is a ledge to climb.
     GameInteractor_SetDisableLedgeGrabsActive(1);
 }
 
@@ -318,7 +307,6 @@ static void StartShrinking(Player* player) {
     PlaySfx(NA_SE_SY_CAMERA_ZOOM_UP);
 }
 
-// Growing back inside a crawlspace would bury normal-sized Link in the rock above him.
 static void StartGrowing(Player* player, PlayState* play) {
     Vec3f checkPos = player->actor.world.pos;
     CollisionPoly* ceilingPoly;
@@ -335,9 +323,6 @@ static void StartGrowing(Player* player, PlayState* play) {
     PlaySfx(NA_SE_SY_CAMERA_ZOOM_DOWN);
 }
 
-// The tunnel mouth is a wall the movement check never sees; what does see it is the interact-wall probe, the
-// same one vanilla reads for its "Enter on A" prompt. Detection stops once the checks are off, so the window
-// stays open while a normal-Link-height ceiling is still overhead.
 static void UpdateCrawlspaceWindow(Player* player, PlayState* play) {
     Vec3f checkPos = player->actor.world.pos;
     CollisionPoly* ceilingPoly;
@@ -365,8 +350,6 @@ static void UpdateCrawlspaceWindow(Player* player, PlayState* play) {
     sCrawlspaceTimer--;
 }
 
-// The per-frame code recomputes the cylinder height from the skeleton but never its radius, so Minish Link
-// would keep a hitbox ten times his body.
 static void ApplyTinyBody(Player* player) {
     player->cylinder.dim.radius = MINISH_BODY_EXTENT;
     player->cylinder.dim.height = MINISH_BODY_EXTENT;
@@ -395,9 +378,6 @@ static void UpdateMinishSize(Player* player, PlayState* play) {
     }
 }
 
-// ── Warp ─────────────────────────────────────────────────────────────────────
-
-// Farore's Wind's own landing: respawnFlag 3 makes the arriving scene read respawn[RESPAWN_MODE_TOP].
 static void DepartToSoil(PlayState* play, s8 destination) {
     const PodSoil* soil = &sPodSoils[destination];
 
@@ -437,8 +417,6 @@ static void UpdateWarp(Player* player, PlayState* play) {
     Actor_SetScale(&player->actor, sPlayerScale);
 }
 
-// ── Warp map ─────────────────────────────────────────────────────────────────
-
 static void CloseMap(void) {
     sIsMapOpen = false;
     sApi->ReleasePlayerInput(MINISH_CAP_OWNER);
@@ -459,7 +437,6 @@ static void OpenMap(PlayState* play) {
     PlaySfx(NA_SE_SY_WIN_OPEN);
 }
 
-// The soil whose direction on the map best matches where the stick points, nearest first.
 static s8 FindSoilTowardStick(s8 from, s16 stickX, s16 stickY) {
     f32 stickAngle = atan2f((f32)stickX, (f32)stickY);
     s8 best = -1;
@@ -532,10 +509,6 @@ static void UpdateMap(PlayState* play) {
     }
 }
 
-// ── Warp map drawing ─────────────────────────────────────────────────────────
-
-// The map page of the pause screen, in its own coordinates: the frame spans 240x160 around the origin and the
-// world map image sits inside it. Screen is 320x240 in the 10.2 fixed point the RDP takes.
 #define MAP_ORIGIN_Y 96
 #define MAP_X(x) (640 + (s32)(x)*24 / 5)
 #define MAP_Y(y) (480 - MAP_ORIGIN_Y - (s32)(y)*24 / 5)
@@ -564,7 +537,6 @@ static const char* sCurrentPositionTexs[MINISH_LANGUAGE_COUNT] = {
     gPauseCurrentPositionJPNTex,
 };
 
-// Clouds cover the areas the file has not discovered yet, each with the world map flag it hides behind.
 static const char* sCloudTexs[] = {
     gWorldMapCloud16Tex, gWorldMapCloud15Tex, gWorldMapCloud14Tex, gWorldMapCloud13Tex,
     gWorldMapCloud12Tex, gWorldMapCloud11Tex, gWorldMapCloud10Tex, gWorldMapCloud9Tex,
@@ -638,7 +610,6 @@ static void DrawFrame(PlayState* play, s32 language) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The world map is one 216x128 CI8 image, drawn in the same strips the pause screen uses.
 static void DrawWorldMap(PlayState* play) {
     s32 left = MAP_X(-108);
     s32 right = MAP_X(108);
@@ -746,7 +717,6 @@ static void DrawCursorIcon(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Where the pause screen writes the area you are standing in: the title, then the name on the parchment.
 static void DrawSoilName(PlayState* play, s32 language) {
     bool isUnlocked = IsSoilUnlocked(sCursorSoil);
     s32 left;
@@ -833,8 +803,6 @@ static void DrawMap(PlayState* play) {
     DrawSoilName(play, language);
 }
 
-// ── Hooks ────────────────────────────────────────────────────────────────────
-
 static void ResolveMotionScale(Player* player, s32 kind, f32* scale) {
     if (sSizePhase != MINISH_SIZE_TINY) {
         return;
@@ -843,7 +811,6 @@ static void ResolveMotionScale(Player* player, s32 kind, f32* scale) {
         *scale *= MINISH_SPEED_FACTOR;
         return;
     }
-    // The cap the engine measured against the wall he faces: at Minish size he is next to one everywhere.
     *scale = R_RUN_SPEED_LIMIT / 100.0f;
 }
 
@@ -865,8 +832,6 @@ static void ResolveCameraView(Camera* camera, Vec3f* eye, Vec3f* at, Vec3f* up) 
     if (player == NULL) {
         return;
     }
-    // The whole rig shrinks toward Link with him, so the zoom eases in and out with the animation. The floor
-    // keeps the eye outside the near plane.
     rigScale = player->actor.scale.x / PLAYER_SCALE_NORMAL;
     if (rigScale >= 0.999f) {
         return;
@@ -916,8 +881,6 @@ static void UseCap(PlayState* play, Player* player) {
     sIsUsePending = true;
 }
 
-// A press resolves here, at the end of the player's update, so nothing the rest of the frame chooses runs over
-// the map taking the input or over the size change.
 static void StartPendingUse(Player* player, PlayState* play) {
     if (!sIsUsePending) {
         return;
@@ -938,7 +901,6 @@ static void StartPendingUse(Player* player, PlayState* play) {
         OpenMap(play);
         return;
     }
-    // A form owns Link's scale; two owners would fight over it every frame.
     if (sApi->GetActiveForm() != NULL) {
         PlaySfx(NA_SE_SY_ERROR);
         return;
@@ -953,7 +915,6 @@ static void ResetOnSceneLoad(Player* player, PlayState* play) {
     if (IsTiny()) {
         EndMinishSize(player);
     }
-    // The arrival grows Link back on the far side of the transition it asked for.
     if (sWarpPhase == MINISH_WARP_ARRIVING) {
         sPlayerScale = WARP_SCALE;
         return;
@@ -1002,7 +963,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, MINISH_CAP_KEY, MINISH_CAP_KEY, "",
 };

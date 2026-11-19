@@ -5,7 +5,7 @@
 
 #ifdef _MSC_VER
 // An undeclared CVarGetFloat is assumed to return int, which breaks live calibration.
-#pragma warning(error: 4013)
+#pragma warning(error : 4013)
 #endif
 
 #include "z64items.h"
@@ -59,8 +59,6 @@ typedef struct {
     bool hasLastSet;
 } ColliderAnchor;
 
-// A swapped actor keeps its hitboxes where it used to stand: they are world-space geometry that only
-// the owner refreshes, and many actors build theirs once, in their init.
 typedef struct {
     Actor* owner;
     Vec3f basePos;
@@ -86,35 +84,54 @@ static const u16 sItemButtons[SWITCH_HOOK_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, 
 
 static const u8 sSwappableCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_CHEST, ACTORCAT_NPC };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnActorDrawEnd", "OnSceneInit",
-                                              "OnPlayerResolveItemActionInit", "OnActorUpdate", "OnInterfaceDrawEnd" };
+static const char* const sRequiredHooks[] = {
+    "OnGameFrameUpdate", "OnPlayerUpdate",    "OnActorDrawEnd", "OnSceneInit", "OnPlayerResolveItemActionInit",
+    "OnActorUpdate",     "OnInterfaceDrawEnd"
+};
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
 static const SOHModApi* sApi;
 
-// Final user calibration: translation (-1.90, 0.95, 4.43), scale 0.52.
-// Static model resources contain the pose. Only the animated hand frame is rebuilt.
 static void HandFrame(Player* player, MtxF* frame) {
-    Vec3f hand=player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
-    Vec3f arm=player->bodyPartsPos[PLAYER_BODYPART_L_FOREARM];
-    f32 dx=hand.x-arm.x,dy=hand.y-arm.y,dz=hand.z-arm.z;
-    f32 horizontal=sqrtf(dx*dx+dz*dz),length=sqrtf(dx*dx+dy*dy+dz*dz);
-    f32 sx=0,cx=1,sy=0,cy=1;
-    if (length>0.0001f) { sy=dy/length;cy=horizontal/length; }
-    if (horizontal>0.0001f) { sx=dx/horizontal;cx=dz/horizontal; }
-    frame->xx=cx;frame->yx=0;frame->zx=-sx;frame->wx=0;
-    frame->xy=-sx*sy;frame->yy=cy;frame->zy=-cx*sy;frame->wy=0;
-    frame->xz=sx*cy;frame->yz=sy;frame->zz=cx*cy;frame->wz=0;
-    frame->xw=hand.x;frame->yw=hand.y;frame->zw=hand.z;frame->ww=1;
+    Vec3f hand = player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
+    Vec3f arm = player->bodyPartsPos[PLAYER_BODYPART_L_FOREARM];
+    f32 dx = hand.x - arm.x, dy = hand.y - arm.y, dz = hand.z - arm.z;
+    f32 horizontal = sqrtf(dx * dx + dz * dz), length = sqrtf(dx * dx + dy * dy + dz * dz);
+    f32 sx = 0, cx = 1, sy = 0, cy = 1;
+    if (length > 0.0001f) {
+        sy = dy / length;
+        cy = horizontal / length;
+    }
+    if (horizontal > 0.0001f) {
+        sx = dx / horizontal;
+        cx = dz / horizontal;
+    }
+    frame->xx = cx;
+    frame->yx = 0;
+    frame->zx = -sx;
+    frame->wx = 0;
+    frame->xy = -sx * sy;
+    frame->yy = cy;
+    frame->zy = -cx * sy;
+    frame->wy = 0;
+    frame->xz = sx * cy;
+    frame->yz = sy;
+    frame->zz = cx * cy;
+    frame->wz = 0;
+    frame->xw = hand.x;
+    frame->yw = hand.y;
+    frame->zw = hand.z;
+    frame->ww = 1;
 }
 
 static Vec3f HandPosition(Player* player) {
-    MtxF frame;HandFrame(player,&frame);
-    const Vec3f socket={ -0.99972534f, 0.13365173f, 3.96459961f };
-    Vec3f pos={frame.xw+frame.xx*socket.x+frame.xy*socket.y+frame.xz*socket.z,
-               frame.yw+frame.yx*socket.x+frame.yy*socket.y+frame.yz*socket.z,
-               frame.zw+frame.zx*socket.x+frame.zy*socket.y+frame.zz*socket.z};
+    MtxF frame;
+    HandFrame(player, &frame);
+    const Vec3f socket = { -0.99972534f, 0.13365173f, 3.96459961f };
+    Vec3f pos = { frame.xw + frame.xx * socket.x + frame.xy * socket.y + frame.xz * socket.z,
+                  frame.yw + frame.yx * socket.x + frame.yy * socket.y + frame.yz * socket.z,
+                  frame.zw + frame.zx * socket.x + frame.zy * socket.y + frame.zz * socket.z };
     return pos;
 }
 
@@ -133,7 +150,7 @@ static void InitRemoteVisuals(void);
 
 static u8 sPhase;
 static bool sThrowAnimating;
-static const ALIGN_ASSET(2) char sThrowAnim[]="__OTR__objects/gameplay_keep/gPlayerAnim_link_boom_throwR";
+static const ALIGN_ASSET(2) char sThrowAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_boom_throwR";
 static bool sIsAimPending;
 static s16 sFlightTimer;
 static s16 sHoldTimer;
@@ -156,8 +173,7 @@ void Player_SetupActionPreserveItemAction(PlayState* play, Player* player, Playe
 void func_80839FFC(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u16 FindEquippedButtonMask(void) {
@@ -170,7 +186,6 @@ static u16 FindEquippedButtonMask(void) {
     return 0;
 }
 
-// Spending the last charge greys the hook out for two minutes, and it comes back full rather than by one.
 static void TickCharges(void) {
     if (sDepletedTimer > 0) {
         if (--sDepletedTimer == 0) {
@@ -205,8 +220,6 @@ static bool IsSwappable(Actor* actor) {
     return false;
 }
 
-// Whatever sits closest to the line Link is facing wins, height ignored: the hook aims itself, so the
-// player only has to look roughly at what they want to trade places with.
 static Actor* ScanForSelection(Player* player, PlayState* play) {
     Actor* best = NULL;
     s16 bestError = SWITCH_HOOK_SELECT_CONE;
@@ -259,7 +272,6 @@ static bool IsActorAlive(PlayState* play, Actor* actor) {
     return false;
 }
 
-// Rounded, not truncated: the s16 shapes would lose up to a unit per frame and lag behind the model.
 static s16 RoundToS16(f32 value) {
     return (s16)(value >= 0.0f ? value + 0.5f : value - 0.5f);
 }
@@ -303,8 +315,8 @@ static void ShiftCollider(Collider* collider, Vec3f* delta) {
                 }
                 // The plane is n . p + originDist = 0: without this every test still answers against
                 // the triangle's original plane.
-                tri->plane.originDist -= tri->plane.normal.x * delta->x + tri->plane.normal.y * delta->y +
-                                         tri->plane.normal.z * delta->z;
+                tri->plane.originDist -=
+                    tri->plane.normal.x * delta->x + tri->plane.normal.y * delta->y + tri->plane.normal.z * delta->z;
             }
             break;
         }
@@ -316,7 +328,6 @@ static void ShiftCollider(Collider* collider, Vec3f* delta) {
                 quad->dim.quad[i].y += delta->y;
                 quad->dim.quad[i].z += delta->z;
             }
-            // The cached edge midpoints are world space too, and they drive the quad-vs-quad tests.
             quad->dim.dcMid.x += dx;
             quad->dim.dcMid.y += dy;
             quad->dim.dcMid.z += dz;
@@ -380,8 +391,9 @@ static void CollectColliders(AnchorSlot* slot, Collider** list, s32 count) {
                 goto next;
             }
         }
-        Vec3f base=slot->owner->world.pos;
-        if(Math_Vec3f_DistXYZ(&reference,&slot->basePos)<Math_Vec3f_DistXYZ(&reference,&base))base=slot->basePos;
+        Vec3f base = slot->owner->world.pos;
+        if (Math_Vec3f_DistXYZ(&reference, &slot->basePos) < Math_Vec3f_DistXYZ(&reference, &base))
+            base = slot->basePos;
         slot->anchors[slot->count].collider = list[i];
         slot->anchors[slot->count].offset.x = reference.x - base.x;
         slot->anchors[slot->count].offset.y = reference.y - base.y;
@@ -392,12 +404,11 @@ static void CollectColliders(AnchorSlot* slot, Collider** list, s32 count) {
     }
 }
 
-// Snapshot the actor at rest: the offsets have to describe where its hitboxes sit before the teleport.
 static void CaptureColliders(PlayState* play, u8 slotIndex, Actor* actor) {
     AnchorSlot* slot = &sAnchorSlots[slotIndex];
 
     slot->owner = actor;
-    slot->basePos=actor->world.pos;
+    slot->basePos = actor->world.pos;
     slot->isActive = true;
     slot->count = 0;
     slot->hasFocusLast = false;
@@ -415,9 +426,8 @@ static void ReanchorOne(AnchorSlot* slot, ColliderAnchor* anchor) {
     if (!GetColliderReference(anchor->collider, &reference)) {
         return;
     }
-    // The owner rebuilt this collider since the last pass, so its answer wins and the offset follows it.
-    if (anchor->hasLastSet && (reference.x != anchor->lastSet.x || reference.y != anchor->lastSet.y ||
-                               reference.z != anchor->lastSet.z)) {
+    if (anchor->hasLastSet &&
+        (reference.x != anchor->lastSet.x || reference.y != anchor->lastSet.y || reference.z != anchor->lastSet.z)) {
         anchor->offset.x = reference.x - slot->owner->world.pos.x;
         anchor->offset.y = reference.y - slot->owner->world.pos.y;
         anchor->offset.z = reference.z - slot->owner->world.pos.z;
@@ -429,16 +439,15 @@ static void ReanchorOne(AnchorSlot* slot, ColliderAnchor* anchor) {
                     slot->owner->world.pos.z + anchor->offset.z - reference.z };
 
     ShiftCollider(anchor->collider, &delta);
-    // Record where it actually landed: the s16 shapes round, and the ideal would read as "the owner
-    // moved it" on the very next frame.
     anchor->hasLastSet = GetColliderReference(anchor->collider, &anchor->lastSet);
 }
 
 static void ReanchorSlotFocus(AnchorSlot* slot) {
     Actor* owner = slot->owner;
 
-    if (slot->hasFocusLast && (owner->focus.pos.x != slot->focusLastSet.x || owner->focus.pos.y != slot->focusLastSet.y ||
-                               owner->focus.pos.z != slot->focusLastSet.z)) {
+    if (slot->hasFocusLast &&
+        (owner->focus.pos.x != slot->focusLastSet.x || owner->focus.pos.y != slot->focusLastSet.y ||
+         owner->focus.pos.z != slot->focusLastSet.z)) {
         slot->focusOffset.x = owner->focus.pos.x - owner->world.pos.x;
         slot->focusOffset.y = owner->focus.pos.y - owner->world.pos.y;
         slot->focusOffset.z = owner->focus.pos.z - owner->world.pos.z;
@@ -452,8 +461,6 @@ static void ReanchorSlotFocus(AnchorSlot* slot) {
     slot->hasFocusLast = true;
 }
 
-// An actor does not stay where it is put: its own update pushes it out of walls and drops it to the
-// floor, so the hitboxes are repositioned absolutely, every frame, until both sides settle.
 static void ReanchorColliders(PlayState* play) {
     for (u8 index = 0; index < SWITCH_HOOK_ANCHOR_SLOTS; index++) {
         AnchorSlot* slot = &sAnchorSlots[index];
@@ -516,7 +523,6 @@ static void StartSwap(Player* player, PlayState* play, Actor* target) {
     player->linearVelocity = 0.0f;
     player->invincibilityTimer = SWITCH_HOOK_INVINCIBLE_FRAMES;
     Actor_SetColorFilter(target, 0, 255, 0, SWITCH_HOOK_TINT_FRAMES);
-    // The chain sound is a looping one, and it has to be stopped where it was raised.
     player->actor.sfx = 0;
     Audio_StopSfxByPos(&player->actor.projectedPos);
     if (target->sfx != 0) {
@@ -611,8 +617,10 @@ static void ReelHookIn(Player* player, PlayState* play) {
 static void ShotAction(Player* player, PlayState* play) {
     Player_ZeroSpeedXZ(player);
     player->actor.shape.rot.y = player->actor.world.rot.y = player->yaw = sShotYaw;
-    if(sThrowAnimating) {if(LinkAnimation_Update(play,&player->skelAnime))sThrowAnimating=false;}
-    // Keep the custom item alive while the shot owns the body.
+    if (sThrowAnimating) {
+        if (LinkAnimation_Update(play, &player->skelAnime))
+            sThrowAnimating = false;
+    }
     Z64Items_KeepHeld(sApi);
     switch (sPhase) {
         case SWITCH_HOOK_FLYING:
@@ -642,7 +650,8 @@ static void FireHook(Player* player, PlayState* play, s16 yaw, s16 pitch) {
     sPhase = SWITCH_HOOK_FLYING;
     player->itemAction = player->heldItemAction;
     Player_SetupActionPreserveItemAction(play, player, ShotAction, 0);
-    LinkAnimation_PlayOnce(play,&player->skelAnime,(LinkAnimationHeader*)sThrowAnim);sThrowAnimating=true;
+    LinkAnimation_PlayOnce(play, &player->skelAnime, (LinkAnimationHeader*)sThrowAnim);
+    sThrowAnimating = true;
     Player_ZeroSpeedXZ(player);
 }
 
@@ -683,7 +692,6 @@ static void AimAction(Player* player, PlayState* play) {
     Player_UpdateUpperBody(player, play);
 }
 
-// Aiming by hand trades the auto-aim away: there is no selection, so the hook takes whatever it passes.
 static void AimOrFire(Player* player, PlayState* play) {
     if (sPhase == SWITCH_HOOK_AIMING) {
         s16 yaw;
@@ -698,11 +706,12 @@ static void AimOrFire(Player* player, PlayState* play) {
         return;
     }
     if (sSelection != NULL && sSelection->update != NULL) {
-        Vec3f aim=sSelection->focus.pos;
-        if(Math_Vec3f_DistXYZ(&aim,&sSelection->world.pos)>150.0f) {
-            aim=sSelection->world.pos;aim.y+=MIN(MAX(sSelection->colChkInfo.cylHeight*.5f,15.0f),45.0f);
+        Vec3f aim = sSelection->focus.pos;
+        if (Math_Vec3f_DistXYZ(&aim, &sSelection->world.pos) > 150.0f) {
+            aim = sSelection->world.pos;
+            aim.y += MIN(MAX(sSelection->colChkInfo.cylHeight * .5f, 15.0f), 45.0f);
         }
-        Vec3f hand=HandPosition(player);
+        Vec3f hand = HandPosition(player);
         f32 dx = aim.x - hand.x;
         f32 dy = aim.y - hand.y;
         f32 dz = aim.z - hand.z;
@@ -736,7 +745,6 @@ static void StowSwitchHook(Player* player, PlayState* play) {
     sSwapTarget = NULL;
 }
 
-// The hook keeps Link still while it flies, so the upper body is only busy then.
 static int32_t HoldSwitchHook(Player* player, PlayState* play) {
     if (sPhase == SWITCH_HOOK_IN_HAND) {
         sHookPos = HandPosition(player);
@@ -749,7 +757,6 @@ static bool IsChangingHeldItem(Player* player) {
            player->upperActionFunc == Player_UpperAction_ChangeHeldItem;
 }
 
-// The live selection is tinted blue so the player can see what the shot will trade places with.
 static void MarkSelection(Player* player, PlayState* play) {
     if (sPhase != SWITCH_HOOK_IN_HAND) {
         return;
@@ -775,61 +782,71 @@ static void UpdateSwitchHook(void) {
         StopAiming(player, play);
     }
     if (sPhase >= SWITCH_HOOK_FLYING && player->actionFunc != ShotAction) {
-        if (!(player->stateFlags1 & (PLAYER_STATE1_DEAD|PLAYER_STATE1_DAMAGED|PLAYER_STATE1_IN_CUTSCENE|PLAYER_STATE1_IN_WATER))) {
-            player->itemAction=player->heldItemAction;
-            Player_SetupActionPreserveItemAction(play,player,ShotAction,0);
-        } else ReturnHookToHand(player, play);
+        if (!(player->stateFlags1 &
+              (PLAYER_STATE1_DEAD | PLAYER_STATE1_DAMAGED | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_IN_WATER))) {
+            player->itemAction = player->heldItemAction;
+            Player_SetupActionPreserveItemAction(play, player, ShotAction, 0);
+        } else
+            ReturnHookToHand(player, play);
     }
     MarkSelection(player, play);
     if (sSettleTimer > 0) {
         ReanchorColliders(play);
-        if (--sSettleTimer == 0) {
-            // Anchors remain active: static colliders do not rebuild after 40 frames.
-        }
+        if (--sSettleTimer == 0) {}
     }
 }
 
 static void SyncSwappedActor(void* actorRef) {
-    Actor* actor=actorRef;PlayState* play=gPlayState;if(!play)return;
-    bool tracked=false;
-    for(int i=0;i<SWITCH_HOOK_ANCHOR_SLOTS;++i) {
-        AnchorSlot* slot=&sAnchorSlots[i];if(!slot->isActive || slot->owner!=actor)continue;tracked=true;
-        CollectColliders(slot,play->colChkCtx.colAT,play->colChkCtx.colATCount);
-        CollectColliders(slot,play->colChkCtx.colAC,play->colChkCtx.colACCount);
-        CollectColliders(slot,play->colChkCtx.colOC,play->colChkCtx.colOCCount);
+    Actor* actor = actorRef;
+    PlayState* play = gPlayState;
+    if (!play)
+        return;
+    bool tracked = false;
+    for (int i = 0; i < SWITCH_HOOK_ANCHOR_SLOTS; ++i) {
+        AnchorSlot* slot = &sAnchorSlots[i];
+        if (!slot->isActive || slot->owner != actor)
+            continue;
+        tracked = true;
+        CollectColliders(slot, play->colChkCtx.colAT, play->colChkCtx.colATCount);
+        CollectColliders(slot, play->colChkCtx.colAC, play->colChkCtx.colACCount);
+        CollectColliders(slot, play->colChkCtx.colOC, play->colChkCtx.colOCCount);
     }
-    if(tracked)ReanchorColliders(play);
+    if (tracked)
+        ReanchorColliders(play);
 }
-static int32_t HookAmmo(const char* key){return sDepletedTimer>0?0:sCharges;}
+static int32_t HookAmmo(const char* key) {
+    return sDepletedTimer > 0 ? 0 : sCharges;
+}
 
-// Use the same native digits as vanilla ammo, including HUD positioning and fades.
 void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha);
 static void DrawHookChargeCount(PlayState* play) {
-    if (play->pauseCtx.state!=0 || play->gameOverCtx.state!=0) return;
-    const s16 alpha[SWITCH_HOOK_BUTTON_COUNT]={
-        play->interfaceCtx.bAlpha,play->interfaceCtx.cLeftAlpha,play->interfaceCtx.cDownAlpha,
-        play->interfaceCtx.cRightAlpha,play->interfaceCtx.dpadUpAlpha,play->interfaceCtx.dpadDownAlpha,
-        play->interfaceCtx.dpadLeftAlpha,play->interfaceCtx.dpadRightAlpha,
+    if (play->pauseCtx.state != 0 || play->gameOverCtx.state != 0)
+        return;
+    const s16 alpha[SWITCH_HOOK_BUTTON_COUNT] = {
+        play->interfaceCtx.bAlpha,        play->interfaceCtx.cLeftAlpha,     play->interfaceCtx.cDownAlpha,
+        play->interfaceCtx.cRightAlpha,   play->interfaceCtx.dpadUpAlpha,    play->interfaceCtx.dpadDownAlpha,
+        play->interfaceCtx.dpadLeftAlpha, play->interfaceCtx.dpadRightAlpha,
     };
-    for (s16 button=1;button<SWITCH_HOOK_BUTTON_COUNT;++button) {
-        const char* key=sApi->GetEquippedCustomItem(button);
-        if (!key || strcmp(key,SWITCH_HOOK_KEY) || alpha[button]==0 ||
-            (button>=4 && !CVarGetInteger("gEnhancements.DpadEquips",0))) continue;
+    for (s16 button = 1; button < SWITCH_HOOK_BUTTON_COUNT; ++button) {
+        const char* key = sApi->GetEquippedCustomItem(button);
+        if (!key || strcmp(key, SWITCH_HOOK_KEY) || alpha[button] == 0 ||
+            (button >= 4 && !CVarGetInteger("gEnhancements.DpadEquips", 0)))
+            continue;
         OPEN_DISPS(play->state.gfxCtx);
         Gfx_SetupDL_39Overlay(play->state.gfxCtx);
         gDPPipeSync(OVERLAY_DISP++);
-        gDPSetEnvColor(OVERLAY_DISP++,0,0,0,0);
-        gDPSetPrimColor(OVERLAY_DISP++,0,0,255,255,255,alpha[button]);
-        gDPSetCombineLERP(OVERLAY_DISP++,PRIMITIVE,ENVIRONMENT,TEXEL0,ENVIRONMENT,TEXEL0,0,PRIMITIVE,0,
-                          PRIMITIVE,ENVIRONMENT,TEXEL0,ENVIRONMENT,TEXEL0,0,PRIMITIVE,0);
+        gDPSetEnvColor(OVERLAY_DISP++, 0, 0, 0, 0);
+        gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 255, alpha[button]);
+        gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
+                          PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
         CLOSE_DISPS(play->state.gfxCtx);
-        u8 savedItem=gSaveContext.equips.buttonItems[button];
-        s8 savedAmmo=AMMO(ITEM_BEAN);
-        gSaveContext.equips.buttonItems[button]=ITEM_BEAN;
-        AMMO(ITEM_BEAN)=(s8)HookAmmo(SWITCH_HOOK_KEY);
-        Interface_DrawAmmoCount(play,button,alpha[button]);
-        AMMO(ITEM_BEAN)=savedAmmo;
-        gSaveContext.equips.buttonItems[button]=savedItem;
+        u8 savedItem = gSaveContext.equips.buttonItems[button];
+        s8 savedAmmo = AMMO(ITEM_BEAN);
+        gSaveContext.equips.buttonItems[button] = ITEM_BEAN;
+        AMMO(ITEM_BEAN) = (s8)HookAmmo(SWITCH_HOOK_KEY);
+        Interface_DrawAmmoCount(play, button, alpha[button]);
+        AMMO(ITEM_BEAN) = savedAmmo;
+        gSaveContext.equips.buttonItems[button] = savedItem;
     }
 }
 
@@ -858,8 +875,8 @@ static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
     f32 dz = to->z - from->z;
     f32 yaw = Math_FAtan2F(dx, dz);
     f32 pitch = Math_FAtan2F(-dy, sqrtf(SQ(dx) + SQ(dz)));
-    s32 links = CLAMP((s32)(sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) / SWITCH_HOOK_CHAIN_LINK_SPACING), 1,
-                      SWITCH_HOOK_CHAIN_LINK_MAX);
+    s32 links =
+        CLAMP((s32)(sqrtf(SQ(dx) + SQ(dy) + SQ(dz)) / SWITCH_HOOK_CHAIN_LINK_SPACING), 1, SWITCH_HOOK_CHAIN_LINK_MAX);
 
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -874,13 +891,14 @@ static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
 }
 
 static void DrawHeldHook(Player* player, PlayState* play, bool extended) {
-    MtxF frame;HandFrame(player,&frame);
+    MtxF frame;
+    HandFrame(player, &frame);
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Push();
     Matrix_Put(&frame);
-    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)(extended?sBodyDL:sHeldDL));
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)(extended ? sBodyDL : sHeldDL));
     Matrix_Pop();
     CLOSE_DISPS(play->state.gfxCtx);
 }
@@ -893,7 +911,7 @@ static void DrawSwitchHook(Actor* actor, PlayState* play) {
             return;
         }
         Vec3f hand = HandPosition(player);
-        DrawHeldHook(player,play,visual.flags[0]!=0);
+        DrawHeldHook(player, play, visual.flags[0] != 0);
         if (visual.flags[0]) {
             Vec3f tip = { visual.values[0], visual.values[1], visual.values[2] };
             DrawChain(play, &hand, &tip);
@@ -901,13 +919,12 @@ static void DrawSwitchHook(Actor* actor, PlayState* play) {
         return;
     }
 
-
     Vec3f hand = HandPosition(player);
 
     if (sPhase == SWITCH_HOOK_STOWED || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
-    DrawHeldHook(player,play,sPhase>=SWITCH_HOOK_FLYING);
+    DrawHeldHook(player, play, sPhase >= SWITCH_HOOK_FLYING);
     if (sPhase >= SWITCH_HOOK_FLYING) {
         DrawChain(play, &hand, &sHookPos);
     }
@@ -927,11 +944,9 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SWITCH_HOOK_KEY, SWITCH_HOOK_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -947,11 +962,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.switch_hook.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.switch_hook.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 1 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -1012,7 +1028,6 @@ static void InitRemoteVisuals(void) {
     }
 }
 
-
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1040,7 +1055,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetCanUse(&hook, CanUseSwitchHook);
     Z64Items_SetAction(&hook, TakeOutSwitchHook, HoldSwitchHook);
     Z64Items_SetHeldCallbacks(&hook, AimOrFire, StowSwitchHook, NULL);
-    Z64Items_SetAmmo(&hook,HookAmmo);
+    Z64Items_SetAmmo(&hook, HookAmmo);
     hook.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     hook.getItemEntry.drawFunc = DrawGetItem;
 
@@ -1050,7 +1065,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateSwitchHook);
     SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, DrawHookChargeCount);
-    SOH_REGISTER_HOOK(sApi,OnActorUpdate,SyncSwappedActor);
+    SOH_REGISTER_HOOK(sApi, OnActorUpdate, SyncSwappedActor);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetScene);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawSwitchHook);
 }

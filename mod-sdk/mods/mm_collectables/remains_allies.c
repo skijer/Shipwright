@@ -1,6 +1,3 @@
-// The friendly allies the boss remains summon: Odolwa's beetles, sword moths and flight cloud, Goht's thunder
-// and bombchu, Gyorg's fish. Every model is Majora's Mask's own, read from mm.o2r; friend or foe is decided by
-// the collider's AT_TYPE_PLAYER bit, which hits every enemy and never Link.
 #include "remains.h"
 
 #include <math.h>
@@ -12,7 +9,6 @@
 #include "overlays/actors/ovl_En_Bom/z_en_bom.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 
-// MM sfx ids (2ship mm/include/sfx.h), played through mm_assets' service.
 #define MM_SE_EN_MB_MOTH_FLY 0x399B
 #define MM_SE_EN_MB_MOTH_DEAD 0x399C
 #define MM_SE_EN_COMMON_THUNDER 0x394B
@@ -35,7 +31,7 @@ static s16 sBugId = -1;
 static s16 sChuId = -1;
 static s16 sFishId = -1;
 
-// Boss DLs can branch into segment 0x0C (a scene cull list); away from their arena it must point somewhere safe.
+// Boss DLs can branch into segment 0x0C; away from their arena it must point somewhere safe.
 static Gfx sSegment0xCNoop[] = {
     gsSPEndDisplayList(),
     gsSPEndDisplayList(),
@@ -46,8 +42,6 @@ static Gfx sSegment0xCNoop[] = {
 static bool HasResources(const char* first, const char* second) {
     return sApi->HasResource(first) && sApi->HasResource(second);
 }
-
-// ── Shared motion ───────────────────────────────────────────────────────────
 
 Actor* RemainsAlly_FindNearestEnemy(PlayState* play, Vec3f* from, f32 maxDist) {
     static const u8 categories[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS };
@@ -69,7 +63,6 @@ Actor* RemainsAlly_FindNearestEnemy(PlayState* play, Vec3f* from, f32 maxDist) {
     return nearest;
 }
 
-// Actor_MoveXZGravity flies along world.rot.y, so that is the yaw that gets steered.
 static void HomeTowardPos(PlayState* play, Actor* actor, Vec3f* targetPos, f32 speed) {
     Math_SmoothStepToS(&actor->world.rot.y, Actor_WorldYawTowardPoint(actor, targetPos), ALLY_YAW_SCALE,
                        ALLY_YAW_MAXSTEP, ALLY_YAW_MINSTEP);
@@ -79,7 +72,6 @@ static void HomeTowardPos(PlayState* play, Actor* actor, Vec3f* targetPos, f32 s
     Actor_UpdateBgCheckInfo(play, actor, ALLY_WALL_HEIGHT, ALLY_WALL_RADIUS, 0.0f, BGCHECK_WALL_AND_FLOOR);
 }
 
-// A spot in a loose ball trailing behind Link, fanned and ring-depthed by a per-ally seed.
 static Vec3f BallAnchorBehind(Player* player, u32 seed, f32 distance, f32 spacing) {
     s16 behindYaw = player->actor.shape.rot.y + 0x8000;
     s16 fan = (s16)(((s32)(seed & 3) - 1) * 0x1800);
@@ -91,7 +83,6 @@ static Vec3f BallAnchorBehind(Player* player, u32 seed, f32 distance, f32 spacin
     return anchor;
 }
 
-// Boids separation, so a school of the same ally stays a spaced ball instead of one dot.
 static void SeparateFromKin(Actor* self, PlayState* play, s16 id, f32 radius, bool (*isKin)(Actor*)) {
     for (Actor* other = play->actorCtx.actorLists[ACTORCAT_MISC].head; other != NULL; other = other->next) {
         if (other == self || other->id != id || (isKin != NULL && !isKin(other))) {
@@ -106,8 +97,6 @@ static void SeparateFromKin(Actor* self, PlayState* play, s16 id, f32 radius, bo
         }
     }
 }
-
-// ── Odolwa's bug: ground beetle, sword moth, Goht thunder, flight cloud ─────
 
 #define BUG_MODE_BEETLE 0
 #define BUG_MODE_PROJECTILE 1
@@ -144,12 +133,12 @@ static void SeparateFromKin(Actor* self, PlayState* play, s16 id, f32 radius, bo
 #define BUG_BALL_SEP 22.0f
 #define BUG_LINK_MOVE 2.5f
 
-static const char sBugSkel[] = "__OTR__objects/object_boss01/gOdolwaBugSkel";
-static const char sBugCrawlAnim[] = "__OTR__objects/object_boss01/gOdolwaBugCrawlAnim";
-static const char sMothSetupDL[] = "__OTR__overlays/ovl_En_Tanron1/ovl_En_Tanron1_DL_001888";
-static const char sMothModelDL[] = "__OTR__overlays/ovl_En_Tanron1/ovl_En_Tanron1_DL_001900";
-static const char sThunderMaterialDL[] = "__OTR__objects/object_boss_hakugin/gGohtLightningMaterialDL";
-static const char sThunderModelDL[] = "__OTR__objects/object_boss_hakugin/gGohtLightningModelDL";
+static const ALIGN_ASSET(2) char sBugSkel[] = "__OTR__objects/object_boss01/gOdolwaBugSkel";
+static const ALIGN_ASSET(2) char sBugCrawlAnim[] = "__OTR__objects/object_boss01/gOdolwaBugCrawlAnim";
+static const ALIGN_ASSET(2) char sMothSetupDL[] = "__OTR__overlays/ovl_En_Tanron1/ovl_En_Tanron1_DL_001888";
+static const ALIGN_ASSET(2) char sMothModelDL[] = "__OTR__overlays/ovl_En_Tanron1/ovl_En_Tanron1_DL_001900";
+static const ALIGN_ASSET(2) char sThunderMaterialDL[] = "__OTR__objects/object_boss_hakugin/gGohtLightningMaterialDL";
+static const ALIGN_ASSET(2) char sThunderModelDL[] = "__OTR__objects/object_boss_hakugin/gGohtLightningModelDL";
 
 typedef struct {
     Actor actor;
@@ -158,13 +147,12 @@ typedef struct {
     Vec3s morphTable[BUG_LIMB_MAX];
     ColliderCylinder collider;
     s16 mode;
-    s16 hopTimer; // BUG_MODE_CLOUD: its angle around the ring
+    s16 hopTimer;
     s16 lifeTimer;
     s16 flapTimer;
     u8 isModelReady;
 } RemainsAllyBug;
 
-// Radius and height are generous so the hit lands a few frames before the proximity kill fires.
 static ColliderCylinderInit sBugColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK0,
@@ -176,7 +164,6 @@ static ColliderCylinderInit sBugColliderInit = {
     { 24, 44, 0, { 0, 0, 0 } },
 };
 
-// mm.o2r may be mounted after the ally spawns, so a missing model is retried every frame, never latched.
 static bool Bug_TryLoadModel(RemainsAllyBug* self, PlayState* play) {
     if (self->isModelReady) {
         return true;
@@ -266,7 +253,6 @@ static void Bug_OrbitUnderLink(RemainsAllyBug* self, PlayState* play) {
     self->actor.shape.rot.y = self->hopTimer;
 }
 
-// The sword moth dies on walls; Goht's thunder flies through them and just times out.
 static void Bug_FlyAsProjectile(RemainsAllyBug* self, PlayState* play) {
     Actor* target = RemainsAlly_FindNearestEnemy(play, &self->actor.world.pos, BUG_HOME_RANGE);
 
@@ -292,7 +278,6 @@ static void Bug_FlyAsProjectile(RemainsAllyBug* self, PlayState* play) {
     }
 }
 
-// A beetle trails Link in the ball and only breaks off to swarm, kamikaze, while he holds still.
 static void Bug_HopAsBeetle(RemainsAllyBug* self, PlayState* play) {
     Player* player = GET_PLAYER(play);
     Vec3f anchor = BallAnchorBehind(player, (u32)((uintptr_t)self >> 5), BUG_BALL_DIST, BUG_BALL_SPACING);
@@ -341,7 +326,6 @@ static void Bug_Update(Actor* thisx, PlayState* play) {
     if (self->hopTimer > 0) {
         self->hopTimer--;
     }
-    // Every bug expires, so one chasing a foe it can never reach does not live forever.
     if (self->lifeTimer > 0 && --self->lifeTimer == 0) {
         Bug_Die(self);
         return;
@@ -353,7 +337,6 @@ static void Bug_Update(Actor* thisx, PlayState* play) {
     }
 }
 
-// Goht's real bolt, drawn like BossHakugin's: each segment twice, the second turned a quarter on Z.
 static void Bug_DrawThunder(RemainsAllyBug* self, PlayState* play) {
     s16 yaw = self->actor.shape.rot.y;
     u8 alpha = (play->gameplayFrames & 1) ? 255 : 160;
@@ -436,7 +419,6 @@ Actor* RemainsAllyBug_SpawnProjectile(PlayState* play, Vec3f* pos, s16 rotY) {
     return SpawnBug(play, pos, rotY, BUG_MODE_PROJECTILE);
 }
 
-// The charge sets the bolt's lifetime, so how far it reaches, and how hard it hits.
 Actor* RemainsAllyBug_SpawnThunderCharged(PlayState* play, Vec3f* pos, s16 rotY, s16 ttl, s16 damage) {
     RemainsAllyBug* bolt = (RemainsAllyBug*)SpawnBug(play, pos, rotY, BUG_MODE_THUNDER);
 
@@ -447,8 +429,6 @@ Actor* RemainsAllyBug_SpawnThunderCharged(PlayState* play, Vec3f* pos, s16 rotY,
     return (Actor*)bolt;
 }
 
-// ── Goht's bombchu: Majora's Mask's Real Bombchu, crawling on any surface ───
-
 #define CHU_LIMB_TAIL_END 0x05
 #define CHU_LIMB_MAX 0x0A
 #define CHU_SCALE 0.010f
@@ -458,8 +438,8 @@ Actor* RemainsAllyBug_SpawnThunderCharged(PlayState* play, Vec3f* pos, s16 rotY,
 #define CHU_FUSE 250
 #define CHU_RUN_SFX_CADENCE 8
 
-static const char sChuSkel[] = "__OTR__objects/object_rat/gRealBombchuSkel";
-static const char sChuRunAnim[] = "__OTR__objects/object_rat/gRealBombchuRunAnim";
+static const ALIGN_ASSET(2) char sChuSkel[] = "__OTR__objects/object_rat/gRealBombchuSkel";
+static const ALIGN_ASSET(2) char sChuRunAnim[] = "__OTR__objects/object_rat/gRealBombchuRunAnim";
 
 typedef struct {
     Actor actor;
@@ -477,7 +457,6 @@ typedef struct {
     u8 isModelReady;
 } RemainsAllyChu;
 
-// Goht allows one bombchu at a time; a second R+B detonates this one.
 static RemainsAllyChu* sActiveChu;
 
 static bool Chu_TryLoadModel(RemainsAllyChu* self, PlayState* play) {
@@ -499,7 +478,6 @@ static void Chu_SpawnBlast(RemainsAllyChu* self, PlayState* play) {
     }
 }
 
-// The blast hurts Link too, so with no enemy to hit the chu just fizzles.
 static void Chu_Detonate(RemainsAllyChu* self, PlayState* play) {
     if (self->hasDetonated) {
         return;
@@ -538,7 +516,6 @@ static void NormalizeInPlace(Vec3f* vec, f32 magnitude) {
     vec->z *= 1.0f / magnitude;
 }
 
-// The crawl engine below is En_Rat's, with the names OoT's own z_en_bom_chu.c uses.
 static void Chu_UpdateRotation(RemainsAllyChu* self) {
     MtxF mf;
 
@@ -552,7 +529,6 @@ static void Chu_UpdateRotation(RemainsAllyChu* self) {
     mf.yz = self->axisForwards.y;
     mf.zz = self->axisForwards.z;
     Matrix_MtxFToYXZRotS(&mf, &self->actor.world.rot, 0);
-    // Negated back in shape.rot.x: the same ledge-stick trick EnBomChu uses.
     self->actor.world.rot.x = -self->actor.world.rot.x;
 }
 
@@ -650,7 +626,6 @@ static bool Chu_IsTouchingSurface(RemainsAllyChu* self, PlayState* play) {
         return true;
     }
 
-    // Lost the floor: look backwards, left and right for one to wrap onto.
     Vec3f directions[3] = { { -self->axisForwards.x, -self->axisForwards.y, -self->axisForwards.z },
                             self->axisLeft,
                             { -self->axisLeft.x, -self->axisLeft.y, -self->axisLeft.z } };
@@ -693,7 +668,6 @@ static void Chu_RideDynaPoly(RemainsAllyChu* self, PlayState* play) {
     RotateAxisAroundY(&self->axisLeft, sin, cos);
 }
 
-// Turns a little toward the goal each frame, the right way round even upside down on a ceiling.
 static void Chu_SteerToward(RemainsAllyChu* self, Actor* goal) {
     Vec3f newAxisForwards;
     s16 angle = Actor_WorldYawTowardActor(&self->actor, goal) - self->actor.shape.rot.y;
@@ -747,7 +721,6 @@ static void Chu_Destroy(Actor* thisx, PlayState* play) {
     }
 }
 
-// With no foe it runs straight ahead and climbs whatever it meets, like a live Real Bombchu.
 static void Chu_Update(Actor* thisx, PlayState* play) {
     RemainsAllyChu* self = (RemainsAllyChu*)thisx;
 
@@ -807,7 +780,6 @@ static s32 Chu_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec
     return false;
 }
 
-// The tail end is the bomb, flashing red faster as the fuse runs out (En_Rat's cadence).
 static void Chu_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
     RemainsAllyChu* self = (RemainsAllyChu*)thisx;
 
@@ -851,8 +823,6 @@ Actor* RemainsAllyChu_Spawn(PlayState* play, Vec3f* pos, s16 rotY) {
     return Actor_Spawn(&play->actorCtx, play, sChuId, pos->x, pos->y, pos->z, 0, rotY, 0, 0);
 }
 
-// ── Gyorg's fish: the piranha of the Gyorg fight, flopping on land, a school in water ──
-
 #define FISH_LIMB_ROOT 0x01
 #define FISH_LIMB_TRUNK_ROOT 0x03
 #define FISH_LIMB_TAIL_FIN 0x04
@@ -862,7 +832,6 @@ Actor* RemainsAllyChu_Spawn(PlayState* play, Vec3f* pos, s16 rotY) {
 #define FISH_FOLLOW_DIST 42.0f
 #define FISH_SWIM_SPEED 4.0f
 #define FISH_LINK_MOVE_SPEED 2.5f
-// Has to beat Link's swim speed of about 9, or the school falls behind for good.
 #define FISH_CHASE_SPEED 14.0f
 #define FISH_LUNGE_SPEED 13.0f
 #define FISH_IDLE_ATTACK_RANGE 240.0f
@@ -881,8 +850,8 @@ Actor* RemainsAllyChu_Spawn(PlayState* play, Vec3f* pos, s16 rotY) {
 #define FISH_FLOP_BITE_RANGE 22
 #define FISH_SWIM_BITE_RANGE 12
 
-static const char sFishSkel[] = "__OTR__objects/object_boss03/gGyorgSmallFishSkel";
-static const char sFishSwimAnim[] = "__OTR__objects/object_boss03/gGyorgSmallFishSwimAnim";
+static const ALIGN_ASSET(2) char sFishSkel[] = "__OTR__objects/object_boss03/gGyorgSmallFishSkel";
+static const ALIGN_ASSET(2) char sFishSwimAnim[] = "__OTR__objects/object_boss03/gGyorgSmallFishSwimAnim";
 
 typedef struct {
     Actor actor;
@@ -952,7 +921,6 @@ static void Fish_Bite(RemainsAllyFish* self, PlayState* play, s16 radius) {
     CollisionCheck_SetAT(play, &play->colChkCtx, &self->collider.base);
 }
 
-// Stays under the surface and above the floor; returns the climb so the nose can pitch to match.
 static f32 Fish_ClampSwimHeight(RemainsAllyFish* self, f32 desiredY) {
     f32 floorY = self->actor.floorHeight;
 
@@ -965,7 +933,6 @@ static f32 Fish_ClampSwimHeight(RemainsAllyFish* self, f32 desiredY) {
     return yDelta;
 }
 
-// The school trails Link as a ball and only lunges, all at the same foe, while he holds still.
 static void Fish_SwimInWater(RemainsAllyFish* self, PlayState* play) {
     Player* player = GET_PLAYER(play);
     Vec3f anchor = BallAnchorBehind(player, (u32)self->actor.params, FISH_BALL_DIST, FISH_BALL_SPACING);
@@ -998,7 +965,6 @@ static void Fish_SwimInWater(RemainsAllyFish* self, PlayState* play) {
     Fish_Bite(self, play, FISH_SWIM_BITE_RANGE);
 }
 
-// Beached, it hops at random, only vaguely toward a foe, and bites only what it lands right next to.
 static void Fish_FlopOnLand(RemainsAllyFish* self, PlayState* play) {
     self->outOfWaterTimer++;
     self->actor.gravity = -1.8f;
@@ -1032,14 +998,13 @@ static void Fish_Update(Actor* thisx, PlayState* play) {
 
     self->timer++;
     Fish_TryLoadModel(self, play);
-    // A fish spends itself on the bite that lands.
     if (self->collider.base.atFlags & AT_HIT) {
         Remains_PlayMmSfx(MM_SE_EN_PIRANHA_ATTACK, &thisx->projectedPos);
         Actor_Kill(thisx);
         return;
     }
-    bool hasWater = WaterBox_GetSurface1(play, &play->colCtx, thisx->world.pos.x, thisx->world.pos.z, &surfaceY,
-                                         &waterBox);
+    bool hasWater =
+        WaterBox_GetSurface1(play, &play->colCtx, thisx->world.pos.x, thisx->world.pos.z, &surfaceY, &waterBox);
     if (hasWater) {
         self->waterSurfaceY = surfaceY;
     }
@@ -1061,7 +1026,6 @@ static void Fish_Update(Actor* thisx, PlayState* play) {
     self->trunkRotation = Math_SinS(self->wiggleAngle) * FISH_WIGGLE_AMPL;
 }
 
-// En_Tanron3's procedural sway on the same three limbs.
 static s32 Fish_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {
     RemainsAllyFish* self = (RemainsAllyFish*)thisx;
 
@@ -1096,9 +1060,6 @@ Actor* RemainsAllyFish_Spawn(PlayState* play, Vec3f* pos, s16 rotY, s16 index) {
     return Actor_Spawn(&play->actorCtx, play, sFishId, pos->x, pos->y, pos->z, 0, rotY, 0, index);
 }
 
-// ── Registration ────────────────────────────────────────────────────────────
-
-// ACTORCAT_MISC keeps the allies out of enemy counts, room clears and battle music, and out of their own targeting.
 static s16 RegisterAlly(const char* key, const char* description, uint32_t size, SOHActorFunc init,
                         SOHActorFunc destroy, SOHActorFunc update, SOHActorFunc draw) {
     SOHActorDefinition definition = { 0 };

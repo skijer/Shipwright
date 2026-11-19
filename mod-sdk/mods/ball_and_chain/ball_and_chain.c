@@ -31,7 +31,6 @@
 #define BALL_GOLDEN_DAMAGE 16
 #define BALL_HOLD_DROP 5.0f
 #define BALL_CHARGE_MAX 60
-// The ball has to have built up a swing before it can be aimed or hurled; a tap only lifts it.
 #define BALL_CHARGE_MIN 15
 #define BALL_SPIN_RADIUS 20.0f
 #define BALL_SPIN_HEIGHT_MIN 50.0f
@@ -42,7 +41,6 @@
 #define BALL_STICK_DEADZONE 5.0f
 #define BALL_LEAN_TILT 40.0f
 #define BALL_THROW_LEAN 3000
-// The swing pulls Link 1 degree off balance at rest and 5 at full charge, in the ball's own direction.
 #define BALL_LEAN_MIN 182.0f
 #define BALL_LEAN_MAX 910.0f
 #define BALL_HOLD_POSE_FRAME 8
@@ -63,7 +61,6 @@
 #define BALL_THROW_TIMEOUT 200
 #define BALL_HELD_SCALE 0.06f
 #define BALL_SWUNG_SCALE 0.1f
-// The chain model is one strand 100 units long at scale 1.0, the length the hookshot stretches it by.
 #define BALL_CHAIN_STRAND_SPAN 100.0f
 #define BALL_CHAIN_STRAND_MAX 8
 #define BALL_CHAIN_THICKNESS 0.02f
@@ -80,8 +77,6 @@ typedef enum {
     BALL_RETRACTING,
 } BallPhase;
 
-// Goron Bracelet plants you and throws forward, Silver Gauntlets free your feet and your aim, Golden ones
-// swing the ball one-handed in a circle that guards Link.
 typedef enum {
     BALL_STRENGTH_NONE,
     BALL_STRENGTH_BRACELET,
@@ -96,7 +91,6 @@ static const ALIGN_ASSET(2) char sGiveDL[] = "__OTR__objects/object_nei_ball_and
 static const ALIGN_ASSET(2) char sChainLinkDL[] = "__OTR__objects/object_link_boy/gLinkAdultHookshotChainDL";
 static const ALIGN_ASSET(2) char sPotShardsDL[] = "__OTR__objects/gameplay_keep/gEffFragments2DL";
 
-// Vanilla carries: the ball rides in front of Link while he holds it, and overhead once he swings it.
 static const ALIGN_ASSET(2) char sHoldPoseAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_carryB_free";
 static const ALIGN_ASSET(2) char sSpinPoseAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_carryB_wait";
 
@@ -108,13 +102,22 @@ static const u8 sArmLimbs[] = { PLAYER_LIMB_L_SHOULDER, PLAYER_LIMB_L_FOREARM, P
 
 static ColliderCylinderInit sBallColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER | AT_TYPE_OTHER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK2, { DMG_HAMMER_SWING, 0x00, BALL_DAMAGE }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK2,
+      { DMG_HAMMER_SWING, 0x00, BALL_DAMAGE },
+      { 0, 0, 0 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { BALL_COLLIDER_RADIUS, BALL_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",   "OnActorDraw",
-                                              "OnActorDrawEnd",  "OnPlayerFilterInput",
-                                              "OnPlayerResolveMotionScale", "OnPlayerResolveItemActionInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
+                                              "OnPlayerUpdate",
+                                              "OnActorDraw",
+                                              "OnActorDrawEnd",
+                                              "OnPlayerFilterInput",
+                                              "OnPlayerResolveMotionScale",
+                                              "OnPlayerResolveItemActionInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -162,8 +165,7 @@ void EnFz_SetupMelt(EnFz* freezard);
 void BgIceTurara_Break(BgIceTurara* icicle, PlayState* play, f32 scale);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static u16 FindEquippedButtonMask(void) {
@@ -206,8 +208,8 @@ static bool IsOneHanded(void) {
 
 static void StartTrail(PlayState* play) {
     EffectBlureInit2 init = {
-        0, 8, 0, { 255, 255, 255, 255 }, { 200, 220, 255, 128 }, { 255, 255, 255, 0 }, { 200, 220, 255, 0 }, 4, 0, 2, 0,
-        { 235, 235, 245, 200 }, { 180, 190, 210, 96 }, TRAIL_TYPE_SWORDS,
+        0, 8, 0, { 255, 255, 255, 255 }, { 200, 220, 255, 128 }, { 255, 255, 255, 0 }, { 200, 220, 255, 0 }, 4,
+        0, 2, 0, { 235, 235, 245, 200 }, { 180, 190, 210, 96 },  TRAIL_TYPE_SWORDS,
     };
 
     Effect_Add(play, &sTrailIndex, EFFECT_BLURE2, 0, 0, &init);
@@ -230,7 +232,6 @@ static void EndTrail(PlayState* play) {
     }
 }
 
-// Ground-level strikes count as the hammer's floor slam, which is what floor switches and stakes answer to.
 static void StrikeWithBall(Player* player, PlayState* play) {
     bool isAtFootLevel = sBallPos.y - player->actor.world.pos.y < 30.0f;
 
@@ -297,7 +298,6 @@ static void ShatterShadowTemplePot(PlayState* play, Actor* pot) {
     Actor_Kill(pot);
 }
 
-// Every reward the Goron City pot can hand out, in one hit, with the heart piece keeping its collectible flag.
 static void ShatterGoronCityPot(PlayState* play, Actor* pot) {
     static const s16 sDropYaws[] = { -0x0FA0, 0x0320, 0x0FA0 };
     Vec3f dropPos = { pot->world.pos.x, pot->world.pos.y + 170.0f, pot->world.pos.z };
@@ -308,7 +308,8 @@ static void ShatterGoronCityPot(PlayState* play, Actor* pot) {
         DropFromPot(play, &dropPos, ITEM00_RUPEE_GREEN, sDropYaws[i] + 0x4000, 11.0f);
     }
     DropFromPot(play, &dropPos,
-                Flags_GetCollectible(play, heartPieceFlag) ? ITEM00_RUPEE_PURPLE : (heartPieceFlag << 8) | ITEM00_HEART_PIECE,
+                Flags_GetCollectible(play, heartPieceFlag) ? ITEM00_RUPEE_PURPLE
+                                                           : (heartPieceFlag << 8) | ITEM00_HEART_PIECE,
                 sDropYaws[1], 11.0f);
     DropFromPot(play, &dropPos, ITEM00_RUPEE_RED, sDropYaws[0] + 0x6000, 11.0f);
     DropFromPot(play, &dropPos, ITEM00_RUPEE_BLUE, sDropYaws[2] + 0x6000, 11.0f);
@@ -348,7 +349,6 @@ static bool IsBallNear(Actor* actor, f32 reach) {
     return Math_Vec3f_DistXYZ(&sBallPos, &actor->world.pos) < reach;
 }
 
-// A fast ball tunnels through thin ice and pots between frames, so those break on proximity, not on contact.
 static void BreakWhatTheBallReaches(PlayState* play) {
     Actor* next;
 
@@ -395,7 +395,6 @@ static void StrikeAndBreak(Player* player, PlayState* play) {
     BreakWhatTheBallReaches(play);
 }
 
-// Golden Gauntlets hold the ball in the throwing hand alone; weaker arms need both.
 static void HoldBallInHands(Player* player) {
     Vec3f* left = &player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     Vec3f* right = &player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
@@ -410,7 +409,6 @@ static void HoldBallInHands(Player* player) {
     sBallPos.z = (left->z + right->z) * 0.5f;
 }
 
-// The engine's own speed resolution, so Link keeps his turning and his animations and only loses pace.
 static void WeighDownPlayer(Player* player, int32_t kind, float* scale) {
     if (sPhase == BALL_IDLE || IsBallAway()) {
         return;
@@ -448,7 +446,10 @@ static void OrbitBallOverhead(Player* player) {
     f32 orbitX = Math_SinS(sSpinAngle) * BALL_SPIN_RADIUS;
     f32 orbitZ = Math_CosS(sSpinAngle) * BALL_SPIN_RADIUS;
     f32 orbitY = BALL_SPIN_HEIGHT_MIN + (BALL_SPIN_HEIGHT_MAX - BALL_SPIN_HEIGHT_MIN) * chargeRatio -
-                 Math_CosS(sSpinAngle) * sStickLeanY * (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT) - Math_SinS(sSpinAngle) * sStickLeanX * (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT);
+                 Math_CosS(sSpinAngle) * sStickLeanY *
+                     (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT) -
+                 Math_SinS(sSpinAngle) * sStickLeanX *
+                     (Strength() == BALL_STRENGTH_BRACELET ? BALL_LEAN_TILT * 0.2f : BALL_LEAN_TILT);
     s16 yaw = player->actor.shape.rot.y;
 
     sSpinAngle += SpinStep();
@@ -468,7 +469,6 @@ static void ReturnBallToHands(Player* player, PlayState* play) {
     }
 }
 
-// Aimed throws lead the arc so gravity lands the ball on the mark; a plain throw only goes where Link faces.
 static void LaunchTowards(Vec3f* mark, f32 launchSpeed) {
     f32 dx = mark->x - sBallPos.x;
     f32 dy = mark->y - sBallPos.y;
@@ -507,7 +507,8 @@ static void AimLaunch(Player* player, f32 launchSpeed) {
 }
 
 static void ThrowBall(Player* player, PlayState* play) {
-    f32 launchSpeed = BALL_LAUNCH_SPEED_MIN + (BALL_LAUNCH_SPEED_MAX - BALL_LAUNCH_SPEED_MIN) * sCharge / BALL_CHARGE_MAX;
+    f32 launchSpeed =
+        BALL_LAUNCH_SPEED_MIN + (BALL_LAUNCH_SPEED_MAX - BALL_LAUNCH_SPEED_MIN) * sCharge / BALL_CHARGE_MAX;
 
     sBallPos.x = player->actor.world.pos.x + Math_SinS(player->actor.shape.rot.y) * 20.0f;
     sBallPos.y = player->actor.world.pos.y + 45.0f;
@@ -522,8 +523,6 @@ static void ThrowBall(Player* player, PlayState* play) {
     PlaySfxAt(NA_SE_IT_HAMMER_SWING, &player->actor.world.pos);
 }
 
-// Golden Gauntlets swing the ball one-handed and wide, so it circles Link at chest height and guards him
-// instead of riding over his head.
 static void OrbitBallAround(Player* player) {
     f32 chargeRatio = (f32)sCharge / BALL_CHARGE_MAX;
     f32 radius = BALL_GUARD_RADIUS_MIN + (BALL_GUARD_RADIUS_MAX - BALL_GUARD_RADIUS_MIN) * chargeRatio;
@@ -567,16 +566,22 @@ static void UpdateSpinning(Player* player, PlayState* play) {
         sQuickSpinFrames = (s16)((0x10000 + step - 1) / step);
     }
     ReadStickLean(player, play);
-    if (sQuickSpinFrames == 0) { sCharge = MIN(sCharge + 1, BALL_CHARGE_MAX); }
+    if (sQuickSpinFrames == 0) {
+        sCharge = MIN(sCharge + 1, BALL_CHARGE_MAX);
+    }
     SwingBall(player);
     StrikeAndBreak(player, play);
     FeedTrail(play);
     Actor_PlaySfx_Flagged(&player->actor, NA_SE_IT_SWORD_SWING - SFX_FLAG);
     if (sQuickSpinFrames > 0) {
-        if (--sQuickSpinFrames == 0) { sPhase = BALL_HOLDING; }
+        if (--sQuickSpinFrames == 0) {
+            sPhase = BALL_HOLDING;
+        }
         return;
     }
-    if (IsButtonHeld(play)) { return; }
+    if (IsButtonHeld(play)) {
+        return;
+    }
     if (!IsBallSwungUp()) {
         sPhase = BALL_HOLDING;
         return;
@@ -584,8 +589,6 @@ static void UpdateSpinning(Player* player, PlayState* play) {
     ThrowBall(player, play);
 }
 
-// The return value is Link's "upper body is busy" flag: only the spin claims it, or the ball merely carried
-// in hand would block his rolls and his other item buttons.
 static void GuardWithHeldBall(Player* player, PlayState* play) {
     sBallCollider.base.atFlags &= ~(AT_ON | AT_HIT);
     sBallCollider.base.acFlags = AC_ON | AC_HARD | AC_TYPE_ENEMY;
@@ -822,7 +825,6 @@ static void RequestArmPose(PlayState* play) {
                                   isHeld ? BALL_HOLD_POSE_FRAME : BALL_SPIN_POSE_FRAME, PLAYER_LIMB_MAX, sPoseJoints);
 }
 
-// Golden Gauntlets swing it with the throwing arm alone, so the left arm keeps whatever Link is animating.
 static void ApplyArmPose(Player* player) {
     u32 first = IsOneHanded() ? ARRAY_COUNT(sArmLimbs) / 2 : 0;
 
@@ -831,22 +833,20 @@ static void ApplyArmPose(Player* player) {
     }
 }
 
-// Iron Boots are what vanilla checks before a fan or a current may push Link: the ball weighs at least as much.
 static void AnchorAgainstWind(Player* player) {
     player->pushedSpeed = 0.0f;
 }
 
-// The overhead spin orbits in Link's own frame, the one-handed guard orbits in world space.
 static s16 GetBallBearing(Player* player) {
     return IsOneHanded() ? (s16)(sSpinAngle - player->actor.shape.rot.y) : sSpinAngle;
 }
 
-// The ball drags Link a few degrees after it, harder the faster it goes. Weaker arms take the pull in the
-// torso; Golden Gauntlets hold their ground and only the swinging shoulder gives.
 static void LeanIntoSwing(Player* player) {
     s16 bearing = GetBallBearing(player);
     f32 pull = BALL_LEAN_MIN + (BALL_LEAN_MAX - BALL_LEAN_MIN) * sCharge / BALL_CHARGE_MAX;
-    if (Strength() == BALL_STRENGTH_BRACELET) { pull *= 0.2f; }
+    if (Strength() == BALL_STRENGTH_BRACELET) {
+        pull *= 0.2f;
+    }
     s16 forwards = (s16)(Math_CosS(bearing) * pull);
     s16 sideways = (s16)(-Math_SinS(bearing) * pull);
 
@@ -863,7 +863,6 @@ static void LeanIntoSwing(Player* player) {
     player->upperLimbRot.y = 0;
 }
 
-// Runs just before Link is drawn, the only point in the frame where the joint table is his final pose.
 static void PoseArmsAroundBall(Actor* actor, PlayState* play, bool* drawVanilla) {
     if (gPlayState == NULL || actor != &GET_PLAYER(gPlayState)->actor) {
         return;
@@ -908,8 +907,6 @@ static void KeepBallStateSane(void) {
     RequestArmPose(play);
 }
 
-// A and B stop the swing, and vanilla would read the same press as "roll" or "draw the sword". The mod reads
-// the raw input, so taking them off Link's copy for those frames costs it nothing.
 static void KeepSwingButtons(Player* player, Input* input) {
     if (sPhase == BALL_IDLE || sPhase == BALL_HOLDING) {
         return;
@@ -918,7 +915,6 @@ static void KeepSwingButtons(Player* player, Input* input) {
     input->press.button &= ~(BTN_A | BTN_B | BTN_R);
 }
 
-// Whole strands laid end to end keep the links their own size and leave no gap between them.
 static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
     f32 dx = to->x - from->x;
     f32 dy = to->y - from->y;
@@ -946,7 +942,6 @@ static void DrawChain(PlayState* play, Vec3f* from, Vec3f* to) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Only the chain is arched; the ball retains its original orbit and position.
 static void DrawOverheadChain(PlayState* play, Vec3f* from, Vec3f* to) {
     Vec3f previous = *from;
     for (s32 i = 1; i <= 8; ++i) {
@@ -1003,8 +998,6 @@ static void DrawBallAndChain(Actor* actor, PlayState* play) {
         return;
     }
 
-
-
     if (sPhase == BALL_AIMING) {
         Z64Aiming_DrawReticle(play, player, BALL_CHAIN_LENGTH,
                               (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_LAUNCH });
@@ -1031,11 +1024,9 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BALL_KEY, BALL_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -1051,11 +1042,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.ball_and_chain.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.ball_and_chain.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 1 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -1116,7 +1108,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;

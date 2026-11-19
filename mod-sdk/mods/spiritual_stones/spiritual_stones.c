@@ -90,15 +90,12 @@ static const StoneInfo sStones[STONE_MAX] = {
       "%cZora's Sapphire&%wYou swim faster.&Press %y\xA1%w for the warp point menu." },
 };
 
-
 static const u16 sItemButtons[BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                 BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
 static const char* const sRequiredHooks[] = {
-    "OnPlayerUpdate", "OnPlayerResolveMotionScale", "OnKaleidoInput", "OnPlayDrawBegin", "OnPlayDrawEnd",
-    "OnGameFrameUpdate",
-    "OnSceneInit",
-    "OnLoadFile",
+    "OnPlayerUpdate",     "OnPlayerResolveMotionScale", "OnKaleidoInput", "OnPlayDrawBegin",
+    "OnPlayDrawEnd",      "OnGameFrameUpdate",          "OnSceneInit",    "OnLoadFile",
     "OnSceneSpawnActors",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
@@ -113,37 +110,43 @@ static bool sIsVoidDamageWaived;
 static Actor* sStatues[STONE_MAX];
 static int8_t sPendingWarpStone = -1;
 static u8 sPassiveDisabled;
-// The vanilla quest renderer reads gItemIcons directly. Substitute only during the draw;
-// display-list texture pointers retain their own stable OTR names after restoration.
 static void* sQuestIconBackup[STONE_MAX];
 static bool sQuestIconsPatched;
-static const ALIGN_ASSET(2) char sPassiveOffIcons[STONE_MAX][80]={
-    "__OTR__textures/icon_item_custom/gStonePassiveOff0Tex",
-    "__OTR__textures/icon_item_custom/gStonePassiveOff1Tex",
+static const ALIGN_ASSET(2) char sPassiveOffIcons[STONE_MAX][80] = {
+    "__OTR__textures/icon_item_custom/gStonePassiveOff0Tex", "__OTR__textures/icon_item_custom/gStonePassiveOff1Tex",
     "__OTR__textures/icon_item_custom/gStonePassiveOff2Tex"
 };
 static void RestoreQuestIcons(void) {
-    if(!sQuestIconsPatched)return;
-    for(int stone=0;stone<STONE_MAX;++stone)gItemIcons[ITEM_KOKIRI_EMERALD+stone]=sQuestIconBackup[stone];
-    sQuestIconsPatched=false;
+    if (!sQuestIconsPatched)
+        return;
+    for (int stone = 0; stone < STONE_MAX; ++stone)
+        gItemIcons[ITEM_KOKIRI_EMERALD + stone] = sQuestIconBackup[stone];
+    sQuestIconsPatched = false;
 }
 static void DrawStoneState(void) {
     RestoreQuestIcons();
-    if(!gPlayState || gPlayState->pauseCtx.state==0 || !KaleidoQuestManager_IsVanillaPageShown())return;
-    for(int stone=0;stone<STONE_MAX;++stone) {
-        sQuestIconBackup[stone]=gItemIcons[ITEM_KOKIRI_EMERALD+stone];
-        if(sPassiveDisabled&(1<<stone))gItemIcons[ITEM_KOKIRI_EMERALD+stone]=(void*)sPassiveOffIcons[stone];
+    if (!gPlayState || gPlayState->pauseCtx.state == 0 || !KaleidoQuestManager_IsVanillaPageShown())
+        return;
+    for (int stone = 0; stone < STONE_MAX; ++stone) {
+        sQuestIconBackup[stone] = gItemIcons[ITEM_KOKIRI_EMERALD + stone];
+        if (sPassiveDisabled & (1 << stone))
+            gItemIcons[ITEM_KOKIRI_EMERALD + stone] = (void*)sPassiveOffIcons[stone];
     }
-    sQuestIconsPatched=true;
+    sQuestIconsPatched = true;
 }
-static void ToggleStonePassive(PlayState* play,Input* input,bool* handled) {
-    if(*handled || !(input->press.button&BTN_A) || play->pauseCtx.pageIndex!=PAUSE_QUEST || !KaleidoQuestManager_IsVanillaPageShown())return;
-    int stone=play->pauseCtx.cursorPoint[PAUSE_QUEST]-QUEST_KOKIRI_EMERALD;
-    if(stone<0 || stone>=STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem))return;
-    sPassiveDisabled^=1<<stone;
-    sApi->StorageSet(MOD_NAME,"passive_disabled",&sPassiveDisabled,sizeof(sPassiveDisabled));
-    *handled=true;input->press.button&=~BTN_A;
-    Audio_PlaySfxGeneral(NA_SE_SY_DECIDE,&gSfxDefaultPos,4,&gSfxDefaultFreqAndVolScale,&gSfxDefaultFreqAndVolScale,&gSfxDefaultReverb);
+static void ToggleStonePassive(PlayState* play, Input* input, bool* handled) {
+    if (*handled || !(input->press.button & BTN_A) || play->pauseCtx.pageIndex != PAUSE_QUEST ||
+        !KaleidoQuestManager_IsVanillaPageShown())
+        return;
+    int stone = play->pauseCtx.cursorPoint[PAUSE_QUEST] - QUEST_KOKIRI_EMERALD;
+    if (stone < 0 || stone >= STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem))
+        return;
+    sPassiveDisabled ^= 1 << stone;
+    sApi->StorageSet(MOD_NAME, "passive_disabled", &sPassiveDisabled, sizeof(sPassiveDisabled));
+    *handled = true;
+    input->press.button &= ~BTN_A;
+    Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
@@ -180,7 +183,6 @@ static uint16_t FindEquippedButtonMask(const char* key) {
     return 0;
 }
 
-// Nothing in the item registry derives ownership from a quest flag, so the mod restates it as the flags move.
 static void SyncQuestOwnership(void) {
     uint32_t questItems = gSaveContext.inventory.questItems;
 
@@ -193,21 +195,23 @@ static void SyncQuestOwnership(void) {
     }
 }
 
-// The vanilla Quest Status page has no custom-item cells for its three stones.
-// Bind its real quest slots explicitly; A remains the independent passive toggle.
-static void EquipStoneWarp(PlayState* play,Input* input,bool* handled) {
-    if(*handled || play->pauseCtx.pageIndex!=PAUSE_QUEST || play->pauseCtx.cursorSpecialPos!=0 ||
-       !KaleidoQuestManager_IsVanillaPageShown()) return;
-    int stone=play->pauseCtx.cursorPoint[PAUSE_QUEST]-QUEST_KOKIRI_EMERALD;
-    if(stone<0 || stone>=STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem)) return;
-    for(uint8_t button=1;button<BUTTON_COUNT;button++) {
-        u16 mask=sItemButtons[button];
-        if(!(input->press.button&mask) || (button>=4 && !CVarGetInteger("gEnhancements.DpadEquips",0))) continue;
+static void EquipStoneWarp(PlayState* play, Input* input, bool* handled) {
+    if (*handled || play->pauseCtx.pageIndex != PAUSE_QUEST || play->pauseCtx.cursorSpecialPos != 0 ||
+        !KaleidoQuestManager_IsVanillaPageShown())
+        return;
+    int stone = play->pauseCtx.cursorPoint[PAUSE_QUEST] - QUEST_KOKIRI_EMERALD;
+    if (stone < 0 || stone >= STONE_MAX || !CHECK_QUEST_ITEM(sStones[stone].questItem))
+        return;
+    for (uint8_t button = 1; button < BUTTON_COUNT; button++) {
+        u16 mask = sItemButtons[button];
+        if (!(input->press.button & mask) || (button >= 4 && !CVarGetInteger("gEnhancements.DpadEquips", 0)))
+            continue;
         SyncQuestOwnership();
-        if(sApi->EquipCustomItem(button,sStones[stone].key)) {
-            *handled=true;input->press.button&=~mask;
-            Audio_PlaySfxGeneral(NA_SE_SY_DECIDE,&gSfxDefaultPos,4,&gSfxDefaultFreqAndVolScale,
-                &gSfxDefaultFreqAndVolScale,&gSfxDefaultReverb);
+        if (sApi->EquipCustomItem(button, sStones[stone].key)) {
+            *handled = true;
+            input->press.button &= ~mask;
+            Audio_PlaySfxGeneral(NA_SE_SY_DECIDE, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
+                                 &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
         }
         return;
     }
@@ -217,7 +221,6 @@ static bool IsStoneWarpReady(uint8_t stone) {
     return sHasOwlStatue && sSaved.warp[stone].entranceIndex >= 0;
 }
 
-// Replanting moves the one waypoint that stone has, so the statue standing on the old spot goes with it.
 static void SpawnStatue(PlayState* play, uint8_t stone) {
     const StoneWarp* warp = &sSaved.warp[stone];
 
@@ -278,8 +281,6 @@ static void WarpToStatue(PlayState* play, uint8_t stone) {
     sIsVoidDamageWaived = true;
 }
 
-// The native choice renderer has no disabled color. Draw that single label with
-// its own native font glyphs, without changing the player's global text colors.
 void Message_DrawTextChar(PlayState* play, void* textureImage, Gfx** p);
 void Message_SetView(View* view);
 #ifdef _WIN32
@@ -295,103 +296,116 @@ static u16 sWarpPromptTextId;
 static void DrawDisabledWarpChoice(void) {
     PlayState* play = gPlayState;
     if (!play || sPendingWarpStone < 0 || IsStoneWarpReady((uint8_t)sPendingWarpStone) ||
-        play->msgCtx.textId != sWarpPromptTextId || Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE) return;
+        play->msgCtx.textId != sWarpPromptTextId || Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE)
+        return;
     if (!sDisabledFontLoaded) {
         for (int i = 0; sDisabledLabel[i]; ++i)
             Font_LoadChar(&sDisabledFont, sDisabledLabel[i] - ' ', i * FONT_CHAR_TEX_SIZE);
         sDisabledFontLoaded = true;
     }
     MessageContext* msg = &play->msgCtx;
-    s16 oldX=msg->textPosX, oldY=msg->textPosY;
-    s16 oldR=msg->textColorR, oldG=msg->textColorG, oldB=msg->textColorB, oldA=msg->textColorAlpha;
+    s16 oldX = msg->textPosX, oldY = msg->textPosY;
+    s16 oldR = msg->textColorR, oldG = msg->textColorG, oldB = msg->textColorB, oldA = msg->textColorAlpha;
     Message_SetView(&msg->view);
     Gfx_SetupDL_39Overlay(play->state.gfxCtx);
     OPEN_DISPS(play->state.gfxCtx);
     gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_NONE);
-    gDPSetCombineLERP(OVERLAY_DISP++, 0,0,0,PRIMITIVE, TEXEL0,0,PRIMITIVE,0,
-                     0,0,0,PRIMITIVE, TEXEL0,0,PRIMITIVE,0);
-    msg->textPosX=R_TEXT_INIT_XPOS+32;
-    msg->textPosY=R_TEXT_INIT_YPOS+2*R_TEXT_LINE_SPACING;
-    msg->textColorR=msg->textColorG=msg->textColorB=128;
-    msg->textColorAlpha=255;
-    for (int i=0; sDisabledLabel[i]; ++i) {
-        if (sDisabledLabel[i]==' ') msg->textPosX+=CVarGetInteger("gEnhancements.TextSpacing",6);
+    gDPSetCombineLERP(OVERLAY_DISP++, 0, 0, 0, PRIMITIVE, TEXEL0, 0, PRIMITIVE, 0, 0, 0, 0, PRIMITIVE, TEXEL0, 0,
+                      PRIMITIVE, 0);
+    msg->textPosX = R_TEXT_INIT_XPOS + 32;
+    msg->textPosY = R_TEXT_INIT_YPOS + 2 * R_TEXT_LINE_SPACING;
+    msg->textColorR = msg->textColorG = msg->textColorB = 128;
+    msg->textColorAlpha = 255;
+    for (int i = 0; sDisabledLabel[i]; ++i) {
+        if (sDisabledLabel[i] == ' ')
+            msg->textPosX += CVarGetInteger("gEnhancements.TextSpacing", 6);
         else {
-            Gfx* gfx=OVERLAY_DISP;
-            Message_DrawTextChar(play,&sDisabledFont.charTexBuf[i*FONT_CHAR_TEX_SIZE],&gfx);
-            OVERLAY_DISP=gfx;
-            msg->textPosX+=(s32)(sFontWidths[sDisabledLabel[i]-' ']*(R_TEXT_CHAR_SCALE/100.0f));
+            Gfx* gfx = OVERLAY_DISP;
+            Message_DrawTextChar(play, &sDisabledFont.charTexBuf[i * FONT_CHAR_TEX_SIZE], &gfx);
+            OVERLAY_DISP = gfx;
+            msg->textPosX += (s32)(sFontWidths[sDisabledLabel[i] - ' '] * (R_TEXT_CHAR_SCALE / 100.0f));
         }
     }
-    msg->textPosX=oldX;msg->textPosY=oldY;
-    msg->textColorR=oldR;msg->textColorG=oldG;msg->textColorB=oldB;msg->textColorAlpha=oldA;
+    msg->textPosX = oldX;
+    msg->textPosY = oldY;
+    msg->textColorR = oldR;
+    msg->textColorG = oldG;
+    msg->textColorB = oldB;
+    msg->textColorAlpha = oldA;
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 static void ResolveWarpPrompt(Player* player, PlayState* play) {
-    if (sPendingWarpStone < 0) return;
+    if (sPendingWarpStone < 0)
+        return;
     if (play->msgCtx.textId != sWarpPromptTextId || play->msgCtx.msgMode == MSGMODE_NONE) {
-        sPendingWarpStone=-1;
+        sPendingWarpStone = -1;
         return;
     }
-    if (Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE || !Message_ShouldAdvance(play)) return;
-    uint8_t stone=(uint8_t)sPendingWarpStone;
-    uint8_t choice=play->msgCtx.choiceIndex;
-    if (choice==1 && !IsStoneWarpReady(stone)) {
-        PlaySfxAt(NA_SE_SY_ERROR,&player->actor.world.pos);
-        // Prevent Message_Main from accepting the same disabled selection later this frame.
-        play->state.input[0].press.button &= ~(BTN_A|BTN_B|BTN_CUP);
+    if (Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE || !Message_ShouldAdvance(play))
+        return;
+    uint8_t stone = (uint8_t)sPendingWarpStone;
+    uint8_t choice = play->msgCtx.choiceIndex;
+    if (choice == 1 && !IsStoneWarpReady(stone)) {
+        PlaySfxAt(NA_SE_SY_ERROR, &player->actor.world.pos);
+        play->state.input[0].press.button &= ~(BTN_A | BTN_B | BTN_CUP);
         play->state.input[0].cur.button &= ~BTN_B;
         return;
     }
     Message_CloseTextbox(play);
-    sPendingWarpStone=-1;
-    if (choice==0 && sHasOwlStatue) PlantStatue(play,player,stone);
-    else if (choice==1) WarpToStatue(play,stone);
+    sPendingWarpStone = -1;
+    if (choice == 0 && sHasOwlStatue)
+        PlantStatue(play, player, stone);
+    else if (choice == 1)
+        WarpToStatue(play, stone);
 }
 
 static void OpenWarpPrompt(PlayState* play, uint8_t stone) {
-    const char* text=IsStoneWarpReady(stone)
-        ? "What do you want to do?\x1C&%gNew Warp Point&Go to Warp Point&Nothing%w"
-        : "What do you want to do?\x1C&%gNew Warp Point& &Nothing%w";
-    if (!sApi->ShowTextbox(play,text,false)) return;
-    sPendingWarpStone=(int8_t)stone;
-    sWarpPromptTextId=play->msgCtx.textId;
+    const char* text = IsStoneWarpReady(stone)
+                           ? "What do you want to do?\x1C&%gNew Warp Point&Go to Warp Point&Nothing%w"
+                           : "What do you want to do?\x1C&%gNew Warp Point& &Nothing%w";
+    if (!sApi->ShowTextbox(play, text, false))
+        return;
+    sPendingWarpStone = (int8_t)stone;
+    sWarpPromptTextId = play->msgCtx.textId;
 }
 
 static void TickStoneButtons(Player* player, PlayState* play) {
-    if (sPendingWarpStone>=0) return;
-    for (uint8_t stone=0;stone<STONE_MAX;stone++) {
-        uint16_t button=FindEquippedButtonMask(sStones[stone].key);
-        if (button && CHECK_QUEST_ITEM(sStones[stone].questItem) && (play->state.input[0].press.button&button)) {
-            OpenWarpPrompt(play,stone);
+    if (sPendingWarpStone >= 0)
+        return;
+    for (uint8_t stone = 0; stone < STONE_MAX; stone++) {
+        uint16_t button = FindEquippedButtonMask(sStones[stone].key);
+        if (button && CHECK_QUEST_ITEM(sStones[stone].questItem) && (play->state.input[0].press.button & button)) {
+            OpenWarpPrompt(play, stone);
             return;
         }
     }
 }
 
-static void ResolveStoneMotion(Player* player,int32_t kind,float* scale) {
-    if(!gPlayState || IsPlayerBusy(player,gPlayState)) return;
-    if(kind==SOH_PLAYER_MOTION_WATER_SPEED && (player->stateFlags1&PLAYER_STATE1_IN_WATER) &&
-       !(sPassiveDisabled&(1<<STONE_ZORA)) && CHECK_QUEST_ITEM(QUEST_ZORA_SAPPHIRE)) {
-        *scale*=STONE_SWIM_BOOST;
-    } else if((kind==SOH_PLAYER_MOTION_STICK_SPEED || kind==SOH_PLAYER_MOTION_SPEED_CAP) &&
-        !(player->stateFlags1&(PLAYER_STATE1_IN_WATER|PLAYER_STATE1_CLIMBING_LADDER)) &&
-        (player->actor.bgCheckFlags&1) && !(sPassiveDisabled&(1<<STONE_KOKIRI)) && CHECK_QUEST_ITEM(QUEST_KOKIRI_EMERALD)) {
-        *scale*=STONE_WALK_BOOST;
+static void ResolveStoneMotion(Player* player, int32_t kind, float* scale) {
+    if (!gPlayState || IsPlayerBusy(player, gPlayState))
+        return;
+    if (kind == SOH_PLAYER_MOTION_WATER_SPEED && (player->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
+        !(sPassiveDisabled & (1 << STONE_ZORA)) && CHECK_QUEST_ITEM(QUEST_ZORA_SAPPHIRE)) {
+        *scale *= STONE_SWIM_BOOST;
+    } else if ((kind == SOH_PLAYER_MOTION_STICK_SPEED || kind == SOH_PLAYER_MOTION_SPEED_CAP) &&
+               !(player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_CLIMBING_LADDER)) &&
+               (player->actor.bgCheckFlags & 1) && !(sPassiveDisabled & (1 << STONE_KOKIRI)) &&
+               CHECK_QUEST_ITEM(QUEST_KOKIRI_EMERALD)) {
+        *scale *= STONE_WALK_BOOST;
     }
 }
-void Player_Action_8084BF1C(Player*,PlayState*);
-static void BoostStoneClimb(bool* should,va_list args) {
-    Player* player=va_arg(args,Player*);
-    if(!*should || !gPlayState || IsPlayerBusy(player,gPlayState) ||
-       (sPassiveDisabled&(1<<STONE_GORON)) || !CHECK_QUEST_ITEM(QUEST_GORON_RUBY) ||
-       !(player->stateFlags1&PLAYER_STATE1_CLIMBING_LADDER) || player->actionFunc!=Player_Action_8084BF1C) return;
-    // Advance the native climb twice before its root movement is applied. Each step retains endpoint checks.
-    *should=false;
-    Player_Action_8084BF1C(player,gPlayState);
-    if(player->actionFunc==Player_Action_8084BF1C && (player->stateFlags1&PLAYER_STATE1_CLIMBING_LADDER))
-        Player_Action_8084BF1C(player,gPlayState);
+void Player_Action_8084BF1C(Player*, PlayState*);
+static void BoostStoneClimb(bool* should, va_list args) {
+    Player* player = va_arg(args, Player*);
+    if (!*should || !gPlayState || IsPlayerBusy(player, gPlayState) || (sPassiveDisabled & (1 << STONE_GORON)) ||
+        !CHECK_QUEST_ITEM(QUEST_GORON_RUBY) || !(player->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER) ||
+        player->actionFunc != Player_Action_8084BF1C)
+        return;
+    *should = false;
+    Player_Action_8084BF1C(player, gPlayState);
+    if (player->actionFunc == Player_Action_8084BF1C && (player->stateFlags1 & PLAYER_STATE1_CLIMBING_LADDER))
+        Player_Action_8084BF1C(player, gPlayState);
 }
 
 static void StatueDraw(Actor* thisx, PlayState* play) {
@@ -403,8 +417,7 @@ static void StatueDraw(Actor* thisx, PlayState* play) {
     Matrix_Translate(thisx->world.pos.x, thisx->world.pos.y + STATUE_JEWEL_HEIGHT, thisx->world.pos.z, MTXMODE_NEW);
     Matrix_RotateY(BINANG_TO_RAD((int16_t)(play->gameplayFrames * 0x100)), MTXMODE_APPLY);
     Matrix_Scale(STATUE_JEWEL_SCALE, STATUE_JEWEL_SCALE, STATUE_JEWEL_SCALE, MTXMODE_APPLY);
-    // The Temple of Time's actual gem and gold setting, with their native material setup.
-    GetItem_Draw(play,sStoneDrawIds[thisx->params % STONE_MAX]);
+    GetItem_Draw(play, sStoneDrawIds[thisx->params % STONE_MAX]);
     Matrix_Pop();
 }
 
@@ -437,8 +450,8 @@ static void ForgetSceneState(int16_t sceneNum) {
 
 static void ReloadState(int32_t fileNum) {
     LoadState();
-    sPassiveDisabled=0;
-    sApi->StorageGet(MOD_NAME,"passive_disabled",&sPassiveDisabled,sizeof(sPassiveDisabled));
+    sPassiveDisabled = 0;
+    sApi->StorageGet(MOD_NAME, "passive_disabled", &sPassiveDisabled, sizeof(sPassiveDisabled));
     sOwnedQuestItems = 0xFFFFFFFF;
 }
 
@@ -505,15 +518,14 @@ SOH_MOD_EXPORT void ModInit(void) {
         }
     }
     ReloadState(0);
-    SOH_REGISTER_HOOK(sApi,OnPlayerResolveMotionScale,ResolveStoneMotion);
-    SOH_REGISTER_HOOK(sApi,OnKaleidoInput,ToggleStonePassive);
-    SOH_REGISTER_HOOK(sApi,OnKaleidoInput,EquipStoneWarp);
-    SOH_REGISTER_HOOK(sApi,OnPlayDrawBegin,DrawStoneState);
-    SOH_REGISTER_HOOK(sApi,OnPlayDrawEnd,RestoreQuestIcons);
-    // This hook runs after the native overlay is built, so the gray label stays above the textbox.
-    SOH_REGISTER_HOOK(sApi,OnGameFrameUpdate,DrawDisabledWarpChoice);
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveMotionScale, ResolveStoneMotion);
+    SOH_REGISTER_HOOK(sApi, OnKaleidoInput, ToggleStonePassive);
+    SOH_REGISTER_HOOK(sApi, OnKaleidoInput, EquipStoneWarp);
+    SOH_REGISTER_HOOK(sApi, OnPlayDrawBegin, DrawStoneState);
+    SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, RestoreQuestIcons);
+    SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, DrawDisabledWarpChoice);
     sApi->RegisterVB(VB_INFLICT_VOID_DAMAGE, WaiveVoidDamage);
-    sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC,BoostStoneClimb);
+    sApi->RegisterVB(VB_EXECUTE_PLAYER_ACTION_FUNC, BoostStoneClimb);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, TickMod);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetSceneState);
     SOH_REGISTER_HOOK(sApi, OnLoadFile, ReloadState);

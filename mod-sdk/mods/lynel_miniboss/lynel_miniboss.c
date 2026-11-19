@@ -1,5 +1,3 @@
-// Red-maned Lynel miniboss: sword, shield and a triple-shot bow. A headshot stuns it and lets Link ride it.
-// Model from a Tripo mesh rigged and animated by blender_labs/lynel/build_lynel_assets.py.
 
 #include "soh/ModApi/ModApi.h"
 
@@ -41,7 +39,6 @@
 #define LYNEL_RIDER_DROP 27.0f
 #define LYNEL_MAX_CHARGES 2
 
-// Speeds match the stride of each gait animation so the hooves do not skate.
 #define LYNEL_WALK_SPEED 2.6f
 #define LYNEL_GALLOP_SPEED 9.0f
 #define LYNEL_CHARGE_SPEED 13.0f
@@ -278,7 +275,6 @@ static DamageTable sDamageTable = {
 
 static CollisionCheckInfoInit2 sColChkInit = { LYNEL_HEALTH, 40, 100, 0, MASS_IMMOVABLE };
 
-// Upper-body limbs of Link that follow the slash while his legs keep the riding pose.
 static u8 sRiderUpperBodyLimbs[PLAYER_LIMB_MAX] = {
     [PLAYER_LIMB_UPPER] = true,  [PLAYER_LIMB_HEAD] = true,       [PLAYER_LIMB_HAT] = true,
     [PLAYER_LIMB_COLLAR] = true, [PLAYER_LIMB_L_SHOULDER] = true, [PLAYER_LIMB_L_FOREARM] = true,
@@ -449,7 +445,6 @@ static void EnLynel_UpdateBlast(PlayState* play, LynelProjectile* blast) {
     }
 }
 
-// Rain arrows leave the screen upwards and come back down on wherever Link stands at that moment.
 static void EnLynel_DropRainArrow(PlayState* play, LynelProjectile* arrow) {
     Player* player = EnLynel_GetPlayer(play);
 
@@ -640,7 +635,6 @@ static s16 EnLynel_GetYawToPlayer(EnLynel* this) {
     return this->actor.yawTowardsPlayer - this->actor.shape.rot.y;
 }
 
-// Turns swing the body around the hind hooves, as a horse turns on its haunches.
 static void EnLynel_PivotToward(EnLynel* this, s16 targetYaw, s16 step) {
     f32 pivotX = this->actor.world.pos.x - LYNEL_HIND_PIVOT_DIST * Math_SinS(this->actor.shape.rot.y);
     f32 pivotZ = this->actor.world.pos.z - LYNEL_HIND_PIVOT_DIST * Math_CosS(this->actor.shape.rot.y);
@@ -881,7 +875,6 @@ static void EnLynel_Block(EnLynel* this, PlayState* play) {
     EnLynel_SetupAction(this, EnLynel_BlockHit);
 }
 
-// A second blocked hit in a row is answered with the shield bash, as in BotW.
 static void EnLynel_BlockHit(EnLynel* this, PlayState* play) {
     EnLynel_TurnTowardPlayer(this, 0x700);
     if (!SkelAnime_Update(&this->skelAnime)) {
@@ -931,7 +924,6 @@ static void EnLynel_Charge(EnLynel* this, PlayState* play) {
     }
 }
 
-// Sits back on the hinds to brake, then wheels round to face Link and may charge again.
 static void EnLynel_Wheel(EnLynel* this, PlayState* play) {
     f32 frame = this->skelAnime.curFrame;
 
@@ -980,7 +972,6 @@ static void EnLynel_LandLeap(EnLynel* this, PlayState* play) {
     EffectSsBlast_SpawnWhiteShockwave(play, &impact, &sZeroVec, &sZeroVec);
 }
 
-// BotW leaping cleave: vaults at Link, hangs at the apex with the sword raised and splits the ground on landing.
 static void EnLynel_Leap(EnLynel* this, PlayState* play) {
     static const f32 sAirFrames = 14.0f;
     f32 frame = this->skelAnime.curFrame;

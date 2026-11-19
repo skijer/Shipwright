@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================================
-// Struct (merged from z_arrow_wind.h)
-// ============================================================================
-
 struct ArrowWind;
 
 typedef void (*ArrowWindActionFunc)(struct ArrowWind*, PlayState*);
@@ -23,11 +19,6 @@ typedef struct ArrowWind {
     /* 0x0164 */ f32 unk_164;
     /* 0x0168 */ ArrowWindActionFunc actionFunc;
 } ArrowWind; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_wind_gfx.c)
-// ============================================================================
 
 static u64 sArrowWindTexture2[] = {
     0x0002111542b3e5ea, 0xeaefe9dafff2fcfe, 0xfffafef5fbf4e1f7, 0xdeeee37041130b00, 0x000407092696c1ef,
@@ -207,13 +198,8 @@ static Gfx sArrowWindVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97WindMatDL[] = "__OTR__overlays/ovl_Arrow_Ice/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97WindMdlDL[] = "__OTR__overlays/ovl_Arrow_Ice/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 
@@ -285,7 +271,6 @@ static void Sw97_ArrowWind_LerpPos(Vec3f* unkPos, Vec3f* windPos, f32 scale) {
     unkPos->z += ((windPos->z - unkPos->z) * scale);
 }
 
-// Returns 1 if (actor) is within cylinder centered on (center) with given XZ radius and Y half-height.
 static u8 Sw97_ArrowWind_InCylinder(Actor* actor, Vec3f* center, f32 radiusXZ, f32 heightY) {
     f32 dy = actor->world.pos.y - center->y;
     if (dy < -heightY || dy > heightY) {
@@ -296,7 +281,6 @@ static u8 Sw97_ArrowWind_InCylinder(Actor* actor, Vec3f* center, f32 radiusXZ, f
     return sqrtf(SQ(dx) + SQ(dz)) < radiusXZ;
 }
 
-// Push (actor) radially outward from (center) on the XZ plane with given force, plus an upward pop.
 static void Sw97_ArrowWind_PushOutward(Actor* actor, Vec3f* center, f32 force, f32 upPop) {
     f32 dx = actor->world.pos.x - center->x;
     f32 dz = actor->world.pos.z - center->z;
@@ -313,10 +297,7 @@ static void Sw97_ArrowWind_PushOutward(Actor* actor, Vec3f* center, f32 force, f
     }
 }
 
-// Wind shockwave on impact: radial knockback (heavy + light zone), grass/pot break,
-// torch extinguish, drop flying enemies, vacuum nearby pickups toward Link.
 static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
-    // Zone sizes (units): heavy = 2 Link-heights radius/height, light = 4 Link-heights.
     const f32 heavyRadius = 80.0f;
     const f32 heavyHalfH = 80.0f;
     const f32 lightRadius = 200.0f;
@@ -326,7 +307,6 @@ static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
     Actor* actor;
     Actor* next;
 
-    // Enemies — radial outward push from impact point.
     for (actor = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; actor != NULL; actor = next) {
         next = actor->next;
         if (actor->update == NULL)
@@ -338,11 +318,9 @@ static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
         if (inHeavy) {
             Sw97_ArrowWind_PushOutward(actor, center, 25.0f, 6.0f);
         } else if (inLight) {
-            // Lighter outward push at the larger range.
             Sw97_ArrowWind_PushOutward(actor, center, 15.0f, 4.0f);
         }
 
-        // Flying enemies in the wider zone get slammed down on top of the outward push.
         if (inLight) {
             if (actor->id == ACTOR_EN_FIREFLY || actor->id == ACTOR_EN_SW || actor->id == ACTOR_EN_PEEHAT) {
                 actor->velocity.y = -10.0f;
@@ -351,7 +329,6 @@ static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
         }
     }
 
-    // Props — cut grass / break pots in the heavy zone.
     for (actor = play->actorCtx.actorLists[ACTORCAT_PROP].head; actor != NULL; actor = next) {
         next = actor->next;
         if (actor->update == NULL)
@@ -364,7 +341,6 @@ static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
         }
     }
 
-    // Torches — extinguish by clearing their lit-switch flag.
     for (actor = play->actorCtx.actorLists[ACTORCAT_PROP].head; actor != NULL; actor = next) {
         next = actor->next;
         if (actor->update == NULL)
@@ -380,7 +356,6 @@ static void Sw97_ArrowWind_ApplyEffects(PlayState* play, Vec3f* center) {
         }
     }
 
-    // Pickups (EnItem00 in ACTORCAT_MISC) — vacuum TOWARD Link.
     for (actor = play->actorCtx.actorLists[ACTORCAT_MISC].head; actor != NULL; actor = next) {
         next = actor->next;
         if (actor->update == NULL)
@@ -480,7 +455,6 @@ static void Sw97_ArrowWind_Fly(ArrowWind* this, PlayState* play) {
         Sw97_ArrowWind_SetupAction(this, Sw97_ArrowWind_Hit);
         this->timer = 32;
         this->alpha = 255;
-        // Wind shockwave: radial outward push to enemies, grass cut, torches out, pickups vacuum.
         Sw97_ArrowWind_ApplyEffects(play, &this->actor.world.pos);
     } else if (arrow->timer < 34) {
         if (this->alpha < 35) {

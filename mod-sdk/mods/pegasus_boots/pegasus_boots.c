@@ -1,8 +1,5 @@
 #include <string.h>
-/**
- * Pegasus Boots: holding B where a spin attack would charge turns the charge into a blade-first dash, with a wind
- * cone in front that strikes while there is magic to pay for it. Walls, crates and trees stop it with a bonk.
- */
+// Pegasus Boots: holding B where a spin attack would charge turns it into a dash.
 
 #include <math.h>
 
@@ -84,20 +81,15 @@ static struct {
     bool needsResetOnLanding;
 } sPegasus;
 
-// The torso and arms take the stab pose; everything from the waist down keeps running.
 static u8 sUpperBodyMap[PLAYER_LIMB_MAX];
 static Vec3s sStabPose[PLAYER_LIMB_BUF_COUNT];
 static Vec3s sRunPose[PLAYER_LIMB_BUF_COUNT];
 
 static Vtx sConeVtx[] = {
-    VTX(0, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4000, 8000, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(2828, 8000, 2828, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 8000, 4000, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-2828, 8000, 2828, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4000, 8000, 0, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-2828, 8000, -2828, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 8000, -4000, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),          VTX(4000, 8000, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(2828, 8000, 2828, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(0, 8000, 4000, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-2828, 8000, 2828, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),   VTX(-4000, 8000, 0, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-2828, 8000, -2828, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00), VTX(0, 8000, -4000, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),
     VTX(2828, 8000, -2828, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00),
 };
 
@@ -141,12 +133,10 @@ static bool IsDashing(void) {
 }
 
 static void PlaySfx(Player* player, u16 sfxId) {
-    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultReverb);
 }
 
-// The dash rides the spin-charge walk; leaving that action live afterwards moves the stick against the locked
-// facing, which is the inverted-controls state.
 static void ResetToIdle(Player* player, PlayState* play) {
     player->linearVelocity = 0.0f;
     player->actor.speedXZ = 0.0f;
@@ -185,15 +175,16 @@ static void StrikeWithWind(Player* player, PlayState* play) {
         Collider_SetCylinder(play, &sWindCollider, &player->actor, &sWindColliderInit);
         sPegasus.isColliderReady = true;
     }
-    sWindCollider.dim.pos.x = (s16)(player->actor.world.pos.x + Math_SinS(player->actor.shape.rot.y) * PEGASUS_COL_FORWARD);
+    sWindCollider.dim.pos.x =
+        (s16)(player->actor.world.pos.x + Math_SinS(player->actor.shape.rot.y) * PEGASUS_COL_FORWARD);
     sWindCollider.dim.pos.y = (s16)player->actor.world.pos.y;
-    sWindCollider.dim.pos.z = (s16)(player->actor.world.pos.z + Math_CosS(player->actor.shape.rot.y) * PEGASUS_COL_FORWARD);
+    sWindCollider.dim.pos.z =
+        (s16)(player->actor.world.pos.z + Math_CosS(player->actor.shape.rot.y) * PEGASUS_COL_FORWARD);
     sWindCollider.base.atFlags |= AT_ON | AT_TYPE_PLAYER;
     CollisionCheck_SetAT(play, &play->colChkCtx, &sWindCollider.base);
     if (!(sWindCollider.base.atFlags & AT_HIT)) {
         return;
     }
-    // Without this the wind breaks a crate before the wall touch registers, and the dash only sometimes stops.
     struck = sWindCollider.base.at;
     if (struck != NULL && (struck->id == ACTOR_OBJ_KIBAKO || struck->id == ACTOR_OBJ_KIBAKO2)) {
         sPegasus.smashedCrate = true;
@@ -224,11 +215,11 @@ static void PoseDash(Player* player, PlayState* play) {
     if (sPegasus.legFrame > lastFrame) {
         sPegasus.legFrame -= lastFrame;
     }
-    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)gPlayerAnim_link_normal_run_free,
-                                  (s32)sPegasus.legFrame, player->skelAnime.limbCount, sRunPose);
+    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)gPlayerAnim_link_normal_run_free, (s32)sPegasus.legFrame,
+                                  player->skelAnime.limbCount, sRunPose);
     AnimationContext_SetCopyAll(play, player->skelAnime.limbCount, player->skelAnime.jointTable, sRunPose);
-    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)gPlayerAnim_link_fighter_Lpierce_kiru,
-                                  PEGASUS_STAB_FRAME, player->skelAnime.limbCount, sStabPose);
+    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)gPlayerAnim_link_fighter_Lpierce_kiru, PEGASUS_STAB_FRAME,
+                                  player->skelAnime.limbCount, sStabPose);
     AnimationContext_SetCopyTrue(play, player->skelAnime.limbCount, player->skelAnime.jointTable, sStabPose,
                                  sUpperBodyMap);
 }
@@ -239,7 +230,6 @@ static bool IsFacingWall(Player* player) {
     return (player->actor.bgCheckFlags & BGCHECK_TOUCHING_WALL) && ABS(yawToWall) < 0x2000;
 }
 
-// The same signals a roll leaves: a crate wall breaks, a tree drops what it holds.
 static bool HitsObstacle(Player* player, PlayState* play) {
     Actor* touched = player->cylinder.base.oc;
 
@@ -265,7 +255,6 @@ static bool HitsObstacle(Player* player, PlayState* play) {
     return false;
 }
 
-// A roll's own bonk: the charge action stays underneath and the dash ends when hip_down has played out.
 static void Bonk(Player* player, PlayState* play) {
     LinkAnimation_Change(play, &player->skelAnime, (LinkAnimationHeader*)gPlayerAnim_link_normal_hip_down_free, 1.0f,
                          0.0f, Animation_GetLastFrame((void*)gPlayerAnim_link_normal_hip_down_free), ANIMMODE_ONCE,
@@ -296,7 +285,6 @@ static void UpdateIdle(Player* player, Input* input) {
     PlaySfx(player, NA_SE_PL_WALK_GROUND);
 }
 
-// A cancelled windup needs no reset: the charge action still owns Link and ends itself.
 static void UpdateWindup(Player* player, PlayState* play, Input* input) {
     if (!CHECK_BTN_ALL(input->cur.button, BTN_B)) {
         StopDash(player, play, false);
@@ -385,7 +373,6 @@ static void TickDash(void) {
     }
 }
 
-// Nothing Link is told to do lands while he is picking himself up off the floor.
 static void HoldStillWhileBonked(Player* player, Input* input) {
     if (sPegasus.state != PEGASUS_BONK) {
         return;
@@ -428,8 +415,6 @@ static void DrawWindCone(Player* player, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The anklet is the hover boots dyed red, drawn where the body drew no boots of its own: these boots sit on a
-// Kokiri base. The skeleton's limb matrices on segment 0x0D are still loaded right after the player draws.
 static void DrawRedBoots(Player* player, PlayState* play) {
     if ((player == GET_PLAYER(play) && !LINK_IS_ADULT) || (player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON) ||
         (player->stateFlags2 & PLAYER_STATE2_CRAWLING)) {
@@ -462,7 +447,6 @@ static void DrawOnPlayer(Actor* actor, PlayState* play) {
     }
 }
 
-// The hover boots' get-item model mapped onto the icon's crimson; a grayscale tint could only darken it.
 static u32 CrimsonRamp(u32 rgba) {
     u8 r = (rgba >> 24) & 0xFF;
     u8 g = (rgba >> 16) & 0xFF;
@@ -474,11 +458,10 @@ static u32 CrimsonRamp(u32 rgba) {
 }
 
 static bool IsTwoWordCommand(u8 opcode) {
-    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 ||
-           opcode == 0x32 || opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
+    return opcode == 0x20 || opcode == 0x24 || opcode == 0x25 || opcode == 0x27 || opcode == 0x31 || opcode == 0x32 ||
+           opcode == 0x33 || opcode == 0x35 || opcode == 0x36 || opcode == 0x42;
 }
 
-// A local copy, never the shared resource: the vanilla Hover Boots must keep their own colours.
 static Gfx* BuildCrimsonBootsDL(void) {
     static Gfx sDL[GI_DL_CAPACITY];
     static bool sBuilt;
@@ -527,7 +510,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The collider is bound to the player actor, and a new scene brings a new one.
 static void ForgetSceneState(int16_t sceneNum) {
     sPegasus.state = PEGASUS_IDLE;
     sPegasus.isColliderReady = false;
@@ -540,8 +522,8 @@ static void ReleaseDash(const char* key) {
     }
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerFilterInput", "OnActorDrawEnd",
-                                              "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerFilterInput",
+                                              "OnActorDrawEnd", "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -560,11 +542,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.pegasus_boots.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.pegasus_boots.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 1 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -603,8 +586,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void DrawRemotePlayer(Actor* actor, PlayState* play) {
     if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
         DrawOnPlayer(actor, play);
@@ -622,9 +603,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -660,10 +638,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = ReleaseDash;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        PEGASUS_BOOTS_KEY, PEGASUS_BOOTS_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, PEGASUS_BOOTS_KEY, PEGASUS_BOOTS_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

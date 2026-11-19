@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================================
-// Struct (merged from z_arrow_soul.h)
-// ============================================================================
-
 struct ArrowSoul;
 
 typedef void (*ArrowSoulActionFunc)(struct ArrowSoul*, PlayState*);
@@ -23,11 +19,6 @@ typedef struct ArrowSoul {
     /* 0x0164 */ f32 unk_164;
     /* 0x0168 */ ArrowSoulActionFunc actionFunc;
 } ArrowSoul; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_soul_gfx.c)
-// ============================================================================
 
 static u64 sArrowSoulTexture1[] = {
     0x0101010101010101, 0x0101010101010101, 0x0101010101010101, 0x0101010101010101, 0x0101010101010101,
@@ -208,13 +199,8 @@ static Gfx sArrowSoulVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97SoulMatDL[] = "__OTR__overlays/ovl_Arrow_Light/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97SoulMdlDL[] = "__OTR__overlays/ovl_Arrow_Light/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 
@@ -287,20 +273,14 @@ static void Sw97_ArrowSoul_LerpPos(Vec3f* unkPos, Vec3f* soulPos, f32 scale) {
     unkPos->z += ((soulPos->z - unkPos->z) * scale);
 }
 
-// Strict mapping per design:
-//   Undead (ReDead, Gibdo share EN_RD; Stalfos = EN_TEST) → Poe (EN_PO_FIELD)
-//   Small (Keese = EN_FIREFLY, Tektite = EN_TITE) → Healing Fairy (EN_ELF FAIRY_HEAL=6)
-//   Cucco (EN_NIW) → CUCCO MODE (30-second transformation, Soul-arrow only).
 static void Sw97_ArrowSoul_TryTransform(EnArrow* arrow, PlayState* play) {
-    // Use collider.base.at for the hit actor — arrow->hitActor only gets set for
-    // actors with ACTOR_FLAG_CAN_ATTACH_TO_ARROW (most enemies don't qualify).
+    // arrow->hitActor is only set for ACTOR_FLAG_CAN_ATTACH_TO_ARROW actors.
     Actor* hit = arrow->collider.base.at;
     if (hit == NULL || hit->update == NULL) {
         return;
     }
     s16 actorId = hit->id;
 
-    // Cucco hit → CUCCO MODE. The cucco isn't killed — Link transforms.
     if (actorId == ACTOR_EN_NIW) {
         Sw97_StartCuccoMode();
         return;
@@ -315,7 +295,7 @@ static void Sw97_ArrowSoul_TryTransform(EnArrow* arrow, PlayState* play) {
         spawnParams = 0;
     } else if (actorId == ACTOR_EN_FIREFLY || actorId == ACTOR_EN_TITE) {
         spawnId = ACTOR_EN_ELF;
-        spawnParams = 6; // FAIRY_HEAL — Link absorbs on contact
+        spawnParams = 6;
     } else {
         return;
     }
@@ -402,9 +382,6 @@ static void Sw97_ArrowSoul_Fly(ArrowSoul* this, PlayState* play) {
         this->timer = 32;
         this->alpha = 255;
         Sw97_ArrowSoul_TryTransform(arrow, play);
-        // Soul arrows refund Link 6 magic when they hit an actual enemy
-        // (harvesting the target's "spirit"). Skip pots, breakable walls,
-        // doors, etc. — only ENEMY / BOSS targets count.
         Actor* hit = arrow->collider.base.at;
         if (hit != NULL && hit->update != NULL && (hit->category == ACTORCAT_ENEMY || hit->category == ACTORCAT_BOSS)) {
             gSaveContext.magic += 6;

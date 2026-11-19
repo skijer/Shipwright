@@ -1,9 +1,3 @@
-/**
- * Cane of Pacci: a tap flips what Link aims at onto its back, helpless, the way a hammered Tektite goes over.
- * Holding the button lifts it instead and letting go throws it, and how much the cane can lift is Link's own
- * strength: nothing bare-handed, pots and light foes with the bracelet, heavy foes and big rocks with the
- * silver gauntlets, blocks with the golden ones.
- */
 
 #include <math.h>
 #include <string.h>
@@ -50,7 +44,6 @@
 #define PACCI_LIFT_SPIN 0x400
 #define PACCI_LIFT_THROW_BASE_SPEED 8.0f
 #define PACCI_LIFT_THROW_SPEED_PER_STRENGTH 4.0f
-// Nearly flat: the object already hangs above Link, so the arc starts up there.
 #define PACCI_LIFT_THROW_VEL_Y 0.5f
 #define PACCI_LIFT_GRAVITY -1.4f
 #define PACCI_LIFT_FLIGHT_FRAMES 90
@@ -59,7 +52,6 @@
 #define PACCI_BURST_DAMAGE_PER_STRENGTH 4
 #define PACCI_BURST_MIN_DAMAGE 8
 
-// Enemy weight classes: past these masses a foe needs the next gauntlet.
 #define PACCI_LIGHT_MASS 50
 #define PACCI_MEDIUM_MASS 150
 #define PACCI_STRENGTH_GOLD 3
@@ -92,7 +84,6 @@ typedef enum {
     PACCI_SWINGING,
 } PacciCanePhase;
 
-// Everything a flip overwrites, so a foe that survives it gets its own behaviour back exactly as it was.
 typedef struct {
     Actor* actor;
     u8 phase;
@@ -145,7 +136,8 @@ static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/
 static const ALIGN_ASSET(2) char sCaneDL[] = "__OTR__objects/object_pacci_cane/g_somaria_cane_dl";
 static const ALIGN_ASSET(2) char sCaneGiveDL[] = "__OTR__objects/object_pacci_cane/g_somaria_cane_give_dl";
 static const ALIGN_ASSET(2) char sCastAnim[] = "__OTR__misc/link_animetion/gPlayerAnim_nei_somaria";
-static const ALIGN_ASSET(2) char sRaisedAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_fighter_power_kiru_wait";
+static const ALIGN_ASSET(2) char sRaisedAnim[] =
+    "__OTR__objects/gameplay_keep/gPlayerAnim_link_fighter_power_kiru_wait";
 static const ALIGN_ASSET(2) char sThrowAnim[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_hammer_hit";
 static const ALIGN_ASSET(2) char sBeamDL[] = "__OTR__objects/object_dy_obj/gGreatFairySpiralBeamDL";
 static const ALIGN_ASSET(2) char sFlash1DL[] = "__OTR__objects/gameplay_keep/gEffFlash1DL";
@@ -156,34 +148,40 @@ static const ALIGN_ASSET(2) char sFlareRingDL[] = "__OTR__objects/gameplay_keep/
 static const u16 sItemButtons[PACCI_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                       BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-// Foes that would break if knocked over, and song spots that have no body to move.
-static const s16 sUntouchable[] = { ACTOR_EN_IK, ACTOR_EN_TORCH2, ACTOR_EN_ZF,  ACTOR_EN_WALLMAS,       ACTOR_EN_FLOORMAS,
-                                    ACTOR_EN_RD, ACTOR_EN_FZ,     ACTOR_EN_VM,  ACTOR_EN_RR,            ACTOR_EN_OKARINA_TAG,
-                                    ACTOR_EN_OKARINA_EFFECT };
-// The only scenery the golden gauntlets may carry: loose blocks and crates, never lifts, doors or floors.
+static const s16 sUntouchable[] = {
+    ACTOR_EN_IK, ACTOR_EN_TORCH2, ACTOR_EN_ZF, ACTOR_EN_WALLMAS,     ACTOR_EN_FLOORMAS,      ACTOR_EN_RD,
+    ACTOR_EN_FZ, ACTOR_EN_VM,     ACTOR_EN_RR, ACTOR_EN_OKARINA_TAG, ACTOR_EN_OKARINA_EFFECT
+};
 static const s16 sLiftableScenery[] = { ACTOR_OBJ_OSHIHIKI, ACTOR_OBJ_KIBAKO2 };
 
 static const Color_RGBA8 sSparklePrim = { 255, 255, 190, 255 };
 static const Color_RGBA8 sSparkleEnv = { 255, 150, 0, 255 };
 
-// While flipped the target carries this collider instead of its own: AT smashes what it falls on, like a
-// thrown pot, and AC is what makes a downed foe hittable at all.
 static ColliderCylinderInit sFlipColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_ON | AC_TYPE_PLAYER, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK0, { 0xFFCFFFFF, 0x00, 0x08 }, { 0xFFCFFFFF, 0x00, 0x00 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_ON,
+    { ELEMTYPE_UNK0,
+      { 0xFFCFFFFF, 0x00, 0x08 },
+      { 0xFFCFFFFF, 0x00, 0x00 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_ON,
       OCELEM_NONE },
     { 30, 46, -12, { 0, 0, 0 } },
 };
 
-// Owned by Link, not by the thrown object: an actor's AT never hits its own AC, and this must hurt both.
+// Owned by Link: an actor's AT never hits its own AC.
 static ColliderCylinderInit sBurstColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK0, { 0xFFCFFFFF, 0x00, PACCI_BURST_MIN_DAMAGE }, { 0x00000000, 0x00, 0x00 },
-      TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK0,
+      { 0xFFCFFFFF, 0x00, PACCI_BURST_MIN_DAMAGE },
+      { 0x00000000, 0x00, 0x00 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 34, 40, -10, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayDrawEnd", "OnSceneInit", "OnActorDrawEnd" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayDrawEnd", "OnSceneInit",
+                                              "OnActorDrawEnd" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -220,8 +218,7 @@ void Player_ZeroSpeedXZ(Player* player);
 LinkAnimationHeader* ResourceMgr_LoadPlayerAnimAsHeader(const char* animPath);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void PlayErrorSfx(void) {
@@ -256,7 +253,6 @@ static PacciFlip* FindFlip(Actor* actor) {
     return NULL;
 }
 
-// A foe killed while flipped leaves its entry behind: the effect outlives the cane, so reap before taking one.
 static PacciFlip* TakeFlip(void) {
     for (u8 i = 0; i < PACCI_POOL_SIZE; i++) {
         if (sFlips[i].actor != NULL && sFlips[i].actor->update == NULL) {
@@ -287,31 +283,38 @@ static void RestoreFlipped(PacciFlip* flip) {
     flip->actor = NULL;
 }
 
-// Anything physical that is not Link, a boss or an NPC, and that the game actually draws.
 static bool IsTargetable(Actor* actor) {
-    if (Player_GetStrength() < 1 || actor == NULL || actor->update == NULL || actor->draw == NULL || actor->id == ACTOR_PLAYER ||
-        actor->id == ACTOR_EN_OKARINA_TAG || actor->id == ACTOR_EN_OKARINA_EFFECT ||
-        FindFlip(actor) != NULL || actor == sLift.held) { return false; }
-    if (Player_GetStrength() >= PACCI_STRENGTH_GOLD) { return true; }
+    if (Player_GetStrength() < 1 || actor == NULL || actor->update == NULL || actor->draw == NULL ||
+        actor->id == ACTOR_PLAYER || actor->id == ACTOR_EN_OKARINA_TAG || actor->id == ACTOR_EN_OKARINA_EFFECT ||
+        FindFlip(actor) != NULL || actor == sLift.held) {
+        return false;
+    }
+    if (Player_GetStrength() >= PACCI_STRENGTH_GOLD) {
+        return true;
+    }
     if (actor->category == ACTORCAT_ENEMY) {
         return Player_GetStrength() >= 2 || actor->id == ACTOR_EN_TITE;
     }
     return actor->category == ACTORCAT_PROP;
 }
 
-static bool IsFlippable(Actor* actor) { return IsTargetable(actor); }
+static bool IsFlippable(Actor* actor) {
+    return IsTargetable(actor);
+}
 static s32 RequiredStrength(Actor* actor) {
-    if (actor->category == ACTORCAT_PROP || actor->id == ACTOR_EN_TITE) { return 1; }
+    if (actor->category == ACTORCAT_PROP || actor->id == ACTOR_EN_TITE) {
+        return 1;
+    }
     return actor->category == ACTORCAT_ENEMY ? 2 : 3;
 }
 static bool IsLiftable(Actor* actor) {
     return IsTargetable(actor) && Player_GetStrength() >= RequiredStrength(actor);
 }
 
-// What Link is looking at wins over what is merely closer: the cone is measured from his facing.
 static Actor* ScanAhead(PlayState* play, bool (*filter)(Actor*)) {
-    static const u8 sCategories[] = { ACTORCAT_ENEMY, ACTORCAT_PROP, ACTORCAT_BG, ACTORCAT_NPC,
-        ACTORCAT_CHEST, ACTORCAT_BOSS, ACTORCAT_MISC, ACTORCAT_SWITCH, ACTORCAT_ITEMACTION, ACTORCAT_EXPLOSIVE, ACTORCAT_DOOR };
+    static const u8 sCategories[] = { ACTORCAT_ENEMY,      ACTORCAT_PROP,      ACTORCAT_BG,   ACTORCAT_NPC,
+                                      ACTORCAT_CHEST,      ACTORCAT_BOSS,      ACTORCAT_MISC, ACTORCAT_SWITCH,
+                                      ACTORCAT_ITEMACTION, ACTORCAT_EXPLOSIVE, ACTORCAT_DOOR };
     Player* player = GET_PLAYER(play);
     Actor* best = NULL;
     s32 bestYawError = PACCI_SCAN_CONE;
@@ -322,8 +325,8 @@ static Actor* ScanAhead(PlayState* play, bool (*filter)(Actor*)) {
                 continue;
             }
             f32 distance = Math_Vec3f_DistXZ(&player->actor.world.pos, &actor->world.pos);
-            s32 yawError = ABS((s16)(Math_Vec3f_Yaw(&player->actor.world.pos, &actor->world.pos) -
-                                     player->actor.shape.rot.y));
+            s32 yawError =
+                ABS((s16)(Math_Vec3f_Yaw(&player->actor.world.pos, &actor->world.pos) - player->actor.shape.rot.y));
 
             if (distance > PACCI_SCAN_MIN_DIST && distance <= PACCI_SCAN_RANGE && yawError < bestYawError) {
                 bestYawError = yawError;
@@ -333,8 +336,6 @@ static Actor* ScanAhead(PlayState* play, bool (*filter)(Actor*)) {
     }
     return best;
 }
-
-// The cast visual: a beam from the cane hand to the target, sparkles along it and a ring gripping the target.
 
 static void GetHandPos(Player* player, Vec3f* pos) {
     Vec3f forearm = player->bodyPartsPos[PLAYER_BODYPART_R_FOREARM];
@@ -354,7 +355,6 @@ static void GetVfxTargetPos(Vec3f* pos) {
     pos->y += sVfx.grabHeight;
 }
 
-// A quadratic arch from hand to target, bowed sideways and rippling with the frame counter.
 static void GetCurvePoint(Vec3f* pos, Vec3f* start, Vec3f* end, f32 t, f32 sideOffset, u32 frame) {
     f32 inv = 1.0f - t;
     f32 dx = end->x - start->x;
@@ -433,7 +433,8 @@ static void UpdateVfx(PlayState* play, Player* player) {
     sVfx.age++;
     if (!sVfx.isPersistent && !sVfx.isReleasing &&
         (sVfx.age >= PACCI_VFX_MAX_FRAMES ||
-         (sVfx.age > PACCI_VFX_REACH_FRAMES && (sVfx.target->bgCheckFlags & (PACCI_BG_GROUND | PACCI_BG_GROUND_TOUCH))))) {
+         (sVfx.age > PACCI_VFX_REACH_FRAMES &&
+          (sVfx.target->bgCheckFlags & (PACCI_BG_GROUND | PACCI_BG_GROUND_TOUCH))))) {
         sVfx.isReleasing = true;
         sVfx.releaseTimer = PACCI_VFX_RELEASE_FRAMES;
         GetVfxTargetPos(&target);
@@ -529,8 +530,7 @@ static void DrawGrip(PlayState* play, Vec3f* hand, Vec3f* target, f32 reach, f32
     for (u8 i = 0; i < PACCI_VFX_GRIP_POINTS; i++) {
         s16 angle = (s16)(i * (0x10000 / PACCI_VFX_GRIP_POINTS) + (sVfx.target->shape.rot.z - sVfx.startRotZ));
         f32 side = Math_CosS(angle) * gripRadius;
-        Vec3f point = { target->x + sideX * side, target->y + Math_SinS(angle) * gripRadius,
-                        target->z + sideZ * side };
+        Vec3f point = { target->x + sideX * side, target->y + Math_SinS(angle) * gripRadius, target->z + sideZ * side };
 
         DrawSprite(play, &point, 0.014f * pulse, sSparklesDL);
     }
@@ -549,8 +549,7 @@ static void DrawVfx(PlayState* play, Player* player) {
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
     gSPSegment(POLY_XLU_DISP++, 0x08,
                (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, play->gameplayFrames * 2, 0, 0x20, 0x40, 1,
-                                             play->gameplayFrames, play->gameplayFrames * -8, 0x10, 0x10, 2, 0, 1,
-                                             -8));
+                                             play->gameplayFrames, play->gameplayFrames * -8, 0x10, 0x10, 2, 0, 1, -8));
     gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 190, alpha);
     gDPSetEnvColor(POLY_XLU_DISP++, 255, 150, 0, alpha);
     CLOSE_DISPS(play->state.gfxCtx);
@@ -582,8 +581,6 @@ static void DrawVfx(PlayState* play, Player* player) {
     DrawSprite(play, &target, 0.034f * pulse, sFlash2DL);
 }
 
-// Impact burst: the thrown object and whatever it hit take a real hit, with their own flinch, death and drop.
-
 static void SpawnBurst(PlayState* play, Player* player, Vec3f* pos, bool isHeavy) {
     s32 strength = Player_GetStrength();
 
@@ -592,7 +589,6 @@ static void SpawnBurst(PlayState* play, Player* player, Vec3f* pos, bool isHeavy
         sIsBurstReady = true;
     }
     Collider_SetCylinder(play, &sBurst, &player->actor, &sBurstColliderInit);
-    // Rocks only break to a hammer blow, and the golden gauntlets throw hard enough to deliver one.
     sBurst.info.toucher.dmgFlags = isHeavy || strength >= PACCI_STRENGTH_GOLD ? DMG_HAMMER : DMG_ARROW;
     sBurst.info.toucher.damage = (u8)MAX(PACCI_BURST_MIN_DAMAGE, strength * PACCI_BURST_DAMAGE_PER_STRENGTH);
     sBurst.dim.pos.x = (s16)pos->x;
@@ -608,8 +604,6 @@ static void UpdateBurst(PlayState* play) {
     sBurstTimer--;
     CollisionCheck_SetAT(play, &play->colChkCtx, &sBurst.base);
 }
-
-// Flip
 
 static void RollTumble(PacciFlip* flip) {
     flip->tumbleTargetX = (s16)((Rand_ZeroOne() - 0.7f) * 2800.0f);
@@ -628,7 +622,6 @@ static void FallStep(PacciFlip* flip, Actor* actor, PlayState* play) {
     Actor_UpdateBgCheckInfo(play, actor, 5.0f, 15.0f, 0.0f, PACCI_BG_CHECK_FLAGS);
 }
 
-// AC and OC stay live the whole time so a downed foe can be hit; AT only while it falls.
 static void SubmitFlipColliders(PacciFlip* flip, Actor* actor, PlayState* play, bool isAirborne) {
     Collider_UpdateCylinder(actor, &flip->collider);
     if (isAirborne) {
@@ -638,8 +631,6 @@ static void SubmitFlipColliders(PacciFlip* flip, Actor* actor, PlayState* play, 
     CollisionCheck_SetOC(play, &play->colChkCtx, &flip->collider.base);
 }
 
-// A hit on a downed foe comes off its health without waking it; only the killing blow gives it back, with
-// colChkInfo untouched, so its own update runs its own death.
 static bool TakeDownedHit(PacciFlip* flip, Actor* actor) {
     if (!(flip->collider.base.acFlags & AC_HIT)) {
         return false;
@@ -672,7 +663,6 @@ static void UpdateAirborne(PacciFlip* flip, Actor* actor, PlayState* play) {
         Actor_SpawnFloorDustRing(play, actor, &actor->world.pos, 20.0f, 11, 4.0f, 0, 0, false);
         Audio_PlayActorSound2(actor, NA_SE_EN_DODO_M_GND);
     }
-    // A flipped prop lands like a dropped pot and takes the impact; only foes stay down, helpless.
     if (actor->category != ACTORCAT_ENEMY) {
         Vec3f impact = actor->world.pos;
         bool isHeavy = actor->id == ACTOR_EN_ISHI;
@@ -713,7 +703,6 @@ static void UpdateRighting(PacciFlip* flip, Actor* actor, PlayState* play) {
     }
 }
 
-// The flipped actor's update: its own AI does not run at all while this one stands in for it.
 static void FlippedUpdate(Actor* actor, PlayState* play) {
     PacciFlip* flip = FindFlip(actor);
 
@@ -776,9 +765,6 @@ static bool CastFlip(PlayState* play, Player* player) {
     return true;
 }
 
-// Lift and throw
-
-// A held foe's update: the cane owns its movement and collision, and a live no-op keeps it off the kill list.
 static void HeldEnemyUpdate(Actor* actor, PlayState* play) {
 }
 
@@ -794,7 +780,6 @@ static void LetGo(void) {
         actor->minVelocityY = sLift.origMinVelocityY;
         actor->room = sLift.origRoom;
         actor->colorFilterParams = 0;
-        // Heavy enough to throw is heavy enough to hold down a floor switch.
         actor->flags |= ACTOR_FLAG_CAN_PRESS_SWITCHES;
     }
     sLift.held = NULL;
@@ -832,14 +817,12 @@ static bool TryGrab(PlayState* play, Player* player) {
         target->update = HeldEnemyUpdate;
         target->flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED;
     }
-    // A held object must survive the room it was picked up in unloading.
     target->room = -1;
     Audio_PlayActorSound2(target, NA_SE_EN_TEKU_REVERSE);
     StartVfx(play, player, target, true);
     return true;
 }
 
-// Aimed at Link's lock-on target when he has one, straight ahead otherwise; the stronger he is, the faster.
 static void Throw(Player* player) {
     Actor* actor = sLift.held;
     Actor* focus = player->focusActor;
@@ -852,8 +835,9 @@ static void Throw(Player* player) {
         LetGo();
         return;
     }
-    yaw = focus != NULL && focus != actor && focus->update != NULL ? Math_Vec3f_Yaw(&actor->world.pos, &focus->world.pos)
-                                                                   : player->actor.shape.rot.y;
+    yaw = focus != NULL && focus != actor && focus->update != NULL
+              ? Math_Vec3f_Yaw(&actor->world.pos, &focus->world.pos)
+              : player->actor.shape.rot.y;
     actor->world.rot.y = yaw;
     actor->shape.rot.y = yaw;
     actor->speedXZ = PACCI_LIFT_THROW_BASE_SPEED + PACCI_LIFT_THROW_SPEED_PER_STRENGTH * Player_GetStrength();
@@ -883,7 +867,6 @@ static void HoldAloft(Player* player, Actor* actor) {
     Actor_SetColorFilter(actor, PACCI_TINT_RED, 255, 0, 8);
 }
 
-// Landed, hit a wall, hit something, or flew too long: both ends of the impact take a real hit.
 static void FlyThrown(PlayState* play, Player* player, Actor* actor) {
     Actor_MoveXZGravity(actor);
     Actor_UpdateBgCheckInfo(play, actor, 5.0f, 15.0f, 0.0f, PACCI_BG_CHECK_FLAGS);
@@ -920,8 +903,6 @@ static void UpdateLift(PlayState* play, Player* player) {
         HoldAloft(player, actor);
     }
 }
-
-// The cane
 
 static void StartUpperAnim(PlayState* play, Player* player, LinkAnimationHeader* anim, f32 speed) {
     if (anim != NULL) {
@@ -962,7 +943,6 @@ static void OnRelease(PlayState* play, Player* player) {
     }
 }
 
-// Only strength can lift: bare-handed the hold does nothing, and anything too heavy is refused.
 static void OnHoldReached(PlayState* play, Player* player) {
     if (Player_GetStrength() == 0 || !TryGrab(play, player)) {
         PlayErrorSfx();
@@ -1013,7 +993,6 @@ static bool WasJustHurt(Player* player) {
     return isHurt;
 }
 
-// The raised pose belongs to the hold: frame 0 of the wait animation, frozen, with the legs left alone.
 static void HoldRaisedPose(PlayState* play, Player* player) {
     if (!sIsPoseHeld) {
         StartUpperAnim(play, player, (LinkAnimationHeader*)sRaisedAnim, 0.0f);
@@ -1023,7 +1002,6 @@ static void HoldRaisedPose(PlayState* play, Player* player) {
     LinkAnimation_Update(play, &player->upperSkelAnime);
 }
 
-// The return value is Link's "upper body is busy": only while the cane is actually swinging or raised.
 static s32 UpdateCane(Player* player, PlayState* play) {
     if (sPhase == PACCI_CASTING || sPhase == PACCI_SWINGING) {
         Player_ZeroSpeedXZ(player);
@@ -1049,16 +1027,13 @@ static void TakeOutCane(PlayState* play, Player* player) {
     sHoldTimer = 0;
     sIsTrackingPress = false;
     sIsPoseHeld = false;
-    // The press that drew the cane is not a cast.
     sIsWaitingForRelease = true;
     sLastInvincibility = player->invincibilityTimer;
 }
 
-// Tap and hold are told apart from the raw button in TrackButton; the press itself only has to be consumed.
 static void PressCane(Player* player, PlayState* play) {
 }
 
-// Flipped foes keep their state on purpose: knock one over, switch to the sword, hit it while it is down.
 static void PutCaneAway(Player* player, PlayState* play) {
     sPhase = PACCI_STOWED;
     sHoldTimer = 0;
@@ -1109,8 +1084,7 @@ static void DrawPacciInRightHand(Actor* actor, PlayState* play) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Translate(hand.x, hand.y, hand.z, MTXMODE_NEW);
     Matrix_RotateY(atan2f(dx, dz), MTXMODE_APPLY);
-    Matrix_RotateX(-atan2f(dy, sqrtf(dx*dx + dz*dz)), MTXMODE_APPLY);
-    // Calibrated by the user on 2026-10-14; two decimal places retain the measured pose.
+    Matrix_RotateX(-atan2f(dy, sqrtf(dx * dx + dz * dz)), MTXMODE_APPLY);
     Matrix_Translate(1.64f, -0.75f, 19.51f, MTXMODE_APPLY);
     Matrix_RotateX(DEG_TO_RAD(83.14f), MTXMODE_APPLY);
     Matrix_RotateY(DEG_TO_RAD(62.96f), MTXMODE_APPLY);
@@ -1129,7 +1103,6 @@ static void DrawPacciEffects(void) {
     }
 }
 
-// Every actor the cane was holding or flipping belongs to the scene that is ending.
 static void ForgetScene(int16_t sceneNum) {
     for (u8 i = 0; i < PACCI_POOL_SIZE; i++) {
         sFlips[i].actor = NULL;
@@ -1153,11 +1126,9 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, PACCI_KEY, PACCI_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -1173,11 +1144,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.cane_pacci.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.cane_pacci.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -1200,9 +1172,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (sPhase != PACCI_STOWED);
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -1235,7 +1205,6 @@ static void InitRemoteVisuals(void) {
     }
 }
 
-
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1253,7 +1222,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOHCustomItemDefinition cane = Z64Items_Define(PACCI_KEY, sIconTex, sNameTex);
 
     Z64Items_SetButtons(&cane, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
-    // Shares the Cane of Somaria's cell, after it.
     Z64Items_SetPlacement(&cane, 0, 21, -1);
     Z64Items_SetTextbox(&cane, "You got the %yCane of Pacci%w! Its&magic %yflips%w what it touches&"
                                "onto its back. Hold %y\xA1%w to %ylift%w it&instead and let go to throw it.^"

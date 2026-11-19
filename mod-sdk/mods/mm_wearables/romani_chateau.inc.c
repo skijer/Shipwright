@@ -1,4 +1,3 @@
-// Romani's Mask calls a cow the way Epona's Song does; wearing it at Link's house cow pours Chateau Romani.
 #define CHATEAU_KEY "nei.chateau_romani"
 
 const GetItemEntry* CustomItemRegistry_FindGetItemEntry(const char* key);
@@ -29,8 +28,7 @@ static void EndChateauMagic(void) {
     StoreChateauMagic();
 }
 
-static void ActivateChateauMagic(PlayState* play) {
-    Health_ChangeBy(play, 0x140);
+static void LendChateauMagic(void) {
     if (Flags_GetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER) || CVarGetInteger("gCheats.InfiniteMagic", 0)) {
         return;
     }
@@ -39,6 +37,15 @@ static void ActivateChateauMagic(PlayState* play) {
     Flags_SetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER);
     gSaveContext.magic = gSaveContext.magicCapacity;
     StoreChateauMagic();
+}
+
+static void ActivateChateauMagic(PlayState* play) {
+    Health_ChangeBy(play, 0x140);
+    LendChateauMagic();
+}
+
+static bool IsChateauLendingMagic(void) {
+    return sChateauOwnsMagic;
 }
 
 static void TickChateauMagic(void) {
@@ -59,10 +66,12 @@ static void RegisterCowMessages(void) {
     message.textboxPosition = 2;
     message.autoFormat = true;
     message.key = "nei.romani.cow_intro";
-    message.text = "This cow makes Chateau Romani! Have you brought an empty bottle?" "\x0B";
+    message.text = "This cow makes Chateau Romani! Have you brought an empty bottle?"
+                   "\x0B";
     sCowIntroText = sApi->RegisterMessage(&message);
     message.key = "nei.romani.cow_refill";
-    message.text = "Let me fill your bottle with fresh Chateau Romani!" "\x0B";
+    message.text = "Let me fill your bottle with fresh Chateau Romani!"
+                   "\x0B";
     sCowRefillText = sApi->RegisterMessage(&message);
 }
 
@@ -89,8 +98,7 @@ static bool CanCallCow(PlayState* play) {
     return play->msgCtx.msgMode == MSGMODE_NONE && !(player->stateFlags1 & busy) && DREG(53) == 0;
 }
 
-// DREG(53) is what En_Cow's idle reads after Epona's Song. Every cow reads it once in the next frame;
-// a call still standing after that found no idle cow, and would restart a conversation later.
+// DREG(53) is what En_Cow's idle reads after Epona's Song; a call left standing after one frame found no cow.
 static void WithdrawCowCall(void) {
     if (!sCowCalled || gPlayState == NULL || gPlayState->gameplayFrames - sCowCallFrame < 2) {
         return;
@@ -111,8 +119,8 @@ static void CallCow(Actor* cow, PlayState* play) {
     sCowCallFrame = play->gameplayFrames;
 }
 
-// En_Cow re-offers GI_MILK every frame until Link takes it; the offer it already won is swapped in place,
-// because GiveItemEntryFromActor's talk-range test rejects a GI_CUSTOM entry mid-conversation.
+// GiveItemEntryFromActor's talk-range test rejects a GI_CUSTOM entry mid-conversation, so the offer is swapped in
+// place.
 static void OfferChateauForMilk(Actor* cow, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
@@ -152,11 +160,11 @@ static void StoreChateau(void) {
 }
 
 static void LoadChateau(int32_t file) {
-    sChateauMagicActive = false;
     sChateauOwnsMagic = false;
     sApi->StorageGet("nei.mm_wearables", "chateau_magic_owned", &sChateauOwnsMagic, sizeof(sChateauOwnsMagic));
+    sChateauMagicActive = sChateauOwnsMagic;
     if (sChateauOwnsMagic) {
-        EndChateauMagic();
+        Flags_SetRandomizerInf(RAND_INF_HAS_INFINITE_MAGIC_METER);
     }
     sCowCalled = false;
     sChateauCount = 0;
@@ -164,7 +172,6 @@ static void LoadChateau(int32_t file) {
     sChateauCount = MIN(sChateauCount, 1);
 }
 
-// not_enough_bottles owns which bottle holds Chateau; without it the drink waits in its own slot.
 static bool FillChateauBottle(PlayState* play) {
     typedef bool (*FillFunc)(PlayState*);
     FillFunc fill = SOH_MOD_API_HAS(sApi, FindService) ? (FillFunc)sApi->FindService("nei.bottles.fill_chateau") : NULL;
@@ -201,6 +208,9 @@ static void RegisterChateau(void) {
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorUpdate, ACTOR_EN_COW, UpdateCowForRomani);
     if (SOH_MOD_API_HAS(sApi, PublishService)) {
         sApi->PublishService("nei.chateau.drink", (void*)ActivateChateauMagic);
+        sApi->PublishService("nei.chateau.lends_magic", (void*)IsChateauLendingMagic);
+        sApi->PublishService("nei.chateau.lend", (void*)LendChateauMagic);
+        sApi->PublishService("nei.chateau.end", (void*)EndChateauMagic);
     }
     SOHCustomItemDefinition item = Z64Items_Define(CHATEAU_KEY, sChateauIcon, sChateauName);
     Z64Items_SetButtons(&item, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);

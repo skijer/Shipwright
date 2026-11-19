@@ -1,6 +1,3 @@
-// Where the primed element shows and is picked, as in NEI: the button icon wears the element's medallion,
-// A on the bow or slingshot cell cycles it with the stick, and holding C on the cell opens a ring of all of them.
-
 #include "z64items.h"
 
 #include "sw97_mod.h"
@@ -15,7 +12,6 @@
 #define CYCLING_COLOR_SET 8
 #define NO_CELL -1
 #define ICON_CUSTOM(name) "__OTR__textures/icon_item_custom/" name
-// Every row starts even, so no path reads as a segmented address.
 #define ICON_PATH_SIZE 72
 
 typedef struct {
@@ -61,7 +57,6 @@ static const ALIGN_ASSET(2) char sSlingshotElementIcons[SW97_ELEM_COUNT][ICON_PA
     ICON_CUSTOM("gItemIconSlingshotSw97WindTex"),
 };
 
-// NEI's ring: up to eight entries clockwise from the top of the cell.
 static const s16 sRingOffsetX[WHEEL_MAX_ENTRIES] = { 0, 17, 24, 17, 0, -17, -24, -17 };
 static const s16 sRingOffsetY[WHEEL_MAX_ENTRIES] = { -24, -17, 0, 17, 24, 17, 0, -17 };
 
@@ -94,7 +89,7 @@ static uint8_t CurrentEntryIndex(bool isSling) {
 
 static void PlayMenuSfx(u16 sfxId) {
     Audio_PlaySfxGeneral(sfxId, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
 }
 
 static void ResolveElementButtonIcon(PlayState* play, uint8_t button, uint16_t item, const char** iconPath) {
@@ -130,7 +125,6 @@ static void StepSelector(bool isSling, s32 direction) {
     PlayMenuSfx(NA_SE_SY_CURSOR);
 }
 
-// KaleidoWheel_Run from NEI: A opens and closes, the stick or the D-pad steps, and the cursor is locked meanwhile.
 static void HandleSelector(PlayState* play, bool isSling, uint8_t cell) {
     PauseContext* pauseCtx = &play->pauseCtx;
     Input* input = &play->state.input[0];
@@ -188,7 +182,6 @@ static void MoveRingCursor(Input* input, uint8_t count) {
     }
 }
 
-// Pressing C equips the weapon as usual; keeping it held opens the ring, and letting go primes the choice.
 static void HandleRing(PlayState* play, bool isSling) {
     Input* input = &play->state.input[0];
     uint8_t count = Sw97_ElementCount();
@@ -248,7 +241,8 @@ static void DrawSelectorPreviews(PlayState* play, bool isSling, uint8_t cell) {
     if (count <= 1) {
         return;
     }
-    KaleidoScope_DrawCycleIcons(play, cell, CycleIcon(isSling, Sw97_ElementAt((uint8_t)((current + count - 1) % count))),
+    KaleidoScope_DrawCycleIcons(play, cell,
+                                CycleIcon(isSling, Sw97_ElementAt((uint8_t)((current + count - 1) % count))),
                                 CycleIcon(isSling, Sw97_ElementAt((uint8_t)((current + 1) % count))));
 }
 
@@ -277,7 +271,6 @@ static void DrawRing(PlayState* play, bool isSling, uint8_t cell) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Drawn once every cell is down, so no later icon covers the previews that spill onto the neighbours.
 static void DrawWeaponCell(PlayState* play, int32_t cell, int32_t item, Vtx* vertices) {
     PauseContext* pauseCtx = &play->pauseCtx;
     uint16_t cursorItem;

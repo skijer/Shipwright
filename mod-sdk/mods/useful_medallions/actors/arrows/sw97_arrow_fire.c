@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================================
-// Struct (merged from z_arrow_fire.h)
-// ============================================================================
-
 struct ArrowFire;
 
 typedef void (*ArrowFireActionFunc)(struct ArrowFire*, PlayState*);
@@ -23,11 +19,6 @@ typedef struct ArrowFire {
     /* 0x0166 */ u16 timer;
     /* 0x0168 */ u8 alpha;
 } ArrowFire; // size = 0x016C
-
-
-// ============================================================================
-// Graphics data (merged from z_arrow_fire_gfx.c)
-// ============================================================================
 
 static UNK_TYPE sArrowFireTexture1[] = {
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -217,13 +208,8 @@ static Gfx sArrowFireVertexDL[] = {
     gsSPEndDisplayList(),
 };
 
-// Vanilla OTR cone geometry (correct wide cone, replaces narrow SW97 inline vertices)
 static const ALIGN_ASSET(2) char sSw97FireMatDL[] = "__OTR__overlays/ovl_Arrow_Fire/sMaterialDL";
 static const ALIGN_ASSET(2) char sSw97FireMdlDL[] = "__OTR__overlays/ovl_Arrow_Fire/sModelDL";
-
-// ============================================================================
-// Actor code
-// ============================================================================
 
 #define FLAGS 0x02000010
 
@@ -261,7 +247,6 @@ void Sw97_ArrowFire_Init(Actor* thisx, PlayState* play) {
 
 void Sw97_ArrowFire_Destroy(Actor* thisx, PlayState* play) {
     func_800876C8(play);
-    // Translates to: "Disappearance"
     LOG_STRING("消滅");
 }
 
@@ -277,13 +262,11 @@ void Sw97_ArrowFire_Charge(ArrowFire* this, PlayState* play) {
     if (this->radius < 10) {
         this->radius += 1;
     }
-    // copy position and rotation from arrow
     this->actor.world.pos = arrow->actor.world.pos;
     this->actor.shape.rot = arrow->actor.shape.rot;
 
     Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_ARROW_CHARGE_FIRE - SFX_FLAG);
 
-    // if arrow has no parent, player has fired the arrow
     if (arrow->actor.parent == NULL) {
         this->unkPos = this->actor.world.pos;
         this->radius = 10;
@@ -360,7 +343,6 @@ void Sw97_ArrowFire_Fly(ArrowFire* this, PlayState* play) {
         Actor_Kill(&this->actor);
         return;
     }
-    // copy position and rotation from arrow
     this->actor.world.pos = arrow->actor.world.pos;
     this->actor.shape.rot = arrow->actor.shape.rot;
     distanceScaled = Math_Vec3f_DistXYZ(&this->unkPos, &this->actor.world.pos) * (1.0f / 24.0f);
@@ -416,7 +398,6 @@ void Sw97_ArrowFire_Draw(Actor* thisx, PlayState* play) {
         Matrix_RotateZ(tranform->shape.rot.z * (M_PI / 0x8000), MTXMODE_APPLY);
         Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
 
-        // Draw red effect over the screen when arrow hits
         if (this->unk_15C > 0) {
             POLY_XLU_DISP = func_800937C0(POLY_XLU_DISP);
             gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, (s32)(40.0f * this->unk_15C) & 0xFF, 0, 0,
@@ -426,7 +407,6 @@ void Sw97_ArrowFire_Draw(Actor* thisx, PlayState* play) {
             gDPFillRectangle(POLY_XLU_DISP++, 0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1);
         }
 
-        // Draw fire on the arrow
         Gfx_SetupDL_25Xlu(play->state.gfxCtx);
         gDPSetPrimColor(POLY_XLU_DISP++, 0x80, 0x80, 255, 200, 0, this->alpha);
         gDPSetEnvColor(POLY_XLU_DISP++, 255, 0, 0, 128);

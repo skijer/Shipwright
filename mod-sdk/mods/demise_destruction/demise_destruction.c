@@ -59,8 +59,7 @@ static s16 sSceneNum = -1;
 static u32 sLastFrame;
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void SpawnExplosionAt(PlayState* play, Vec3f* pos, f32 scale) {
@@ -96,15 +95,13 @@ static void SpawnLightningRing(PlayState* play, Vec3f* center, u8 count) {
     }
 }
 
-// Dust crawling outward along the ground, the tell that the blast is still growing.
 static void SpawnGroundDust(PlayState* play, Vec3f* center, u8 count) {
     Color_RGBA8 env = { 0, 0, 0, 255 };
 
     for (u8 i = 0; i < count; i++) {
         s16 angle = (s16)(i * (0x10000 / count));
         f32 radius = 80.0f + Rand_ZeroOne() * 240.0f;
-        Vec3f pos = { center->x + Math_SinS(angle) * radius, center->y + 2.0f,
-                      center->z + Math_CosS(angle) * radius };
+        Vec3f pos = { center->x + Math_SinS(angle) * radius, center->y + 2.0f, center->z + Math_CosS(angle) * radius };
         Vec3f velocity = { Math_SinS(angle) * 3.0f, 1.0f + Rand_ZeroOne() * 2.0f, Math_CosS(angle) * 3.0f };
         Vec3f accel = { -velocity.x * 0.1f, -0.1f, -velocity.z * 0.1f };
 
@@ -124,7 +121,6 @@ static void RequestQuake(PlayState* play, s16 speed, s16 strength, s16 duration)
     Quake_SetCountdown(quake, duration);
 }
 
-// The Megaton Hammer's floor hit: tektites flip and every actor that listens for the hammer reacts near Link.
 static void ShakeGroundLikeHammer(PlayState* play) {
     RequestQuake(play, 27767, 12, 30);
     play->actorCtx.unk_02 = 4;
@@ -180,7 +176,6 @@ static void UpdateStorm(PlayState* play) {
     }
 }
 
-// A scene load rebuilds envCtx and the lights, so nothing the spell set up belongs to the new scene.
 static void ForgetPreviousScene(PlayState* play) {
     bool isNewScene = (play->sceneNum != sSceneNum) || (play->state.frames < sLastFrame);
 
@@ -203,7 +198,7 @@ static void Stop(Player* player, PlayState* play) {
     if (sPhase == DEMISE_IDLE) {
         return;
     }
-    // NEI left these set when the wind-up was cut short, which stranded Link with no input.
+    // Left set when the wind-up is cut short, which would strand Link with no input.
     if (sPhase == DEMISE_WINDUP) {
         player->stateFlags1 &= ~(PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_INPUT_DISABLED);
         ReleaseCamera(play);
@@ -216,8 +211,7 @@ static void Stop(Player* player, PlayState* play) {
 }
 
 static bool CanCast(Player* player, PlayState* play) {
-    return sPhase == DEMISE_IDLE && !(player->stateFlags1 & PLAYER_STATE1_IN_WATER) &&
-           (player->actor.bgCheckFlags & 1);
+    return sPhase == DEMISE_IDLE && !(player->stateFlags1 & PLAYER_STATE1_IN_WATER) && (player->actor.bgCheckFlags & 1);
 }
 
 // Two frames early: the player is still finishing its own update and would stomp the camera setting back.
@@ -325,7 +319,6 @@ static void UpdateWindup(Player* player, PlayState* play) {
     sTimer = 0;
 }
 
-// The blast is one cylinder of hammer-class damage, held live for a few frames after the flash.
 static void UpdateFinish(Player* player, PlayState* play) {
     sCollider.dim.pos.x = (s16)player->actor.world.pos.x;
     sCollider.dim.pos.y = (s16)player->actor.world.pos.y;
@@ -390,7 +383,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEMISE_KEY, DEMISE_KEY, "",
 };

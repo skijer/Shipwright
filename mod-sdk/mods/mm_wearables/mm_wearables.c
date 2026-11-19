@@ -1,6 +1,3 @@
-// Majora's Mask wearables: seventeen masks that leave Link as Link.
-// The four transformation masks, Keaton's Mask, Kafei's Mask and Garo's Mask live in their own mods.
-// Together the mods fill Majora's 24-cell mask grid.
 
 #include <string.h>
 #include <math.h>
@@ -45,21 +42,20 @@ extern void MmTax_Init(const SOHModApi* api);
 #define MASK_CAPTAIN 21
 #define MASK_GIANT 22
 
-// Every slot this mod fills. Everything per-mask is generated from it, so adding a mask is one line.
-#define MM_WEARABLE_SLOTS(X)                                                                                     \
-    X(MASK_POSTMAN) X(MASK_ALL_NIGHT) X(MASK_BLAST) X(MASK_STONE) X(MASK_GREAT_FAIRY) X(MASK_BREMEN)              \
-    X(MASK_BUNNY) X(MASK_DON_GERO) X(MASK_SCENTS) X(MASK_ROMANI) X(MASK_CIRCUS_LEADER) X(MASK_COUPLE)             \
-    X(MASK_TRUTH) X(MASK_KAMARO) X(MASK_GIBDO) X(MASK_CAPTAIN) X(MASK_GIANT)
+#define MM_WEARABLE_SLOTS(X)                                                                                          \
+    X(MASK_POSTMAN)                                                                                                   \
+    X(MASK_ALL_NIGHT) X(MASK_BLAST) X(MASK_STONE) X(MASK_GREAT_FAIRY) X(MASK_BREMEN) X(MASK_BUNNY) X(MASK_DON_GERO)   \
+        X(MASK_SCENTS) X(MASK_ROMANI) X(MASK_CIRCUS_LEADER) X(MASK_COUPLE) X(MASK_TRUTH) X(MASK_KAMARO) X(MASK_GIBDO) \
+            X(MASK_CAPTAIN) X(MASK_GIANT)
 
 #define MM_ICON_DIR "__OTR__icon_item_static_yar/"
 #define MM_NAME_DIR "__OTR__item_name_static/"
 #define MM_OBJECT_DIR "__OTR__objects/object_"
 #define MM_ANIM_DIR "__OTR__misc/link_animetion/gPlayerAnim_"
 
-// soh does not name the bgCheckFlags bits; z_player.c reads this one raw as 1.
+// z_player.c reads this bgCheckFlags bit raw as 1.
 #define BG_ON_GROUND 1
 
-// An actor this far away is outside every range check in the game.
 #define HIDDEN_DISTANCE 32000.0f
 
 #define NIGHT_SKULLTULA_SCALE 0.02f
@@ -92,14 +88,12 @@ extern void MmTax_Init(const SOHModApi* api);
 #define CAPTAIN_SPAWN_NEAR 200.0f
 #define CAPTAIN_SPAWN_SPREAD 200.0f
 #define CAPTAIN_GIANT_STALCHILD_PARAMS 10
-// home.rot.z on a spawned minion: nothing vanilla writes it, so it marks our own.
 #define CAPTAIN_MINION_TAG 0x7FFF
 
 #define BREMEN_MARCH_SPEED 3.5f
 #define BREMEN_TURN_RATE 0x07D0
 #define BREMEN_CUCCO_AT_FRAME 120
 #define BREMEN_CUCCO_COOLDOWN 400
-// SPEED_MODE_CURVED of z_player.c, which has no public header either.
 #define SPEED_MODE_CURVED 0.018f
 
 #define COW_TALK_RADIUS 150.0f
@@ -115,7 +109,6 @@ extern void MmTax_Init(const SOHModApi* api);
 #define FAIRY_HAIR_SEGMENT 0x0B
 #define GREAT_FAIRY_REWARD_SWITCH 0x38
 
-// A Majora player animation is the same raw format as an Ocarina one, but its root sits elsewhere.
 #define MM_ANIM_VALUES_PER_FRAME 67
 #define MM_ANIM_BASE_TRANSL_X (-57)
 
@@ -124,45 +117,42 @@ extern void MmTax_Init(const SOHModApi* api);
 
 typedef struct {
     const char* key;
-    // The key a save made before the mm. names owns this mask under; NULL when it never changed.
-    const char* legacyKey;
+    const char* storeId;
     const char* iconPath;
     const char* namePath;
-    // NULL for a mask that wears Ocarina's own model instead (see vanillaMask).
     const char* wornDL;
     const char* getItemDL;
-    // The PLAYER_MASK_* slot this mask lends while worn, so every vanilla NPC check already works.
     uint8_t vanillaMask;
     const char* getItemText;
     const char* pauseText;
 } WearableMask;
 
 static const WearableMask sMasks[MASK_GRID_SIZE] = {
-    [MASK_POSTMAN] = { "mm.mask.postman", "nei.mask_postman", MM_ICON_DIR "gItemIconPostmansHatTex",
+    [MASK_POSTMAN] = { "mm.mask.postman", "mask_postman", MM_ICON_DIR "gItemIconPostmansHatTex",
                        MM_NAME_DIR "gItemNamePostmansHatENGTex",
                        MM_OBJECT_DIR "mask_posthat/object_mask_posthat_DL_000290",
                        MM_OBJECT_DIR "gi_mask12/gGiPostmanHatCapDL", PLAYER_MASK_NONE,
                        "You got the %rPostman's Hat%w!&The cap of a man who has&never been late in his life.",
                        "%rPostman's Hat&%wPress %y\xA1%w to wear it. %y\xA0%w opens the&mailbox map." },
-    [MASK_ALL_NIGHT] = { "mm.mask.all_night", "nei.mask_all_night", MM_ICON_DIR "gItemIconAllNightMaskTex",
+    [MASK_ALL_NIGHT] = { "mm.mask.all_night", "mask_all_night", MM_ICON_DIR "gItemIconAllNightMaskTex",
                          MM_NAME_DIR "gItemNameAllNightMaskENGTex",
                          MM_OBJECT_DIR "mask_yofukasi/object_mask_yofukasi_DL_000490",
                          MM_OBJECT_DIR "gi_mask06/gGiAllNightMaskFaceDL", PLAYER_MASK_NONE,
                          "You got the %rAll-Night Mask%w!&Nothing sleeps while you wear&"
                          "it, not even what only comes&out at night.",
                          "%rAll-Night Mask&%wPress %y\xA1%w to wear it. Night skulltulas&come out by day." },
-    [MASK_BLAST] = { "mm.mask.blast", "nei.mask_blast", MM_ICON_DIR "gItemIconBlastMaskTex",
+    [MASK_BLAST] = { "mm.mask.blast", "mask_blast", MM_ICON_DIR "gItemIconBlastMaskTex",
                      MM_NAME_DIR "gItemNameBlastMaskENGTex",
                      MM_OBJECT_DIR "mask_bakuretu/object_mask_bakuretu_DL_0005C0",
                      MM_OBJECT_DIR "gi_mask21/gGiBlastMaskDL", PLAYER_MASK_NONE,
                      "You got the %rBlast Mask%w! A&bomb you can wear. Press %y\xA0%w and&stand well back.",
                      "%rBlast Mask&%wPress %y\xA1%w to wear it. Then %y\xA0%w&detonates it." },
-    [MASK_STONE] = { "mm.mask.stone", "nei.mask_stone", MM_ICON_DIR "gItemIconStoneMaskTex",
+    [MASK_STONE] = { "mm.mask.stone", "mask_stone", MM_ICON_DIR "gItemIconStoneMaskTex",
                      MM_NAME_DIR "gItemNameStoneMaskENGTex", MM_OBJECT_DIR "mask_stone/object_mask_stone_DL_000820",
                      MM_OBJECT_DIR "gi_stonemask/gGiStoneMaskDL", PLAYER_MASK_NONE,
                      "You got the %rStone Mask%w! It&makes you as dull as a rock:&nobody will look twice at you.",
                      "%rStone Mask&%wPress %y\xA1%w to wear it. Nothing can&see or hear you." },
-    [MASK_GREAT_FAIRY] = { "mm.mask.great_fairy", "nei.mask_great_fairy", MM_ICON_DIR "gItemIconGreatFairyMaskTex",
+    [MASK_GREAT_FAIRY] = { "mm.mask.great_fairy", "mask_great_fairy", MM_ICON_DIR "gItemIconGreatFairyMaskTex",
                            MM_NAME_DIR "gItemNameGreatFairysMaskENGTex",
                            MM_OBJECT_DIR "mask_bigelf/object_mask_bigelf_DL_0016F0",
                            MM_OBJECT_DIR "gi_mask14/gGiGreatFairyMaskFaceDL", PLAYER_MASK_NONE,
@@ -170,86 +160,82 @@ static const WearableMask sMasks[MASK_GRID_SIZE] = {
                            "and the Great Fairies answer&it.",
                            "%rGreat Fairy's Mask&%wPress %y\xA1%w to wear it. %y\xA0%w opens the&"
                            "fountain map; in a fountain, %y\x9F%w&claims her gift." },
-    [MASK_BREMEN] = { "mm.mask.bremen", "nei.mask_bremen", MM_ICON_DIR "gItemIconBremenMaskTex",
+    [MASK_BREMEN] = { "mm.mask.bremen", "mask_bremen", MM_ICON_DIR "gItemIconBremenMaskTex",
                       MM_NAME_DIR "gItemNameBremenMaskENGTex", MM_OBJECT_DIR "mask_bree/object_mask_bree_DL_0003C0",
                       MM_OBJECT_DIR "gi_mask20/gGiBremenMaskDL", PLAYER_MASK_NONE,
                       "You got the %rBremen Mask%w!&Hold %y\xA0%w and march. Whatever&"
                       "falls in behind you is yours.",
                       "%rBremen Mask&%wPress %y\xA1%w to wear it. Hold %y\xA0%w to&march." },
-    [MASK_BUNNY] = { "nei.mask_bunny", NULL, "__OTR__textures/icon_item_static/gItemIconMaskBunnyHoodTex",
+    [MASK_BUNNY] = { "nei.mask_bunny", "mask_bunny", "__OTR__textures/icon_item_static/gItemIconMaskBunnyHoodTex",
                      "__OTR__textures/item_name_static/gBunnyHoodItemNameENGTex", NULL,
                      "__OTR__objects/object_gi_rabit_mask/gGiBunnyHoodDL", PLAYER_MASK_BUNNY,
                      "You got the %rBunny Hood%w! In&Termina its ears do more than&flap: you run like a rabbit.",
                      "%rBunny Hood&%wPress %y\xA1%w to wear it. Link runs half&again as fast." },
-    [MASK_DON_GERO] = { "mm.mask.don_gero", "nei.mask_don_gero", MM_ICON_DIR "gItemIconDonGeroMaskTex",
+    [MASK_DON_GERO] = { "mm.mask.don_gero", "mask_don_gero", MM_ICON_DIR "gItemIconDonGeroMaskTex",
                         MM_NAME_DIR "gItemNameDonGerosMaskENGTex", MM_OBJECT_DIR "mask_gero/gDonGeroMaskDL",
                         MM_OBJECT_DIR "gi_mask16/gGiDonGeroMaskFaceDL", PLAYER_MASK_NONE,
                         "You got %rDon Gero's Mask%w! The&frogs take their conductor&seriously. Find their log.",
                         "%rDon Gero's Mask&%wPress %y\xA1%w to wear it. At the frogs'&log, %y\xA1%w conducts." },
-    [MASK_SCENTS] = { "mm.mask.scents", "nei.mask_scents", MM_ICON_DIR "gItemIconMaskOfScentsTex",
+    [MASK_SCENTS] = { "mm.mask.scents", "mask_scents", MM_ICON_DIR "gItemIconMaskOfScentsTex",
                       MM_NAME_DIR "gItemNameMaskOfScentsENGTex",
                       MM_OBJECT_DIR "mask_bu_san/object_mask_bu_san_DL_000710",
                       MM_OBJECT_DIR "gi_mask22/gGiMaskOfScentsFaceDL", PLAYER_MASK_NONE,
                       "You got the %rMask of Scents%w!&A pig's nose, and a pig's nose&misses nothing.",
                       "%rMask of Scents&%wPress %y\xA1%w to wear it. Stand still and&Link sniffs the air." },
-    [MASK_ROMANI] = { "mm.mask.romani", "nei.mask_romani", MM_ICON_DIR "gItemIconRomaniMaskTex",
+    [MASK_ROMANI] = { "mm.mask.romani", "mask_romani", MM_ICON_DIR "gItemIconRomaniMaskTex",
                       MM_NAME_DIR "gItemNameRomanisMaskENGTex",
                       MM_OBJECT_DIR "mask_romerny/object_mask_romerny_DL_0007A0",
                       MM_OBJECT_DIR "gi_mask10/gGiRomaniMaskCapDL", PLAYER_MASK_NONE,
                       "You got %rRomani's Mask%w! Every&cow in the land knows the&ranch it came from.",
                       "%rRomani's Mask&%wPress %y\xA1%w to wear it. Cows give milk&to %y\xA0%w, no song." },
-    [MASK_CIRCUS_LEADER] = { "mm.mask.circus_leader", "nei.mask_circus_leader", MM_ICON_DIR "gItemIconCircusLeaderMaskTex",
+    [MASK_CIRCUS_LEADER] = { "mm.mask.circus_leader", "mask_circus_leader", MM_ICON_DIR "gItemIconCircusLeaderMaskTex",
                              MM_NAME_DIR "gItemNameCircusLeadersMaskENGTex",
                              MM_OBJECT_DIR "mask_zacho/object_mask_zacho_DL_000700",
                              MM_OBJECT_DIR "gi_mask11/gGiCircusLeaderMaskFaceDL", PLAYER_MASK_NONE,
                              "You got the %rCircus Leader's&Mask%w! A face so sad that&"
                              "everyone who sees it weeps.",
                              "%rCircus Leader's Mask&%wPress %y\xA1%w to wear it." },
-    [MASK_COUPLE] = { "mm.mask.couple", "nei.mask_couple", MM_ICON_DIR "gItemIconCouplesMaskTex",
-                      MM_NAME_DIR "gItemNameCouplesMaskENGTex",
-                      MM_OBJECT_DIR "mask_meoto/object_mask_meoto_DL_0005A0",
+    [MASK_COUPLE] = { "mm.mask.couple", "mask_couple", MM_ICON_DIR "gItemIconCouplesMaskTex",
+                      MM_NAME_DIR "gItemNameCouplesMaskENGTex", MM_OBJECT_DIR "mask_meoto/object_mask_meoto_DL_0005A0",
                       MM_OBJECT_DIR "gi_mask13/gGiCouplesMaskFullDL", PLAYER_MASK_NONE,
                       "You got the %rCouple's Mask%w!&Two halves made whole.&Wearing it mends you as you&walk.",
                       "%rCouple's Mask&%wPress %y\xA1%w to wear it. Heals by day,&restores magic by night." },
-    [MASK_TRUTH] = { "nei.mask_truth", NULL, "__OTR__textures/icon_item_static/gItemIconMaskTruthTex",
+    [MASK_TRUTH] = { "nei.mask_truth", "mask_truth", "__OTR__textures/icon_item_static/gItemIconMaskTruthTex",
                      "__OTR__textures/item_name_static/gMaskofTruthItemNameENGTex", NULL,
                      "__OTR__objects/object_gi_truth_mask/gGiMaskOfTruthDL", PLAYER_MASK_TRUTH,
                      "You got the %rMask of Truth%w!&Stone and beast alike will tell&you what they know.",
                      "%rMask of Truth&%wPress %y\xA1%w to wear it. Gossip Stones&will speak." },
-    [MASK_KAMARO] = { "mm.mask.kamaro", "nei.mask_kamaro", MM_ICON_DIR "gItemIconKamaroMaskTex",
+    [MASK_KAMARO] = { "mm.mask.kamaro", "mask_kamaro", MM_ICON_DIR "gItemIconKamaroMaskTex",
                       MM_NAME_DIR "gItemNameKamarosMaskENGTex",
                       MM_OBJECT_DIR "mask_dancer/object_mask_dancer_DL_000EF0",
                       MM_OBJECT_DIR "gi_mask17/gGiKamaroMaskDL", PLAYER_MASK_NONE,
                       "You got %rKamaro's Mask%w! A&dancer's last lesson. Hold %y\xA0%w and&pass it on.",
                       "%rKamaro's Mask&%wPress %y\xA1%w to wear it. Hold %y\xA0%w to&dance." },
-    [MASK_GIBDO] = { "mm.mask.gibdo", "nei.mask_gibdo", MM_ICON_DIR "gItemIconGibdoMaskTex",
+    [MASK_GIBDO] = { "mm.mask.gibdo", "mask_gibdo", MM_ICON_DIR "gItemIconGibdoMaskTex",
                      MM_NAME_DIR "gItemNameGibdoMaskENGTex", MM_OBJECT_DIR "mask_gibudo/object_mask_gibudo_DL_000250",
                      MM_OBJECT_DIR "gi_mask15/gGiGibdoMaskDL", PLAYER_MASK_NONE,
                      "You got the %rGibdo Mask%w! The&dead take you for one of their&own and let you pass.",
                      "%rGibdo Mask&%wPress %y\xA1%w to wear it. Redeads and&Gibdos ignore you." },
-    [MASK_CAPTAIN] = { "mm.mask.captain", "nei.mask_captain", MM_ICON_DIR "gItemIconCaptainsHatTex",
+    [MASK_CAPTAIN] = { "mm.mask.captain", "mask_captain", MM_ICON_DIR "gItemIconCaptainsHatTex",
                        MM_NAME_DIR "gItemNameCaptainsHatENGTex", MM_OBJECT_DIR "mask_skj/object_mask_skj_DL_0009F0",
                        MM_OBJECT_DIR "gi_mask18/gGiCaptainsHatBodyDL", PLAYER_MASK_NONE,
                        "You got the %rCaptain's Hat%w! The&bones of the field answer to&whoever wears it.",
                        "%rCaptain's Hat&%wPress %y\xA1%w to wear it. Stalchildren&serve instead of attack." },
-    [MASK_GIANT] = { "mm.mask.giant", "nei.mask_giant", MM_ICON_DIR "gItemIconGiantsMaskTex",
-                     MM_NAME_DIR "gItemNameGiantsMaskENGTex",
-                     MM_OBJECT_DIR "mask_kyojin/object_mask_kyojin_DL_000380",
+    [MASK_GIANT] = { "mm.mask.giant", "mask_giant", MM_ICON_DIR "gItemIconGiantsMaskTex",
+                     MM_NAME_DIR "gItemNameGiantsMaskENGTex", MM_OBJECT_DIR "mask_kyojin/object_mask_kyojin_DL_000380",
                      MM_OBJECT_DIR "gi_mask23/gGiGiantMaskDL", PLAYER_MASK_NONE,
                      "You got the %rGiant's Mask%w! Put&it on and the world gets small.&"
                      "It costs magic to stay big.",
                      "%rGiant's Mask&%wPress %y\xA1%w to grow. Drains magic until&it runs out." },
 };
 
-static const ALIGN_ASSET(2) char sBlastCooldownDL[] =
-    MM_OBJECT_DIR "mask_bakuretu/object_mask_bakuretu_DL_000440";
+static const ALIGN_ASSET(2) char sBlastCooldownDL[] = MM_OBJECT_DIR "mask_bakuretu/object_mask_bakuretu_DL_000440";
 static const ALIGN_ASSET(2) char sBremenMarchAnim[] = MM_ANIM_DIR "clink_normal_okarina_walkB_Data";
 static const ALIGN_ASSET(2) char sKamaroDanceAnim[] = MM_ANIM_DIR "alink_dance_loop_Data";
 static const ALIGN_ASSET(2) char sScentsSniffAnim[] = MM_ANIM_DIR "cl_msbowait_Data";
 static const ALIGN_ASSET(2) char sGiantSetMaskAnim[] = MM_ANIM_DIR "cl_setmask_Data";
 static const ALIGN_ASSET(2) char sGiantSetMaskEndAnim[] = MM_ANIM_DIR "cl_setmaskend_Data";
 
-// D_801C0BC0 / D_801C0BD0: what MM binds to segment 0x09 around the Blast Mask's two display lists.
 static Gfx sBlastDefaultSeg9[] = {
     gsDPSetEnvColor(0, 0, 0, 255),
     gsSPEndDisplayList(),
@@ -272,7 +258,6 @@ typedef struct {
     int16_t params;
 } NightSkulltula;
 
-// The gold skulltulas OoT only spawns after dark, which is exactly what the All-Night Mask denies.
 static const NightSkulltula sNightSkulltulas[] = {
     { SCENE_GRAVEYARD, 1, true, { 156, 315, 795 }, { 16384, -32768, 0 }, -20096 },
     { SCENE_ZORAS_FOUNTAIN, 0, true, { -1891, 187, 1911 }, { 16384, 18022, 0 }, -19964 },
@@ -288,17 +273,21 @@ static const NightSkulltula sNightSkulltulas[] = {
     { SCENE_LON_LON_RANCH, 0, true, { 997, 286, -2698 }, { 16384, -16384, 0 }, -29692 },
 };
 
-// z_en_fr.c sSongIndex: which eventChkInf[13] bit each of the seven frog songs claims.
 static const uint8_t sFrogSongShifts[FROG_SONG_COUNT] = {
-    EVENTCHKINF_SONGS_FOR_FROGS_ZL_SHIFT,     EVENTCHKINF_SONGS_FOR_FROGS_EPONA_SHIFT,
-    EVENTCHKINF_SONGS_FOR_FROGS_SARIA_SHIFT,  EVENTCHKINF_SONGS_FOR_FROGS_SUNS_SHIFT,
-    EVENTCHKINF_SONGS_FOR_FROGS_SOT_SHIFT,    EVENTCHKINF_SONGS_FOR_FROGS_STORMS_SHIFT,
+    EVENTCHKINF_SONGS_FOR_FROGS_ZL_SHIFT,    EVENTCHKINF_SONGS_FOR_FROGS_EPONA_SHIFT,
+    EVENTCHKINF_SONGS_FOR_FROGS_SARIA_SHIFT, EVENTCHKINF_SONGS_FOR_FROGS_SUNS_SHIFT,
+    EVENTCHKINF_SONGS_FOR_FROGS_SOT_SHIFT,   EVENTCHKINF_SONGS_FOR_FROGS_STORMS_SHIFT,
     EVENTCHKINF_SONGS_FOR_FROGS_CHOIR_SHIFT,
 };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
-    "OnPlayerUpdate", "OnLoadFile", "OnPlayerFilterInput", "ShouldActorUpdate",
-    "OnPlayerPostLimbDraw", "OnPlayerResolveLimbDraw",
+static const char* const sRequiredHooks[] = {
+    "OnGameFrameUpdate",
+    "OnPlayerUpdate",
+    "OnLoadFile",
+    "OnPlayerFilterInput",
+    "ShouldActorUpdate",
+    "OnPlayerPostLimbDraw",
+    "OnPlayerResolveLimbDraw",
     "OnPlayerResolveMotionScale",
     "OnActorUpdate",
     "OnActorResolvePlayerRelation",
@@ -307,7 +296,6 @@ static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",
     "OnLoadGame",
     "OnOpenText",
     "OnInterfaceDrawEnd",
-    "OnCustomItemOwnedChange",
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -350,15 +338,12 @@ static bool sDonGeroOffering;
 static int32_t sDonGeroReward;
 static f32 sPoseFrame;
 
-// Plain exported symbols of the game with no public header.
 s32 Player_GetMovementSpeedAndYaw(Player* player, f32* outSpeedTarget, s16* outYawTarget, f32 speedMode,
                                   PlayState* play);
 void Player_SetupAction(PlayState* play, Player* player, PlayerActionFunc actionFunc, s32 flags);
 void func_80839FFC(Player* player, PlayState* play);
 void Player_AnimPlayLoop(PlayState* play, Player* player, LinkAnimationHeader* anim);
 LinkAnimationHeader* Player_GetIdleAnim(Player* player);
-
-// ---- resources ----
 
 #define MM_ANIM_SLOTS 5
 static LinkAnimationHeader sMmAnims[MM_ANIM_SLOTS];
@@ -370,8 +355,7 @@ static LinkAnimationHeader* sSetMaskAnim;
 static LinkAnimationHeader* sSetMaskEndAnim;
 static bool sAnimsLoaded;
 
-// A Majora animation walks its root where Ocarina's does not, so the base translation is forced back on a
-// private copy — the resource itself is shared with the whole game.
+// The base translation is forced on a private copy because the resource is shared with the whole game.
 static LinkAnimationHeader* LoadMmAnim(const char* path, int32_t slot) {
     if (!sApi->HasResource(path)) {
         return NULL;
@@ -414,7 +398,6 @@ static void LoadAnims(void) {
     sAnimsLoaded = sDanceAnim != NULL && sMarchAnim != NULL;
 }
 
-// Drawing a display list that no archive provides jumps into its own path string.
 static bool HasWornModel(int32_t index) {
     const char* path = sMasks[index].wornDL;
 
@@ -427,8 +410,6 @@ static bool HasWornModel(int32_t index) {
     return sResourcePresent[index] > 0;
 }
 
-// ---- worn state ----
-
 static bool IsWearing(int32_t index) {
     return sWorn == index;
 }
@@ -438,7 +419,6 @@ static bool AnswersButtonB(void) {
            IsWearing(MASK_GREAT_FAIRY);
 }
 
-// A mask that answers B takes it from the player, so neither the sword nor a form's own B move fires under it.
 static void ClaimButtonB(void) {
     if (AnswersButtonB()) {
         sApi->BlockPlayerInput(MASK_BUTTON_OWNER, BTN_B, false);
@@ -470,7 +450,6 @@ static void StopBremenMarch(PlayState* play, Player* player) {
     LinkAnimation_PlayLoop(play, &player->skelAnime, (LinkAnimationHeader*)gPlayerAnim_link_normal_wait);
 }
 
-// The dance owns Link's action func: an action left running under it would wait for a clip it no longer has.
 static void KamaroDanceAction(Player* player, PlayState* play) {
     player->linearVelocity = 0.0f;
 }
@@ -485,7 +464,6 @@ static void StopKamaroDance(PlayState* play, Player* player) {
     Player_AnimPlayLoop(play, player, Player_GetIdleAnim(player));
 }
 
-// The white of the transformation goes through the engine's own fill, which draws under the interface.
 static void ApplyGiantFill(PlayState* play) {
     if (sGiantFillAlpha <= 0) {
         play->envCtx.fillScreen = false;
@@ -542,13 +520,13 @@ static void TakeOff(PlayState* play, Player* player) {
 static void ResetFairyHair(void);
 
 static void PutOn(Player* player, int32_t index) {
-    if (index == MASK_GREAT_FAIRY) ResetFairyHair();
+    if (index == MASK_GREAT_FAIRY)
+        ResetFairyHair();
     SetWornMask(index);
     sPoseFrame = 0.0f;
 
     if (sMasks[index].vanillaMask != PLAYER_MASK_NONE) {
-        // Vanilla clears currentMask every frame the matching mask item is not on a button, and this one never
-        // is: lending PersistentMasks is what keeps the slot until the mask comes off.
+        // Vanilla clears currentMask whenever the mask item is not on a button; PersistentMasks keeps the slot.
         LendPersistentMasks(true);
         player->currentMask = sMasks[index].vanillaMask;
     }
@@ -562,7 +540,6 @@ static void PutOn(Player* player, int32_t index) {
     ClaimButtonB();
 }
 
-// Majora refuses the Giant's Mask on an empty meter, because its whole effect is magic.
 static void DetonateBlastMask(PlayState* play, Player* player);
 static void ToggleMask(PlayState* play, Player* player, int32_t index) {
     bool wearingIt = IsWearing(index);
@@ -575,25 +552,24 @@ static void ToggleMask(PlayState* play, Player* player, int32_t index) {
     TakeOff(play, player);
     if (!wearingIt) {
         typedef void (*RemoveRemainsFunc)(void);
-        RemoveRemainsFunc takeOffRemains=SOH_MOD_API_HAS(sApi,FindService)?(RemoveRemainsFunc)sApi->FindService("nei.remains.take_off"):NULL;
-        if(takeOffRemains)takeOffRemains();
+        RemoveRemainsFunc takeOffRemains =
+            SOH_MOD_API_HAS(sApi, FindService) ? (RemoveRemainsFunc)sApi->FindService("nei.remains.take_off") : NULL;
+        if (takeOffRemains)
+            takeOffRemains();
         PutOn(player, index);
     }
     Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
     player->stateFlags2 |= PLAYER_STATE2_FOOTSTEP;
 }
 
-#define DECLARE_WEAR_FUNC(index)                                        \
-    static void Wear_##index(PlayState* play, Player* player) {         \
-        ToggleMask(play, player, index);                                \
+#define DECLARE_WEAR_FUNC(index)                                \
+    static void Wear_##index(PlayState* play, Player* player) { \
+        ToggleMask(play, player, index);                        \
     }
 MM_WEARABLE_SLOTS(DECLARE_WEAR_FUNC)
 #undef DECLARE_WEAR_FUNC
 
-// ---- drawing ----
-
-// The Great Fairy's Mask reads six matrices off segment 0x0B for its hair; without them it walks a pointer
-// into whatever the last mod left there.
+// The Great Fairy's Mask reads six matrices off segment 0x0B for its hair.
 #include "fairy_hair.inc.c"
 
 static void ResetFairyHair(void) {
@@ -614,7 +590,6 @@ static void BindFairyHairMatrices(PlayState* play, Player* player) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Player_DrawBlastMask: the recovering mask crossfades a scrolling display list over the normal one.
 static void DrawBlastMask(PlayState* play, const char* dlPath) {
     OPEN_DISPS(play->state.gfxCtx);
 
@@ -638,36 +613,40 @@ static void DrawBlastMask(PlayState* play, const char* dlPath) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Majora's mask display lists leave their own env colour and a lighting-less geometry mode behind, which
-// would black out the chest limb drawn right after.
+// Majora's mask display lists leave an env colour and a lighting-less geometry mode behind.
 static u32 SavedPlayerEnv(PlayState* play) {
-    Gfx* begin=play->state.gfxCtx->polyOpa.bufp;
-    Gfx* cursor=play->state.gfxCtx->polyOpa.p;
-    while(cursor>begin) {--cursor;if(((cursor->words.w0>>24)&255)==G_SETENVCOLOR)return (u32)cursor->words.w1;}
+    Gfx* begin = play->state.gfxCtx->polyOpa.bufp;
+    Gfx* cursor = play->state.gfxCtx->polyOpa.p;
+    while (cursor > begin) {
+        --cursor;
+        if (((cursor->words.w0 >> 24) & 255) == G_SETENVCOLOR)
+            return (u32)cursor->words.w1;
+    }
     return 0xFFFFFFFF;
 }
-static void RestorePlayerEnv(PlayState* play,u32 rgba) {
+static void RestorePlayerEnv(PlayState* play, u32 rgba) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    gDPSetPrimColor(POLY_OPA_DISP++,0,0,255,255,255,255);
-    gDPSetEnvColor(POLY_OPA_DISP++,rgba>>24,(rgba>>16)&255,(rgba>>8)&255,rgba&255);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, rgba >> 24, (rgba >> 16) & 255, (rgba >> 8) & 255, rgba & 255);
     CLOSE_DISPS(play->state.gfxCtx);
 }
-static void RestoreLimbState(PlayState* play, Player* player,u32 savedEnv) {
+static void RestoreLimbState(PlayState* play, Player* player, u32 savedEnv) {
 
     OPEN_DISPS(play->state.gfxCtx);
     gDPPipeSync(POLY_OPA_DISP++);
-    gDPSetEnvColor(POLY_OPA_DISP++,savedEnv>>24,(savedEnv>>16)&255,(savedEnv>>8)&255,savedEnv&255);
+    gDPSetEnvColor(POLY_OPA_DISP++, savedEnv >> 24, (savedEnv >> 16) & 255, (savedEnv >> 8) & 255, savedEnv & 255);
     gSPLoadGeometryMode(POLY_OPA_DISP++, G_ZBUFFER | G_SHADE | G_CULL_BACK | G_LIGHTING | G_SHADING_SMOOTH);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
 static void DrawWornMaskModel(PlayState* play, Player* player, int32_t limbIndex) {
-    if (CVarGetInteger("gMods.MMMasks.Hide",0) || limbIndex != PLAYER_LIMB_HEAD || sWorn == MASK_NONE || !HasWornModel(sWorn)) {
+    if (CVarGetInteger("gMods.MMMasks.Hide", 0) || limbIndex != PLAYER_LIMB_HEAD || sWorn == MASK_NONE ||
+        !HasWornModel(sWorn)) {
         return;
     }
 
-    u32 savedEnv=SavedPlayerEnv(play);
+    u32 savedEnv = SavedPlayerEnv(play);
     const char* dlPath = sMasks[sWorn].wornDL;
 
     if (sWorn == MASK_BLAST) {
@@ -691,8 +670,6 @@ static void DrawWornMask(PlayState* play, Player* player, int32_t limbIndex) {
     }
 }
 
-// ---- what other actors know about Link ----
-
 static bool IsHiddenFromActor(Actor* actor) {
     if (IsWearing(MASK_STONE)) {
         return actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_NPC ||
@@ -707,8 +684,7 @@ static bool IsHiddenFromActor(Actor* actor) {
     return false;
 }
 
-// The single point where vanilla decides what an actor knows about Link this frame. The yaw has to point
-// away from him too: fifty-four sites ask Actor_IsFacingPlayer and never look at the distance.
+// The yaw has to point away from Link too: many sites ask Actor_IsFacingPlayer and never look at the distance.
 static void HidePlayerFromActor(Actor* actor, float* xzDist, float* yDist, int16_t* yawTowards) {
     if (!IsHiddenFromActor(actor)) {
         return;
@@ -718,7 +694,6 @@ static void HidePlayerFromActor(Actor* actor, float* xzDist, float* yDist, int16
     *yawTowards = actor->shape.rot.y + 0x8000;
 }
 
-// An enemy that cannot find Link has nothing to shout about.
 static void SilenceHiddenActor(Actor* actor, int32_t kind, uint16_t* sfxId, bool* handled) {
     if (kind != SOH_ACTOR_SFX_GENERIC && kind != SOH_ACTOR_SFX_FLAGGED) {
         return;
@@ -730,8 +705,6 @@ static void SilenceHiddenActor(Actor* actor, int32_t kind, uint16_t* sfxId, bool
         *handled = true;
     }
 }
-
-// ---- per-mask behaviour ----
 
 static void PlayPoseLoop(PlayState* play, Player* player, LinkAnimationHeader* anim) {
     LinkAnimation_PlayLoop(play, &player->skelAnime, anim);
@@ -746,8 +719,7 @@ static void PlayPoseLoop(PlayState* play, Player* player, LinkAnimationHeader* a
 
 static bool IsPlayerBusy(Player* player) {
     return (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
-                                   PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM |
-                                   PLAYER_STATE1_TALKING)) != 0;
+                                   PLAYER_STATE1_IN_ITEM_CS | PLAYER_STATE1_GETTING_ITEM | PLAYER_STATE1_TALKING)) != 0;
 }
 
 static void SpawnNightSkulltulas(PlayState* play) {
@@ -771,7 +743,6 @@ static void UpdateAllNightMask(PlayState* play) {
     SpawnNightSkulltulas(play);
 }
 
-// En_Sw shrinks itself to nothing during the day; the mask holds it open.
 static void KeepSkulltulaAwake(void* actorRef) {
     Actor* actor = (Actor*)actorRef;
 
@@ -781,12 +752,12 @@ static void KeepSkulltulaAwake(void* actorRef) {
     Actor_SetScale(actor, NIGHT_SKULLTULA_SCALE);
 }
 
-// The bomb runs its first update before any draw can place its collider, so the explosion sphere is set here.
+// The bomb updates before any draw can place its collider, so the explosion sphere is set here.
 static void DetonateBlastMask(PlayState* play, Player* player) {
     Vec3f at = player->actor.world.pos;
-    at.x+=Math_SinS(player->actor.shape.rot.y)*25.0f;
-    at.z+=Math_CosS(player->actor.shape.rot.y)*25.0f;
-    at.y+=20.0f;
+    at.x += Math_SinS(player->actor.shape.rot.y) * 25.0f;
+    at.z += Math_CosS(player->actor.shape.rot.y) * 25.0f;
+    at.y += 20.0f;
     EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, at.x, at.y, at.z, 0, 0, 0, BOMB_BODY);
 
     if (bomb == NULL) {
@@ -797,14 +768,13 @@ static void DetonateBlastMask(PlayState* play, Player* player) {
     bomb->explosionCollider.elements[0].dim.worldSphere.center.x = (int16_t)at.x;
     bomb->explosionCollider.elements[0].dim.worldSphere.center.y = (int16_t)at.y;
     bomb->explosionCollider.elements[0].dim.worldSphere.center.z = (int16_t)at.z;
-    bool shield=(player->stateFlags1&PLAYER_STATE1_SHIELDING) ||
-        ((play->state.input[0].cur.button&BTN_R) && player->currentShield!=PLAYER_SHIELD_NONE);
-    if(shield) {
-        // Friendly AT still damages enemies; Link's enemy-only AC cannot receive this blast.
-        bomb->explosionCollider.base.atFlags=(bomb->explosionCollider.base.atFlags&~AT_TYPE_ALL)|AT_TYPE_PLAYER;
-        Player_PlaySfx(&player->actor,NA_SE_IT_SHIELD_REFLECT_SW);
+    bool shield = (player->stateFlags1 & PLAYER_STATE1_SHIELDING) ||
+                  ((play->state.input[0].cur.button & BTN_R) && player->currentShield != PLAYER_SHIELD_NONE);
+    if (shield) {
+        bomb->explosionCollider.base.atFlags = (bomb->explosionCollider.base.atFlags & ~AT_TYPE_ALL) | AT_TYPE_PLAYER;
+        Player_PlaySfx(&player->actor, NA_SE_IT_SHIELD_REFLECT_SW);
     }
-    sBlastCooldown = CVarGetInteger("gMods.MMMasks.InstantBlast",0)?0:BLAST_COOLDOWN_FRAMES;
+    sBlastCooldown = CVarGetInteger("gMods.MMMasks.InstantBlast", 0) ? 0 : BLAST_COOLDOWN_FRAMES;
 }
 
 static void UpdateBlastMask(PlayState* play, Player* player) {
@@ -824,8 +794,7 @@ static void UpdateGreatFairyMask(PlayState* play, Player* player) {
     if (CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B)) {
         OpenTravelMap(play, player, TRAVEL_FOUNTAIN);
     }
-    if (play->sceneNum != SCENE_GREAT_FAIRYS_FOUNTAIN_MAGIC &&
-        play->sceneNum != SCENE_GREAT_FAIRYS_FOUNTAIN_SPELLS) {
+    if (play->sceneNum != SCENE_GREAT_FAIRYS_FOUNTAIN_MAGIC && play->sceneNum != SCENE_GREAT_FAIRYS_FOUNTAIN_SPELLS) {
         return;
     }
     if (IsPlayerBusy(player) || !CHECK_BTN_ALL(play->state.input[0].press.button, BTN_A)) {
@@ -884,8 +853,6 @@ static void OfferFrogReward(PlayState* play, Player* player) {
     Actor_OfferGetItem(&player->actor, play, sDonGeroReward, 30.0f, 100.0f);
 }
 
-// Conducting the choir claims every song the frogs still owe at once; the flag setter is what the randomizer
-// listens to, so a shuffled seed delivers its own items through it.
 static void ConductFrogChoir(PlayState* play, Player* player) {
     int32_t reward = GI_NONE;
 
@@ -970,8 +937,6 @@ static Actor* FindDarunia(PlayState* play) {
     return NULL;
 }
 
-// Dancing next to Darunia counts as Saria's Song: his own ocarina check takes it from here, so the cutscene is
-// running before he waits for it to end and his reward is handed over as vanilla does.
 static void DanceForDarunia(PlayState* play, Player* player) {
     if (play->sceneNum != SCENE_GORON_CITY || Flags_GetRandomizerInf(RAND_INF_DARUNIAS_JOY)) {
         return;
@@ -1003,7 +968,6 @@ static void UpdateKamaroMask(PlayState* play, Player* player) {
         sPoseFrame = 0.0f;
         Player_SetupAction(play, player, KamaroDanceAction, 0);
     }
-    // Damage or a cutscene can take Link away from the dance without B being let go.
     if (!canDance || player->actionFunc != KamaroDanceAction || !CHECK_BTN_ALL(input->cur.button, BTN_B)) {
         StopKamaroDance(play, player);
         return;
@@ -1044,8 +1008,7 @@ static void UpdateCaptainsHat(PlayState* play, Player* player) {
     f32 z = player->actor.world.pos.z + Math_CosS(angle) * distance;
     int16_t id = LINK_IS_ADULT ? ACTOR_EN_TEST : ACTOR_EN_SKB;
     int16_t params = LINK_IS_ADULT ? 0 : CAPTAIN_GIANT_STALCHILD_PARAMS;
-    Actor* minion =
-        Actor_Spawn(&play->actorCtx, play, id, x, player->actor.world.pos.y, z, 0, angle, 0, params);
+    Actor* minion = Actor_Spawn(&play->actorCtx, play, id, x, player->actor.world.pos.y, z, 0, angle, 0, params);
 
     if (minion != NULL) {
         minion->home.rot.z = CAPTAIN_MINION_TAG;
@@ -1053,8 +1016,6 @@ static void UpdateCaptainsHat(PlayState* play, Player* player) {
     sCaptainTimer = 0;
 }
 
-// Player_Action_89: Link raises the mask to his face, the screen fills white, and the new size snaps in
-// behind it.
 static void UpdateGiantTransform(PlayState* play, Player* player) {
     sGiantTransformTimer++;
     player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
@@ -1104,7 +1065,6 @@ static void UpdateGiantsMask(PlayState* play, Player* player) {
         return;
     }
 
-    // Everything else in the game resets the player scale, so the giant size is re-asserted every frame.
     Actor_SetScale(&player->actor, GIANT_SCALE);
 
     if (sGiantMagicTimer > 0) {
@@ -1124,91 +1084,128 @@ static void UpdateGiantsMask(PlayState* play, Player* player) {
     Player_PlaySfx(&player->actor, NA_SE_PL_CHANGE_ARMS);
 }
 
-static Actor* sGiantLightProps[2];static s16 sGiantLightParams[2];
-static bool sGiantPushSetting;static int sGiantPushPrevious;
+static Actor* sGiantLightProps[2];
+static s16 sGiantLightParams[2];
+static bool sGiantPushSetting;
+static int sGiantPushPrevious;
 static Actor* sGiantMovingCrate;
 static void RestoreGiantProps(void) {
-    for(int i=0;i<2;++i)if(sGiantLightProps[i]!=NULL) {
-        sGiantLightProps[i]->params=sGiantLightParams[i];sGiantLightProps[i]=NULL;
+    for (int i = 0; i < 2; ++i)
+        if (sGiantLightProps[i] != NULL) {
+            sGiantLightProps[i]->params = sGiantLightParams[i];
+            sGiantLightProps[i] = NULL;
+        }
+}
+static void GiantPlayerInput(Player* player, Input* input) {
+    if (IsWearing(MASK_BLAST)) {
+        if (gPlayState && (gPlayState->state.input[0].press.button & BTN_B) && sBlastCooldown == 0 &&
+            !IsPlayerBusy(player))
+            DetonateBlastMask(gPlayState, player);
+        input->cur.button &= ~BTN_B;
+        input->press.button &= ~BTN_B;
+    }
+    if (!IsWearing(MASK_GIANT))
+        return;
+    Actor* props[2] = { player->interactRangeActor, player->heldActor };
+    for (int i = 0; i < 2; ++i)
+        if (props[i] && (i == 0 || props[i] != props[0]) && props[i]->id == ACTOR_EN_ISHI &&
+            (props[i]->params & 15) == 1) {
+            sGiantLightProps[i] = props[i];
+            sGiantLightParams[i] = props[i]->params;
+            props[i]->params &= ~15;
+        }
+}
+static void GiantStrength(bool* should, va_list args) {
+    int32_t* strength = va_arg(args, int32_t*);
+    if (IsWearing(MASK_GIANT)) {
+        *strength = 3;
+        *should = false;
     }
 }
-static void GiantPlayerInput(Player* player,Input* input) {
-    if(IsWearing(MASK_BLAST)) {
-        if(gPlayState && (gPlayState->state.input[0].press.button&BTN_B) && sBlastCooldown==0 && !IsPlayerBusy(player))DetonateBlastMask(gPlayState,player);
-        input->cur.button&=~BTN_B;input->press.button&=~BTN_B;
-    }
-    if(!IsWearing(MASK_GIANT))return;
-    Actor* props[2]={player->interactRangeActor,player->heldActor};
-    for(int i=0;i<2;++i)if(props[i] && (i==0 || props[i]!=props[0]) && props[i]->id==ACTOR_EN_ISHI && (props[i]->params&15)==1) {
-        sGiantLightProps[i]=props[i];sGiantLightParams[i]=props[i]->params;props[i]->params&=~15;
-    }
-}
-static void GiantStrength(bool* should,va_list args) {
-    int32_t* strength=va_arg(args,int32_t*);
-    if(IsWearing(MASK_GIANT)){*strength=3;*should=false;}
-}
-static void GiantPushBegin(void* actorRef,bool* update) {
-    Actor* actor=actorRef;
-    if(!*update || !IsWearing(MASK_GIANT))return;
-    if(actor->id==ACTOR_BG_PUSHBOX) {
-        if(fabsf(((DynaPolyActor*)actor)->unk_150)>.1f || fabsf(actor->speedXZ)>.1f)sGiantMovingCrate=actor;
+static void GiantPushBegin(void* actorRef, bool* update) {
+    Actor* actor = actorRef;
+    if (!*update || !IsWearing(MASK_GIANT))
+        return;
+    if (actor->id == ACTOR_BG_PUSHBOX) {
+        if (fabsf(((DynaPolyActor*)actor)->unk_150) > .1f || fabsf(actor->speedXZ) > .1f)
+            sGiantMovingCrate = actor;
         return;
     }
-    if(actor->id!=ACTOR_OBJ_OSHIHIKI && actor->id!=ACTOR_BG_HIDAN_ROCK && actor->id!=ACTOR_BG_PO_EVENT)return;
-    sGiantPushPrevious=CVarGetInteger("gEnhancements.FasterBlockPush",0);sGiantPushSetting=true;
-    CVarSetInteger("gEnhancements.FasterBlockPush",MAX(sGiantPushPrevious,8));
+    if (actor->id != ACTOR_OBJ_OSHIHIKI && actor->id != ACTOR_BG_HIDAN_ROCK && actor->id != ACTOR_BG_PO_EVENT)
+        return;
+    sGiantPushPrevious = CVarGetInteger("gEnhancements.FasterBlockPush", 0);
+    sGiantPushSetting = true;
+    CVarSetInteger("gEnhancements.FasterBlockPush", MAX(sGiantPushPrevious, 8));
 }
 static void GiantPushEnd(void* actorRef) {
-    Actor* actor=actorRef;
-    if(actor==sGiantMovingCrate) {
-        sGiantMovingCrate=NULL;
-        actor->world.pos.x+=Math_SinS(actor->world.rot.y)*actor->speedXZ*3;
-        actor->world.pos.z+=Math_CosS(actor->world.rot.y)*actor->speedXZ*3;
-        Actor_UpdateBgCheckInfo(gPlayState,actor,20,40,40,0x1D);
+    Actor* actor = actorRef;
+    if (actor == sGiantMovingCrate) {
+        sGiantMovingCrate = NULL;
+        actor->world.pos.x += Math_SinS(actor->world.rot.y) * actor->speedXZ * 3;
+        actor->world.pos.z += Math_CosS(actor->world.rot.y) * actor->speedXZ * 3;
+        Actor_UpdateBgCheckInfo(gPlayState, actor, 20, 40, 40, 0x1D);
     }
-    if(sGiantPushSetting){CVarSetInteger("gEnhancements.FasterBlockPush",sGiantPushPrevious);sGiantPushSetting=false;}
+    if (sGiantPushSetting) {
+        CVarSetInteger("gEnhancements.FasterBlockPush", sGiantPushPrevious);
+        sGiantPushSetting = false;
+    }
 }
 
-static void BlastSwordHand(Player* player,int32_t limb,Gfx** dl,Gfx* original,Vec3f* pos) {
+static void BlastSwordHand(Player* player, int32_t limb, Gfx** dl, Gfx* original, Vec3f* pos) {
     if (gPlayState == NULL) {
         return;
     }
     RemoteVisualState visual;
-    bool wearing = player == GET_PLAYER(gPlayState) ? IsWearing(MASK_BLAST) :
-                       ReadRemoteVisual(player, &visual) && visual.flags[0] == MASK_BLAST;
+    bool wearing = player == GET_PLAYER(gPlayState)
+                       ? IsWearing(MASK_BLAST)
+                       : ReadRemoteVisual(player, &visual) && visual.flags[0] == MASK_BLAST;
     if (wearing && limb == PLAYER_LIMB_L_HAND) {
         *dl = (Gfx*)(LINK_IS_ADULT ? gLinkAdultLeftHandClosedNearDL : gLinkChildLeftFistNearDL);
     }
 }
 static void BlastBIcon(PlayState* play) {
-    if(!IsWearing(MASK_BLAST) || play->pauseCtx.state!=0)return;
-    Gfx* begin=play->state.gfxCtx->overlay.bufp;Gfx* end=play->state.gfxCtx->overlay.p;
-    for(Gfx* cmd=begin;cmd<end;++cmd)if(((cmd->words.w0>>24)&255)==G_SETTIMG &&
-        (cmd->words.w1==0x08000000 || cmd->words.w1==(uintptr_t)play->interfaceCtx.iconItemSegment))
-        cmd->words.w1=(uintptr_t)sMasks[MASK_BLAST].iconPath;
+    if (!IsWearing(MASK_BLAST) || play->pauseCtx.state != 0)
+        return;
+    Gfx* begin = play->state.gfxCtx->overlay.bufp;
+    Gfx* end = play->state.gfxCtx->overlay.p;
+    for (Gfx* cmd = begin; cmd < end; ++cmd)
+        if (((cmd->words.w0 >> 24) & 255) == G_SETTIMG &&
+            (cmd->words.w1 == 0x08000000 || cmd->words.w1 == (uintptr_t)play->interfaceCtx.iconItemSegment))
+            cmd->words.w1 = (uintptr_t)sMasks[MASK_BLAST].iconPath;
 }
 
 static void GiantHammerSword(void) {
-    if(!gPlayState || !IsWearing(MASK_GIANT))return;
-    Player* player=GET_PLAYER(gPlayState);
-    if(player->meleeWeaponState==0)return;
-    for(int i=0;i<ARRAY_COUNT(player->meleeWeaponQuads);++i)
-        player->meleeWeaponQuads[i].info.toucher.dmgFlags=DMG_HAMMER_SWING;
+    if (!gPlayState || !IsWearing(MASK_GIANT))
+        return;
+    Player* player = GET_PLAYER(gPlayState);
+    if (player->meleeWeaponState == 0)
+        return;
+    for (int i = 0; i < ARRAY_COUNT(player->meleeWeaponQuads); ++i)
+        player->meleeWeaponQuads[i].info.toucher.dmgFlags = DMG_HAMMER_SWING;
 }
 
 static void UpdateWornMask(void) {
     RestoreGiantProps();
-    if(sWorn!=MASK_BLAST && sBlastCooldown>0)--sBlastCooldown;
+    if (sWorn != MASK_BLAST && sBlastCooldown > 0)
+        --sBlastCooldown;
     PlayState* play = gPlayState;
 
-    if (play == NULL) return;
+    if (play == NULL)
+        return;
     Player* player = GET_PLAYER(play);
-    if (!sAnimsLoaded && (play->gameplayFrames % 60) == 0) LoadAnims();
-    if (UpdateTravelMap(play)) return;
+    if (!sAnimsLoaded && (play->gameplayFrames % 60) == 0)
+        LoadAnims();
+    if (UpdateTravelMap(play))
+        return;
     UpdatePostmanMailboxes(play, player);
-    if (sTravelMode != TRAVEL_NONE || sWorn == MASK_NONE) return;
+    if (sTravelMode != TRAVEL_NONE || sWorn == MASK_NONE)
+        return;
 
-    // The lent mask slot is what makes every vanilla reaction work, and a load or a cutscene can drop it.
+    if (sApi->GetActiveForm() != NULL) {
+        TakeOff(play, player);
+        return;
+    }
+
     if (sMasks[sWorn].vanillaMask != PLAYER_MASK_NONE) {
         player->currentMask = sMasks[sWorn].vanillaMask;
     }
@@ -1249,9 +1246,6 @@ static void UpdateWornMask(void) {
     }
 }
 
-// ---- reactions the masks borrow from vanilla ----
-
-// The vanilla enhancement already grants this boost when it is on, so the mask only adds what is missing.
 static void ScaleBunnyHoodSpeed(Player* player, int32_t kind, float* scale) {
     if (kind != SOH_PLAYER_MOTION_STICK_SPEED || !IsWearing(MASK_BUNNY)) {
         return;
@@ -1268,9 +1262,9 @@ static void KeepRedeadsCalm(bool* should, va_list args) {
     }
 }
 
-// ---- session state ----
-
-bool MmWearables_IsCircusLeaderWorn(void) { return IsWearing(MASK_CIRCUS_LEADER); }
+bool MmWearables_IsCircusLeaderWorn(void) {
+    return IsWearing(MASK_CIRCUS_LEADER);
+}
 
 static void ForgetScene(int16_t sceneNum) {
     sTruthLastStone = NULL;
@@ -1300,40 +1294,33 @@ static void ForgetFile(int32_t fileNum) {
     ForgetScene(0);
 }
 
-// ---- registration ----
-
-static void DrawCompleteMask(PlayState* play,const char* face,const char* detail) {
+static void DrawCompleteMask(PlayState* play, const char* face, const char* detail) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)face);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)face);
     Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPMatrix(POLY_XLU_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_XLU_DISP++,(Gfx*)detail);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)detail);
     CLOSE_DISPS(play->state.gfxCtx);
 }
-static void DrawDonGeroItem(PlayState* play,GetItemEntry* entry) {
-    static const ALIGN_ASSET(2) char face[]="__OTR__objects/object_gi_mask16/gGiDonGeroMaskFaceDL";
-    static const ALIGN_ASSET(2) char body[]="__OTR__objects/object_gi_mask16/gGiDonGeroMaskBodyDL";
-    DrawCompleteMask(play,face,body);
+static void DrawDonGeroItem(PlayState* play, GetItemEntry* entry) {
+    static const ALIGN_ASSET(2) char face[] = "__OTR__objects/object_gi_mask16/gGiDonGeroMaskFaceDL";
+    static const ALIGN_ASSET(2) char body[] = "__OTR__objects/object_gi_mask16/gGiDonGeroMaskBodyDL";
+    DrawCompleteMask(play, face, body);
 }
-static void DrawCircusItem(PlayState* play,GetItemEntry* entry) {
-    static const ALIGN_ASSET(2) char face[]="__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskFaceDL";
-    static const ALIGN_ASSET(2) char brows[]="__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskEyebrowsDL";
-    DrawCompleteMask(play,face,brows);
+static void DrawCircusItem(PlayState* play, GetItemEntry* entry) {
+    static const ALIGN_ASSET(2) char face[] = "__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskFaceDL";
+    static const ALIGN_ASSET(2) char brows[] = "__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskEyebrowsDL";
+    DrawCompleteMask(play, face, brows);
 }
 
 #include "romani_chateau.inc.c"
 
-// The store toggles and the oldest saves name a mask by its "nei." suffix, which the mm. rename kept.
-static const char* MaskStoreName(const WearableMask* mask) {
-    return (mask->legacyKey != NULL ? mask->legacyKey : mask->key) + sizeof("nei.") - 1;
-}
-
 static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     const WearableMask* mask = &sMasks[index];
     char option[128];
-    snprintf(option, sizeof(option), "gMods.Store.mm_wearables.%s", MaskStoreName(mask));
+    snprintf(option, sizeof(option), "gMods.Store.mm_wearables.%s", mask->storeId);
     if (!CVarGetInteger(option, 1)) {
         return;
     }
@@ -1343,8 +1330,10 @@ static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     definition.flags |= SOH_CUSTOM_ITEM_INSTANT | SOH_CUSTOM_ITEM_WEARABLE;
     Z64Items_SetPlacement(&definition, MASK_PAGE, (uint8_t)index, 0);
     Z64Items_SetGetItemModel(&definition, mask->getItemDL);
-    if(index==MASK_DON_GERO)definition.getItemEntry.drawFunc=DrawDonGeroItem;
-    if(index==MASK_CIRCUS_LEADER)definition.getItemEntry.drawFunc=DrawCircusItem;
+    if (index == MASK_DON_GERO)
+        definition.getItemEntry.drawFunc = DrawDonGeroItem;
+    if (index == MASK_CIRCUS_LEADER)
+        definition.getItemEntry.drawFunc = DrawCircusItem;
     Z64Items_SetTextbox(&definition, mask->getItemText);
     Z64Items_SetPauseText(&definition, mask->pauseText);
     Z64Items_SetAction(&definition, wear, NULL);
@@ -1353,42 +1342,35 @@ static void RegisterMask(int32_t index, SOHCustomItemInitFunc wear) {
     };
     Z64Items_SetLogic(&definition, &randomizer);
     Z64Items_Register(sApi, &definition);
-    static char skijerKeys[MASK_GRID_SIZE][64];
-    snprintf(skijerKeys[index], sizeof(skijerKeys[index]), "skijer.%s", MaskStoreName(mask));
-    Z64Items_RegisterLegacyKey(sApi, &definition, skijerKeys[index]);
-    if (mask->legacyKey != NULL) {
-        Z64Items_RegisterLegacyKey(sApi, &definition, mask->legacyKey);
+}
+
+static void HideNativeWearables(bool* draw, va_list args) {
+    (void)args;
+    if (sWorn != MASK_NONE && CVarGetInteger("gMods.MMMasks.Hide", 0)) {
+        *draw = false;
     }
 }
 
-static void MigrateMaskKeys(int32_t file) {
-    char skijerKey[64];
-    for (int i = 0; i < MASK_GRID_SIZE; ++i) {
-        if (sMasks[i].key == NULL) {
-            continue;
-        }
-        snprintf(skijerKey, sizeof(skijerKey), "skijer.%s", MaskStoreName(&sMasks[i]));
-        Z64Items_MigrateLegacyKey(sApi, skijerKey, sMasks[i].key);
-        Z64Items_MigrateLegacyKey(sApi, sMasks[i].legacyKey, sMasks[i].key);
-    }
-}
-
-static void ForwardLegacyMask(const char* key, bool owned) {
-    for (int i = 0; i < MASK_GRID_SIZE; ++i) {
-        Z64Items_ForwardLegacyKey(sApi, key, owned, sMasks[i].legacyKey, sMasks[i].key);
-    }
-}
-static void HideNativeWearables(bool* draw,va_list args) {
-    if(sWorn!=MASK_NONE && CVarGetInteger("gMods.MMMasks.Hide",0))*draw=false;
-}
 static void RegisterMaskOptions(void) {
-    if(!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Mods","Majora's Mask","gMods.Menu.Page",1);
-    const char* labels[]={"Hide MM masks","Instant transformation masks","Instant Blast Mask"};
-    const char* cvars[]={"gMods.MMMasks.Hide","gMods.MMMasks.InstantForms","gMods.MMMasks.InstantBlast"};
-    for(int i=0;i<3;++i) {
-        SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Majora's Mask";
-        w.type=SOH_MOD_MENU_CHECKBOX;w.label=labels[i];w.cvar=cvars[i];sApi->RegisterMenuWidget(&w);
+    static const char* const sLabels[] = { "Hide MM masks", "Instant transformation masks", "Instant Blast Mask" };
+    static const char* const sCvars[] = { "gMods.MMMasks.Hide", "gEnhancements.Forms.InstantTransform",
+                                          "gMods.MMMasks.InstantBlast" };
+
+    if (!SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {
+        return;
+    }
+    if (SOH_MOD_API_HAS(sApi, RegisterMenuSidebar)) {
+        sApi->RegisterMenuSidebar("Mods", "Majora's Mask", "gMods.Menu.Page", 1);
+    }
+    for (u32 i = 0; i < ARRAY_COUNT(sLabels); i++) {
+        SOHModMenuWidget widget = { 0 };
+        widget.structSize = sizeof(widget);
+        widget.section = "Mods";
+        widget.sidebar = "Majora's Mask";
+        widget.type = SOH_MOD_MENU_CHECKBOX;
+        widget.label = sLabels[i];
+        widget.cvar = sCvars[i];
+        sApi->RegisterMenuWidget(&widget);
     }
 }
 static bool sRemoteVisualReady;
@@ -1405,7 +1387,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.mm_wearables.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.mm_wearables.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
     if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
@@ -1449,8 +1432,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor) ||
@@ -1462,8 +1443,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
 
 #define REMOTE_HAIR_CAPACITY 64
 
@@ -1505,8 +1484,8 @@ static RemoteHair* FindRemoteHair(uint32_t peer, PlayState* play) {
 
 static void DrawRemoteMask(PlayState* play, Player* player, int32_t limb) {
     RemoteVisualState visual;
-    if (limb != PLAYER_LIMB_HEAD || !ReadRemoteVisual(player, &visual) ||
-        sMasks[visual.flags[0]].key == NULL || visual.values[0] < 0.0f || visual.values[0] > 32767.0f) {
+    if (limb != PLAYER_LIMB_HEAD || !ReadRemoteVisual(player, &visual) || sMasks[visual.flags[0]].key == NULL ||
+        visual.values[0] < 0.0f || visual.values[0] > 32767.0f) {
         return;
     }
     int32_t worn = sWorn;
@@ -1555,18 +1534,20 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
-static void RemoveForOtherMask(PlayState* play,Player* player){if(sWorn!=MASK_NONE)TakeOff(play,player);}
+static void RemoveForOtherMask(PlayState* play, Player* player) {
+    if (sWorn != MASK_NONE)
+        TakeOff(play, player);
+}
 SOH_MOD_EXPORT void ModInit(void) {
     InitRemoteVisuals();
-    if(SOH_MOD_API_HAS(sApi,PublishService))sApi->PublishService("nei.masks.take_off",(void*)RemoveForOtherMask);
+    if (SOH_MOD_API_HAS(sApi, PublishService))
+        sApi->PublishService("nei.masks.take_off", (void*)RemoveForOtherMask);
     RegisterMaskOptions();
-    SOH_REGISTER_HOOK(sApi,OnPlayerUpdate,GiantHammerSword);
-    SOH_REGISTER_HOOK(sApi,OnInterfaceDrawEnd,BlastBIcon);
-    SOH_REGISTER_HOOK(sApi,OnPlayerResolveLimbDraw,BlastSwordHand);
+    SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, GiantHammerSword);
+    SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, BlastBIcon);
+    SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, BlastSwordHand);
     RegisterChateau();
-    SOH_REGISTER_HOOK(sApi,OnLoadFile,MigrateMaskKeys);
-    SOH_REGISTER_HOOK(sApi, OnCustomItemOwnedChange, ForwardLegacyMask);
-    sApi->RegisterVB(VB_DRAW_PLAYER_MASK,HideNativeWearables);
+    sApi->RegisterVB(VB_DRAW_PLAYER_MASK, HideNativeWearables);
     LoadAnims();
     MmTax_Init(sApi);
     RegisterMaskEffects();
@@ -1575,12 +1556,11 @@ SOH_MOD_EXPORT void ModInit(void) {
 #define REGISTER_WEARABLE(index) RegisterMask(index, Wear_##index);
     MM_WEARABLE_SLOTS(REGISTER_WEARABLE)
 #undef REGISTER_WEARABLE
-    MigrateMaskKeys(0);
 
-    SOH_REGISTER_HOOK(sApi,OnPlayerFilterInput,GiantPlayerInput);
-    SOH_REGISTER_HOOK(sApi,ShouldActorUpdate,GiantPushBegin);
-    SOH_REGISTER_HOOK(sApi,OnActorUpdate,GiantPushEnd);
-    sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE,GiantStrength);
+    SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, GiantPlayerInput);
+    SOH_REGISTER_HOOK(sApi, ShouldActorUpdate, GiantPushBegin);
+    SOH_REGISTER_HOOK(sApi, OnActorUpdate, GiantPushEnd);
+    sApi->RegisterVB(VB_USE_STRENGTH_UPGRADE, GiantStrength);
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateWornMask);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawWornMask);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveMotionScale, ScaleBunnyHoodSpeed);
@@ -1592,4 +1572,3 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     sApi->RegisterVB(VB_REDEAD_GIBDO_FREEZE_LINK, KeepRedeadsCalm);
 }
-

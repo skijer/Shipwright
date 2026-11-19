@@ -1,11 +1,3 @@
-/**
- * Majora's Mask items: the Gorons' Powder Keg and the Pictograph Box.
- *
- * The keg is a real En_Bom wearing the MM barrel, so vanilla carries, throws and detonates it; the mod only
- * widens the blast. The pictograph reads the framebuffer, which the renderer answers a frame late, so its
- * capture is a small state machine.
- */
-
 #include <string.h>
 
 #include "z64items.h"
@@ -22,7 +14,6 @@
 #define MM_ITEMS_MOD "mm_items"
 #define POWER_KEG_KEY "mm.power_keg"
 #define PICTO_BOX_KEY "mm.picto_box"
-// Wheels on the OoT grid: the keg next to the bombs, the camera next to the Lens of Truth.
 #define MM_ITEMS_PAGE SOH_ITEM_PAGE_VANILLA
 #define POWER_KEG_SLOT SLOT_BOMB
 #define PICTO_BOX_SLOT SLOT_LENS
@@ -39,16 +30,14 @@ static const ALIGN_ASSET(2) char sKegNameTex[] = "__OTR__item_name_static/gItemN
 static const ALIGN_ASSET(2) char sPictoIconTex[] = "__OTR__icon_item_static_yar/gItemIconPictographBoxTex";
 static const ALIGN_ASSET(2) char sPictoNameTex[] = "__OTR__item_name_static/gItemNamePictographBoxENGTex";
 
-// Majora's Mask models, extracted by the mm_assets mod. Absent without it, which is why every use is gated
-// on HasResource instead of the manifest's "requires": the items work either way.
 static const ALIGN_ASSET(2) char sKegBarrelDL[] = "__OTR__objects/object_gi_bigbomb/gGiPowderKegBarrelDL";
 static const ALIGN_ASSET(2) char sKegSkullDL[] = "__OTR__objects/object_gi_bigbomb/gGiPowderKegGoronSkullAndFuseDL";
 static const ALIGN_ASSET(2) char sPictoBodyDL[] = "__OTR__objects/object_gi_camera/gGiPictoBoxBodyAndLensDL";
 static const ALIGN_ASSET(2) char sPictoFrameDL[] = "__OTR__objects/object_gi_camera/gGiPictoBoxFrameDL";
 
-static const char* const sRequiredHooks[] = { "OnPlayerUpdate",     "OnActorDraw",   "OnItemReceive", "OnLoadFile",
-                                              "OnSceneInit",        "OnInterfaceDrawEnd", "OnPlayDrawEnd",
-                                              "OnActorUpdate",      "ShouldActorUpdate" };
+static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnActorDraw",   "OnItemReceive",
+                                              "OnLoadFile",     "OnSceneInit",   "OnInterfaceDrawEnd",
+                                              "OnPlayDrawEnd",  "OnActorUpdate", "ShouldActorUpdate" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -58,11 +47,9 @@ static const u16 sItemButtons[MM_ITEMS_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN
 static const SOHModApi* sApi;
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
-// The button an item is equipped to, so a mod that reads raw input knows which press was its own.
 static u16 GetEquippedButtons(const char* key) {
     u16 mask = 0;
 
@@ -76,19 +63,15 @@ static u16 GetEquippedButtons(const char* key) {
     return mask;
 }
 
-// --- Powder Keg ---
-
 #define POWER_KEG_MAX 5
-#define POWER_KEG_FUSE 100               // half again the bomb's own 70 ticks: set it down and walk away
-// A bomb blast tops out at a radius of 72, so the ring sits close enough for its four blasts and the keg's
-// own to overlap into one wide one instead of a circle with a hole in it.
+#define POWER_KEG_FUSE 100
 #define POWER_KEG_BLAST_RING 110.0f
-#define POWER_KEG_OBSTACLE_RADIUS 350.0f // boulders and heavy blocks, enough to clear a wall
+#define POWER_KEG_OBSTACLE_RADIUS 350.0f
 #define POWER_KEG_SATELLITES 4
 #define POWER_KEG_BURST_SCALE 0.01f
 #define POWER_KEG_BLAST_VFX_SCALE 300
 #define POWER_KEG_BLAST_VFX_STEP 57
-#define POWER_KEG_MODEL_SCALE 0.333f // GI models read too big at their own 1.0
+#define POWER_KEG_MODEL_SCALE 0.333f
 #define HEAVY_BLOCK_BIG_PIECE 2
 #define HEAVY_BLOCK_SMALL_PIECE 3
 
@@ -108,14 +91,11 @@ static void LoadKegCount(void) {
     }
 }
 
-// A keg arrives full: every one found in OoT is a fresh crate of them, and there is no Goron to buy more from.
 static void RestockKegs(const char* key) {
     sKegCount = POWER_KEG_MAX;
     StoreKegCount();
 }
 
-// Bombs and kegs are the same powder, so a bomb refill tops the crate up by one. Without it a spent keg is
-// gone for the rest of the file: OoT has no shop that sells them.
 static void RestockFromBombRefill(GetItemEntry entry) {
     if (entry.itemId < ITEM_BOMBS_5 || entry.itemId > ITEM_BOMBS_30 || sKegCount >= POWER_KEG_MAX) {
         return;
@@ -135,8 +115,7 @@ static bool CanUsePowerKeg(Player* player, PlayState* play) {
     return (player->stateFlags1 & PLAYER_STATE1_CARRYING_ACTOR) == 0;
 }
 
-// Heavy blocks die by Actor_Kill and never by their own break: each one spawns twelve debris actors, and a
-// field of them at once overflowed the actor pool.
+// Heavy blocks are killed rather than broken: twelve debris actors each overflowed the actor pool.
 static void ShatterObstacles(PlayState* play, Vec3f* center) {
     static const s16 sBreakableIds[] = { ACTOR_EN_ISHI, ACTOR_OBJ_HAMISHI, ACTOR_OBJ_BOMBIWA, ACTOR_EN_GOROIWA };
     static const s32 sCategories[] = { ACTORCAT_BG, ACTORCAT_PROP };
@@ -173,8 +152,7 @@ static void ShatterObstacles(PlayState* play, Vec3f* center) {
     }
 }
 
-// Vanilla builds the explosion sphere from the bomb's draw, which never runs when it is born already
-// exploding, so its centre is placed here.
+// Vanilla places the explosion sphere from the bomb's draw, which never runs for a bomb born exploding.
 static void BurstAt(PlayState* play, Vec3f* pos) {
     EnBom* bomb = (EnBom*)Actor_Spawn(&play->actorCtx, play, ACTOR_EN_BOM, pos->x, pos->y, pos->z, 0, 0, 0, BOMB_BODY);
 
@@ -188,8 +166,6 @@ static void BurstAt(PlayState* play, Vec3f* pos) {
     bomb->explosionCollider.elements[0].dim.worldSphere.center.z = (s16)pos->z;
 }
 
-// The keg's own En_Bom already blew where it stood; a ring of further blasts is what widens its reach to a
-// keg's, with real bomb damage rather than a radius check of our own.
 static void Explode(PlayState* play, Vec3f* center) {
     static const f32 sRingCos[POWER_KEG_SATELLITES] = { 1.0f, 0.0f, -1.0f, 0.0f };
     static const f32 sRingSin[POWER_KEG_SATELLITES] = { 0.0f, 1.0f, 0.0f, -1.0f };
@@ -208,9 +184,7 @@ static void Explode(PlayState* play, Vec3f* center) {
     ShatterObstacles(play, center);
 }
 
-// The keg is a real bomb, so vanilla ticks its fuse and blows it up wherever it ended: the extra blast lands
-// at its last position, not Link's. That position is copied every frame because a killed actor is freed
-// before this is asked where it was.
+// The position is copied every frame because a killed actor is freed before it is asked where it was.
 static void WatchKeg(PlayState* play) {
     if (sKeg == NULL) {
         return;
@@ -223,12 +197,8 @@ static void WatchKeg(PlayState* play) {
     sKeg = NULL;
 }
 
-// Player_UpperAction_CarryActor and the carry-wait animation, which vanilla reaches through the bomb's item
-// action; the keg has its own, so it asks for the carry pose the way lifting a pot does.
 void func_80835688(Player* player, PlayState* play);
 
-// Mirrors the vanilla bomb pull: an En_Bom spawned as Link's child and handed to his carry state, so he walks
-// with it, throws it and sets it down exactly as he would a bomb.
 static void PullPowerKeg(PlayState* play, Player* player) {
     Actor* keg = Actor_SpawnAsChild(&play->actorCtx, &player->actor, play, ACTOR_EN_BOM, player->actor.world.pos.x,
                                     player->actor.world.pos.y, player->actor.world.pos.z, 0, player->actor.shape.rot.y,
@@ -252,8 +222,6 @@ static void PullPowerKeg(PlayState* play, Player* player) {
     PlaySfxAt(NA_SE_PL_PULL_UP_BIGROCK, &player->actor.world.pos);
 }
 
-// The barrel is opaque and the Goron skull and its fuse translucent, the way MM's own get-item draw splits
-// them. The transform is rebuilt from the actor's position so the bomb's collision scale cannot shrink it.
 static void DrawKeg(Actor* actor, PlayState* play, bool* drawVanilla) {
     if (actor != sKeg || actor->params != BOMB_BODY || !sApi->HasResource(sKegBarrelDL)) {
         return;
@@ -291,8 +259,6 @@ static void DrawKegGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// --- Pictograph Box: photo format (verbatim from MM's z_play.c and z64save.h) ---
-
 #define PICTO_PHOTO_WIDTH 160
 #define PICTO_PHOTO_HEIGHT 112
 #define PICTO_PHOTO_TOPLEFT_X ((SCREEN_WIDTH - PICTO_PHOTO_WIDTH) / 2)
@@ -306,7 +272,7 @@ static void DrawKegGetItem(PlayState* play, GetItemEntry* entry) {
 #define PLAY_INTENSITY_BLUE 1
 #define PLAY_INTENSITY_NORM (0x1F * PLAY_INTENSITY_RED + 0x1F * PLAY_INTENSITY_GREEN + 0x1F * PLAY_INTENSITY_BLUE)
 #define PLAY_INTENSITY_MIX(r, g, b, m) \
-    ((((r) * PLAY_INTENSITY_RED + (g) * PLAY_INTENSITY_GREEN + (b) * PLAY_INTENSITY_BLUE) * (m)) / PLAY_INTENSITY_NORM)
+    ((((r)*PLAY_INTENSITY_RED + (g)*PLAY_INTENSITY_GREEN + (b)*PLAY_INTENSITY_BLUE) * (m)) / PLAY_INTENSITY_NORM)
 #define PICTO_RGBA16_GET_R(pixel) (((pixel) >> 11) & 0x1F)
 #define PICTO_RGBA16_GET_G(pixel) (((pixel) >> 6) & 0x1F)
 #define PICTO_RGBA16_GET_B(pixel) (((pixel) >> 1) & 0x1F)
@@ -334,7 +300,6 @@ static void ConvertRgba16ToIntensity(u8* dest, const u16* src, s32 left, s32 top
     }
 }
 
-// Five 5-bit pixels packed into every eight bits, exactly as MM stores a pictograph.
 static void CompressI8ToI5(const u8* src, u8* dest, size_t size) {
     s32 bitsLeft = PLAY_DECOMPRESS_BITS;
     u32 destPixel = 0;
@@ -358,7 +323,6 @@ static void CompressI8ToI5(const u8* src, u8* dest, size_t size) {
     }
 }
 
-// The save holds I5 only, so showing a stored pictograph means unpacking it back to 8bpp first.
 static void DecompressI5ToI8(const u8* src, u8* dest, size_t size) {
     s32 bitsLeft = PLAY_DECOMPRESS_BITS;
     u32 srcPixel = *src++;
@@ -379,8 +343,6 @@ static void DecompressI5ToI8(const u8* src, u8* dest, size_t size) {
         bitsLeft = shift;
     }
 }
-
-// --- Pictograph Box: subject validation (ported from MM's z_snap.c) ---
 
 typedef enum {
     PICTO_VALID_0,
@@ -418,8 +380,6 @@ typedef struct {
     s16 angleRange;
 } PictoSubject;
 
-// MM keys validation off a per-actor callback, which OoT actors have no field for, so the subjects are a
-// table of ids instead. Each OoT actor stands in for the Terminan one MM would have photographed.
 static const PictoSubject sPictoSubjects[] = {
     { ACTOR_EN_SKJ, PICTO_PARAMS_ANY, PICTO_VALID_MONKEY, 10.0f, 400.0f, 0x4000 },
     { ACTOR_EN_BIGOKUTA, PICTO_PARAMS_ANY, PICTO_VALID_BIG_OCTO, 10.0f, 800.0f, -1 },
@@ -531,8 +491,6 @@ static void RecordPictographedActors(PlayState* play) {
     StorePictoFlags();
 }
 
-// --- Pictograph Box: capture and prompt ---
-
 #define PICTO_TIME_PRIORITY 900
 #define PICTO_ARM_FRAMES 2
 #define PICTO_HUD_HIDE 1
@@ -549,7 +507,6 @@ static void RecordPictographedActors(PlayState* play) {
 #define PICTO_PANEL_TOP 22
 #define PICTO_PANEL_RIGHT 251
 #define PICTO_PANEL_BOTTOM 151
-// MM lifts the print to leave the message box its room along the bottom.
 #define PICTO_PHOTO_RAISE 33
 
 typedef enum { PICTO_OFF, PICTO_LENS, PICTO_PHOTO } PictoState;
@@ -561,13 +518,12 @@ static bool sIsLensPending;
 static bool sIsShutterArmed;
 static u8 sLensFrames;
 static bool sIsPhotoStored;
-// A freshly shot picture is the only one that writes the save when it is kept; the stored one is only being
-// looked at again.
 static bool sIsPhotoFresh;
 static bool sIsPromptShown;
 
 static void LoadPictoSave(void) {
-    sPhotoHasColor=sApi->StorageGet(MM_ITEMS_MOD,PICTO_COLOR_FIELD,sPhotoColor,sizeof(sPhotoColor))==sizeof(sPhotoColor);
+    sPhotoHasColor =
+        sApi->StorageGet(MM_ITEMS_MOD, PICTO_COLOR_FIELD, sPhotoColor, sizeof(sPhotoColor)) == sizeof(sPhotoColor);
     sIsPhotoStored = sApi->StorageGet(MM_ITEMS_MOD, PICTO_PHOTO_FIELD, sPhotoI5, sizeof(sPhotoI5)) == sizeof(sPhotoI5);
     sPictoFlags[0] = 0;
     sPictoFlags[1] = 0;
@@ -577,11 +533,10 @@ static void LoadPictoSave(void) {
 static void ClearStoredPhoto(void) {
     sApi->StorageRemove(MM_ITEMS_MOD, PICTO_PHOTO_FIELD);
     sIsPhotoStored = false;
-    sApi->StorageRemove(MM_ITEMS_MOD,PICTO_COLOR_FIELD);sPhotoHasColor=false;
+    sApi->StorageRemove(MM_ITEMS_MOD, PICTO_COLOR_FIELD);
+    sPhotoHasColor = false;
 }
 
-// The box owns A and B: A is the shutter and B puts it away, so neither may reach Link underneath. The stick
-// is only taken away once the picture is on screen — while the lens is up it is what aims the shot.
 static void HoldPictoInput(bool blockStick) {
     sApi->BlockPlayerInput(MM_ITEMS_MOD, BTN_A | BTN_B, blockStick);
 }
@@ -612,8 +567,6 @@ static void LeaveBox(Player* player, PlayState* play) {
     Interface_ChangeHudVisibilityMode(PICTO_HUD_SHOW);
 }
 
-// The world stops at the shutter, MM's own halt, so the print and the world behind the prompt agree. The
-// subjects are judged now, while their positions are still the ones in the frame.
 static void PressShutter(PlayState* play) {
     sPictoSavedFlags[0] = sPictoFlags[0];
     sPictoSavedFlags[1] = sPictoFlags[1];
@@ -623,8 +576,7 @@ static void PressShutter(PlayState* play) {
     Sfx_PlaySfxCentered(NA_SE_SY_CAMERA_ZOOM_DOWN);
 }
 
-// The readback is deferred to when the frame's list is processed, so it is emitted here, after the world is
-// drawn and before the interface, and read in the next update.
+// The readback is deferred until the frame's list is processed and is read in the next update.
 static void EmitCapture(void) {
     PlayState* play = gPlayState;
 
@@ -652,9 +604,11 @@ static void ShowStoredPhoto(void) {
 }
 
 static void DevelopCapture(Player* player, PlayState* play) {
-    for(int y=0;y<PICTO_PHOTO_HEIGHT;++y)
-        memcpy(&sPhotoColor[y*PICTO_PHOTO_WIDTH],&sFrameRgba16[(y+PICTO_PHOTO_TOPLEFT_Y)*SCREEN_WIDTH+PICTO_PHOTO_TOPLEFT_X],PICTO_PHOTO_WIDTH*sizeof(u16));
-    sPhotoHasColor=true;
+    for (int y = 0; y < PICTO_PHOTO_HEIGHT; ++y)
+        memcpy(&sPhotoColor[y * PICTO_PHOTO_WIDTH],
+               &sFrameRgba16[(y + PICTO_PHOTO_TOPLEFT_Y) * SCREEN_WIDTH + PICTO_PHOTO_TOPLEFT_X],
+               PICTO_PHOTO_WIDTH * sizeof(u16));
+    sPhotoHasColor = true;
     ConvertRgba16ToIntensity(sPhotoI8, sFrameRgba16, PICTO_PHOTO_TOPLEFT_X, PICTO_PHOTO_TOPLEFT_Y,
                              PICTO_PHOTO_TOPLEFT_X + PICTO_PHOTO_WIDTH - 1,
                              PICTO_PHOTO_TOPLEFT_Y + PICTO_PHOTO_HEIGHT - 1);
@@ -668,17 +622,16 @@ static void KeepPhoto(Player* player, PlayState* play) {
     if (sIsPhotoFresh) {
         CompressI8ToI5(sPhotoI8, sPhotoI5, PICTO_PHOTO_SIZE);
         sApi->StorageSet(MM_ITEMS_MOD, PICTO_PHOTO_FIELD, sPhotoI5, sizeof(sPhotoI5));
-        if(CVarGetInteger("gMods.Pictobox.Color",0) && sPhotoHasColor)
-            sApi->StorageSet(MM_ITEMS_MOD,PICTO_COLOR_FIELD,sPhotoColor,sizeof(sPhotoColor));
-        else sApi->StorageRemove(MM_ITEMS_MOD,PICTO_COLOR_FIELD);
+        if (CVarGetInteger("gMods.Pictobox.Color", 0) && sPhotoHasColor)
+            sApi->StorageSet(MM_ITEMS_MOD, PICTO_COLOR_FIELD, sPhotoColor, sizeof(sPhotoColor));
+        else
+            sApi->StorageRemove(MM_ITEMS_MOD, PICTO_COLOR_FIELD);
         sIsPhotoStored = true;
     }
     LeaveBox(player, play);
     Sfx_PlaySfxCentered(NA_SE_SY_DECIDE);
 }
 
-// Saying no throws the picture away and drops you back into the lens: that is how MM lets you retake one,
-// and why the box never asks whether to replace what it holds. A fresh shot also rolls its subjects back.
 static void DiscardPhoto(void) {
     if (sIsPhotoFresh) {
         sPictoFlags[0] = sPictoSavedFlags[0];
@@ -717,9 +670,6 @@ static void UpdateLens(Player* player, PlayState* play) {
     if (sLensFrames < PICTO_ARM_FRAMES) {
         sLensFrames++;
     }
-    // The press that raised the lens can still be down when this first ticks, and the item's own action runs
-    // a step behind, so the shutter waits for every one of its buttons to come back up — and for the
-    // first-person view it is supposed to photograph.
     if (!sIsShutterArmed) {
         sIsShutterArmed = Z64Aiming_IsAiming() && (held & shutterMask) == 0 && sLensFrames >= PICTO_ARM_FRAMES;
         return;
@@ -741,7 +691,6 @@ static bool CanUsePictoBox(Player* player, PlayState* play) {
                                    PLAYER_STATE1_DEAD | PLAYER_STATE1_TALKING)) == 0;
 }
 
-// With a picture already inside, the box shows you THAT one first, the way MM's pictograph button does.
 static void TakeOutPictoBox(PlayState* play, Player* player) {
     if (sPictoState != PICTO_OFF) {
         return;
@@ -753,8 +702,6 @@ static void TakeOutPictoBox(PlayState* play, Player* player) {
     EnterLens();
 }
 
-// The lens holds the first-person state and the rotations the engine walks back to zero every frame they go
-// unclaimed, so it belongs here, inside the player's update. The photo prompt does not: see RunPhotoPrompt.
 static int32_t UpdatePictoBox(Player* player, PlayState* play) {
     if (sPictoState != PICTO_LENS) {
         return sPictoState == PICTO_PHOTO;
@@ -769,9 +716,7 @@ static int32_t UpdatePictoBox(Player* player, PlayState* play) {
     return 1;
 }
 
-// The prompt's own textbox keeps the item's upper action from running, and the host reads an upper action
-// that stopped as an item that left the hand, so the prompt runs from the end of the player's update and
-// says the box is still out.
+// The prompt's textbox stops the item's upper action, which the host reads as the item leaving the hand.
 static void RunPhotoPrompt(Player* player, PlayState* play) {
     if (sPictoState != PICTO_PHOTO) {
         return;
@@ -787,9 +732,6 @@ static void StowPictoBox(Player* player, PlayState* play) {
     LeaveBox(player, play);
 }
 
-// The aim claims the camera and the first-person state, both of which the rest of the player's update would
-// undo, so it is requested from the end of that update rather than from the item's own action. It also waits
-// out the take-out animation, which would otherwise overwrite the arms the moment the lens comes up.
 static void StartPendingAim(Player* player, PlayState* play) {
     if (!sIsLensPending || sPictoState != PICTO_LENS) {
         return;
@@ -816,37 +758,37 @@ static void DrawPictoGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// --- Pictograph Box: drawing ---
-
-// MM's own frame: four corner brackets on the R_PICTO_FOCUS_BORDER positions and a crosshair at its icon.
-// The message box draws after this, so the cycle type goes back before leaving.
-static const ALIGN_ASSET(2) char sFocusBorder[]="__OTR__parameter_static/gPictoBoxFocusBorderTex";
-static const ALIGN_ASSET(2) char sFocusIcon[]="__OTR__parameter_static/gPictoBoxFocusIconTex";
-static const ALIGN_ASSET(2) char sFocusText[]="__OTR__parameter_static/gPictoBoxFocusTextTex";
+static const ALIGN_ASSET(2) char sFocusBorder[] = "__OTR__parameter_static/gPictoBoxFocusBorderTex";
+static const ALIGN_ASSET(2) char sFocusIcon[] = "__OTR__parameter_static/gPictoBoxFocusIconTex";
+static const ALIGN_ASSET(2) char sFocusText[] = "__OTR__parameter_static/gPictoBoxFocusTextTex";
 static void DrawViewfinder(PlayState* play) {
- OPEN_DISPS(play->state.gfxCtx);Gfx_SetupDL_39Overlay(play->state.gfxCtx);
- gDPSetAlphaCompare(OVERLAY_DISP++,G_AC_THRESHOLD);
- gDPSetRenderMode(OVERLAY_DISP++,G_RM_XLU_SURF,G_RM_XLU_SURF2);
- gDPSetCombineMode(OVERLAY_DISP++,G_CC_MODULATEIA_PRIM,G_CC_MODULATEIA_PRIM);
- gDPSetPrimColor(OVERLAY_DISP++,0,0,255,255,155,255);
- gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusBorder,G_IM_FMT_IA,16,16,0,G_TX_MIRROR|G_TX_WRAP,G_TX_MIRROR|G_TX_WRAP,4,4,G_TX_NOLOD,G_TX_NOLOD);
- for(int i=0;i<4;++i) {
-  int x=(i&1)?PICTO_VIEWFINDER_RIGHT:PICTO_VIEWFINDER_LEFT;
-  int y=(i&2)?PICTO_VIEWFINDER_BOTTOM:PICTO_VIEWFINDER_TOP;
-  gSPTextureRectangle(OVERLAY_DISP++,x*4,y*4,(x+16)*4,(y+16)*4,G_TX_RENDERTILE,(i&1)?512:0,(i&2)?512:0,1<<10,1<<10);
- }
- gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusIcon,G_IM_FMT_I,32,16,0,G_TX_WRAP,G_TX_WRAP,G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
- gSPTextureRectangle(OVERLAY_DISP++,142*4,108*4,174*4,124*4,G_TX_RENDERTILE,0,0,1<<10,1<<10);
- gDPLoadTextureBlock_4b(OVERLAY_DISP++,sFocusText,G_IM_FMT_I,32,8,0,G_TX_WRAP,G_TX_WRAP,G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
- gSPTextureRectangle(OVERLAY_DISP++,142*4,128*4,174*4,136*4,G_TX_RENDERTILE,0,0,1<<10,1<<10);
- gDPSetAlphaCompare(OVERLAY_DISP++,G_AC_NONE);CLOSE_DISPS(play->state.gfxCtx);
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_39Overlay(play->state.gfxCtx);
+    gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_THRESHOLD);
+    gDPSetRenderMode(OVERLAY_DISP++, G_RM_XLU_SURF, G_RM_XLU_SURF2);
+    gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, 255, 255, 155, 255);
+    gDPLoadTextureBlock_4b(OVERLAY_DISP++, sFocusBorder, G_IM_FMT_IA, 16, 16, 0, G_TX_MIRROR | G_TX_WRAP,
+                           G_TX_MIRROR | G_TX_WRAP, 4, 4, G_TX_NOLOD, G_TX_NOLOD);
+    for (int i = 0; i < 4; ++i) {
+        int x = (i & 1) ? PICTO_VIEWFINDER_RIGHT : PICTO_VIEWFINDER_LEFT;
+        int y = (i & 2) ? PICTO_VIEWFINDER_BOTTOM : PICTO_VIEWFINDER_TOP;
+        gSPTextureRectangle(OVERLAY_DISP++, x * 4, y * 4, (x + 16) * 4, (y + 16) * 4, G_TX_RENDERTILE,
+                            (i & 1) ? 512 : 0, (i & 2) ? 512 : 0, 1 << 10, 1 << 10);
+    }
+    gDPLoadTextureBlock_4b(OVERLAY_DISP++, sFocusIcon, G_IM_FMT_I, 32, 16, 0, G_TX_WRAP, G_TX_WRAP, G_TX_NOMASK,
+                           G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+    gSPTextureRectangle(OVERLAY_DISP++, 142 * 4, 108 * 4, 174 * 4, 124 * 4, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
+    gDPLoadTextureBlock_4b(OVERLAY_DISP++, sFocusText, G_IM_FMT_I, 32, 8, 0, G_TX_WRAP, G_TX_WRAP, G_TX_NOMASK,
+                           G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+    gSPTextureRectangle(OVERLAY_DISP++, 142 * 4, 128 * 4, 174 * 4, 136 * 4, G_TX_RENDERTILE, 0, 0, 1 << 10, 1 << 10);
+    gDPSetAlphaCompare(OVERLAY_DISP++, G_AC_NONE);
+    CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The print on its grey mount, MM's own layout. Sepia is not a filter: the I8 image runs through
-// MODULATEI_PRIM and the prim colour is the tone.
 static void DrawPhoto(PlayState* play) {
     s32 top = PICTO_PHOTO_TOPLEFT_Y - PICTO_PHOTO_RAISE;
-    bool color=sPhotoHasColor && CVarGetInteger("gMods.Pictobox.Color",0);
+    bool color = sPhotoHasColor && CVarGetInteger("gMods.Pictobox.Color", 0);
 
     OPEN_DISPS(play->state.gfxCtx);
     gDPPipeSync(OVERLAY_DISP++);
@@ -860,21 +802,20 @@ static void DrawPhoto(PlayState* play) {
     gDPSetRenderMode(OVERLAY_DISP++, G_RM_OPA_SURF, G_RM_OPA_SURF2);
     gDPSetTextureFilter(OVERLAY_DISP++, G_TF_POINT);
     gDPSetCombineMode(OVERLAY_DISP++, G_CC_MODULATEI_PRIM, G_CC_MODULATEI_PRIM);
-    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, color?255:250, color?255:160, color?255:160, 255);
+    gDPSetPrimColor(OVERLAY_DISP++, 0, 0, color ? 255 : 250, color ? 255 : 160, color ? 255 : 160, 255);
 
     for (s32 y = 0; y < PICTO_PHOTO_HEIGHT; y += PICTO_PHOTO_STRIP, top += PICTO_PHOTO_STRIP) {
-        // The buffer never moves, so the renderer's texture cache would keep serving the previous photo
-        // unless each strip is invalidated after a new capture overwrites it.
-        if(color) {
-            gSPInvalidateTexCache(OVERLAY_DISP++,(uintptr_t)&sPhotoColor[y*PICTO_PHOTO_WIDTH]);
-            gDPLoadTextureBlock(OVERLAY_DISP++,&sPhotoColor[y*PICTO_PHOTO_WIDTH],G_IM_FMT_RGBA,G_IM_SIZ_16b,
-                PICTO_PHOTO_WIDTH,PICTO_PHOTO_STRIP,0,G_TX_NOMIRROR|G_TX_WRAP,G_TX_NOMIRROR|G_TX_WRAP,
-                G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+        // The buffer never moves, so each strip must be invalidated after a capture or the cache serves the old photo.
+        if (color) {
+            gSPInvalidateTexCache(OVERLAY_DISP++, (uintptr_t)&sPhotoColor[y * PICTO_PHOTO_WIDTH]);
+            gDPLoadTextureBlock(OVERLAY_DISP++, &sPhotoColor[y * PICTO_PHOTO_WIDTH], G_IM_FMT_RGBA, G_IM_SIZ_16b,
+                                PICTO_PHOTO_WIDTH, PICTO_PHOTO_STRIP, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
         } else {
-            gSPInvalidateTexCache(OVERLAY_DISP++,(uintptr_t)&sPhotoI8[y*PICTO_PHOTO_WIDTH]);
-            gDPLoadTextureBlock(OVERLAY_DISP++,&sPhotoI8[y*PICTO_PHOTO_WIDTH],G_IM_FMT_I,G_IM_SIZ_8b,
-                PICTO_PHOTO_WIDTH,PICTO_PHOTO_STRIP,0,G_TX_NOMIRROR|G_TX_WRAP,G_TX_NOMIRROR|G_TX_WRAP,
-                G_TX_NOMASK,G_TX_NOMASK,G_TX_NOLOD,G_TX_NOLOD);
+            gSPInvalidateTexCache(OVERLAY_DISP++, (uintptr_t)&sPhotoI8[y * PICTO_PHOTO_WIDTH]);
+            gDPLoadTextureBlock(OVERLAY_DISP++, &sPhotoI8[y * PICTO_PHOTO_WIDTH], G_IM_FMT_I, G_IM_SIZ_8b,
+                                PICTO_PHOTO_WIDTH, PICTO_PHOTO_STRIP, 0, G_TX_NOMIRROR | G_TX_WRAP,
+                                G_TX_NOMIRROR | G_TX_WRAP, G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
         }
         gSPTextureRectangle(OVERLAY_DISP++, PICTO_PHOTO_TOPLEFT_X << 2, top << 2,
                             (PICTO_PHOTO_TOPLEFT_X + PICTO_PHOTO_WIDTH) << 2, (top + PICTO_PHOTO_STRIP) << 2,
@@ -884,15 +825,14 @@ static void DrawPhoto(PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Use the native ammo renderer so HUD anchors, margins, scaling and widescreen agree.
 void Interface_DrawAmmoCount(PlayState* play, s16 button, s16 alpha);
 static void DrawPictoPhotoCount(PlayState* play) {
     if (play->pauseCtx.state != 0 || play->gameOverCtx.state != 0) {
         return;
     }
     const s16 alpha[MM_ITEMS_BUTTON_COUNT] = {
-        play->interfaceCtx.bAlpha, play->interfaceCtx.cLeftAlpha, play->interfaceCtx.cDownAlpha,
-        play->interfaceCtx.cRightAlpha, play->interfaceCtx.dpadUpAlpha, play->interfaceCtx.dpadDownAlpha,
+        play->interfaceCtx.bAlpha,        play->interfaceCtx.cLeftAlpha,     play->interfaceCtx.cDownAlpha,
+        play->interfaceCtx.cRightAlpha,   play->interfaceCtx.dpadUpAlpha,    play->interfaceCtx.dpadDownAlpha,
         play->interfaceCtx.dpadLeftAlpha, play->interfaceCtx.dpadRightAlpha,
     };
     for (s16 button = 0; button < MM_ITEMS_BUTTON_COUNT; button++) {
@@ -909,8 +849,7 @@ static void DrawPictoPhotoCount(PlayState* play) {
         gDPSetCombineLERP(OVERLAY_DISP++, PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0,
                           PRIMITIVE, ENVIRONMENT, TEXEL0, ENVIRONMENT, TEXEL0, 0, PRIMITIVE, 0);
         CLOSE_DISPS(play->state.gfxCtx);
-        // The native renderer accepts vanilla ammo items. Borrow a slot only for this draw;
-        // the custom item's getAmmo callback already supplies the separate pause-menu count.
+        // The native renderer accepts vanilla ammo items only, so a slot is borrowed for this draw.
         u8 savedItem = gSaveContext.equips.buttonItems[button];
         s8 savedAmmo = AMMO(ITEM_BEAN);
         gSaveContext.equips.buttonItems[button] = ITEM_BEAN;
@@ -931,8 +870,6 @@ static void DrawPictoOverlay(PlayState* play) {
         DrawPhoto(play);
     }
 }
-
-// --- Mod frame ---
 
 static void RunMmItems(void) {
     PlayState* play = gPlayState;
@@ -965,7 +902,6 @@ static void ReloadSave(int32_t fileNum) {
     LoadPictoSave();
 }
 
-// Each is shuffled once by the randomizer; no vanilla logic needs them.
 static const SOHCustomItemRandomizer sKegRandomizer = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, POWER_KEG_KEY, POWER_KEG_KEY, "",
 };
@@ -981,13 +917,22 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
-static int32_t PictoPhotoCount(const char* key){return sIsPhotoStored?1:0;}
+static int32_t PictoPhotoCount(const char* key) {
+    return sIsPhotoStored ? 1 : 0;
+}
 static void RegisterPictoOptions(void) {
-    if(!SOH_MOD_API_HAS(sApi,RegisterMenuWidget))return;
-    if(SOH_MOD_API_HAS(sApi,RegisterMenuSidebar))sApi->RegisterMenuSidebar("Mods","Majora's Mask","gMods.Menu.Page",1);
-    SOHModMenuWidget w={0};w.structSize=sizeof(w);w.section="Mods";w.sidebar="Majora's Mask";
-    w.type=SOH_MOD_MENU_CHECKBOX;w.label="Save pictographs in color";w.cvar="gMods.Pictobox.Color";
-    w.tooltip="Keep a color photograph in the save file. Existing monochrome photographs remain readable.";
+    if (!SOH_MOD_API_HAS(sApi, RegisterMenuWidget))
+        return;
+    if (SOH_MOD_API_HAS(sApi, RegisterMenuSidebar))
+        sApi->RegisterMenuSidebar("Mods", "Majora's Mask", "gMods.Menu.Page", 1);
+    SOHModMenuWidget w = { 0 };
+    w.structSize = sizeof(w);
+    w.section = "Mods";
+    w.sidebar = "Majora's Mask";
+    w.type = SOH_MOD_MENU_CHECKBOX;
+    w.label = "Save pictographs in color";
+    w.cvar = "gMods.Pictobox.Color";
+    w.tooltip = "Keep a color photograph in the save file. Existing monochrome photographs remain readable.";
     sApi->RegisterMenuWidget(&w);
 }
 SOH_MOD_EXPORT void ModInit(void) {
@@ -1020,7 +965,7 @@ SOH_MOD_EXPORT void ModInit(void) {
                                 "to take the picture.^Only one pictograph fits inside,&so choose what you keep.");
     Z64Items_SetPauseText(&picto, "%rPictograph Box&%wPress %y\xA1%w to raise the lens, %y\x9F%w to&"
                                   "shoot, %y\xA0%w to put it away.");
-    Z64Items_SetAmmo(&picto,PictoPhotoCount);
+    Z64Items_SetAmmo(&picto, PictoPhotoCount);
     Z64Items_SetCanUse(&picto, CanUsePictoBox);
     Z64Items_SetAction(&picto, TakeOutPictoBox, UpdatePictoBox);
     Z64Items_SetHeldCallbacks(&picto, NULL, StowPictoBox, NULL);
@@ -1034,8 +979,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (CVarGetInteger("gMods.Store.mm_items.ice_magic", 1) != 0) {
         RegisterMmIce();
     }
-    if ((enableKeg && !Z64Items_Register(sApi, &keg)) ||
-        (enablePicto && !Z64Items_Register(sApi, &picto))) {
+    if ((enableKeg && !Z64Items_Register(sApi, &keg)) || (enablePicto && !Z64Items_Register(sApi, &picto))) {
         return;
     }
     LoadKegCount();

@@ -1,0 +1,16 @@
+{
+  "name": "fleet_mm_assets",
+  "display_name": "Majora's Mask rewards for Fleet",
+  "author": "Skijer",
+  "version": "0.1.0",
+  "format": 2,
+  "modapi": 2,
+  "game": "oot",
+  "description": "Fleet foreign reward identities and base draw recipes. Special presentations and asset installation are incomplete.",
+  "development_stage": "base-draw-development",
+  "presentation_ready": false,
+  "fleet_only": true,
+  "dependency_only": true,
+  "ordinary_pool_count": 0,
+  "catalog_schema": 1
+}

@@ -1,7 +1,3 @@
-/**
- * Golden hearts past OoT's twenty: each golden heart is drawn over a red one and takes damage first. They live
- * in the save's mod storage, so the vanilla health fields and their twenty-heart cap stay untouched.
- */
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -16,14 +12,22 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #define MOD_NAME "golden_hearts"
-#define POOL_OPTION "oot.golden_hearts"
+#define CONTAINER_POOL_OPTION "oot.golden_hearts"
+#define PIECE_POOL_OPTION "oot.golden_heart_pieces"
 #define STARTING_OPTION "oot.starting_golden_hearts"
-// Fleet's shared Golden Hearts family names this item by the same key in both games.
 #define GOLDEN_HEART_KEY "nei.heart.golden"
+#define GOLDEN_PIECE_KEY "nei.heart.golden_piece"
+#define RED_QUARTERS_SERVICE "nei.heart.golden_red_quarters"
 #define CAPACITY_KEY "capacity"
 #define HEALTH_KEY "health"
+#define PIECES_KEY "pieces"
+#define RED_HEARTS_KEY "red_hearts"
 #define MAX_GOLDEN_HEARTS 20
 #define HEART_HEALTH 16
+#define MAX_RED_HEALTH (20 * HEART_HEALTH)
+#define PIECES_PER_HEART 4
+#define FULL_REFILL 0x140
+#define MAX_POOL_CONTAINERS 40
 
 s16 getHealthMeterXOffset(void);
 s16 getHealthMeterYOffset(void);
@@ -44,23 +48,40 @@ static const char* const sHeartFractionTex[] = {
 static const SOHModApi* sApi;
 static u8 sCapacity;
 static s16 sHealth;
+static u8 sPieces;
+static u8 sRedHearts;
 
 static void Store(void) {
     sApi->StorageSet(MOD_NAME, CAPACITY_KEY, &sCapacity, sizeof(sCapacity));
     sApi->StorageSet(MOD_NAME, HEALTH_KEY, &sHealth, sizeof(sHealth));
+    sApi->StorageSet(MOD_NAME, PIECES_KEY, &sPieces, sizeof(sPieces));
+    sApi->StorageSet(MOD_NAME, RED_HEARTS_KEY, &sRedHearts, sizeof(sRedHearts));
 }
 
 static s16 GetMaxHealth(void) {
     return sCapacity * HEART_HEALTH;
 }
 
-// A new randomizer file starts with the seed's golden hearts full; an older file keeps what it stored.
+static s32 ReadRedQuarters(void) {
+    return sRedHearts * PIECES_PER_HEART;
+}
+
+static void ReadStoredByte(const char* key, u8* value) {
+    if (sApi->StorageHas(MOD_NAME, key)) {
+        sApi->StorageGet(MOD_NAME, key, value, sizeof(*value));
+    }
+}
+
 static void LoadGoldenHearts(int32_t fileNum) {
     sCapacity = 0;
     sHealth = 0;
+    sPieces = 0;
+    sRedHearts = 0;
     if (sApi->StorageHas(MOD_NAME, CAPACITY_KEY)) {
         sApi->StorageGet(MOD_NAME, CAPACITY_KEY, &sCapacity, sizeof(sCapacity));
         sApi->StorageGet(MOD_NAME, HEALTH_KEY, &sHealth, sizeof(sHealth));
+        ReadStoredByte(PIECES_KEY, &sPieces);
+        ReadStoredByte(RED_HEARTS_KEY, &sRedHearts);
         return;
     }
     if (IS_RANDO) {
@@ -70,12 +91,28 @@ static void LoadGoldenHearts(int32_t fileNum) {
     }
 }
 
+static void GrantWholeHeart(void) {
+    if (gSaveContext.healthCapacity < MAX_RED_HEALTH) {
+        gSaveContext.healthCapacity += HEART_HEALTH;
+        gSaveContext.healthAccumulator = FULL_REFILL;
+        sRedHearts++;
+    } else if (sCapacity < MAX_GOLDEN_HEARTS) {
+        sCapacity++;
+    }
+    sHealth = GetMaxHealth();
+}
+
 static void ReceiveGoldenHeart(const char* key) {
-    if (strcmp(key, GOLDEN_HEART_KEY) != 0 || sCapacity >= MAX_GOLDEN_HEARTS) {
+    const bool isContainer = strcmp(key, GOLDEN_HEART_KEY) == 0;
+    if (!isContainer && strcmp(key, GOLDEN_PIECE_KEY) != 0) {
         return;
     }
-    sCapacity++;
-    sHealth = GetMaxHealth();
+    if (!isContainer) {
+        sPieces = (sPieces + 1) % PIECES_PER_HEART;
+    }
+    if (isContainer || sPieces == 0) {
+        GrantWholeHeart();
+    }
     Store();
 }
 
@@ -92,7 +129,6 @@ static void ShieldWithGoldenHearts(int16_t amount) {
     }
 }
 
-// OoT draws each heart around (30 + offsetX, 26 + offsetY) on screen, ten to a row.
 static f32 GetHeartsScale(void) {
     if (CVarGetInteger("gCosmetics.HUD.HeartsCount.PosType", 0) == 0) {
         return 0.7f;
@@ -139,32 +175,72 @@ static void DrawGoldenHearts(PlayState* play) {
     }
 }
 
-static const char* const sCounts[] = { "0",  "1",  "2",  "3",  "4",  "5",  "6",  "7",  "8",  "9", "10",
-                                       "11", "12", "13", "14", "15", "16", "17", "18", "19", "20" };
+#define COUNTS_IN_TENS(tens) \
+    tens "0", tens "1", tens "2", tens "3", tens "4", tens "5", tens "6", tens "7", tens "8", tens "9"
+
+static const char* const sCounts[] = { "0",
+                                       "1",
+                                       "2",
+                                       "3",
+                                       "4",
+                                       "5",
+                                       "6",
+                                       "7",
+                                       "8",
+                                       "9",
+                                       COUNTS_IN_TENS("1"),
+                                       COUNTS_IN_TENS("2"),
+                                       COUNTS_IN_TENS("3"),
+                                       COUNTS_IN_TENS("4"),
+                                       COUNTS_IN_TENS("5"),
+                                       COUNTS_IN_TENS("6"),
+                                       COUNTS_IN_TENS("7"),
+                                       "80" };
 
 static const SOHModRandoOption sOptions[] = {
-    { sizeof(SOHModRandoOption), POOL_OPTION, "Golden Heart Containers",
-      "Golden Heart Containers added to the item pool. Each adds a golden heart over the red ones.", sCounts,
+    { sizeof(SOHModRandoOption), CONTAINER_POOL_OPTION, "Golden Heart Containers",
+      "Golden Heart Containers added to the item pool. Each adds a heart; past twenty hearts, a golden heart.", sCounts,
+      MAX_POOL_CONTAINERS + 1, 0, SOH_MOD_RANDO_WIDGET_SLIDER },
+    { sizeof(SOHModRandoOption), PIECE_POOL_OPTION, "Golden Heart Pieces",
+      "Golden Heart Pieces added to the item pool. Four make a heart; past twenty hearts, a golden heart.", sCounts,
       ARRAY_COUNT(sCounts), 0, SOH_MOD_RANDO_WIDGET_SLIDER },
     { sizeof(SOHModRandoOption), STARTING_OPTION, "Starting Golden Hearts",
-      "Golden hearts Link starts with, past the twenty red ones.", sCounts, ARRAY_COUNT(sCounts), 0,
+      "Golden hearts Link starts with, past the twenty red ones.", sCounts, MAX_GOLDEN_HEARTS + 1, 0,
       SOH_MOD_RANDO_WIDGET_SLIDER },
 };
 
-static void RegisterGoldenHeartContainer(void) {
-    static const SOHCustomItemRandomizer pool = {
+typedef struct {
+    const char* key;
+    const char* name;
+    const char* icon;
+    const char* model;
+    const char* text;
+    const char* poolOption;
+} GoldenItem;
+
+static const GoldenItem sGoldenItems[] = {
+    { GOLDEN_HEART_KEY, "Golden Heart Container", "__OTR__textures/icon_item_custom/gItemIconGoldenHeartTex",
+      "__OTR__objects/object_gi_hearts/gGiHeartContainerDL",
+      "You got a %yGolden Heart Container%w!&Your life grows by one heart.", CONTAINER_POOL_OPTION },
+    { GOLDEN_PIECE_KEY, "Golden Heart Piece", "__OTR__textures/icon_item_custom/gItemIconGoldenHeartPieceTex",
+      "__OTR__objects/object_gi_hearts/gGiHeartPieceDL",
+      "You got a %yGolden Heart Piece%w!&Four of them make a whole heart.", PIECE_POOL_OPTION },
+};
+
+static void RegisterGoldenItem(const GoldenItem* item) {
+    const SOHCustomItemRandomizer pool = {
         .structSize = sizeof(SOHCustomItemRandomizer),
         .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
         .poolCount = 0,
-        .logicKey = GOLDEN_HEART_KEY,
-        .hintKey = GOLDEN_HEART_KEY,
-        .poolCountOption = POOL_OPTION,
+        .logicKey = item->key,
+        .hintKey = item->key,
+        .poolCountOption = item->poolOption,
     };
-    SOHCustomItemDefinition definition =
-        Z64Items_Define(GOLDEN_HEART_KEY, "__OTR__textures/icon_item_custom/gItemIconGoldenHeartTex", NULL);
-    definition.displayName = "Golden Heart Container";
-    Z64Items_SetTextbox(&definition, "You got a %yGolden Heart Container%w!&A golden heart now guards a red one.");
-    Z64Items_SetGetItemModel(&definition, "__OTR__objects/object_gi_hearts/gGiHeartContainerDL");
+    SOHCustomItemDefinition definition = Z64Items_Define(item->key, item->icon, NULL);
+    definition.displayName = item->name;
+    definition.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
+    Z64Items_SetTextbox(&definition, item->text);
+    Z64Items_SetGetItemModel(&definition, item->model);
     Z64Items_SetLogic(&definition, &pool);
     Z64Items_Register(sApi, &definition);
 }
@@ -185,7 +261,12 @@ SOH_MOD_EXPORT void ModInit(void) {
     for (u32 i = 0; i < ARRAY_COUNT(sOptions); i++) {
         sApi->RegisterRandoOption(&sOptions[i]);
     }
-    RegisterGoldenHeartContainer();
+    for (u32 i = 0; i < ARRAY_COUNT(sGoldenItems); i++) {
+        RegisterGoldenItem(&sGoldenItems[i]);
+    }
+    if (SOH_MOD_API_HAS(sApi, PublishService)) {
+        sApi->PublishService(RED_QUARTERS_SERVICE, (void*)ReadRedQuarters);
+    }
     SOH_REGISTER_HOOK(sApi, OnLoadFile, LoadGoldenHearts);
     SOH_REGISTER_HOOK(sApi, OnCustomItemReceive, ReceiveGoldenHeart);
     SOH_REGISTER_HOOK(sApi, OnPlayerHealthChange, ShieldWithGoldenHearts);

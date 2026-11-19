@@ -18,9 +18,7 @@
 #define FD_MASK_KEY "nei.fierce_deity_mask"
 #define FD_FORM_KEY "nei.fierce_deity"
 #define FD_BEAM_ACTOR_KEY "nei.fierce_deity_beam"
-// No resources live here: a model path is what turns on the host's root scaling, as for Goron.
 #define FD_MODEL_PATH "objects/forms/fierce_deity"
-// Cell 23 of the mask page is where Majora's Mask keeps the Fierce Deity's Mask.
 #define FD_MASK_PAGE 1
 #define FD_MASK_SLOT 23
 
@@ -36,12 +34,10 @@
 #define FD_MOTION_SCALE 1.5f
 #define FD_LIFT_SPEED 1.75f
 #define FD_PUSH_SPEED 1.5f
-// Obj_Oshihiki moves one 20-unit cell per push.
 #define PUSH_CELL 20.0f
 #define FD_TURN_RATE 1200
 #define SLOW_ROOM_RUN_SPEED_LIMIT 500
 
-// MM keeps the Deity's voice in its first bank, the ids OoT gives adult Link: same id, the Deity's sample.
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 #define LINK_VOICE_ACTIONS 0x20
 typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
@@ -66,7 +62,7 @@ typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
 #define BEAM_TARGET_SCALE 12.0f
 #define BEAM_DRAW_SCALE 0.02f
 #define BEAM_DAMAGE 4
-// NEI's beam flag: OoT names that bit the Kokiri jump slash.
+// OoT names that bit the Kokiri jump slash.
 #define BEAM_DMG_FLAGS DMG_JUMP_KOKIRI
 
 #define MM_ANIM_VALUES_PER_FRAME 67
@@ -79,6 +75,7 @@ static const ALIGN_ASSET(2) char sGetItemFaceDL[] = "__OTR__objects/object_gi_ma
 static const ALIGN_ASSET(2) char sGetItemHairDL[] = "__OTR__objects/object_gi_mask03/gGiFierceDeityMaskHairAndHatDL";
 static const ALIGN_ASSET(2) char sMaskDL[] = "__OTR__objects/gameplay_keep/gFierceDeityMaskDL";
 static const ALIGN_ASSET(2) char sMaskOnPath[] = "__OTR__misc/link_animetion/gPlayerAnim_cl_setmask_Data";
+static const ALIGN_ASSET(2) char sMaskOffPath[] = "__OTR__misc/link_animetion/gPlayerAnim_pz_maskoffstart_Data";
 static const ALIGN_ASSET(2) char sSwordBeamDL[] = "__OTR__objects/gameplay_keep/gSwordBeamDL";
 static const ALIGN_ASSET(2) char sSwordIconTex[] = "__OTR__icon_item_static_yar/gItemIconFierceDeitySwordTex";
 static const ALIGN_ASSET(2) char sEyesTex[] = OBJ_FD "EyesTex";
@@ -244,18 +241,13 @@ s32 Player_ActionHandler_12(Player* player, PlayState* play);
 void Player_SetupRoll(Player* player, PlayState* play);
 
 static const SOHModApi* sApi;
-extern bool FormRegistry_ApplyActive(const char* key);
-static bool ToggleConfiguredForm(const char* key) {
-    if(CVarGetInteger("gMods.MMMasks.InstantForms",0)) {
-        return FormRegistry_ApplyActive(sApi->IsFormActive(key)?NULL:key);
-    }
-    return sApi->ToggleForm(key);
-}
 
 static MmSfxPlayFunc sPlayMmSfx;
 static PlayerAgeProperties sFdBody;
 static LinkAnimationHeader sMaskOnAnim;
 static s16* sMaskOnFrames;
+static LinkAnimationHeader sMaskOffAnim;
+static s16* sMaskOffFrames;
 static s16 sBeamActorId = -1;
 static bool sIsSlashQueued;
 
@@ -267,8 +259,7 @@ static bool IsFierceDeity(void) {
     return sApi != NULL && sApi->IsFormActive(FD_FORM_KEY);
 }
 
-// Optional appearance provider. Resolve lazily so mod load order does not matter;
-// the combat, equipment policy, actor scale and abilities remain this mod's.
+// Resolved lazily so mod load order does not matter.
 typedef bool (*FdAppearanceActiveFunc)(void);
 typedef bool (*FdAppearanceBodyFunc)(Player*, int32_t, Gfx**, Gfx*, Vec3f*);
 typedef bool (*FdAppearanceFaceFunc)(const char**, const char**);
@@ -294,13 +285,10 @@ static bool CanAct(Player* player) {
               PLAYER_STATE1_CLIMBING_LEDGE | PLAYER_STATE1_HANGING_OFF_LEDGE | PLAYER_STATE1_SHIELDING));
 }
 
-// The Deity wields the Biggoron's hand (ResolveFdEquipment), so vanilla draws it, puts it away and picks the
-// two-handed stance; only the blade and its swings are his.
 static bool HoldsDeitySword(Player* player) {
     return player->heldItemAction == PLAYER_IA_SWORD_BIGGORON;
 }
 
-// B off during a shop or a minigame keeps the blade still.
 static bool CanSwing(Player* player) {
     return HoldsDeitySword(player) && gSaveContext.buttonStatus[0] != BTN_DISABLED && CanAct(player);
 }
@@ -317,7 +305,8 @@ static s32 CheckSwordRebound(PlayState* play, Player* player) {
 
 static bool CanJumpFromFloor(PlayState* play, Player* player) {
     return play->roomCtx.curRoom.behaviorType1 != ROOM_BEHAVIOR_TYPE1_2 && player->actor.floorPoly != NULL &&
-           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != FLOOR_TYPE_NO_JUMP &&
+           SurfaceType_GetFloorType(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) !=
+               FLOOR_TYPE_NO_JUMP &&
            SurfaceType_GetFloorEffect(&play->colCtx, player->actor.floorPoly, player->actor.floorBgId) != SLOPE_STEEP;
 }
 
@@ -325,9 +314,6 @@ static bool IsJumpSlash(s32 mwa) {
     return mwa == PLAYER_MWA_JUMPSLASH_START || mwa == PLAYER_MWA_JUMPSLASH_FINISH;
 }
 
-// ---- sword beam ----
-
-// A beam keeps its target by pointer, and the target may have died since the last frame.
 static bool IsActorAlive(PlayState* play, Actor* actor) {
     for (s32 category = 0; category < ACTORCAT_MAX; category++) {
         for (Actor* it = play->actorCtx.actorLists[category].head; it != NULL; it = it->next) {
@@ -339,29 +325,37 @@ static bool IsActorAlive(PlayState* play, Actor* actor) {
     return false;
 }
 
-// Aim assistance is applied once at launch, within the forward cone.
 #define BEAM_AIM_CONE 0x1555
 #define BEAM_AIM_BIAS 0x05B0
-static bool BeamCandidate(Player* player,Actor* target,Vec3f* origin){
-    if(!target||!target->update||(target->category!=ACTORCAT_ENEMY&&target->category!=ACTORCAT_BOSS))return false;
-    s16 delta=Math_Vec3f_Yaw(origin,&target->focus.pos)-player->actor.shape.rot.y;
-    return ABS(delta)<=BEAM_AIM_CONE&&Math_Vec3f_DistXYZ(origin,&target->focus.pos)<=800.0f;
+static bool BeamCandidate(Player* player, Actor* target, Vec3f* origin) {
+    if (!target || !target->update || (target->category != ACTORCAT_ENEMY && target->category != ACTORCAT_BOSS))
+        return false;
+    s16 delta = Math_Vec3f_Yaw(origin, &target->focus.pos) - player->actor.shape.rot.y;
+    return ABS(delta) <= BEAM_AIM_CONE && Math_Vec3f_DistXYZ(origin, &target->focus.pos) <= 800.0f;
 }
-static void BeamLaunchDirection(PlayState* play,Player* player,Vec3f* origin,s16* yaw,s16* pitch){
-    *yaw=player->actor.shape.rot.y;*pitch=0;
-    Actor* target=player->focusActor?player->focusActor:play->actorCtx.targetCtx.arrowPointedActor;
-    if(!BeamCandidate(player,target,origin))target=NULL;
-    float best=800.0f;
-    const int categories[]={ACTORCAT_ENEMY,ACTORCAT_BOSS};
-    if(!target)for(int i=0;i<2;i++)for(Actor* a=play->actorCtx.actorLists[categories[i]].head;a;a=a->next){
-        if(!BeamCandidate(player,a,origin))continue;
-        float distance=Math_Vec3f_DistXYZ(origin,&a->focus.pos);
-        if(distance<best){best=distance;target=a;}
-    }
-    if(target){
-        s16 delta=Math_Vec3f_Yaw(origin,&target->focus.pos)-*yaw;
-        *yaw+=CLAMP(delta,-BEAM_AIM_BIAS,BEAM_AIM_BIAS);
-        *pitch=CLAMP(Math_Vec3f_Pitch(origin,&target->focus.pos),-BEAM_AIM_BIAS,BEAM_AIM_BIAS);
+static void BeamLaunchDirection(PlayState* play, Player* player, Vec3f* origin, s16* yaw, s16* pitch) {
+    *yaw = player->actor.shape.rot.y;
+    *pitch = 0;
+    Actor* target = player->focusActor ? player->focusActor : play->actorCtx.targetCtx.arrowPointedActor;
+    if (!BeamCandidate(player, target, origin))
+        target = NULL;
+    float best = 800.0f;
+    const int categories[] = { ACTORCAT_ENEMY, ACTORCAT_BOSS };
+    if (!target)
+        for (int i = 0; i < 2; i++)
+            for (Actor* a = play->actorCtx.actorLists[categories[i]].head; a; a = a->next) {
+                if (!BeamCandidate(player, a, origin))
+                    continue;
+                float distance = Math_Vec3f_DistXYZ(origin, &a->focus.pos);
+                if (distance < best) {
+                    best = distance;
+                    target = a;
+                }
+            }
+    if (target) {
+        s16 delta = Math_Vec3f_Yaw(origin, &target->focus.pos) - *yaw;
+        *yaw += CLAMP(delta, -BEAM_AIM_BIAS, BEAM_AIM_BIAS);
+        *pitch = CLAMP(Math_Vec3f_Pitch(origin, &target->focus.pos), -BEAM_AIM_BIAS, BEAM_AIM_BIAS);
     }
 }
 
@@ -388,7 +382,7 @@ static void InitBeam(Actor* actor, PlayState* play) {
     PlaceBeamLight(beam);
     beam->light = LightContext_InsertLight(play, &play->lightCtx, &beam->lightInfo);
     Audio_PlaySfxGeneral(NA_SE_IT_ROLLING_CUT_LV1, &player->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void DestroyBeam(Actor* actor, PlayState* play) {
@@ -400,9 +394,6 @@ static void DestroyBeam(Actor* actor, PlayState* play) {
         beam->light = NULL;
     }
 }
-
-// The beam flies straight after its small initial aim adjustment.
-
 
 // AT_HIT is read before this frame's SetAT, which clears it.
 static bool HasBeamStruck(PlayState* play, SwordBeam* beam) {
@@ -458,23 +449,19 @@ static void DrawBeam(Actor* actor, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Each beam goes forward with slight launch assistance and costs one unit of magic.
 static void FireBeam(PlayState* play, Player* player) {
     if (gSaveContext.magic <= 0 || sBeamActorId < 0) {
         return;
     }
     Vec3f* origin = &player->bodyPartsPos[PLAYER_BODYPART_WAIST];
-    s16 yaw,pitch;
-    BeamLaunchDirection(play,player,origin,&yaw,&pitch);
-    Actor* beam = Actor_Spawn(&play->actorCtx, play, sBeamActorId, origin->x, origin->y, origin->z, pitch,
-                              yaw, 0, 0);
+    s16 yaw, pitch;
+    BeamLaunchDirection(play, player, origin, &yaw, &pitch);
+    Actor* beam = Actor_Spawn(&play->actorCtx, play, sBeamActorId, origin->x, origin->y, origin->z, pitch, yaw, 0, 0);
     if (beam == NULL) {
         return;
     }
     gSaveContext.magic--;
 }
-
-// ---- sword ----
 
 static s32 ChooseSlash(Player* player) {
     s32 direction = player->controlStickDirections[player->controlStickDataIndex];
@@ -577,7 +564,6 @@ static void SwingAction(Player* player, PlayState* play) {
     FinishSwing(play, player, slash);
 }
 
-// A blade held back by B off must not fall to vanilla's swing, which would wear a Giant's Knife.
 static int32_t HandleSlash(PlayState* play, Player* player) {
     bool wantsSlash = sIsSlashQueued || CHECK_BTN_ALL(play->state.input[0].press.button, BTN_B);
 
@@ -591,8 +577,6 @@ static int32_t HandleSlash(PlayState* play, Player* player) {
     StartSlash(play, player);
     return SOH_FORM_ACTION_STARTED;
 }
-
-// ---- jump slash ----
 
 // z_player.c's Player_Action_80844AF4: the landing turns the leap into its finishing blow.
 static void JumpSlashAction(Player* player, PlayState* play) {
@@ -631,8 +615,6 @@ static void StartJumpSlash(PlayState* play, Player* player, f32 xzVelocity, f32 
     Player_PlayVoiceSfx(player, NA_SE_VO_LI_SWORD_L);
 }
 
-// Z-target's A still owns the side hops and the back flip. Forward, the drawn blade leaps, or he rolls when it
-// cannot swing, as Player_ActionHandler_10 does.
 static int32_t HandleZTargetA(PlayState* play, Player* player) {
     s32 direction = player->controlStickDirections[player->controlStickDataIndex];
 
@@ -662,8 +644,6 @@ static void SlashFromJump(PlayState* play, Player* player) {
     }
     StartJumpSlash(play, player, 3.0f, 4.5f);
 }
-
-// ---- spin charge ----
 
 static void StepCharge(Player* player) {
     Math_StepToF(&player->unk_858, 1.0f, CHARGE_RATE);
@@ -742,7 +722,6 @@ static void ChargeAction(Player* player, PlayState* play) {
     }
 }
 
-// The walking charges' shared tail: creep toward the stick at a fifth of the speed, stand still once stopped.
 static void CreepWhileCharging(PlayState* play, Player* player, f32 standingSpeed, bool isSideways) {
     f32 speedTarget;
     s16 yawTarget;
@@ -831,9 +810,6 @@ static int32_t HandleSpinCharge(PlayState* play, Player* player) {
     return SOH_FORM_ACTION_STARTED;
 }
 
-// ---- blade ----
-
-// The trail vertex vanilla added this frame carries the knife's tip; flags 8 on Link's trail copy it unsmoothed.
 static void RetipNewestTrailVertex(EffectBlure* trail, Vec3f* knifeTip, Vec3f* bladeTip) {
     if (trail == NULL || trail->numElements <= 0) {
         return;
@@ -848,8 +824,7 @@ static void RetipNewestTrailVertex(EffectBlure* trail, Vec3f* knifeTip, Vec3f* b
     newest->p1.z = (s16)bladeTip->z;
 }
 
-// Without a whole Giant's Knife vanilla places the broken one, 1500 long; this lays the Biggoron's 5500 back
-// over it, as z_player_lib.c's func_80090A28 and func_800906D4 would for a whole blade.
+// Without a whole Giant's Knife vanilla places the broken one, 1500 long; this lays the Biggoron's 5500 back over it.
 static void StretchBrokenBlade(PlayState* play, Player* player) {
     static Vec3f sBases[3] = { { 0.0f, 400.0f, 0.0f }, { 0.0f, 1400.0f, -1000.0f }, { 0.0f, -400.0f, 1000.0f } };
     EffectBlure* trail = Effect_GetByIndex(player->meleeWeaponEffectIndex);
@@ -882,8 +857,7 @@ static void StretchBrokenBlade(PlayState* play, Player* player) {
     }
 }
 
-// OoT's sheathed Master Sword is its held mesh moved by (-714, -310, 78) in the sheath limb (measured in
-// oot.o2r); the Deity's blade is 2000 longer, so it rides 1000 higher to share the overhang with the hilt.
+// The sheathed Master Sword is its held mesh moved by (-714, -310, 78) in the sheath limb (measured in oot.o2r).
 static void DrawSwordOnBack(PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     Matrix_Push();
@@ -908,14 +882,10 @@ static void DrawBlade(PlayState* play, Player* player, int32_t limbIndex) {
     }
 }
 
-// ---- body ----
-
 static bool NameHas(Gfx* dList, const char* part) {
     return dList != NULL && ResourceMgr_OTRSigCheck((char*)dList) && strstr((const char*)dList, part) != NULL;
 }
 
-// Vanilla's left hand says what is held: the Biggoron, whole or broken, is the Deity's blade. A child's
-// Biggoron hand is the Master Sword one.
 static const char* LeftHandDL(Gfx* vanilla) {
     if (NameHas(vanilla, "Bottle")) {
         return sBottleHandDL;
@@ -974,7 +944,6 @@ static void ResolveFdFace(const char** eyes, const char** mouth) {
     *mouth = sMouthTex;
 }
 
-// MM's sPlayerAgeProperties[FIERCE_DEITY]: Link's body measures at one and a half times, the rest stays his.
 static void ResolveFdAgeProperties(Player* player, PlayerAgeProperties** properties) {
     if (!IsFierceDeity() || *properties == NULL) {
         return;
@@ -1002,7 +971,6 @@ static void ResolveFdAgeProperties(Player* player, PlayerAgeProperties** propert
     *properties = &sFdBody;
 }
 
-// The Deity lifts like a Goron: the same offset on Link's own strength level.
 static void ResolveFdStrength(bool* should, va_list args) {
     if (!IsFierceDeity()) {
         return;
@@ -1017,7 +985,6 @@ static void ResolveFdGrab(bool* should, va_list args) {
     Z64Strength_ResolvePrevent(should, Z64STRENGTH_OFFSET_GORON);
 }
 
-// B always swings the Deity's blade, whatever it holds, so MM's icon replaces it.
 static void ShowSwordOnB(PlayState* play, uint8_t button, uint16_t item, const char** iconPath) {
     (void)play;
     (void)item;
@@ -1026,8 +993,6 @@ static void ShowSwordOnB(PlayState* play, uint8_t button, uint16_t item, const c
     }
     *iconPath = sSwordIconTex;
 }
-
-// ---- lifetime ----
 
 static bool IsSwordAction(Player* player) {
     return player->actionFunc == SwingAction || player->actionFunc == JumpSlashAction ||
@@ -1041,7 +1006,6 @@ static void EnterFierceDeity(PlayState* play, Player* player) {
     Actor_SetScale(&player->actor, FD_ACTOR_SCALE);
 }
 
-// The borrowed Biggoron leaves with the Deity: id, action and model group change together, as OoT changes them.
 static void SheatheDeitySword(Player* player) {
     player->heldItemId = ITEM_NONE;
     player->heldItemAction = PLAYER_IA_NONE;
@@ -1063,10 +1027,7 @@ static void ExitFierceDeity(PlayState* play, Player* player) {
     }
 }
 
-// ---- strength ----
-
-// Vanilla drops the body by the height left to climb times 100, a world unit only at Link's scale, so the drop
-// is brought back to the Deity's.
+// Vanilla drops the body by the height left to climb times 100, a world unit only at Link's scale.
 static int32_t HandleLedge(PlayState* play, Player* player) {
     f32 restOffset = player->actor.shape.yOffset;
     if (!Player_ActionHandler_12(player, play)) {
@@ -1093,14 +1054,12 @@ static bool IsLifting(Player* player) {
            (IsAnimNamed(anim, "_carryB") || IsAnimNamed(anim, "silver_carry") || IsAnimNamed(anim, "heavy_carry"));
 }
 
-// The lift actions test frames by crossing, so a faster clip still catches the grab.
 static void HurryLift(Player* player) {
     if (IsLifting(player) && player->skelAnime.playSpeed > 0.0f && player->skelAnime.playSpeed <= 1.0f) {
         player->skelAnime.playSpeed *= FD_LIFT_SPEED;
     }
 }
 
-// Runs after the block stepped its push; the Deity is carried the same stretch so his hands stay on it.
 static void HurryPushedBlock(void* actor) {
     ObjOshihiki* block = (ObjOshihiki*)actor;
 
@@ -1120,10 +1079,7 @@ static void HurryPushedBlock(void* actor) {
     player->actor.world.pos.z += step * block->yawCos;
 }
 
-// ---- stride and voice ----
-
-// MM's func_80123140 with its PLAYER_BOOTS_FIERCE_DEITY row, less REG(39) that OoT lacks: a higher top speed,
-// a slower start and turn, longer leaps off ledges. Iron and Hover Boots keep their rows for their puzzles.
+// MM's func_80123140 with its PLAYER_BOOTS_FIERCE_DEITY row, less REG(39) that OoT lacks.
 static void WearFdBoots(PlayState* play, Player* player) {
     if (player->currentBoots != PLAYER_BOOTS_KOKIRI) {
         return;
@@ -1182,9 +1138,6 @@ static void UpdateFierceDeity(PlayState* play, Player* player) {
     sIsSlashQueued = false;
 }
 
-// ---- drawing the blade ----
-
-// With the blade out, B is HandleSlash's alone: vanilla using the held item would start its own jump slash.
 static void KeepBForBlade(bool* should, va_list args) {
     s32 item = va_arg(args, s32);
 
@@ -1196,7 +1149,6 @@ static void KeepBForBlade(bool* should, va_list args) {
     }
 }
 
-// OoT swings straight out of the draw only with a one-handed blade; the Deity's B draws and swings on the ground.
 static void SwingOutOfDraw(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
 
@@ -1207,15 +1159,13 @@ static void SwingOutOfDraw(bool* should, va_list args) {
     sIsSlashQueued = true;
 }
 
-// ---- mask ----
-
 static bool CanWearMask(Player* player, PlayState* play) {
     return IsGrounded(player) &&
            !(player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_IN_CUTSCENE));
 }
 
 static void WearMask(PlayState* play, Player* player) {
-    ToggleConfiguredForm(FD_FORM_KEY);
+    sApi->ToggleForm(FD_FORM_KEY);
 }
 
 static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
@@ -1228,7 +1178,6 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, FD_MASK_KEY, FD_MASK_KEY, "",
 };
@@ -1251,10 +1200,8 @@ static void RegisterMask(void) {
     Z64Items_Register(sApi, &mask);
 }
 
-// ---- form ----
-
-static LinkAnimationHeader* LoadMaskOnAnim(void) {
-    LinkAnimationHeader* source = ResourceMgr_LoadPlayerAnimAsHeader(sMaskOnPath);
+static LinkAnimationHeader* LoadMmPose(const char* path, LinkAnimationHeader* header, s16** frameStore) {
+    LinkAnimationHeader* source = ResourceMgr_LoadPlayerAnimAsHeader(path);
 
     if (source == NULL || source->common.frameCount <= 0) {
         return NULL;
@@ -1271,14 +1218,13 @@ static LinkAnimationHeader* LoadMaskOnAnim(void) {
         root[0] = MM_ANIM_BASE_TRANSL_X;
         root[2] = 0;
     }
-    free(sMaskOnFrames);
-    sMaskOnFrames = frames;
-    sMaskOnAnim.common.frameCount = source->common.frameCount;
-    sMaskOnAnim.segment = frames;
-    return &sMaskOnAnim;
+    free(*frameStore);
+    *frameStore = frames;
+    header->common.frameCount = source->common.frameCount;
+    header->segment = frames;
+    return header;
 }
 
-// The host stashes Link's own sword and gives it back on the way out, saved or not.
 static uint16_t ResolveFdEquipment(int32_t equipType, uint16_t value) {
     if (equipType == EQUIP_TYPE_SWORD) {
         return EQUIP_VALUE_SWORD_BIGGORON;
@@ -1305,7 +1251,6 @@ static bool IsAllowedCustomItem(const char* customKey) {
     return false;
 }
 
-// NEI's sSlotAllowedFD: nuts, the Lens, the hammer and bottles, plus the Roc's, the rods and the ball and chain.
 static bool AllowsFdItem(uint16_t item, const char* customKey) {
     if (customKey != NULL) {
         return IsAllowedCustomItem(customKey);
@@ -1335,7 +1280,9 @@ static void RegisterForm(void) {
     deity.motionScale = FD_MOTION_SCALE;
     deity.resolveEquipment = ResolveFdEquipment;
     deity.allowsButtonItem = AllowsFdItem;
-    deity.transformAnim = LoadMaskOnAnim();
+    deity.transformAnim = LoadMmPose(sMaskOnPath, &sMaskOnAnim, &sMaskOnFrames);
+    // MM's D_8085D160 takes the Deity's mask off with the Zora's clip.
+    deity.transformOffAnim = LoadMmPose(sMaskOffPath, &sMaskOffAnim, &sMaskOffFrames);
     deity.transformMask = sMaskDL;
     deity.transformVoiceSfx = NA_SE_VO_LI_FALL_L;
     deity.actions = sActions;

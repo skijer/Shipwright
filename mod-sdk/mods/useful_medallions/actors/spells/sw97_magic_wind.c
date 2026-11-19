@@ -10,13 +10,7 @@
 #include "../../sw97_mod.h"
 #include "soh/ResourceManagerHelpers.h"
 
-// Adult Link's "rakkatyu" (falling) animation — used as Link's pose while
-// caught in the tornado core. The asset lives in misc/link_animetion/ as a
-// raw SOH_PlayerAnimation payload (no LinkAnimationHeader struct attached),
-// so the gameplay_keep-style asset-path pattern crashes inside
-// AnimationContext_SetLoadFrame. Use ResourceMgr_LoadPlayerAnimAsHeader which
-// wraps the raw payload in a runtime header — same approach the in-game
-// animation viewer uses (animationViewer.cpp:131-138).
+// The asset is a raw player animation payload without a LinkAnimationHeader, so it must be wrapped at load.
 static LinkAnimationHeader* Sw97_MagicWind_LoadFallAnim(void) {
     static LinkAnimationHeader* cached = NULL;
     if (cached != NULL)
@@ -29,10 +23,6 @@ static LinkAnimationHeader* Sw97_MagicWind_LoadFallAnim(void) {
     return cached;
 }
 
-// ============================================================
-// Struct (merged from z_magic_wind.h)
-// ============================================================
-
 struct MagicWind;
 
 typedef void (*MagicWindFunc)(struct MagicWind* this, PlayState* play);
@@ -44,20 +34,13 @@ typedef struct MagicWind {
     /* 0x0170 */ MagicWindFunc actionFunc;
     s16 pushTimer;
     u8 pushActive;
-    // Tornado spell: a stationary vortex 80u in front of Link that pulls in
-    // enemies / small props (filtered) and lifts them. Link is granted a
-    // grace period before he becomes a valid target himself.
     u8 tornadoActive;
-    s16 tornadoTimer;         // counts up 0..TORNADO_TOTAL_FRAMES
-    s16 tornadoGraceFrames;   // counts down; while > 0 Link is immune
-    s16 tornadoDamageTick;    // counts down to next damage tick
-    f32 tornadoCurrentRadius; // grows 40 → 200 during phase 1
-    Vec3f tornadoCenter;      // fixed at cast time
+    s16 tornadoTimer;
+    s16 tornadoGraceFrames;
+    s16 tornadoDamageTick;
+    f32 tornadoCurrentRadius;
+    Vec3f tornadoCenter;
 } MagicWind;
-
-// ============================================================
-// Forward declarations
-// ============================================================
 
 #define FLAGS 0x02000010
 #define THIS ((MagicWind*)thisx)
@@ -75,49 +58,26 @@ void Sw97_MagicWind_FadeOut(MagicWind* this, PlayState* play);
 void Sw97_MagicWind_WaitAtFullSize(MagicWind* this, PlayState* play);
 void Sw97_MagicWind_Grow(MagicWind* this, PlayState* play);
 
-// ============================================================
-// Graphics data (merged from z_magic_wind_gfx.c)
-// ============================================================
-
 Vtx sWindCylinderVtx[] = {
-    VTX(0, 0, -6000, 1024, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(-4243, 12800, -4243, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 12800, -6000, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 0, -4243, 1280, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(0, 0, 6000, 0, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 12800, 4243, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 12800, 6000, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(4243, 0, 4243, 256, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(-6000, 12800, 0, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-6000, 0, 0, 1536, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 0, -4243, 768, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 12800, -4243, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 12800, 4243, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 0, 4243, 1792, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(6000, 12800, 0, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(6000, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(0, 12800, 6000, 2048, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 0, 6000, 2048, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 0, -6000, 1024, 2048, 0xFF, 0xFF, 0xFF, 0xFF),     VTX(-4243, 12800, -4243, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 12800, -6000, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(-4243, 0, -4243, 1280, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 0, 6000, 0, 2048, 0xFF, 0xFF, 0xFF, 0xFF),         VTX(4243, 12800, 4243, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 12800, 6000, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),        VTX(4243, 0, 4243, 256, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(-6000, 12800, 0, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(-6000, 0, 0, 1536, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(4243, 0, -4243, 768, 2048, 0xFF, 0xFF, 0xFF, 0xFF),   VTX(4243, 12800, -4243, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-4243, 12800, 4243, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00), VTX(-4243, 0, 4243, 1792, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(6000, 12800, 0, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),      VTX(6000, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 12800, 6000, 2048, 0, 0xFF, 0xFF, 0xFF, 0x00),     VTX(0, 0, 6000, 2048, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
 
-    // 2nd Set
-    VTX(0, 0, -6000, 1024, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(-4243, 12800, -4243, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 12800, -6000, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 0, -4243, 1280, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(0, 0, 6000, 0, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 12800, 4243, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 12800, 6000, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(4243, 0, 4243, 256, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(-6000, 12800, 0, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-6000, 0, 0, 1536, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 0, -4243, 768, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(4243, 12800, -4243, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 12800, 4243, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(-4243, 0, 4243, 1792, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(6000, 12800, 0, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(6000, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
-    VTX(0, 12800, 6000, 2048, 0, 0xFF, 0xFF, 0xFF, 0x00),
-    VTX(0, 0, 6000, 2048, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 0, -6000, 1024, 2048, 0xFF, 0xFF, 0xFF, 0xFF),     VTX(-4243, 12800, -4243, 1280, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 12800, -6000, 1024, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(-4243, 0, -4243, 1280, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 0, 6000, 0, 2048, 0xFF, 0xFF, 0xFF, 0xFF),         VTX(4243, 12800, 4243, 256, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(0, 12800, 6000, 0, 0, 0xFF, 0xFF, 0xFF, 0x00),        VTX(4243, 0, 4243, 256, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(-6000, 12800, 0, 1536, 0, 0xFF, 0xFF, 0xFF, 0x00),    VTX(-6000, 0, 0, 1536, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(4243, 0, -4243, 768, 2048, 0xFF, 0xFF, 0xFF, 0xFF),   VTX(4243, 12800, -4243, 768, 0, 0xFF, 0xFF, 0xFF, 0x00),
+    VTX(-4243, 12800, 4243, 1792, 0, 0xFF, 0xFF, 0xFF, 0x00), VTX(-4243, 0, 4243, 1792, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(6000, 12800, 0, 512, 0, 0xFF, 0xFF, 0xFF, 0x00),      VTX(6000, 0, 0, 512, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
+    VTX(0, 12800, 6000, 2048, 0, 0xFF, 0xFF, 0xFF, 0x00),     VTX(0, 0, 6000, 2048, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
 };
 
 char sWindEffTexture[] = {
@@ -393,10 +353,6 @@ Gfx sOuterCylinderDList[] = {
     gsSPEndDisplayList(),
 };
 
-// ============================================================
-// Skel Curve data
-// ============================================================
-
 static u8 sWindTransformRefIdx[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -484,46 +440,36 @@ static u8 sAlphaUpdVals[] = {
     0x00, 0x03, 0x04, 0x07, 0x09, 0x0A, 0x0D, 0x0F, 0x11, 0x12, 0x15, 0x16, 0x19, 0x1B, 0x1C, 0x1F, 0x21, 0x23,
 };
 
-// ============================================================
-// Wind barrier push
-// ============================================================
+#define WIND_PUSH_DURATION 450
 
-#define WIND_PUSH_DURATION 450 // 15 sec × 30fps (legacy push-enemy barrier — disabled when tornado runs)
-
-// ─── Tornado constants ───────────────────────────────────────
-#define TORNADO_TOTAL_FRAMES 300 // 10 sec @ 30fps tick
-#define TORNADO_GROW_FRAMES 90   // phase 1: grow (3 sec)
-#define TORNADO_GRACE_FRAMES 45  // 1.5 sec — VFX visible but no suction yet (warning window)
-// Venti-ulti style: massive outer attraction radius, dense particle column,
-// continuous damage core in the middle. Link is pulled in too unless he runs
-// far enough; if he reaches the core he gets locked in a falling animation.
+#define TORNADO_TOTAL_FRAMES 300
+#define TORNADO_GROW_FRAMES 90
+#define TORNADO_GRACE_FRAMES 45
 #define TORNADO_INITIAL_RADIUS 100.0f
-#define TORNADO_MAX_RADIUS 600.0f  // big attraction sphere
-#define TORNADO_CORE_RADIUS 100.0f // inner kill / fall-anim zone
-#define TORNADO_LIFT_MAX 300.0f    // taller column
-#define TORNADO_DAMAGE_INTERVAL 8  // fast tick — feels like a black hole
-#define TORNADO_DAMAGE_PER_TICK 6  // small per-tick × fast rate = high DPS
+#define TORNADO_MAX_RADIUS 600.0f
+#define TORNADO_CORE_RADIUS 100.0f
+#define TORNADO_LIFT_MAX 300.0f
+#define TORNADO_DAMAGE_INTERVAL 8
+#define TORNADO_DAMAGE_PER_TICK 6
 
-// Heavy / armored / anchored enemies the tornado can't move. Bosses are
-// excluded automatically via ACTORCAT_BOSS in the suction loop.
 static u8 Sw97_MagicWind_IsBlacklistedEnemy(s16 id) {
     switch (id) {
-        case ACTOR_EN_AM:       // Armos
-        case ACTOR_EN_VM:       // Beamos
-        case ACTOR_EN_IK:       // Iron Knuckle
-        case ACTOR_EN_DH:       // Dead Hand
-        case ACTOR_EN_DHA:      // Dead Hand stalk
-        case ACTOR_EN_RR:       // Like Like
-        case ACTOR_EN_KAREBABA: // Withered (rooted) Deku Baba
-        case ACTOR_EN_ANUBICE:  // Anubis
-        case ACTOR_EN_SW:       // Skullwalltula / gold token host
-        case ACTOR_EN_DODONGO:  // Dodongo
-        case ACTOR_EN_GE1:      // Gerudo (white-clad)
-        case ACTOR_EN_GE2:      // Gerudo guard (purple-clad)
-        case ACTOR_EN_GE3:      // Gerudo
-        case ACTOR_EN_GELDB:    // Gerudo Black (spearwoman)
-        case ACTOR_EN_TEST:     // Stalfos
-        case ACTOR_EN_BIGOKUTA: // Big Octo
+        case ACTOR_EN_AM:
+        case ACTOR_EN_VM:
+        case ACTOR_EN_IK:
+        case ACTOR_EN_DH:
+        case ACTOR_EN_DHA:
+        case ACTOR_EN_RR:
+        case ACTOR_EN_KAREBABA:
+        case ACTOR_EN_ANUBICE:
+        case ACTOR_EN_SW:
+        case ACTOR_EN_DODONGO:
+        case ACTOR_EN_GE1:
+        case ACTOR_EN_GE2:
+        case ACTOR_EN_GE3:
+        case ACTOR_EN_GELDB:
+        case ACTOR_EN_TEST:
+        case ACTOR_EN_BIGOKUTA:
             return 1;
         default:
             return 0;
@@ -534,8 +480,6 @@ static u8 Sw97_MagicWind_IsSuckableProp(s16 id) {
     return id == ACTOR_EN_KUSA || id == ACTOR_OBJ_TSUBO;
 }
 
-// Black-hole pull on an enemy / prop. d > CORE: strong radial inward + lift;
-// d <= CORE: tangential spin, capped lift, AI suppressed so they spin freely.
 static void Sw97_MagicWind_TornadoApplyActor(Actor* a, Vec3f* c, f32 R) {
     f32 dx = a->world.pos.x - c->x;
     f32 dz = a->world.pos.z - c->z;
@@ -544,19 +488,15 @@ static void Sw97_MagicWind_TornadoApplyActor(Actor* a, Vec3f* c, f32 R) {
         return;
 
     if (d > TORNADO_CORE_RADIUS) {
-        // Hard inward pull — strength scales with distance so far enemies still
-        // get yanked in noticeably. Capped to avoid teleport-style snaps.
         f32 strength = 14.0f;
         f32 invD = strength / (d > 0.001f ? d : 0.001f);
         a->world.pos.x -= dx * invD;
         a->world.pos.z -= dz * invD;
-        // Lift continuously while approaching — feeds them into the funnel.
         if (a->world.pos.y - c->y < TORNADO_LIFT_MAX) {
             a->velocity.y = 5.0f;
         }
         a->bgCheckFlags &= ~BGCHECKFLAG_GROUND;
     } else {
-        // CORE: tangential spin + steady upward lift.
         f32 tx = -dz, tz = dx;
         f32 tNorm = sqrtf(SQ(tx) + SQ(tz));
         if (tNorm > 0.01f) {
@@ -568,15 +508,10 @@ static void Sw97_MagicWind_TornadoApplyActor(Actor* a, Vec3f* c, f32 R) {
             a->velocity.y = 5.0f;
         }
         a->bgCheckFlags &= ~BGCHECKFLAG_GROUND;
-        a->freezeTimer = 4; // re-asserted each frame so AI doesn't override us
+        a->freezeTimer = 4;
     }
 }
 
-// Link version: pulled in by the suction, but never damaged. If he reaches the
-// inner core, lock him in the looping "falling" animation (matches the user's
-// "MM cliff-falling" request — OoT's equivalent is gPlayerAnim_link_normal_fall_wait)
-// and set PLAYER_STATE2_GRABBED_BY_ENEMY to suppress normal control until the
-// tornado expires or Link is dragged out.
 static void Sw97_MagicWind_TornadoApplyPlayer(PlayState* play, Player* p, Vec3f* c, f32 R) {
     f32 dx = p->actor.world.pos.x - c->x;
     f32 dz = p->actor.world.pos.z - c->z;
@@ -585,14 +520,11 @@ static void Sw97_MagicWind_TornadoApplyPlayer(PlayState* play, Player* p, Vec3f*
         return;
 
     if (d > TORNADO_CORE_RADIUS) {
-        // Pull — weaker on Link than on enemies so a determined player can still
-        // escape by running outward.
         f32 strength = 8.0f;
         f32 invD = strength / (d > 0.001f ? d : 0.001f);
         p->actor.world.pos.x -= dx * invD;
         p->actor.world.pos.z -= dz * invD;
     } else {
-        // In the core — tangential spin, lift, freeze control, falling anim.
         f32 tx = -dz, tz = dx;
         f32 tNorm = sqrtf(SQ(tx) + SQ(tz));
         if (tNorm > 0.01f) {
@@ -605,8 +537,6 @@ static void Sw97_MagicWind_TornadoApplyPlayer(PlayState* play, Player* p, Vec3f*
         }
         p->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
         p->stateFlags2 |= PLAYER_STATE2_GRABBED_BY_ENEMY;
-        // Falling animation — resolved at runtime so a missing/renamed asset
-        // returns NULL instead of crashing AnimationContext_SetLoadFrame.
         LinkAnimationHeader* fallAnim = Sw97_MagicWind_LoadFallAnim();
         if (fallAnim != NULL && p->skelAnime.animation != fallAnim) {
             Player_AnimPlayLoop(play, p, fallAnim);
@@ -614,7 +544,6 @@ static void Sw97_MagicWind_TornadoApplyPlayer(PlayState* play, Player* p, Vec3f*
     }
 }
 
-// Iterate enemies (filtered), small props (whitelist), and Link.
 static void Sw97_MagicWind_TornadoSuck(PlayState* play, Vec3f* c, f32 R) {
     Actor* a;
     for (a = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; a != NULL; a = a->next) {
@@ -637,8 +566,6 @@ static void Sw97_MagicWind_TornadoSuck(PlayState* play, Vec3f* c, f32 R) {
     }
 }
 
-// Fast damage tick for enemies inside the core. Link is never damaged — being
-// stuck in the falling anim + losing control is the player's "punishment".
 static void Sw97_MagicWind_TornadoDamageTick(PlayState* play, Vec3f* c) {
     Actor* a;
     for (a = play->actorCtx.actorLists[ACTORCAT_ENEMY].head; a != NULL; a = a->next) {
@@ -661,19 +588,11 @@ static void Sw97_MagicWind_TornadoDamageTick(PlayState* play, Vec3f* c) {
     }
 }
 
-// Visible tornado: dense particle column for the Venti-ulti look. Three layers
-// each frame:
-//   - Outer ring at the funnel wall (broad swirl).
-//   - Inner core chimney (vertical column of rising particles).
-//   - Vertical wind streaks (long-lived particles with strong upward velocity)
-//     — these act as the "EffectBlure-style" upward wind support.
-// func_8002836C is the same particle spawner used by GustJar VFX.
 static void Sw97_MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
     Color_RGBA8 prim = { 220, 250, 255, 220 };
     Color_RGBA8 env = { 150, 200, 230, 140 };
     Vec3f accel = { 0.0f, 0.3f, 0.0f };
 
-    // Outer ring — broad swirling wall at the suction edge.
     for (s32 i = 0; i < 12; i++) {
         f32 angle = Rand_ZeroFloat(2.0f * M_PI);
         f32 ringR = R * (0.75f + Rand_ZeroFloat(0.25f));
@@ -690,7 +609,6 @@ static void Sw97_MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
         func_8002836C(play, &pos, &vel, &accel, &prim, &env, 200, 30, 16);
     }
 
-    // Inner core — vertical chimney with strong upward push.
     for (s32 i = 0; i < 8; i++) {
         f32 angle = Rand_ZeroFloat(2.0f * M_PI);
         f32 coreR = Rand_ZeroFloat(TORNADO_CORE_RADIUS);
@@ -707,9 +625,6 @@ static void Sw97_MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
         func_8002836C(play, &pos, &vel, &accel, &prim, &env, 200, 30, 18);
     }
 
-    // Vertical wind streaks — long-lived, fast upward, slight outward drift
-    // from the column. These read as the "rushing wind" trails going up and
-    // serve as the EffectBlure-style support layer the user asked for.
     Color_RGBA8 streakPrim = { 255, 255, 255, 240 };
     Color_RGBA8 streakEnv = { 180, 220, 240, 160 };
     Vec3f streakAccel = { 0.0f, 0.0f, 0.0f };
@@ -722,11 +637,10 @@ static void Sw97_MagicWind_SpawnTornadoVFX(PlayState* play, Vec3f* c, f32 R) {
             c->z + sinf(angle) * streakR,
         };
         Vec3f vel = {
-            cosf(angle) * 1.5f,           // slight outward drift
-            22.0f + Rand_ZeroFloat(8.0f), // strong upward
+            cosf(angle) * 1.5f,
+            22.0f + Rand_ZeroFloat(8.0f),
             sinf(angle) * 1.5f,
         };
-        // Longer lifetime (60 vs 30) + bigger scale (22) → streak look.
         func_8002836C(play, &pos, &vel, &streakAccel, &streakPrim, &streakEnv, 220, 60, 22);
     }
 }
@@ -743,7 +657,7 @@ static void Sw97_MagicWind_PushEnemies(PlayState* play, Vec3f* center) {
         if (dist < WIND_PUSH_RADIUS && dist > 1.0f) {
             f32 invDist = 1.0f / dist;
             f32 falloff = 1.0f - (dist / WIND_PUSH_RADIUS);
-            // Direct position displacement — velocity gets overwritten by enemy AI
+            // Velocity is overwritten by enemy AI, so displace the position directly.
             enemy->world.pos.x += dx * invDist * WIND_PUSH_FORCE * falloff;
             enemy->world.pos.z += dz * invDist * WIND_PUSH_FORCE * falloff;
         }
@@ -751,24 +665,15 @@ static void Sw97_MagicWind_PushEnemies(PlayState* play, Vec3f* center) {
     }
 }
 
-// ============================================================
-// Action setup
-// ============================================================
-
 void Sw97_MagicWind_SetupAction(MagicWind* this, MagicWindFunc actionFunc) {
     this->actionFunc = actionFunc;
 }
-
-// ============================================================
-// Init / Destroy
-// ============================================================
 
 void Sw97_MagicWind_Init(Actor* thisx, PlayState* play) {
     MagicWind* this = THIS;
     Player* player = PLAYER;
 
     if (SkelCurve_Init(play, &this->skelCurve, &sWindLimbList, &sWindTransformUpdIdx) == 0) {
-        // Magic_Wind_Actor_ct (): Construct failed
         osSyncPrintf("Magic_Wind_Actor_ct():コンストラクト失敗\n");
     }
     this->actor.room = -1;
@@ -777,12 +682,8 @@ void Sw97_MagicWind_Init(Actor* thisx, PlayState* play) {
             SkelCurve_SetAnim(&this->skelCurve, &sWindTransformUpdIdx, 0.0f, 60.0f, 0.0f, 1.0f);
             this->timer = 29;
             Sw97_MagicWind_SetupAction(this, Sw97_MagicWind_WaitForTimer);
-            // Push-enemy barrier conflicts with the tornado's inward pull —
-            // they'd fight each other every frame. Tornado replaces it.
             this->pushActive = 0;
             this->pushTimer = 0;
-            // Tornado does NOT start here — it spawns at the end of the
-            // spell animation (FadeOut → kill transition). Keep fields zeroed.
             this->tornadoActive = 0;
             this->tornadoTimer = 0;
             this->tornadoGraceFrames = 0;
@@ -792,7 +693,6 @@ void Sw97_MagicWind_Init(Actor* thisx, PlayState* play) {
         case 1:
             SkelCurve_SetAnim(&this->skelCurve, &sWindTransformUpdIdx, 60.0f, 0.0f, 60.0f, -1.0f);
             Sw97_MagicWind_SetupAction(this, Sw97_MagicWind_Shrink);
-            // Means start
             LOG_STRING("表示開始");
             func_8002F7DC(&player->actor, NA_SE_PL_MAGIC_WIND_WARP);
             break;
@@ -803,13 +703,8 @@ void Sw97_MagicWind_Destroy(Actor* thisx, PlayState* play) {
     MagicWind* this = THIS;
     SkelCurve_Destroy(play, &this->skelCurve);
     func_800876C8(play);
-    // wipe out
     LOG_STRING("消滅");
 }
-
-// ============================================================
-// Action functions
-// ============================================================
 
 void Sw97_MagicWind_UpdateAlpha(f32 alpha) {
     s32 i;
@@ -826,7 +721,6 @@ void Sw97_MagicWind_WaitForTimer(MagicWind* this, PlayState* play) {
         return;
     }
 
-    // Means start
     LOG_STRING("表示開始");
     func_8002F7DC(&player->actor, NA_SE_PL_MAGIC_WIND_NORMAL);
     Sw97_MagicWind_UpdateAlpha(1.0f);
@@ -855,8 +749,6 @@ void Sw97_MagicWind_FadeOut(MagicWind* this, PlayState* play) {
         Sw97_MagicWind_UpdateAlpha((f32)this->timer * (1.0f / 30.0f));
         this->timer--;
     } else {
-        // Spell animation done — spawn the tornado now (one-shot, only if it
-        // hasn't already been spawned this lifecycle).
         if (!this->tornadoActive && this->tornadoTimer == 0) {
             Player* player = PLAYER;
             s16 yaw = player->actor.shape.rot.y;
@@ -869,7 +761,7 @@ void Sw97_MagicWind_FadeOut(MagicWind* this, PlayState* play) {
             this->tornadoCenter.z = player->actor.world.pos.z + Math_CosS(yaw) * 80.0f;
         }
         if (this->pushActive || this->tornadoActive) {
-            this->actor.draw = NULL; // hide visual, keep alive for push / tornado window
+            this->actor.draw = NULL;
         } else {
             Actor_Kill(&this->actor);
         }
@@ -882,10 +774,6 @@ void Sw97_MagicWind_Shrink(MagicWind* this, PlayState* play) {
     }
 }
 
-// ============================================================
-// Update
-// ============================================================
-
 void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
     MagicWind* this = THIS;
     if (play->msgCtx.msgMode == 0xD || play->msgCtx.msgMode == 0x11) {
@@ -895,9 +783,6 @@ void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
 
     this->actionFunc(this, play);
 
-    // Tornado tick — stationary vortex 80u in front of Link. Phase 1 grows the
-    // suction radius 40 → 200 over the first 90 frames, phase 2 holds at max,
-    // entire window is 300 frames (~10 sec at SW97's 30fps timer convention).
     if (this->tornadoActive) {
         this->tornadoTimer++;
         if (this->tornadoGraceFrames > 0) {
@@ -911,9 +796,6 @@ void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
             this->tornadoCurrentRadius = TORNADO_MAX_RADIUS;
         }
 
-        // 1.5-second grace window after the tornado spawns — VFX is visible but
-        // nothing is sucked in yet, giving the player time to react and clear
-        // the danger zone. Suction + damage activate only after grace expires.
         if (this->tornadoGraceFrames == 0) {
             Sw97_MagicWind_TornadoSuck(play, &this->tornadoCenter, this->tornadoCurrentRadius);
 
@@ -923,11 +805,8 @@ void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
             }
         }
 
-        // Dense VFX every frame for the Venti-burst look.
         Sw97_MagicWind_SpawnTornadoVFX(play, &this->tornadoCenter, this->tornadoCurrentRadius);
 
-        // Layered wind audio centered on the tornado actor — the magic-wind
-        // hum (low constant) plus the GustJar-style suction howl (heavier).
         Actor_PlaySfx_Flagged(&this->actor, NA_SE_PL_MAGIC_WIND_NORMAL - SFX_FLAG);
         Actor_PlaySfx_Flagged(&this->actor, NA_SE_EV_WIND_TRAP - SFX_FLAG);
 
@@ -939,8 +818,6 @@ void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
         }
     }
 
-    // Legacy push-enemy barrier — only runs if explicitly re-enabled (currently
-    // disabled while the tornado is active to avoid push/pull conflicts).
     if (this->pushActive) {
         Player* player = PLAYER;
         Sw97_MagicWind_PushEnemies(play, &player->actor.world.pos);
@@ -952,10 +829,6 @@ void Sw97_MagicWind_Update(Actor* thisx, PlayState* play) {
         }
     }
 }
-
-// ============================================================
-// Draw
-// ============================================================
 
 s32 Sw97_MagicWind_OverrideLimbDraw(PlayState* play, SkelAnimeCurve* skelCurve, s32 limbIndex, void* thisx) {
     MagicWind* this = THIS;

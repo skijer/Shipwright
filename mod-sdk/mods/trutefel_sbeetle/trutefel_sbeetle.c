@@ -1,5 +1,5 @@
 // Scissors Beetle from The Minish Cap: it throws its pincers like boomerangs.
-// Model @syeo501, code @trueffel; ported from NEI as a custom enemy the enemy randomizer can pick.
+// Model @syeo501, code @trueffel.
 
 #include <math.h>
 
@@ -232,7 +232,6 @@ static AnimationInfo sAnimationInfo[] = {
     { &gScissorsBeetleSkelDieAnim, 1.0f, 0.0f, -1.0f, ANIMMODE_ONCE, 3.0f },
 };
 
-// Offsets around the body for the ice shards and flames of an elemental hit, one every four frames.
 static Vec3f sBodyEffectOffsets[12] = {
     { 20.0f, 20.0f, 0.0f },   { 10.0f, 40.0f, 10.0f },   { -10.0f, 40.0f, 10.0f }, { -20.0f, 20.0f, 0.0f },
     { 10.0f, 40.0f, -10.0f }, { -10.0f, 40.0f, -10.0f }, { 0.0f, 20.0f, -20.0f },  { 10.0f, 0.0f, 10.0f },
@@ -255,7 +254,6 @@ static void EnSbeetle_FacePlayer(EnSbeetle* this, s16 step, s16 shapeStep) {
     Math_ApproachS(&this->actor.shape.rot.y, this->actor.world.rot.y, 2, shapeStep);
 }
 
-// Converts a world position into the space of the current limb matrix, so a flying pincer can be drawn on its bone.
 static void EnSbeetle_WorldToCurrentMatrixLocal(Vec3f* worldPos, Vec3f* localPos) {
     MtxF mtx;
 
@@ -270,7 +268,6 @@ static void EnSbeetle_WorldToCurrentMatrixLocal(Vec3f* worldPos, Vec3f* localPos
     localPos->z = scaleSqZ > 0.000001f ? (delta.x * mtx.xz + delta.y * mtx.yz + delta.z * mtx.zz) / scaleSqZ : 0.0f;
 }
 
-// A boomerang arc: straight interpolation, bowed sideways and upwards by a half sine over the flight.
 static void EnSbeetle_GetPincerPath(Vec3f* start, Vec3f* end, f32 progress, f32 side, Vec3f* result) {
     f32 dx = end->x - start->x;
     f32 dz = end->z - start->z;
@@ -302,7 +299,6 @@ static void EnSbeetle_StartPincerReturn(EnSbeetle* this, s16 state) {
     this->pincerFlightTimer = 0;
 }
 
-// Getting hit while the pincers are out calls them straight back and cancels the attack.
 static void EnSbeetle_StartPincerFastReturn(EnSbeetle* this) {
     if (this->pincerState != SBEETLE_PINCER_OUTBOUND && this->pincerState != SBEETLE_PINCER_RETURN) {
         return;
@@ -381,7 +377,6 @@ static bool EnSbeetle_HasLostPlayer(EnSbeetle* this, PlayState* play) {
     return this->actor.xzDistToPlayer > SBEETLE_FORGET_DISTANCE || fabsf(yDist) > SBEETLE_FORGET_HEIGHT;
 }
 
-// It hears the player up close, and otherwise sees a narrow cone far ahead and a wider one nearer.
 static bool EnSbeetle_CanSensePlayer(EnSbeetle* this, PlayState* play) {
     Player* player = GET_PLAYER(play);
     f32 xzDist = this->actor.xzDistToPlayer;
@@ -501,7 +496,6 @@ static void EnSbeetle_Attack(EnSbeetle* this, PlayState* play) {
     if (this->skelAnime.curFrame < 20.0f) {
         EnSbeetle_FacePlayer(this, 3000, 5000);
     }
-    // The lunge: two frames of a dash that covers half the gap to the player.
     if (Animation_OnFrame(&this->skelAnime, 24.0f) || Animation_OnFrame(&this->skelAnime, 25.0f)) {
         this->actor.speedXZ = this->actor.xzDistToPlayer / 2;
         if (!this->audioPlayed) {
@@ -590,7 +584,6 @@ static void EnSbeetle_SetupThreatPlayer(EnSbeetle* this, PlayState* play) {
     this->actionFunc = EnSbeetle_ThreatPlayer;
 }
 
-// Jumps at a far player and away from a near one; it turns on the ground before and after the jump.
 static void EnSbeetle_HopAwayFromOrTowardsPlayer(EnSbeetle* this, PlayState* play) {
     if (this->skelAnime.curFrame <= 6.0f || this->skelAnime.curFrame >= 15.0f) {
         this->actor.speedXZ = 0.0f;
@@ -712,7 +705,6 @@ static void EnSbeetle_ApplyHit(EnSbeetle* this, PlayState* play) {
             EnSbeetle_SetupDie(this, play);
             break;
         default:
-            // A hit while it stares the player down bounces off its guard.
             if (this->actionFunc != EnSbeetle_ThreatPlayer) {
                 EnSbeetle_SetupHurt(this, play);
             }
@@ -798,7 +790,6 @@ static void EnSbeetle_Update(Actor* thisx, PlayState* play) {
     CollisionCheck_SetOC(play, &play->colChkCtx, &this->collider.base);
 }
 
-// A flying pincer is still drawn by its own limb, moved to where the pincer is in the world.
 static void EnSbeetle_DrawPincerLimb(EnSbeetle* this, EnSbeetlePincer* pincer, Vec3f* pos, Vec3s* rot) {
     Vec3f bindPos = *pos;
 
@@ -854,7 +845,6 @@ static void EnSbeetle_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, 
     }
 }
 
-// Both timers also hold the colour filter on while their effects play.
 static void EnSbeetle_SpawnElementEffects(EnSbeetle* this, PlayState* play) {
     if (this->spawnIceTimer != 0) {
         this->actor.colorFilterTimer++;

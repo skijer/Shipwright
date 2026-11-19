@@ -25,8 +25,6 @@
 #define DEKU_LEAF_GLIDE_MAGIC 1
 #define DEKU_LEAF_SWING_MAGIC 1
 #define DEKU_LEAF_SWING_SPEED 2.0f
-// Frames of the 39-frame swing: it stalls at its farthest reach on 8, the leaf is drawn wide from 10, and the
-// gust leaves it on 15.
 #define DEKU_LEAF_APEX_FRAME 8.0f
 #define DEKU_LEAF_APEX_HOLD 5
 #define DEKU_LEAF_GUST_FRAME 15.0f
@@ -54,7 +52,6 @@ static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/
 static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/gDekuLeafNameTex";
 static const ALIGN_ASSET(2) char sLeafDL[] = "__OTR__objects/object_nei_deku_leaf/g_dekuleaf_dl";
 static const ALIGN_ASSET(2) char sSwingAnimPath[] = "__OTR__misc/link_animetion/gPlayerAnim_nei_dekuleaf_blow";
-// Both hands held over the head is the carry pose, and it reads as holding the leaf up into the wind.
 static const ALIGN_ASSET(2) char sGlideAnimPath[] = "__OTR__objects/gameplay_keep/gPlayerAnim_link_normal_carryB_wait";
 
 static const u16 sItemButtons[DEKU_LEAF_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
@@ -64,8 +61,7 @@ static const Color_RGBA8 sWindColor = { 220, 220, 220, 160 };
 static const Color_RGBA8 sAirBallPrimColor = { 195, 225, 235, 160 };
 static const Color_RGBA8 sAirBallEnvColor = { 150, 200, 220, 100 };
 
-// OoT has no wind flag, and DMG_UNBLOCKABLE is a trap: no pot or crate accepts it, and a damage table is read
-// at the HIGHEST flag set, which nearly every foe leaves at zero. The sword's is the flag they all answer to.
+// DMG_UNBLOCKABLE is a trap: no pot or crate accepts it, and damage tables are read at the highest flag set.
 #define DEKU_LEAF_GUST_FLAGS (DMG_SLASH_KOKIRI | DMG_BOOMERANG)
 
 static ColliderCylinderInit sGustColliderInit = {
@@ -135,8 +131,7 @@ static bool HasMagic(s16 amount) {
     return gSaveContext.isMagicAcquired && gSaveContext.magic >= amount;
 }
 
-// The meter's own consume state machine serves one request at a time and beeps at the rest, which a leaf
-// that drains while it glides would trip on its next gust. A point off the meter is the whole cost here.
+// The meter's consume state machine serves one request at a time and beeps at the rest.
 static bool SpendMagic(s16 amount) {
     if (!HasMagic(amount)) {
         return false;
@@ -153,8 +148,7 @@ static bool IsGrounded(Player* player) {
     return (player->actor.bgCheckFlags & 1) != 0;
 }
 
-// Only the resolved header can be told apart from whatever the falling action is playing, so the path is
-// turned into a pointer once and that pointer is what both the comparison and the change use.
+// Only the resolved header can be compared with what the falling action plays, so the path is resolved once.
 static LinkAnimationHeader* GlideAnimation(void) {
     if (sGlideAnim == NULL) {
         sGlideAnim = (LinkAnimationHeader*)ResourceMgr_LoadAnimByName(sGlideAnimPath);
@@ -176,7 +170,6 @@ static void SpawnWindMotes(PlayState* play, Vec3f* origin, s16 yaw) {
     }
 }
 
-// What the gust throws flies out wrapped in its own puff of wind.
 static void SpawnAirBall(PlayState* play, Vec3f* pos) {
     for (u8 mote = 0; mote < DEKU_LEAF_AIR_BALL_MOTES; mote++) {
         s16 angle = (s16)Rand_CenteredFloat(65535.0f);
@@ -207,7 +200,6 @@ static void BurstGust(PlayState* play) {
     sGustCollider.base.atFlags &= ~(AT_ON | AT_HIT);
 }
 
-// What the wind reaches is thrown the way the wind was already going, not away from where it came from.
 static void ThrowHitActor(PlayState* play, Actor* hit) {
     hit->world.rot.y = sGustYaw;
     hit->speedXZ = DEKU_LEAF_GUST_KNOCKBACK;
@@ -229,8 +221,7 @@ static bool HasHitWall(PlayState* play, Vec3f* from, Vec3f* to) {
     return true;
 }
 
-// The hit only shows up in the flags once the frame's collision pass has run, so it is read on the next tick,
-// by which time whatever it was may already be gone.
+// The hit only shows in the flags after the collision pass, so it is read on the next tick.
 static Actor* TakeGustHit(void) {
     Actor* hit = sGustCollider.base.at;
 
@@ -268,7 +259,6 @@ static void AdvanceGust(PlayState* play) {
     }
 }
 
-// The wind-up hangs at its farthest reach before the leaf sweeps, and the swing picks up where it left off.
 static void HoldSwingAtApex(Player* player) {
     if (sApexHold > 0) {
         sApexHold--;
@@ -296,18 +286,15 @@ static void SwingAction(Player* player, PlayState* play) {
         SpendMagic(DEKU_LEAF_SWING_MAGIC);
         LaunchGust(player);
         PlaySfxAt(NA_SE_IT_SWORD_SWING, &player->actor.world.pos);
-        // The effort lands on the beat the gust leaves, as it does on a jump slash.
         Player_PlayVoiceSfx(player, NA_SE_VO_LI_SWORD_N);
     }
 }
 
 static bool CanSwingLeaf(Player* player, PlayState* play) {
-    return sApi->GetActiveForm() == NULL && IsGrounded(player) &&
-           !(player->stateFlags1 & DEKU_LEAF_BLOCKING_STATES) &&
+    return sApi->GetActiveForm() == NULL && IsGrounded(player) && !(player->stateFlags1 & DEKU_LEAF_BLOCKING_STATES) &&
            (player->meleeWeaponState == 0) && HasMagic(DEKU_LEAF_SWING_MAGIC);
 }
 
-// The gust is timed by the animation, so without the resource the leaf never swings at all.
 static void SwingLeaf(PlayState* play, Player* player) {
     LinkAnimationHeader* swing = ResourceMgr_LoadPlayerAnimAsHeader(sSwingAnimPath);
 
@@ -334,7 +321,6 @@ static void StartGliding(Player* player) {
     PlaySfxAt(NA_SE_PL_CHANGE_ARMS, &player->actor.world.pos);
 }
 
-// The rustle is asked for frame by frame, so letting go of the glide is what silences it.
 static void StopGliding(void) {
     sIsGliding = false;
 }
@@ -347,7 +333,6 @@ static bool DrainGlideMagic(void) {
     return SpendMagic(DEKU_LEAF_GLIDE_MAGIC);
 }
 
-// Link's yaw already follows the stick in the air, so a steady forward drift is all the leaf has to add.
 static void UpdateGlide(Player* player, PlayState* play) {
     LinkAnimationHeader* glide = GlideAnimation();
 
@@ -355,7 +340,6 @@ static void UpdateGlide(Player* player, PlayState* play) {
         LinkAnimation_Change(play, &player->skelAnime, glide, 1.0f, 0.0f, Animation_GetLastFrame(glide), ANIMMODE_LOOP,
                              -4.0f);
     }
-    // Roc's Boots halve every fall; the leaf pins its own, so it is halved here.
     f32 fallSpeed = CustomEquipRegistry_IsWorn(ROC_BOOTS_KEY) ? DEKU_LEAF_FALL_SPEED * 0.5f : DEKU_LEAF_FALL_SPEED;
 
     if (player->actor.velocity.y < fallSpeed) {
@@ -364,7 +348,6 @@ static void UpdateGlide(Player* player, PlayState* play) {
     if (player->linearVelocity < DEKU_LEAF_GLIDE_SPEED) {
         Math_StepToF(&player->linearVelocity, DEKU_LEAF_GLIDE_SPEED, DEKU_LEAF_GLIDE_ACCEL);
     }
-    // The rustle of the bean plant's own leaf, asked for every frame the way that plant asks for it.
     Actor_PlaySfx_Flagged(&player->actor, NA_SE_PL_PLANT_MOVE - SFX_FLAG);
 }
 
@@ -380,9 +363,7 @@ static bool CanKeepGliding(Player* player, PlayState* play, u16 buttonMask) {
            !(player->stateFlags1 & DEKU_LEAF_BLOCKING_STATES) && !WasJustHurt(player);
 }
 
-// Both the swing and the glide read the button here, not through vanilla's item path: that one only runs on the
-// frames the current action func updates the upper body, so a press made on any other frame was simply lost.
-// The gust flies on from here too, so it outlives the swing that threw it.
+// Read here, not through vanilla's item path: that only runs on frames where the action func updates the upper body.
 static void UpdateDekuLeaf(void) {
     PlayState* play = gPlayState;
     Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
@@ -392,7 +373,6 @@ static void UpdateDekuLeaf(void) {
         StopGliding();
         return;
     }
-    // A transformation which allows the leaf owns its form-specific behavior.
     if (sApi->GetActiveForm() != NULL) {
         StopGliding();
         return;
@@ -426,7 +406,7 @@ static void UpdateDekuLeaf(void) {
     }
 }
 
-// The leaf's own display list clears lighting for everything drawn after it, so the mode is put back by hand.
+// The leaf's display list clears lighting for everything drawn after it.
 static void DrawLeaf(PlayState* play, Vec3f* pos, f32 yaw, f32 scale) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
@@ -440,7 +420,6 @@ static void DrawLeaf(PlayState* play, Vec3f* pos, f32 yaw, f32 scale) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// A canopy over both hands, not a leaf at his chest: anchored anywhere lower it cuts through Link as he falls.
 static void DrawCanopy(Player* player, PlayState* play) {
     Vec3f* leftHand = &player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     Vec3f* rightHand = &player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
@@ -482,8 +461,6 @@ static void DrawDekuLeaf(Actor* actor, PlayState* play) {
         return;
     }
 
-
-
     if (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) {
         return;
     }
@@ -507,18 +484,15 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The scene rebuilds the player, and the collider still points at the old one until the next swing sets it.
 static void DropGlideOnSceneChange(int16_t sceneNum) {
     sIsGliding = false;
     sGustLife = 0;
     sPreviousInvincibility = 0;
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, DEKU_LEAF_KEY, DEKU_LEAF_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -534,11 +508,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.deku_leaf.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.deku_leaf.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 1 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 1 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -597,7 +572,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;

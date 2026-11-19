@@ -1,8 +1,3 @@
-/**
- * Magic Cape: owning it halves the price of every spell and makes the Lens of Truth drain at half speed.
- * Ganondorf's cloth hangs from Link's shoulders with its own Verlet physics; A on its cell hides it.
- */
-
 #include <math.h>
 #include <string.h>
 
@@ -62,12 +57,11 @@ static const f32 sDistMult[CAPE_JOINTS] = {
     0.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.1f, 1.2f, 1.3f, 1.4f, 1.5f, 1.6f, 1.7f,
 };
 
-#define CAPE_MAP_STRAND(n)                                                                                       \
-    (n) + CAPE_JOINTS * 0, (n) + CAPE_JOINTS * 1, (n) + CAPE_JOINTS * 2, (n) + CAPE_JOINTS * 3,                   \
-        (n) + CAPE_JOINTS * 4, (n) + CAPE_JOINTS * 5, (n) + CAPE_JOINTS * 6, (n) + CAPE_JOINTS * 7,               \
-        (n) + CAPE_JOINTS * 8, (n) + CAPE_JOINTS * 9, (n) + CAPE_JOINTS * 10, (n) + CAPE_JOINTS * 11
+#define CAPE_MAP_STRAND(n)                                                                                             \
+    (n) + CAPE_JOINTS * 0, (n) + CAPE_JOINTS * 1, (n) + CAPE_JOINTS * 2, (n) + CAPE_JOINTS * 3, (n) + CAPE_JOINTS * 4, \
+        (n) + CAPE_JOINTS * 5, (n) + CAPE_JOINTS * 6, (n) + CAPE_JOINTS * 7, (n) + CAPE_JOINTS * 8,                    \
+        (n) + CAPE_JOINTS * 9, (n) + CAPE_JOINTS * 10, (n) + CAPE_JOINTS * 11
 
-// The vertex order of Ganondorf's own cloak mesh.
 static const u16 sVertexMap[CAPE_STRANDS * CAPE_JOINTS] = {
     CAPE_MAP_STRAND(11), CAPE_MAP_STRAND(10), CAPE_MAP_STRAND(9), CAPE_MAP_STRAND(8),
     CAPE_MAP_STRAND(7),  CAPE_MAP_STRAND(6),  CAPE_MAP_STRAND(5), CAPE_MAP_STRAND(4),
@@ -116,7 +110,6 @@ static bool IsVisible(void) {
     return IsOwned() && CustomEquipRegistry_IsToggleOn(MAGIC_CAPE_KEY);
 }
 
-// The spin attack keeps its full price: its charge previews one cost and its release pays another.
 static void HalveSpellCost(int16_t* amount) {
     if (IsOwned() && !sCape.isSpinAttackCharging && *amount > 0) {
         *amount /= 2;
@@ -131,7 +124,6 @@ static void LeaveSpinAttackCost(void* actor) {
     sCape.isSpinAttackCharging = false;
 }
 
-// The lens pays one point each time its timer runs out; the timer jumping back up is that payment.
 static void HalveLensDrain(void) {
     PlayState* play = gPlayState;
     s16 timer;
@@ -148,8 +140,7 @@ static void HalveLensDrain(void) {
     sCape.lensTimerSeen = timer;
 }
 
-// The blended texture is registered once for the whole session: re-registering while the pipeline still
-// referenced the previous one crashed scenes heavy with cutscenes.
+// Register once per session: re-registering while the pipeline still referenced the old one crashed.
 static void InitCloth(void) {
     if (sCape.isInitialized) {
         return;
@@ -197,7 +188,6 @@ static void ClampVelocity(Vec3f* velocity) {
     velocity->z = CLAMP(velocity->z, -CAPE_VEL_CLAMP, CAPE_VEL_CLAMP);
 }
 
-// EnGanonMant_UpdateStrand, scaled to Link.
 static void UpdateStrand(Vec3f* actorPos, CapeStrand* strand, CapeStrand* neighbor, s16 strandNum, f32 backSwayMag,
                          f32 sideSwayMag, f32 minY) {
     Vec3f delta;
@@ -271,8 +261,9 @@ static void UpdateStrand(Vec3f* actorPos, CapeStrand* strand, CapeStrand* neighb
 }
 
 static void UpdateVertices(void) {
-    Vtx* vertices = sRemoteCapeVertices != NULL ? sRemoteCapeVertices :
-                        ResourceMgr_LoadVtxByName((char*)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
+    Vtx* vertices = sRemoteCapeVertices != NULL
+                        ? sRemoteCapeVertices
+                        : ResourceMgr_LoadVtxByName((char*)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
     Vec3f up = { 0.0f, 30.0f, 0.0f };
     Vec3f normal;
 
@@ -296,8 +287,6 @@ static void UpdateVertices(void) {
     }
 }
 
-// The roots fan out in a semicircle between the shoulders; the first tick after an init collapses every joint
-// onto its root so the cloth does not settle in from the world origin.
 static void SimulateCloth(Player* player) {
     Vec3f* left = &sCape.shoulders[0];
     Vec3f* right = &sCape.shoulders[1];
@@ -343,7 +332,6 @@ static void TickCloth(void) {
     PlayState* play = gPlayState;
     Player* player;
 
-    // A skipped update never reaches OnActorUpdate, which would leave every later spell at full price.
     sCape.isSpinAttackCharging = false;
     HalveLensDrain();
     if (play == NULL) {
@@ -353,9 +341,8 @@ static void TickCloth(void) {
     if (player->stateFlags1 & PLAYER_STATE1_ON_HORSE) {
         return;
     }
-    if (!IsVisible() ||
-        (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
-                                PLAYER_STATE1_IN_ITEM_CS))) {
+    if (!IsVisible() || (player->stateFlags1 & (PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
+                                                PLAYER_STATE1_IN_ITEM_CS))) {
         if (sCape.isInitialized) {
             ResetCloth();
         }
@@ -366,7 +353,6 @@ static void TickCloth(void) {
     sCape.hasUpdatedThisFrame = true;
 }
 
-// The cloth runs its physics where it draws, once per updated frame, off the shoulders the limbs just placed.
 static void DrawCloth(Actor* actor, PlayState* play) {
     if (actor != &GET_PLAYER(play)->actor && sRemoteCapeVertices == NULL) {
         DrawRemoteCape(actor, play);
@@ -396,14 +382,12 @@ static void DrawCloth(Actor* actor, PlayState* play) {
         gSPSegmentLoadRes(POLY_OPA_DISP++, 0x0C, (uintptr_t)((sCape.frame % 2) ? gMant1Vtx : gMant2Vtx));
     }
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gMantDL);
-    // The skeleton's cull jump lives on segment 0x0C: left on the cape's vertices, the next limb or clone
-    // drawn would execute vertex data as opcodes.
+    // Segment 0x0C must not point at cape vertices: the next limb would execute them as opcodes.
     gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)gCullBackDList);
     CLOSE_DISPS(play->state.gfxCtx);
     sCape.capturedShoulders = 0;
 }
 
-// Two authored poses of the hanging cloth, alternated so it waves while it hangs.
 static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     const char* cape = ((play->gameplayFrames >> 3) & 1) ? sGetItemCapeWaveDL : sGetItemCapeDL;
 
@@ -426,9 +410,10 @@ static void HideCloth(const char* key) {
     ResetCloth();
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",   "OnPlayerPostLimbDraw", "OnActorDrawEnd",
-                                              "OnMagicResolveCost", "ShouldActorInit",    "OnActorInit",
-                                              "ShouldActorUpdate", "OnActorUpdate",       "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",     "OnPlayerPostLimbDraw",
+                                              "OnActorDrawEnd",    "OnMagicResolveCost", "ShouldActorInit",
+                                              "OnActorInit",       "ShouldActorUpdate",  "OnActorUpdate",
+                                              "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -447,11 +432,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.magic_cape.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.magic_cape.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -473,9 +459,9 @@ static void PublishRemoteVisual(void) {
         Player* player = GET_PLAYER(play);
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
-        visual.active = IsVisible() && !(player->stateFlags1 & (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_DEAD |
-                                                               PLAYER_STATE1_IN_CUTSCENE | PLAYER_STATE1_LOADING |
-                                                               PLAYER_STATE1_IN_ITEM_CS));
+        visual.active = IsVisible() && !(player->stateFlags1 &
+                                         (PLAYER_STATE1_ON_HORSE | PLAYER_STATE1_DEAD | PLAYER_STATE1_IN_CUTSCENE |
+                                          PLAYER_STATE1_LOADING | PLAYER_STATE1_IN_ITEM_CS));
         if (visual.active) {
             visual.values[0] = player->actor.speedXZ;
         }
@@ -491,8 +477,6 @@ static void PublishRemoteVisual(void) {
         }
     }
 }
-
-
 
 static void DrawRemotePlayer(Actor* actor, PlayState* play) {
     if (actor->id != ACTOR_PLAYER && sRemoteVisualReady && sApi->GetNetPeerIdForActor(actor) != 0) {
@@ -512,8 +496,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
-
 
 #define REMOTE_CAPE_CAPACITY 64
 
@@ -565,8 +547,7 @@ static RemoteCape* FindRemoteCape(Player* player, PlayState* play) {
 
 static void CaptureRemoteShoulder(PlayState* play, Player* player, int32_t limb) {
     RemoteVisualState visual;
-    if ((limb != PLAYER_LIMB_L_SHOULDER && limb != PLAYER_LIMB_R_SHOULDER) ||
-        !ReadRemoteVisual(player, &visual)) {
+    if ((limb != PLAYER_LIMB_L_SHOULDER && limb != PLAYER_LIMB_R_SHOULDER) || !ReadRemoteVisual(player, &visual)) {
         return;
     }
     RemoteCape* cape = FindRemoteCape(player, play);
@@ -658,10 +639,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = HideCloth;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        MAGIC_CAPE_KEY, MAGIC_CAPE_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, MAGIC_CAPE_KEY, MAGIC_CAPE_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

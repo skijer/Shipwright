@@ -1,7 +1,3 @@
-/**
- * Champion's Tunic: a sidehop or backflip past an incoming attack while locked on slows the world and offers a
- * flurry rush; swinging takes it. Aiming anything in mid air slows the world and holds Link up: bullet time.
- */
 
 #include <math.h>
 #include <string.h>
@@ -18,7 +14,6 @@
 
 #define CHAMPION_TUNIC_KEY "nei.equip.champion_tunic"
 #define TIME_OWNER CHAMPION_TUNIC_KEY
-// The lowest claim on world speed: any hard stop wins over bullet time.
 #define TIME_PRIORITY 1
 #define SLOW_FACTOR 0.33f
 #define OFFER_FRAMES 45
@@ -104,18 +99,19 @@ static bool IsAimableAction(s8 itemAction) {
 const char* CustomItemRegistry_GetHeldKey(void);
 static bool HoldsAimableItem(Player* player) {
     const char* key = CustomItemRegistry_GetHeldKey();
-    const SOHCustomItemDefinition* item = key != NULL && SOH_MOD_API_HAS(sApi, FindCustomItem) ? sApi->FindCustomItem(key) : NULL;
+    const SOHCustomItemDefinition* item =
+        key != NULL && SOH_MOD_API_HAS(sApi, FindCustomItem) ? sApi->FindCustomItem(key) : NULL;
     return IsAimableAction(player->heldItemAction) || IsAimableAction(player->itemAction) ||
            (item != NULL && item->firstPersonModelPath != NULL) ||
            (key != NULL && (strcmp(key, "nei.beetle") == 0 || strcmp(key, "nei.dominion_rod") == 0 ||
-                           strcmp(key, "nei.ball_and_chain") == 0 || strcmp(key, "nei.whip") == 0));
+                            strcmp(key, "nei.ball_and_chain") == 0 || strcmp(key, "nei.whip") == 0));
 }
 
 static bool IsAiming(Player* player) {
     return (player->stateFlags1 & (PLAYER_STATE1_FIRST_PERSON | PLAYER_STATE1_READY_TO_FIRE)) != 0;
 }
 
-// A dead actor's memory is freed, so its pointer is trusted only while it is still in the actor lists.
+// A dead actor's memory is freed: trust its pointer only while it is still in the actor lists.
 static bool IsActorAlive(PlayState* play, Actor* actor) {
     if (actor == NULL) {
         return false;
@@ -188,8 +184,7 @@ static bool GetColliderCenter(Collider* collider, Vec3f* out) {
     }
 }
 
-// The attack list is complete only between the actor updates and the next frame's wipe, which is where the draw
-// runs. Positions are kept, never pointers, so nothing goes stale before the next update reads them.
+// The attack list is complete only between the actor updates and the next frame's wipe: keep positions, never pointers.
 static void SnapshotIncomingAttacks(PlayState* play, Player* player) {
     sChampion.attackCount = 0;
     for (s32 i = 0; i < play->colChkCtx.colATCount && sChampion.attackCount < ATTACK_SNAPSHOT_MAX; i++) {
@@ -198,7 +193,8 @@ static void SnapshotIncomingAttacks(PlayState* play, Player* player) {
         if (collider == NULL || !(collider->atFlags & AT_ON)) {
             continue;
         }
-        if (collider->actor == &player->actor || (collider->actor != NULL && collider->actor->parent == &player->actor)) {
+        if (collider->actor == &player->actor ||
+            (collider->actor != NULL && collider->actor->parent == &player->actor)) {
             continue;
         }
         if (GetColliderCenter(collider, &sChampion.attackPos[sChampion.attackCount])) {
@@ -239,8 +235,6 @@ static bool IsRegisteredAC(PlayState* play, Collider* collider) {
     return false;
 }
 
-// Enemies go untouchable between hits, which would eat every swing after the first. The victim's hurtboxes are
-// put back for the next frame's attack pass, once each.
 static void KeepTargetHittable(PlayState* play) {
     for (s32 i = 0; i < sChampion.targetColliderCount; i++) {
         Collider* collider = sChampion.targetColliders[i];
@@ -253,8 +247,7 @@ static void KeepTargetHittable(PlayState* play) {
     }
 }
 
-// prevPos moves with world.pos and bgCheckFlags is cleared so the engine does not read the blink as a sweep and
-// drag Link back. The height is the enemy's, so a flying target does not leave him standing on air.
+// prevPos moves with world.pos and bgCheckFlags is cleared so the engine does not read the blink as a sweep.
 static void BlinkToTarget(Player* player, Actor* target) {
     f32 dx = player->actor.world.pos.x - target->world.pos.x;
     f32 dz = player->actor.world.pos.z - target->world.pos.z;
@@ -286,7 +279,7 @@ static void BlinkToTarget(Player* player, Actor* target) {
 
 static void PlayAttentionSfx(Player* player) {
     Audio_PlaySfxGeneral(NA_SE_SY_ATTENTION_ON, &player->actor.world.pos, 4, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void ReturnToIdle(PlayState* play) {
@@ -308,7 +301,6 @@ static void ReturnToIdle(PlayState* play) {
     }
 }
 
-// The dodge only buys the slow motion: Link is not moved and stays vulnerable, and a hit cancels it.
 static void OfferFlurry(Player* player, PlayState* play) {
     sChampion.state = CHAMPION_OFFER;
     sChampion.timer = OFFER_FRAMES;
@@ -332,9 +324,8 @@ static void CommitFlurry(Player* player, PlayState* play) {
 }
 
 static void EnterBulletTime(Player* player, PlayState* play) {
-    // Establish the rest pose once; bow and other item animations own subsequent frames.
-    AnimationContext_SetLoadFrame(play,(LinkAnimationHeader*)gPlayerAnim_link_normal_wait_free,
-        0,player->skelAnime.limbCount,player->skelAnime.jointTable);
+    AnimationContext_SetLoadFrame(play, (LinkAnimationHeader*)gPlayerAnim_link_normal_wait_free, 0,
+                                  player->skelAnime.limbCount, player->skelAnime.jointTable);
     sChampion.state = CHAMPION_BULLET_TIME;
     SlowWorld(true);
     player->actor.speedXZ = 0.0f;
@@ -345,11 +336,11 @@ static void EnterBulletTime(Player* player, PlayState* play) {
 static void UpdateIdle(Player* player, PlayState* play) {
     bool isHopping = (player->stateFlags2 & PLAYER_STATE2_HOPPING) != 0;
 
-    if (!IsGrounded(player) && player->actor.world.pos.y - player->actor.floorHeight >= 5.0f && HoldsAimableItem(player) && IsAiming(player)) {
+    if (!IsGrounded(player) && player->actor.world.pos.y - player->actor.floorHeight >= 5.0f &&
+        HoldsAimableItem(player) && IsAiming(player)) {
         EnterBulletTime(player, play);
         return;
     }
-    // Any frame of the hop counts: on its first frame the blade is usually still travelling toward Link.
     if (isHopping && sChampion.cooldown == 0 && Player_IsZTargeting(player) && IsAttackNearby(player)) {
         OfferFlurry(player, play);
     }
@@ -369,7 +360,6 @@ static void UpdateOffer(Player* player, PlayState* play, bool tookDamage) {
     }
 }
 
-// Many enemies gate their invulnerability on the damage flash, so it is cut short every frame of the rush.
 static void UpdateRush(PlayState* play, bool tookDamage) {
     if (tookDamage || !IsActorAlive(play, sChampion.target)) {
         ReturnToIdle(play);
@@ -381,10 +371,11 @@ static void UpdateRush(PlayState* play, bool tookDamage) {
     }
 }
 
-// The fall is suspended and nothing else: aiming is the game's own first-person aim.
 static void UpdateBulletTime(Player* player, PlayState* play) {
-    if (IsGrounded(player) || player->actor.world.pos.y - player->actor.floorHeight < 5.0f || !HoldsAimableItem(player) || !IsAiming(player) ||
-        (play->state.input[0].rel.button & (BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
+    if (IsGrounded(player) || player->actor.world.pos.y - player->actor.floorHeight < 5.0f ||
+        !HoldsAimableItem(player) || !IsAiming(player) ||
+        (play->state.input[0].rel.button &
+         (BTN_B | BTN_CLEFT | BTN_CDOWN | BTN_CRIGHT | BTN_DUP | BTN_DDOWN | BTN_DLEFT | BTN_DRIGHT))) {
         ReturnToIdle(play);
         return;
     }
@@ -456,10 +447,9 @@ static void WatchCollisionsAfterUpdate(void) {
     }
 }
 
-// A blade quad keeps AT_HIT for the rest of its swing, so a landed blow is its rising edge.
 static void CountFlurryHit(PlayState* play, Player* player) {
-    bool isHitting = (player->meleeWeaponQuads[0].base.atFlags & AT_HIT) ||
-                     (player->meleeWeaponQuads[1].base.atFlags & AT_HIT);
+    bool isHitting =
+        (player->meleeWeaponQuads[0].base.atFlags & AT_HIT) || (player->meleeWeaponQuads[1].base.atFlags & AT_HIT);
     bool isNewHit = isHitting && !sChampion.wasHitting;
     u8 limit = Player_HoldsTwoHandedWeapon(player) ? HITS_TWO_HAND : HITS_ONE_HAND;
 
@@ -473,7 +463,6 @@ static void CountFlurryHit(PlayState* play, Player* player) {
     }
 }
 
-// Only in the air: on the ground vanilla keeps every one of its ways out of the aim.
 static void AllowMidairAim(bool* should, va_list args) {
     Player* player = va_arg(args, Player*);
 
@@ -534,8 +523,8 @@ static void ReleaseTunic(const char* key) {
     sChampion.cooldown = 0;
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayDrawBegin", "OnCollisionRegisterAC",
-                                              "OnSceneInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayDrawBegin",
+                                              "OnCollisionRegisterAC", "OnSceneInit" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -562,11 +551,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.champion_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.champion_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -609,8 +599,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -621,9 +609,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -655,10 +640,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = ReleaseTunic;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        CHAMPION_TUNIC_KEY, CHAMPION_TUNIC_KEY, "",
+        sizeof(SOHCustomItemRandomizer),
+        0,
+        SOH_CUSTOM_ITEM_TYPE_EQUIP,
+        0,
+        1,
+        CHAMPION_TUNIC_KEY,
+        CHAMPION_TUNIC_KEY,
+        "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

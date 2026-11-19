@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================
-// Struct (merged from z_magic_fire.h)
-// ============================================================
-
 struct MagicFire;
 
 typedef struct MagicFire {
@@ -21,10 +17,6 @@ typedef struct MagicFire {
     /*        */ SkelAnimeCurve skelCurve;
     /*        */ Vec3f colliderScale;
 } MagicFire;
-
-// ============================================================
-// Forward declarations
-// ============================================================
 
 #define FLAGS 0x02000010
 #define THIS ((MagicFire*)thisx)
@@ -41,10 +33,6 @@ typedef enum {
     /* 0x02 */ DF_ACTION_STOP_EXPANDING,
     /* 0x03 */ DF_ACTION_EXPAND_QUICKLY
 } MagicFireAction;
-
-// ============================================================
-// Collider
-// ============================================================
 
 static ColliderCylinderInit sCylinderInit = {
     {
@@ -65,10 +53,6 @@ static ColliderCylinderInit sCylinderInit = {
     },
     { 9, 9, 0, { 0, 0, 0 } },
 };
-
-// ============================================================
-// Vertex + Texture data
-// ============================================================
 
 static Vtx sCylinderVtx[] = {
     VTX(-5000, 0, 0, 3072, 2048, 0xFF, 0xFF, 0xFF, 0xFF),     VTX(-3536, 0, 3536, 3584, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
@@ -211,9 +195,6 @@ static char texture0[] = {
     0xFF, 0xFE, 0xFF, 0xFF, 0xFF, 0xEE, 0xEE, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE, 0xEE, 0xDC, 0xEF, 0xFF,
     0xFF, 0xED, 0xEF, 0xED, 0xEF, 0xFF, 0xFF, 0xFF, 0xFF, 0xED, 0xEF, 0xFF, 0xFF, 0xFF, 0xFE,
 };
-// NOTE: texture1 data is very large - included via the original source verbatim
-// Due to its size, we reference it from the original but paste the key data inline.
-// texture1 is identical in structure to the original z_magic_fire.c
 static char texture1[] = {
     0x14, 0x43, 0x37, 0x9B, 0xB8, 0x64, 0x21, 0x00, 0x01, 0x34, 0x68, 0xBA, 0x86, 0x65, 0x32, 0x32, 0x24, 0x33, 0x58,
     0xCD, 0xB8, 0x65, 0x42, 0x00, 0x01, 0x24, 0x68, 0xA9, 0x66, 0x78, 0x62, 0x10, 0x15, 0x64, 0x47, 0x9B, 0xA9, 0x64,
@@ -325,10 +306,6 @@ static char texture1[] = {
     0x22, 0x48, 0xCE, 0xC9, 0x87, 0x53, 0x10, 0x00, 0x23, 0x57, 0x99, 0x76, 0x67, 0x64, 0x20
 };
 
-// ============================================================
-// Display Lists
-// ============================================================
-
 static Gfx sDList1[] = {
     gsDPPipeSync(),
     gsDPSetTextureLUT(G_TT_NONE),
@@ -402,10 +379,6 @@ static Gfx sDList3[] = {
     gsSPEndDisplayList(),
 };
 
-// ============================================================
-// SkelCurve data
-// ============================================================
-
 static u8 sTransformRefIdx[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x03, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x04, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -440,10 +413,6 @@ static SkelCurveLimb sLimb2 = { 0xFF, 0x03, { NULL, sDList2 } };
 static SkelCurveLimb sLimb3 = { 0xFF, 0xFF, { NULL, sDList3 } };
 static SkelCurveLimb* sLimbs[] = { &sLimb0, &sLimb1, &sLimb2, &sLimb3 };
 static SkelCurveLimbList sLimbList = { sLimbs, 0x04 };
-
-// ============================================================
-// Actor functions
-// ============================================================
 
 void Sw97_MagicFire_Init(Actor* thisx, PlayState* play) {
     MagicFire* this = THIS;

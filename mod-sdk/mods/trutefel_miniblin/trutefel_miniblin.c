@@ -1,5 +1,5 @@
 // Miniblin, a Wind Waker style imp that tries to steal a red rupee with its tail.
-// Model @syeo501, code @trueffel; ported from NEI as a custom enemy the enemy randomizer can pick.
+// Model @syeo501, code @trueffel.
 
 #include "soh/ModApi/ModApi.h"
 
@@ -219,7 +219,6 @@ static void EnMiniblin_Rotate(EnMiniblin* this, s16 targetYaw) {
     Math_ApproachS(&this->actor.shape.rot.y, this->actor.world.rot.y, 2, 3000);
 }
 
-// The jump only carries it forward while its feet are off the ground.
 static void EnMiniblin_Hop(EnMiniblin* this, f32 speed, s16 targetYaw) {
     SkelAnime_Update(&this->skelAnime);
     if (Animation_OnFrame(&this->skelAnime, 17.0f)) {
@@ -259,7 +258,6 @@ static void EnMiniblin_SetupTailAttack(EnMiniblin* this, PlayState* play) {
 static void EnMiniblin_ApproachPlayer(EnMiniblin* this, PlayState* play) {
     EnMiniblin_Hop(this, 20.0f / 3.0f, this->actor.yawTowardsPlayer);
 
-    // Landing kills the jump's momentum, so it does not skid past the player.
     if (this->actor.bgCheckFlags & BGCHECK_GROUND) {
         this->actor.velocity.y = 0.0f;
     }
@@ -290,7 +288,7 @@ static void EnMiniblin_SetupFlee(EnMiniblin* this, PlayState* play) {
     this->timer = 100;
     EnMiniblin_ChangeAnimation(this, MINIBLIN_ANIMATION_JUMP);
     Audio_PlaySfxGeneral(NA_SE_VO_IN_LOST, &this->actor.world.pos, 4, &sFleePitch, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
     EnMiniblin_SetupAction(this, EnMiniblin_Flee);
 }
 
@@ -366,7 +364,7 @@ static void EnMiniblin_SetupLaugh(EnMiniblin* this, PlayState* play) {
     this->eyeIndex = MINIBLIN_EYES_LAUGH;
     EnMiniblin_ChangeAnimation(this, MINIBLIN_ANIMATION_LAUGH);
     Audio_PlaySfxGeneral(NA_SE_EN_STAL_WARAU, &this->actor.world.pos, 4, &sLaughPitch, &sLaughVolume,
-                           &gSfxDefaultReverb);
+                         &gSfxDefaultReverb);
     EnMiniblin_SetupAction(this, EnMiniblin_Laugh);
 }
 

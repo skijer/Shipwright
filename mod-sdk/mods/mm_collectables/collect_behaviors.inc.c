@@ -1,146 +1,228 @@
-// Persistent Elegy shells and the two travel songs. Twin Link owns its separate state machine.
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include <stdio.h>
+#include "collect_owl_map.inc.c"
 
 typedef struct {
     Actor actor;
     ColliderCylinder collider;
-    Vec3s pose[PLAYER_LIMB_MAX+1];
+    Vec3s pose[PLAYER_LIMB_MAX + 1];
     s16 cooldown;
 } CollectActor;
-static s16 sShellActorId=-1;
+static s16 sShellActorId = -1;
 static Actor* sShells[4];
-static int sCollectPrompt; // 1 Soaring, 2 Fugue
+static int sCollectPrompt;
 static int sSoaringPage;
 static bool sLandingPending;
-static int sPendingSong=-1,sPendingSongFrames;
-static const ALIGN_ASSET(2) char sElegyModels[4][80]={
-    "__OTR__objects/gameplay_keep/gElegyShellHumanDL","__OTR__objects/gameplay_keep/gElegyShellDekuDL",
-    "__OTR__objects/gameplay_keep/gElegyShellGoronDL","__OTR__objects/gameplay_keep/gElegyShellZoraDL"
+static int sPendingSong = -1, sPendingSongFrames;
+static const ALIGN_ASSET(2) char sElegyModels[4][80] = { "__OTR__objects/gameplay_keep/gElegyShellHumanDL",
+                                                         "__OTR__objects/gameplay_keep/gElegyShellDekuDL",
+                                                         "__OTR__objects/gameplay_keep/gElegyShellGoronDL",
+                                                         "__OTR__objects/gameplay_keep/gElegyShellZoraDL" };
+static ColliderCylinderInit sCollectBody = {
+    { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_ON | OC1_TYPE_ALL, OC2_TYPE_1, COLSHAPE_CYLINDER },
+    { ELEMTYPE_UNK0, { DMG_SLASH_MASTER, 0, 2 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_ON },
+    { 20, 55, 0, { 0, 0, 0 } }
 };
-static ColliderCylinderInit sCollectBody={
-    {COLTYPE_NONE,AT_ON|AT_TYPE_PLAYER,AC_NONE,OC1_ON|OC1_TYPE_ALL,OC2_TYPE_1,COLSHAPE_CYLINDER},
-    {ELEMTYPE_UNK0,{DMG_SLASH_MASTER,0,2},{0,0,0},TOUCH_ON|TOUCH_SFX_NORMAL,BUMP_NONE,OCELEM_ON},
-    {20,55,0,{0,0,0}}
-};
-static void CollectActorInit(Actor* actor,PlayState* play) {
-    CollectActor* self=(CollectActor*)actor;
-    Actor_SetScale(actor,.01f);actor->gravity=-1.0f;
-    actor->flags|=ACTOR_FLAG_CAN_PRESS_SWITCHES;
-    actor->colChkInfo.mass=MASS_IMMOVABLE;
-    Collider_InitCylinder(play,&self->collider);
-    Collider_SetCylinder(play,&self->collider,actor,&sCollectBody);
-    ActorShape_Init(&actor->shape,0,ActorShadow_DrawCircle,20);
+static void CollectActorInit(Actor* actor, PlayState* play) {
+    CollectActor* self = (CollectActor*)actor;
+    Actor_SetScale(actor, .01f);
+    actor->gravity = -1.0f;
+    actor->flags |= ACTOR_FLAG_CAN_PRESS_SWITCHES;
+    actor->colChkInfo.mass = MASS_IMMOVABLE;
+    Collider_InitCylinder(play, &self->collider);
+    Collider_SetCylinder(play, &self->collider, actor, &sCollectBody);
+    ActorShape_Init(&actor->shape, 0, ActorShadow_DrawCircle, 20);
 }
-static void CollectActorDestroy(Actor* actor,PlayState* play) {
-    Collider_DestroyCylinder(play,&((CollectActor*)actor)->collider);
-    for(int i=0;i<4;++i)if(sShells[i]==actor)sShells[i]=NULL;
+static void CollectActorDestroy(Actor* actor, PlayState* play) {
+    Collider_DestroyCylinder(play, &((CollectActor*)actor)->collider);
+    for (int i = 0; i < 4; ++i)
+        if (sShells[i] == actor)
+            sShells[i] = NULL;
 }
-static void CollectActorUpdate(Actor* actor,PlayState* play) {
-    CollectActor* self=(CollectActor*)actor;
+static void CollectActorUpdate(Actor* actor, PlayState* play) {
+    CollectActor* self = (CollectActor*)actor;
     Actor_MoveXZGravity(actor);
-    Actor_UpdateBgCheckInfo(play,actor,20,20,60,5);
-    Collider_UpdateCylinder(actor,&self->collider);
-    CollisionCheck_SetOC(play,&play->colChkCtx,&self->collider.base);
+    Actor_UpdateBgCheckInfo(play, actor, 20, 20, 60, 5);
+    Collider_UpdateCylinder(actor, &self->collider);
+    CollisionCheck_SetOC(play, &play->colChkCtx, &self->collider.base);
 }
-static void ShellDraw(Actor* actor,PlayState* play) {
-    int form=actor->params&3;
-    if(!sApi->HasResource(sElegyModels[form]))return;
+static void ShellDraw(Actor* actor, PlayState* play) {
+    int form = actor->params & 3;
+    if (!sApi->HasResource(sElegyModels[form]))
+        return;
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    gSPMatrix(POLY_OPA_DISP++,MATRIX_NEWMTX(play->state.gfxCtx),G_MTX_NOPUSH|G_MTX_LOAD|G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++,(Gfx*)sElegyModels[form]);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sElegyModels[form]);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 static void SummonElegy(void) {
-    PlayState* play=gPlayState;Player* player=GET_PLAYER(play);int form=0;
-    const char* active=sApi->GetActiveForm();
-    if(active!=NULL) {if(strstr(active,"deku"))form=1;else if(strstr(active,"goron"))form=2;else if(strstr(active,"zora"))form=3;}
-    if(sShells[form]!=NULL)Actor_Kill(sShells[form]);
-    sShells[form]=Actor_Spawn(&play->actorCtx,play,sShellActorId,player->actor.world.pos.x,
-        player->actor.world.pos.y,player->actor.world.pos.z,0,player->actor.shape.rot.y,0,form);
+    PlayState* play = gPlayState;
+    Player* player = GET_PLAYER(play);
+    int form = 0;
+    const char* active = sApi->GetActiveForm();
+    if (active != NULL) {
+        if (strstr(active, "deku"))
+            form = 1;
+        else if (strstr(active, "goron"))
+            form = 2;
+        else if (strstr(active, "zora"))
+            form = 3;
+    }
+    if (sShells[form] != NULL)
+        Actor_Kill(sShells[form]);
+    sShells[form] =
+        Actor_Spawn(&play->actorCtx, play, sShellActorId, player->actor.world.pos.x, player->actor.world.pos.y,
+                    player->actor.world.pos.z, 0, player->actor.shape.rot.y, 0, form);
 }
-typedef struct {const char* name; s16 entrance;Vec3f pos;u8 room;} OwlDestination;
-// Positions read from the vanilla owl actor lists in the user's oot.o2r, not guessed map coordinates.
-static const OwlDestination sOwlDestinations[]={
-    {"Lake Hylia",ENTR_LAKE_HYLIA_NORTH_EXIT,{-3080,-985,6067},0},
-    {"Death Mountain Trail",ENTR_DEATH_MOUNTAIN_TRAIL_BOTTOM_EXIT,{-42,3347,-4409},0},
-    {"Hyrule Field - Kokiri",ENTR_HYRULE_FIELD_PAST_BRIDGE_SPAWN,{4284,182,7877},0},
-    {"Zora's River",ENTR_ZORAS_RIVER_WEST_EXIT,{-1397,260,426},0},
-    {"Gerudo Valley",ENTR_GERUDO_VALLEY_EAST_EXIT,{14,242,-264},0},
-    {"Desert Colossus",ENTR_DESERT_COLOSSUS_EAST_EXIT,{-1456,811,425},0},
-    {"Hyrule Castle",ENTR_CASTLE_GROUNDS_SOUTH_EXIT,{-146,1619,2961},0},
-    {"Lost Woods",ENTR_LOST_WOODS_SOUTH_EXIT,{955,210,-798},2}
+typedef struct {
+    const char* name;
+    s16 entrance;
+    Vec3f pos;
+    u8 room;
+} OwlDestination;
+static const OwlDestination sOwlDestinations[] = {
+    { "Lake Hylia", ENTR_LAKE_HYLIA_NORTH_EXIT, { -3080, -985, 6067 }, 0 },
+    { "Death Mountain Trail", ENTR_DEATH_MOUNTAIN_TRAIL_BOTTOM_EXIT, { -42, 3347, -4409 }, 0 },
+    { "Hyrule Field - Kokiri", ENTR_HYRULE_FIELD_PAST_BRIDGE_SPAWN, { 4284, 182, 7877 }, 0 },
+    { "Zora's River", ENTR_ZORAS_RIVER_WEST_EXIT, { -1397, 260, 426 }, 0 },
+    { "Gerudo Valley", ENTR_GERUDO_VALLEY_EAST_EXIT, { 14, 242, -264 }, 0 },
+    { "Desert Colossus", ENTR_DESERT_COLOSSUS_EAST_EXIT, { -1456, 811, 425 }, 0 },
+    { "Hyrule Castle", ENTR_CASTLE_GROUNDS_SOUTH_EXIT, { -146, 1619, 2961 }, 0 },
+    { "Lost Woods", ENTR_LOST_WOODS_SOUTH_EXIT, { 955, 210, -798 }, 2 }
 };
 static void ShowSoaringPage(void) {
-    static char text[256];int first=sSoaringPage*2;
-    snprintf(text,sizeof(text),"Song of Soaring\x1C%%g%s&%s&%s%%w",sOwlDestinations[first].name,
-        sOwlDestinations[first+1].name,sSoaringPage<3?"More owl spots":"Cancel");
-    sCollectPrompt=sApi->ShowTextbox(gPlayState,text,false)?1:0;
+    static char text[256];
+    int first = sSoaringPage * 2;
+    snprintf(text, sizeof(text), "Song of Soaring\x1C%%g%s&%s&%s%%w", sOwlDestinations[first].name,
+             sOwlDestinations[first + 1].name, sSoaringPage < 3 ? "More owl spots" : "Cancel");
+    sCollectPrompt = sApi->ShowTextbox(gPlayState, text, false) ? 1 : 0;
 }
-static void WarpTo(s16 entrance,const OwlDestination* owl) {
-    PlayState* play=gPlayState;
-    if(owl!=NULL) {
-        RespawnData* dest=&gSaveContext.respawn[RESPAWN_MODE_TOP];
-        dest->entranceIndex=entrance;dest->roomIndex=owl->room;dest->pos=owl->pos;
-        dest->pos.z+=70;dest->yaw=0;dest->playerParams=0xDFF;
-        gSaveContext.respawnFlag=3;sLandingPending=true;
+static void WarpTo(s16 entrance, const OwlDestination* owl) {
+    PlayState* play = gPlayState;
+    if (owl != NULL) {
+        RespawnData* dest = &gSaveContext.respawn[RESPAWN_MODE_TOP];
+        dest->entranceIndex = entrance;
+        dest->roomIndex = owl->room;
+        dest->pos = owl->pos;
+        dest->pos.z += 70;
+        dest->yaw = 0;
+        dest->playerParams = 0xDFF;
+        gSaveContext.respawnFlag = 3;
+        sLandingPending = true;
     }
-    play->nextEntranceIndex=entrance;play->transitionTrigger=TRANS_TRIGGER_START;
-    play->transitionType=TRANS_TYPE_FADE_BLACK;gSaveContext.nextTransitionType=TRANS_TYPE_FADE_BLACK;
-    gSaveContext.nextCutsceneIndex=0xFFEF;
+    play->nextEntranceIndex = entrance;
+    play->transitionTrigger = TRANS_TRIGGER_START;
+    play->transitionType = TRANS_TYPE_FADE_BLACK;
+    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK;
+    gSaveContext.nextCutsceneIndex = 0xFFEF;
 }
+static void PlaySoaring(void) {
+    if (OpenOwlMap(gPlayState)) {
+        return;
+    }
+    sSoaringPage = 0;
+    ShowSoaringPage();
+}
+
 static void ApplyRecognizedSong(int index) {
-    if(index==3)SummonElegy();
-    else if(index==6) {sSoaringPage=0;ShowSoaringPage();}
-    else if(index==7) {
-        sCollectPrompt=sApi->ShowTextbox(gPlayState,"Fugue of Home\x1C%gChild spawn&Adult spawn&Cancel%w",false)?2:0;
+    switch (index) {
+        case 3:
+            SummonElegy();
+            break;
+        case 6:
+            PlaySoaring();
+            break;
+        case 7:
+            sCollectPrompt =
+                sApi->ShowTextbox(gPlayState, "Fugue of Home\x1C%gChild spawn&Adult spawn&Cancel%w", false) ? 2 : 0;
+            break;
+        default:
+            break;
     }
 }
 static void QueueRecognizedSong(int index) {
-    sPendingSong=index;sPendingSongFrames=8;
-    gPlayState->msgCtx.ocarinaMode=OCARINA_MODE_04;
+    sPendingSong = index;
+    sPendingSongFrames = 8;
+    gPlayState->msgCtx.ocarinaMode = OCARINA_MODE_04;
     AudioOcarina_SetInstrument(0);
 }
 static void CollectBehaviorsTick(void) {
-    PlayState* play=gPlayState;if(play==NULL)return;
-    if(sPendingSong>=0 && --sPendingSongFrames<=0) {
-        int song=sPendingSong;sPendingSong=-1;Message_CloseTextbox(play);ApplyRecognizedSong(song);
+    PlayState* play = gPlayState;
+    if (play == NULL)
+        return;
+    if (sPendingSong >= 0 && --sPendingSongFrames <= 0) {
+        int song = sPendingSong;
+        sPendingSong = -1;
+        Message_CloseTextbox(play);
+        ApplyRecognizedSong(song);
     }
-    if(sLandingPending && play->transitionTrigger==TRANS_TRIGGER_OFF && play->transitionMode==TRANS_MODE_OFF) {
-        Player* player=GET_PLAYER(play);Vec3f probe=player->actor.world.pos;probe.y+=100;
-        CollisionPoly* poly=NULL;s32 bg;f32 floor=BgCheck_EntityRaycastFloor5(play,&play->colCtx,&poly,&bg,&player->actor,&probe);
-        if(poly!=NULL && floor>BGCHECK_Y_MIN)player->actor.world.pos.y=floor;
-        sLandingPending=false;
+    if (sLandingPending && play->transitionTrigger == TRANS_TRIGGER_OFF && play->transitionMode == TRANS_MODE_OFF) {
+        Player* player = GET_PLAYER(play);
+        Vec3f probe = player->actor.world.pos;
+        probe.y += 100;
+        CollisionPoly* poly = NULL;
+        s32 bg;
+        f32 floor = BgCheck_EntityRaycastFloor5(play, &play->colCtx, &poly, &bg, &player->actor, &probe);
+        if (poly != NULL && floor > BGCHECK_Y_MIN)
+            player->actor.world.pos.y = floor;
+        sLandingPending = false;
     }
-    if(!sCollectPrompt)return;
-    if(Message_GetState(&play->msgCtx)==TEXT_STATE_NONE) {
-        sCollectPrompt=0;return;
+    if (!sCollectPrompt)
+        return;
+    if (Message_GetState(&play->msgCtx) == TEXT_STATE_NONE) {
+        sCollectPrompt = 0;
+        return;
     }
-    if(Message_GetState(&play->msgCtx)!=TEXT_STATE_CHOICE || !Message_ShouldAdvance(play))return;
-    int prompt=sCollectPrompt,choice=play->msgCtx.choiceIndex;sCollectPrompt=0;
+    if (Message_GetState(&play->msgCtx) != TEXT_STATE_CHOICE || !Message_ShouldAdvance(play))
+        return;
+    int prompt = sCollectPrompt, choice = play->msgCtx.choiceIndex;
+    sCollectPrompt = 0;
     Message_CloseTextbox(play);
-    if(prompt==1) {
-        if(choice==2) {if(sSoaringPage<3){++sSoaringPage;ShowSoaringPage();}}
-        else {const OwlDestination* target=&sOwlDestinations[sSoaringPage*2+choice];WarpTo(target->entrance,target);}
-    } else if(prompt==2 && choice<2) {
-        s16 spawn=choice?ENTR_TEMPLE_OF_TIME_WARP_PAD:ENTR_LINKS_HOUSE_CHILD_SPAWN;
-        if(IS_RANDO)spawn=Entrance_PeekNextIndexOverride(spawn);
-        WarpTo(spawn,NULL); // Never change linkAge or linkAgeOnLoad.
+    if (prompt == 1) {
+        if (choice == 2) {
+            if (sSoaringPage < 3) {
+                ++sSoaringPage;
+                ShowSoaringPage();
+            }
+        } else {
+            const OwlDestination* target = &sOwlDestinations[sSoaringPage * 2 + choice];
+            WarpTo(target->entrance, target);
+        }
+    } else if (prompt == 2 && choice < 2) {
+        s16 spawn = choice ? ENTR_TEMPLE_OF_TIME_WARP_PAD : ENTR_LINKS_HOUSE_CHILD_SPAWN;
+        if (IS_RANDO)
+            spawn = Entrance_PeekNextIndexOverride(spawn);
+        WarpTo(spawn, NULL);
     }
 }
 static void CollectBehaviorsScene(int16_t scene) {
-    memset(sShells,0,sizeof(sShells));sCollectPrompt=0;sPendingSong=-1;
+    memset(sShells, 0, sizeof(sShells));
+    sCollectPrompt = 0;
+    sPendingSong = -1;
+    sOwlMapStage = OWL_MAP_CLOSED;
+    sApi->ReleasePlayerInput(OWL_MAP_INPUT_OWNER);
 }
 static void RegisterCollectBehaviors(void) {
-    if(!SOH_MOD_API_HAS(sApi,RegisterActor) || !SOH_MOD_API_HAS(sApi,ShowTextbox) ||
-       !SOH_MOD_API_HAS(sApi,GetActiveForm))return;
-    SOHActorDefinition a={0};a.structSize=sizeof(a);a.key="nei.elegy.shell";a.description="Elegy switch shell";
-    a.category=ACTORCAT_PROP;a.actorFlags=ACTOR_FLAG_UPDATE_CULLING_DISABLED|ACTOR_FLAG_CAN_PRESS_SWITCHES;
-    a.objectId=OBJECT_GAMEPLAY_KEEP;a.instanceSize=sizeof(CollectActor);
-    a.init=CollectActorInit;a.destroy=CollectActorDestroy;a.update=CollectActorUpdate;a.draw=ShellDraw;
-    sShellActorId=sApi->RegisterActor(&a);
-    SOH_REGISTER_HOOK(sApi,OnGameFrameUpdate,CollectBehaviorsTick);
-    SOH_REGISTER_HOOK(sApi,OnSceneInit,CollectBehaviorsScene);
+    if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !SOH_MOD_API_HAS(sApi, ShowTextbox) ||
+        !SOH_MOD_API_HAS(sApi, GetActiveForm))
+        return;
+    SOHActorDefinition a = { 0 };
+    a.structSize = sizeof(a);
+    a.key = "nei.elegy.shell";
+    a.description = "Elegy switch shell";
+    a.category = ACTORCAT_PROP;
+    a.actorFlags = ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_CAN_PRESS_SWITCHES;
+    a.objectId = OBJECT_GAMEPLAY_KEEP;
+    a.instanceSize = sizeof(CollectActor);
+    a.init = CollectActorInit;
+    a.destroy = CollectActorDestroy;
+    a.update = CollectActorUpdate;
+    a.draw = ShellDraw;
+    sShellActorId = sApi->RegisterActor(&a);
+    SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, CollectBehaviorsTick);
+    SOH_REGISTER_HOOK(sApi, OnSceneInit, CollectBehaviorsScene);
+    SOH_REGISTER_HOOK(sApi, OnInterfaceDrawEnd, DrawOwlMap);
+    SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateOwlMap);
 }

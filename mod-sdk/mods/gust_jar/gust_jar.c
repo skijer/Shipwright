@@ -29,7 +29,6 @@
 #define GUST_JAR_COLLIDER_RADIUS 22
 #define GUST_JAR_COLLIDER_HEIGHT 30
 #define GUST_JAR_FAIRY_MEMORY 8
-// The tornado is modelled 100 units along its own +Y and 47 wide, standing on its base.
 #define GUST_JAR_TORNADO_LENGTH 100.0f
 #define GUST_JAR_TORNADO_RADIUS 47.0f
 #define GUST_JAR_TORNADO_SPIN 0x1800
@@ -39,7 +38,6 @@
 #define GUST_JAR_RIBBON_LIFE 8
 #define GUST_JAR_SHRUNK_LIMIT 12
 #define GUST_JAR_SHRINK_FLOOR 0.15f
-// Frame 8 of the two-handed carry is the pose that holds a jar at chest height.
 #define GUST_JAR_POSE_FRAME 8
 
 typedef enum {
@@ -78,9 +76,7 @@ static const ALIGN_ASSET(2) char sModeIcons[GUST_MODE_MAX][64] = {
     "__OTR__textures/icon_item_custom/gItemIconGustJarSpiritTex",
 };
 
-// Suction never damages what it swallows by element, so every blow carries 0 damage: the flags alone
-// light torches and fire sun switches, exactly as the matching arrow would. Red ice answers to no damage
-// flag at all, so the ice breath melts it by hand.
+// Red ice answers to no damage flag at all, so the ice breath melts it by hand.
 static const GustElement sElements[GUST_MODE_MAX] = {
     { { 110, 190, 255, 255 }, { 40, 90, 200, 255 }, DMG_SLASH_KOKIRI, 0 },
     { { 180, 255, 180, 255 }, { 60, 170, 90, 255 }, DMG_UNBLOCKABLE, QUEST_MEDALLION_FOREST },
@@ -101,7 +97,6 @@ static const Z64WheelEntry sWheelEntries[GUST_MODE_MAX] = {
     { sModeIcons[GUST_MODE_SPIRIT], "Spirit" },
 };
 
-// The small things the bare jar can move. Anything heavier waits for the element that matches it.
 static const s16 sSuckableActors[] = {
     ACTOR_EN_KUSA,     ACTOR_OBJ_TSUBO,  ACTOR_OBJ_KIBAKO,    ACTOR_OBJ_KIBAKO2, ACTOR_OBJ_COMB,
     ACTOR_EN_KANBAN,   ACTOR_BG_YDAN_SP, ACTOR_BG_ICE_TURARA, ACTOR_EN_FIREFLY,  ACTOR_EN_TITE,
@@ -124,8 +119,8 @@ static ColliderCylinderInit sNozzleColliderInit = {
 static const u16 sItemButtons[GUST_JAR_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                          BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnActorDrawEnd", "OnSceneInit", "OnInterfaceDrawEnd",
-                                              "OnLoadFile" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",     "OnActorDrawEnd",
+                                              "OnSceneInit",       "OnInterfaceDrawEnd", "OnLoadFile" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -211,7 +206,6 @@ static void GetAim(Player* player, s16* yaw, s16* pitch) {
     *pitch = 0;
 }
 
-// A positive aim pitch looks DOWN, the way every vanilla projectile reads it, so the axis drops as it grows.
 static void GetNozzle(Player* player, Vec3f* nozzle, Vec3f* axis, s16 yaw, s16 pitch) {
     f32 flat = Math_CosS(pitch);
 
@@ -227,7 +221,6 @@ static bool IsSuckable(Actor* actor, u8 mode) {
     if (actor->update == NULL || (actor->flags & ACTOR_FLAG_TALK) != 0) {
         return false;
     }
-    // The Spirit Medallion's pull takes hold of anything that fights back, not just the small fry.
     if (mode == GUST_MODE_SPIRIT && actor->category == ACTORCAT_ENEMY) {
         return true;
     }
@@ -273,7 +266,7 @@ static void ShrinkTowardsNozzle(Actor* actor, f32 factor) {
     sShrunkCount++;
 }
 
-// Whatever survived the pull gets its own size back; a dead actor's scale is no longer ours to touch.
+// A dead actor's scale is no longer ours to touch.
 static void RestoreShrunkActors(void) {
     for (u8 index = 0; index < sShrunkCount; index++) {
         if (sShrunkActors[index] != NULL && sShrunkActors[index]->update != NULL) {
@@ -331,7 +324,6 @@ static void StopRibbons(PlayState* play) {
     sAreRibbonsLive = false;
 }
 
-// Blure colours are fixed when the effect is added, so a new element needs new ribbons.
 static void StartRibbons(PlayState* play, u8 mode) {
     Color_RGBA8 primary = sElements[mode].primary;
     Color_RGBA8 secondary = sElements[mode].secondary;
@@ -367,7 +359,6 @@ static void StartRibbons(PlayState* play, u8 mode) {
     sRibbonMode = mode;
 }
 
-// Each ribbon rides the funnel's surface: it flares out along the axis while it turns around it.
 static void FeedRibbons(PlayState* play, Vec3f* nozzle, Vec3f* axis, s16 yaw, u8 mode, bool isBlow) {
     f32 reach = isBlow ? GUST_JAR_BLOW_LENGTH : GUST_JAR_SUCK_LENGTH;
     f32 spread = isBlow ? GUST_JAR_BLOW_RADIUS : GUST_JAR_SUCK_RADIUS;
@@ -478,8 +469,6 @@ static void PushActors(PlayState* play, Vec3f* nozzle, Vec3f* axis, u8 mode) {
     }
 }
 
-// Vanilla's own melt: it is the one that sets the block's switch flag and frees whatever it was guarding,
-// and for the block that holds a foe frozen it is its parent's timer that lets him thaw.
 static void MeltRedIce(BgIceShelter* ice) {
     if (((ice->dyna.actor.params >> 8) & 7) == 4 && ice->dyna.actor.parent != NULL) {
         ice->dyna.actor.parent->freezeTimer = 50;
@@ -488,8 +477,7 @@ static void MeltRedIce(BgIceShelter* ice) {
     Audio_PlayActorSound2(&ice->dyna.actor, NA_SE_EV_ICE_MELT);
 }
 
-// Red ice answers only to the blue fire actor, so no damage flag reaches it: the breath melts it itself. Full
-// alpha is what marks a block still solid; a mod cannot compare host action funcs, only its own import thunks.
+// Full alpha marks a block still solid; a mod cannot compare host action funcs, only its own import thunks.
 static void MeltRedIceInCone(PlayState* play, Vec3f* nozzle, Vec3f* axis) {
     for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
         BgIceShelter* ice = (BgIceShelter*)actor;
@@ -497,7 +485,6 @@ static void MeltRedIceInCone(PlayState* play, Vec3f* nozzle, Vec3f* axis) {
         if (actor->id != ACTOR_BG_ICE_SHELTER || ice->alpha != 255) {
             continue;
         }
-        // A block stands on its own origin, so the cone is aimed at the middle of the cylinder that guards it.
         Vec3f middle = { actor->world.pos.x, actor->world.pos.y + ice->cylinder1.dim.height * 0.5f,
                          actor->world.pos.z };
         f32 distance = 0.0f;
@@ -565,7 +552,7 @@ static void GustAimAction(Player* player, PlayState* play) {
     Player_ZeroSpeedXZ(player);
     Player_UpdateUpperBody(player, play);
     HoldJarWithBothHands(player, play);
-    // The item's own update stops while this action owns the player, and a stalled item is put away.
+    // The item's update stops while this action owns the player, and a stalled item is put away.
     if (SOH_MOD_API_HAS(sApi, KeepCustomItemHeld)) {
         sApi->KeepCustomItemHeld();
     }
@@ -593,7 +580,6 @@ static void TakeOutJar(PlayState* play, Player* player) {
         Collider_SetCylinder(play, &sNozzleCollider, &player->actor, &sNozzleColliderInit);
         sIsColliderReady = true;
     }
-    // The jar owns C-Up while it is in hand: unclaimed, the press talks to Navi or beeps over the aim.
     if (SOH_MOD_API_HAS(sApi, BlockPlayerInput)) {
         sApi->BlockPlayerInput(GUST_JAR_KEY, BTN_CUP, false);
     }
@@ -603,7 +589,6 @@ static void TakeOutJar(PlayState* play, Player* player) {
     sFairiesPaidCount = 0;
 }
 
-// Only the arms are borrowed from the carry pose, so Link keeps walking, running and turning as he was.
 static void HoldJarWithBothHands(Player* player, PlayState* play) {
     static const u8 armLimbs[] = { PLAYER_LIMB_L_SHOULDER, PLAYER_LIMB_L_FOREARM, PLAYER_LIMB_L_HAND,
                                    PLAYER_LIMB_R_SHOULDER, PLAYER_LIMB_R_FOREARM, PLAYER_LIMB_R_HAND };
@@ -642,8 +627,6 @@ static void PutJarAway(Player* player, PlayState* play) {
     sIsJarOut = false;
 }
 
-// The jar sits between both hands of the carry pose, laid on its side to face where Link faces, and its band
-// takes the colour of the breath: the mouth is the only part of the model that says what the jar is doing.
 static void DrawJarInHand(Player* player, PlayState* play) {
     Vec3f* leftHand = &player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
     Vec3f* rightHand = &player->bodyPartsPos[PLAYER_BODYPART_R_HAND];
@@ -671,8 +654,7 @@ static void DrawJarInHand(Player* player, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// The cone stands on its own base along +Y, so it is laid down onto the aim before it is stretched. The quarter
-// turn that lays it down grows with the pitch, because a positive pitch aims below the horizon.
+// The quarter turn that lays the cone down grows with the pitch, because a positive pitch aims below the horizon.
 static void DrawTornado(Player* player, PlayState* play) {
     u8 mode = CurrentMode();
     Color_RGBA8 color = sElements[mode].primary;
@@ -713,8 +695,6 @@ static void DrawGustJar(Actor* actor, PlayState* play) {
         return;
     }
 
-
-
     if (!sIsJarOut || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return;
     }
@@ -745,7 +725,6 @@ static void UpdateUnlocks(void) {
     }
 }
 
-// The scene tears down every actor and effect, so the ribbons and the borrowed scales are gone with it.
 static void DropAimOnSceneChange(int16_t sceneNum) {
     Z64Aiming_Drop();
     sIsJarOut = false;
@@ -755,11 +734,9 @@ static void DropAimOnSceneChange(int16_t sceneNum) {
     sFairiesPaidCount = 0;
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, GUST_JAR_KEY, GUST_JAR_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -775,7 +752,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.gust_jar.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.gust_jar.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
     if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
@@ -837,7 +815,6 @@ static void InitRemoteVisuals(void) {
     }
 }
 
-
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -856,7 +833,10 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&jar, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&jar, 0, 12, 0);
-    Z64Items_SetTextbox(&jar,"You got the %rGust Jar%w! Hold its C button to pull in grass, pots and small foes.^Anything that reaches its mouth is cut down. C-Up aims it.^Hold L to choose a breath. Each medallion adds a breath to blow.");
+    Z64Items_SetTextbox(
+        &jar,
+        "You got the %rGust Jar%w! Hold its C button to pull in grass, pots and small foes.^Anything that reaches its "
+        "mouth is cut down. C-Up aims it.^Hold L to choose a breath. Each medallion adds a breath to blow.");
     Z64Items_SetPauseText(&jar, "%rGust Jar&%wHold %y\xA1%w to suck things in. %y\xA5%w aims,&"
                                 "%y\xA2%w picks the breath.");
     Z64Items_SetAction(&jar, TakeOutJar, UseJar);

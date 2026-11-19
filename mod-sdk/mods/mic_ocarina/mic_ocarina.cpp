@@ -1,6 +1,4 @@
-// Humming to ocarina songs: YIN pitch detection on the game's microphone service. A phrase is scored against
-// every song the game currently accepts, with the transposition fitted out, and the winner is handed to the
-// native recogniser as already played. Port of NEI's MicOcarina.cpp; the DSP is kept identical.
+// Hum ocarina songs into the microphone using YIN pitch detection.
 
 #include "soh/ModApi/ModApi.h"
 #include "functions.h"
@@ -17,12 +15,10 @@ extern "C" {
 // OPEN_DISPS redeclares these inside its body, which would give them C++ linkage here.
 void FrameInterpolation_RecordOpenChild(const void* a, int b);
 void FrameInterpolation_RecordCloseChild(void);
-// The bridge header drags libultraship's C++ config classes into a C++ file.
 int32_t CVarGetInteger(const char* name, int32_t defaultValue);
 int16_t OTRGetRectDimensionFromLeftEdge(float v);
 int16_t OTRGetRectDimensionFromRightEdge(float v);
 
-// The ocarina recognition state (code_800EC960.c), owned by the audio thread and only touched from it.
 extern HOST_DATA u16 sAvailOcarinaSongFlags;
 extern HOST_DATA u8 sFirstOcarinaSongIndex;
 extern HOST_DATA u8 sLastOcarinaSongIndex;
@@ -45,8 +41,6 @@ constexpr int kHopSize = 512;
 constexpr int kIntegrationSize = kWindowSize / 2;
 constexpr int kRingSize = 1 << 15;
 
-// Search range, and the only defence against rumble that costs nothing: fans and
-// traffic live below a hummed voice, and nothing above the whistle range is a note.
 constexpr int kTauMin = kSampleRate / 1000;
 constexpr int kTauMax = kSampleRate / 80;
 
@@ -54,62 +48,37 @@ constexpr float kYinThreshold = 0.15f;
 constexpr int kMedianSize = 5;
 constexpr int kMaxPhraseNotes = 8;
 
-// A note ends after this much silence. A longer silence drops the rolling note
-// window, so an abandoned phrase cannot bleed into the next one.
 constexpr int kReleaseHops = 5;
 constexpr int kReanchorHops = 90;
 
-// Silence this long after the last note means the player stopped, and the
-// phrase is judged as it stands: the runner-up margin is waived and the error
-// budget loosens, but nonsense still plays nothing.
 constexpr int kPhraseEndHops = 40;
 constexpr float kPhraseEndMaxErrorCents = 180.0f;
 
-// "da-da" on one pitch is only two notes if the level dips and recovers.
 constexpr float kDipRatio = 0.45f;
 constexpr float kRecoverRatio = 0.70f;
 
-// Sustained deviation from the note being held, in cents, before it counts as a
-// slide into a new note. The scale's tightest interval is 200 cents (A4 to B4).
 constexpr float kJumpCents = 90.0f;
 constexpr int kJumpHops = 3;
 
-// A note only commits after this many stable hops (~32 ms), so a click or a
-// consonant cannot latch a button.
 constexpr int kAttackHops = 3;
 
-// A committed note only enters the phrase once held ~100 ms past the attack:
-// a glide or a hiccup between two real notes never reaches the matcher.
 constexpr int kMinNoteHops = 9;
 
-// Net movement since the hold began that means the pitch is still sliding, so
-// the hold restarts from where it is now. Vibrato swings but does not travel.
 constexpr float kGlideCents = 60.0f;
 
-// The gate rides a tracked background level instead of a fixed threshold, so a
-// noisy room raises the bar rather than producing notes. The floor follows a
-// drop fast and a rise slowly, and never rises while a note is held, or a
-// sustained note would drag the floor up behind itself and cut its own tail.
 constexpr float kFloorFallRate = 0.25f;
 constexpr float kFloorRiseRate = 0.002f;
 constexpr float kGateCloseRatio = 0.5f;
-constexpr float kNoiseMargin = 4.0f;     // 12 dB over the tracked floor
-constexpr float kAbsoluteGate = 0.0056f; // -45 dBFS, the floor under the floor
+constexpr float kNoiseMargin = 4.0f;
+constexpr float kAbsoluteGate = 0.0056f;
 constexpr float kClarityMin = 0.55f;
 
-// Changes smaller than this are the same relative note. Every real adjacent
-// ocarina pitch is at least 200 cents apart.
 constexpr float kContourDeadbandCents = 90.0f;
 
-// RMS interval error a phrase may carry and still count as the song, and how far
-// clear of the runner-up it must land. Two songs within the margin are a coin
-// flip, so nothing fires until the phrase ends. Epona and Healing, the closest
-// pair, sit 82 cents apart when sung perfectly.
 constexpr float kMaxPhraseErrorCents = 120.0f;
 constexpr float kMatchMarginCents = 40.0f;
 constexpr float kNoMatchError = 1.0e9f;
 
-// Semitones above D4 of each ocarina note index (D4 F4 A4 B4 D5).
 constexpr int kScaleDegrees[5] = { 0, 3, 7, 9, 12 };
 
 constexpr float kHopSeconds = static_cast<float>(kHopSize) / kSampleRate;
@@ -118,7 +87,6 @@ constexpr float kMeterWindowSeconds = 6.0f;
 constexpr int kMeterSemitoneRange = 48;
 constexpr int kMeterBarHalfHeight = 1;
 
-// The audio thread polls at its own rate: a few missed game frames are not the ocarina put away.
 constexpr int kOcarinaOutGraceFrames = 4;
 constexpr int kMicGraceFrames = 60;
 constexpr int kOpenRetryFrames = 300;
@@ -132,7 +100,6 @@ struct MeterSegment {
     bool accepted;
 };
 
-// Piano roll of the recent notes.
 struct MeterHistory {
     MeterSegment segments[kMeterSegmentMax];
     int count;
@@ -145,8 +112,6 @@ float sRing[kRingSize];
 uint32_t sRingWritePos = 0;
 uint32_t sRingReadPos = 0;
 
-// Which songs the game will accept right now, mirrored off the audio thread so
-// the matcher can honour the same gate the native staff check uses.
 std::atomic<uint32_t> sAvailableSongFlags{ 0 };
 std::atomic<int> sFirstSongIndex{ 0 };
 std::atomic<int> sLastSongIndex{ 0 };
@@ -164,29 +129,33 @@ struct PitchEstimate {
 float sDiff[kTauMax + 2];
 float sCmndf[kTauMax + 2];
 
-// The scarecrow songs and the memory game are not hummable.
 constexpr int kRecognisedSongs[] = {
-    OCARINA_SONG_MINUET,  OCARINA_SONG_BOLERO, OCARINA_SONG_SERENADE, OCARINA_SONG_REQUIEM,
-    OCARINA_SONG_NOCTURNE, OCARINA_SONG_PRELUDE, OCARINA_SONG_SARIAS, OCARINA_SONG_EPONAS,
-    OCARINA_SONG_LULLABY, OCARINA_SONG_SUNS,   OCARINA_SONG_TIME,     OCARINA_SONG_STORMS,
+    OCARINA_SONG_MINUET,   OCARINA_SONG_BOLERO,  OCARINA_SONG_SERENADE, OCARINA_SONG_REQUIEM,
+    OCARINA_SONG_NOCTURNE, OCARINA_SONG_PRELUDE, OCARINA_SONG_SARIAS,   OCARINA_SONG_EPONAS,
+    OCARINA_SONG_LULLABY,  OCARINA_SONG_SUNS,    OCARINA_SONG_TIME,     OCARINA_SONG_STORMS,
 };
 
 constexpr int kCustomSongBase = 32;
-struct CustomSong { const char* key; int length; uint8_t buttons[8]; };
+struct CustomSong {
+    const char* key;
+    int length;
+    uint8_t buttons[8];
+};
 constexpr CustomSong kCustomSongs[] = {
 #include "mm_song_catalog.inc.h"
 };
 constexpr int kCustomSongCount = sizeof(kCustomSongs) / sizeof(kCustomSongs[0]);
-std::atomic<uint32_t> sCustomOwned{0};
-std::atomic<bool> sFreePlay{false};
-std::atomic<int> sPendingCustomMatch{-1};
+std::atomic<uint32_t> sCustomOwned{ 0 };
+std::atomic<bool> sFreePlay{ false };
+std::atomic<int> sPendingCustomMatch{ -1 };
 thread_local bool sDispatchingCustomNotes = false;
 
 int SongLength(int song) {
     return song >= kCustomSongBase ? kCustomSongs[song - kCustomSongBase].length : gOcarinaSongButtons[song].numButtons;
 }
 int SongButton(int song, int note) {
-    return song >= kCustomSongBase ? kCustomSongs[song - kCustomSongBase].buttons[note] : gOcarinaSongButtons[song].buttonsIndex[note];
+    return song >= kCustomSongBase ? kCustomSongs[song - kCustomSongBase].buttons[note]
+                                   : gOcarinaSongButtons[song].buttonsIndex[note];
 }
 
 float ComputeRms(const float* window, int count) {
@@ -197,8 +166,6 @@ float ComputeRms(const float* window, int count) {
     return sqrtf(sum / count);
 }
 
-// d(tau) = e(0) + e(tau) - 2 r(tau), evaluated directly: at this window size the
-// O(W * tau) loop runs in well under a millisecond, cheaper than owning an FFT.
 PitchEstimate EstimatePitch(const float* window) {
     for (int tau = 1; tau <= kTauMax; tau++) {
         float sum = 0.0f;
@@ -209,9 +176,6 @@ PitchEstimate EstimatePitch(const float* window) {
         sDiff[tau] = sum;
     }
 
-    // Cumulative mean normalisation: dividing by the running mean of d makes the
-    // curve dimensionless (so kYinThreshold is absolute) and removes the bias
-    // that otherwise picks tau too small.
     float runningSum = 0.0f;
     sCmndf[0] = 1.0f;
     for (int tau = 1; tau <= kTauMax; tau++) {
@@ -219,9 +183,6 @@ PitchEstimate EstimatePitch(const float* window) {
         sCmndf[tau] = (runningSum > 0.0f) ? (sDiff[tau] * tau / runningSum) : 1.0f;
     }
 
-    // First local minimum below the threshold, not the global one: the true
-    // period dips below it and so do its multiples, so taking the first dip is
-    // what keeps the fundamental instead of an octave-down answer.
     int best = -1;
     for (int tau = kTauMin; tau < kTauMax; tau++) {
         if (sCmndf[tau] >= kYinThreshold) {
@@ -315,8 +276,6 @@ void AcceptMeterSegment(float cents, float anchorCents) {
     sMeterHistory.hasAnchor = true;
 }
 
-// Once per hop, silence included, so the roll keeps scrolling and the held
-// note's bar keeps stretching.
 void AdvanceMeter(bool noteHeld) {
     sMeterHistory.nowSeconds += kHopSeconds;
     if (noteHeld && (sMeterHistory.count > 0)) {
@@ -344,9 +303,6 @@ bool IsSongAccepted(int songIndex) {
     return (sAvailableSongFlags.load(std::memory_order_relaxed) & (1u << songIndex)) != 0;
 }
 
-// RMS distance in cents between what was heard and the song, after removing the
-// transposition that best fits. Subtracting the mean residual IS that best fit,
-// and it is what makes the score independent of the key the player hums in.
 float PhraseError(const float* cents, int count, int songIndex) {
     if ((count < 2) || (SongLength(songIndex) != count)) {
         return kNoMatchError;
@@ -372,10 +328,6 @@ float PhraseError(const float* cents, int count, int songIndex) {
     return sqrtf(sumSquared / count);
 }
 
-// Vibrato or a breath can split one held note in two. Merging adjacent notes
-// closer than a real interval recovers that, but it also destroys the genuine
-// repeats in Serenade and Nocturne, so this is scored as an alternative
-// hypothesis rather than applied to the phrase.
 int BuildMergedPhrase(const float* cents, int count, float* merged) {
     int write = 0;
     for (int read = 0; read < count; read++) {
@@ -387,9 +339,6 @@ int BuildMergedPhrase(const float* cents, int count, float* merged) {
     return write;
 }
 
-// Scores the song against the newest notes only. Two hypotheses: the notes as
-// segmented, and a slightly wider window with split notes merged, which recovers
-// a note the vibrato guard cut in half.
 float SuffixError(int songIndex, int length) {
     if ((length < 2) || (length > sTracker.phraseCount)) {
         return kNoMatchError;
@@ -415,7 +364,8 @@ MatchCandidates RankSongs() {
     MatchCandidates ranked = { -1, kNoMatchError, kNoMatchError };
     constexpr int nativeCount = sizeof(kRecognisedSongs) / sizeof(kRecognisedSongs[0]);
     for (int candidate = 0; candidate < nativeCount + kCustomSongCount; ++candidate) {
-        const int songIndex = candidate < nativeCount ? kRecognisedSongs[candidate] : kCustomSongBase + candidate - nativeCount;
+        const int songIndex =
+            candidate < nativeCount ? kRecognisedSongs[candidate] : kCustomSongBase + candidate - nativeCount;
         if (!IsSongAccepted(songIndex)) {
             continue;
         }
@@ -438,9 +388,6 @@ void PublishMatch(int songIndex, float error) {
     LUSLOG_DEBUG("MicOcarina: matched song %d at %.0f cents RMS", songIndex, error);
 }
 
-// Run after every accepted note rather than after a silence, so recognition
-// lands as the phrase ends. It also makes a spurious note survivable: it only
-// shifts the window instead of ruining a whole fixed-length phrase.
 void TryMatchSuffix() {
     MatchCandidates ranked = RankSongs();
     if ((ranked.bestSong < 0) || (ranked.bestError > kMaxPhraseErrorCents)) {
@@ -462,8 +409,6 @@ void TryMatchPhraseEnd() {
     PublishMatch(ranked.bestSong, ranked.bestError);
 }
 
-// A rolling window of the last notes, never cleared on overflow: the oldest note
-// is dropped so the newest phrase always stays matchable.
 void PushPhraseNote(float cents) {
     if (!sTracker.hasAnchor) {
         sTracker.anchorCents = cents;
@@ -476,8 +421,6 @@ void PushPhraseNote(float cents) {
     sTracker.phraseCents[sTracker.phraseCount++] = cents;
 }
 
-// The key is anchored by the first note held long enough, never by a candidate
-// or a blip: neither may decide the whole phrase's key.
 void AcceptHeldNote() {
     sTracker.noteInPhrase = true;
     PushPhraseNote(sTracker.noteCents);
@@ -498,8 +441,6 @@ void CommitNote(float cents, float rms) {
     sTracker.pendingHops = 0;
 }
 
-// Holds the candidate until it survives kAttackHops without wandering, then
-// commits it as a real note.
 void ProposeNote(float cents, float rms) {
     if ((sTracker.pendingHops > 0) && (fabsf(cents - sTracker.pendingCents) > kJumpCents)) {
         sTracker.pendingHops = 0;
@@ -531,8 +472,6 @@ void ProcessWindow(const float* window) {
         sTracker.noiseFloor += kFloorRiseRate * (rms - sTracker.noiseFloor);
     }
 
-    // Hysteresis: a note already running only has to clear half the opening
-    // level, so a wavering hum is not chopped into pieces at the threshold.
     float openLevel = fmaxf(kAbsoluteGate, sTracker.noiseFloor * kNoiseMargin);
     float level = sTracker.noteActive ? (openLevel * kGateCloseRatio) : openLevel;
 
@@ -592,8 +531,6 @@ void ProcessWindow(const float* window) {
     }
     sTracker.deviationHops = 0;
 
-    // Follow slow drift within the note so a long vowel does not accumulate into
-    // a false slide, but keep the published button pinned to the committed pitch.
     sTracker.noteCents += 0.15f * (smoothed - sTracker.noteCents);
 
     if (!sTracker.noteInPhrase && (fabsf(smoothed - sTracker.holdStartCents) > kGlideCents)) {
@@ -630,7 +567,6 @@ void ProcessPendingHops() {
 const SOHModApi* sApi = nullptr;
 bool sCaptureOpen = false;
 
-// The game asks the player the first time and shows a microphone icon for as long as this records.
 SOHMicrophoneStatus OpenCaptureDevice() {
     if (!SOH_MOD_API_HAS(sApi, CloseMicrophone)) {
         return SOH_MICROPHONE_UNAVAILABLE;
@@ -644,7 +580,6 @@ SOHMicrophoneStatus OpenCaptureDevice() {
     return status;
 }
 
-// A chunk at a time, each analysed before the next lands, so a long frame cannot overrun the ring.
 void PumpCapture() {
     float chunk[kCaptureChunkSamples];
     for (int i = 0; i < kMaxChunksPerFrame; i++) {
@@ -672,19 +607,19 @@ int sOpenRetryFrames = 0;
 bool sOcarinaOut = false;
 uint32_t sLastSeenMatch = 0;
 
-// Main thread owns the device and the CVar; the audio-thread hook only trades atomics.
-// A stale request means the ocarina was put away, so the mic is freed.
 void TickMicOcarina() {
     uint32_t owned = 0;
-    if (gPlayState != nullptr) for (int i = 0; i < kCustomSongCount; ++i) {
-        if (sApi->IsCustomItemOwned(kCustomSongs[i].key)) owned |= 1u << i;
-    }
+    if (gPlayState != nullptr)
+        for (int i = 0; i < kCustomSongCount; ++i) {
+            if (sApi->IsCustomItemOwned(kCustomSongs[i].key))
+                owned |= 1u << i;
+        }
     sCustomOwned.store(owned, std::memory_order_relaxed);
     const int custom = sPendingCustomMatch.exchange(-1, std::memory_order_acquire);
-    if (custom >= 0 && custom < kCustomSongCount && (owned & (1u << custom)) &&
-        CVarGetInteger(kEnabledCvar, 1) && gPlayState != nullptr && gPlayState->pauseCtx.state == 0 &&
+    if (custom >= 0 && custom < kCustomSongCount && (owned & (1u << custom)) && CVarGetInteger(kEnabledCvar, 1) &&
+        gPlayState != nullptr && gPlayState->pauseCtx.state == 0 &&
         gPlayState->transitionTrigger == TRANS_TRIGGER_OFF) {
-        static const uint8_t pitches[] = {2, 5, 9, 11, 14};
+        static const uint8_t pitches[] = { 2, 5, 9, 11, 14 };
         sDispatchingCustomNotes = true;
         for (int n = 0; n < kCustomSongs[custom].length; ++n) {
             GameInteractor_ExecuteOnOcarinaNote(pitches[kCustomSongs[custom].buttons[n]], 1.0f, 0);
@@ -721,9 +656,9 @@ void TickMicOcarina() {
     PumpCapture();
 }
 
-// Fires on the audio thread every tick the ocarina takes input: the thread that owns the globals below.
 void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
-    if (sDispatchingCustomNotes) return;
+    if (sDispatchingCustomNotes)
+        return;
     sFreePlay.store(sIsOcarinaInputEnabled && (sOcarinaFlags & 0xC000) == 0xC000, std::memory_order_relaxed);
     sRequested.store(true, std::memory_order_relaxed);
     sAvailableSongFlags.store(sAvailOcarinaSongFlags, std::memory_order_relaxed);
@@ -749,7 +684,6 @@ void ListenOnAudioThread(uint8_t note, float modulator, int8_t bend) {
         return;
     }
 
-    // The three writes the native staff check makes on a match: the game runs the fanfare and the effect.
     sPlayedOcarinaSongIndexPlusOne = static_cast<u8>(song + 1);
     sIsOcarinaInputEnabled = 0;
     sOcarinaFlags = 0;
@@ -759,8 +693,6 @@ float SemisToY(float originY, float semis, float pixelsPerSemi) {
     return originY - (semis * pixelsPerSemi);
 }
 
-// A texture rectangle rather than a fill: the fill cycle carries one bit of alpha,
-// and these bars are translucent over live gameplay.
 void DrawSolidRect(PlayState* play, int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint32_t rgba) {
     OPEN_DISPS(play->state.gfxCtx);
     gDPSetPrimColor(OVERLAY_DISP++, 0, 0, (rgba >> 24) & 0xFF, (rgba >> 16) & 0xFF, (rgba >> 8) & 0xFF, rgba & 0xFF);
@@ -795,8 +727,6 @@ void DrawHint(PlayState* play, const char* hint) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Bars are born at the left edge and stream right as they age, so a held note
-// draws itself left to right. White until it counts, green once it does.
 void DrawMeter(PlayState* play) {
     if (!sCaptureOpen || !sOcarinaOut) {
         return;

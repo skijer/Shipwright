@@ -1,6 +1,3 @@
-// SW97 Medallion Spells, ported 1:1 from Skijer's NEI: the six Spaceworld '97 spell actors cast from the
-// medallions, the six elemental shots for the bow and the slingshot, Shadow stealth and the Spirit fairy.
-
 #include "z64items.h"
 
 #include <string.h>
@@ -32,7 +29,9 @@ static const Sw97ActorInfo* const sArrowActorInfos[SW97_ELEM_COUNT] = {
 };
 
 static const char* const sRequiredHooks[] = {
-    "OnPlayerUpdate", "OnGameFrameUpdate", "OnInterfaceDrawEnd",
+    "OnPlayerUpdate",
+    "OnGameFrameUpdate",
+    "OnInterfaceDrawEnd",
     "OnPlayDestroy",
     "OnLoadFile",
     "OnActorInit",
@@ -49,7 +48,6 @@ static const char* const sRequiredHooks[] = {
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// z_bg_ice_shelter internals: the melt its blue fire starts.
 void BgIceShelter_SetupMelt(BgIceShelter* ice);
 
 const SOHModApi* gSw97Api;
@@ -69,7 +67,6 @@ s16 Sw97_GetArrowActorId(Sw97Element element) {
 void Sw97_MeltRedIce(Actor* thisx, PlayState* play) {
     BgIceShelter* ice = (BgIceShelter*)thisx;
 
-    // King Zora's block holds him frozen until it melts.
     if (((ice->dyna.actor.params >> 8) & 7) == 4 && ice->dyna.actor.parent != NULL) {
         ice->dyna.actor.parent->freezeTimer = 50;
     }
@@ -78,7 +75,6 @@ void Sw97_MeltRedIce(Actor* thisx, PlayState* play) {
     Audio_PlayActorSound2(&ice->dyna.actor, NA_SE_EV_ICE_MELT);
 }
 
-// The Soul arrow's Cucco transformation lives in its own mod; without it a Cucco hit is just a hit.
 void Sw97_StartCuccoMode(void) {
     void (*startCuccoMode)(void) = (void (*)(void))gSw97Api->FindService(SW97_CUCCO_MODE_SERVICE);
 
@@ -135,8 +131,8 @@ static void ForgetBlinded(void) {
 
 // The Shadow spell drives the Nayru's Love timer for its whole life, so a running timer is the stealth.
 static bool IsHiddenFrom(Actor* actor) {
-    bool isWatcher = actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_NPC ||
-                     (actor->flags & ACTOR_FLAG_HOSTILE);
+    bool isWatcher =
+        actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_NPC || (actor->flags & ACTOR_FLAG_HOSTILE);
 
     return (gSaveContext.nayrusLoveTimer > 0 && isWatcher) || IsBlinded(actor);
 }

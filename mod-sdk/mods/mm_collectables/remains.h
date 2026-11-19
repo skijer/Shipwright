@@ -1,8 +1,6 @@
 #ifndef MM_COLLECTABLES_REMAINS_H
 #define MM_COLLECTABLES_REMAINS_H
 
-// The boss remains worn on Link's face (remains.c) and the friendly allies they summon (remains_allies.c),
-// ported from NEI's boss_remains for Ship.
 #include "soh/ModApi/ModApi.h"
 
 typedef enum {

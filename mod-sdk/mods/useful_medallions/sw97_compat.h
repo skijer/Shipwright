@@ -34,7 +34,6 @@ typedef PlayState GlobalContext;
 #define Gfx_CallSetupDL Gfx_SetupDL
 #define Audio_PlaySoundAtPosition SoundSource_PlaySfxAtFixedWorldPos
 
-// The decomp's debug prints need a log level the SDK does not expose.
 #undef LOG_STRING
 #define LOG_STRING(string) ((void)0)
 #undef osSyncPrintf
@@ -53,7 +52,6 @@ typedef PlayState GlobalContext;
 
 MtxF* Matrix_GetCurrent(void);
 
-// SW97 helper with no soh equivalent: projects along the current matrix's Z axis.
 static inline void Matrix_MultZ(f32 scale, Vec3f* dst) {
     MtxF* current = Matrix_GetCurrent();
 

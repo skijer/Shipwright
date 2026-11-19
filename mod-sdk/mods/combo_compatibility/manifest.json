@@ -1,8 +1,23 @@
 {
     "name": "combo_compatibility",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Combo Compatibility",
     "game": "oot",
-    "description": "Presentation-only rewards from the other world. Original procedural icons; no duplicate pool copies."
+    "fleet_only": true,
+    "dependency_only": true,
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "icon_item_static_yar/gItemIconLandDeedTex",
+        "item_name_static/gItemNameLandTitleDeedENGTex",
+        "objects/object_gi_reserve01/gGiTitleDeedEmptyDL",
+        "objects/object_gi_reserve00/gGiMoonsTearItemDL",
+        "objects/object_gi_reserve_b_00/gGiRoomKeyDL",
+        "objects/object_gi_reserve_b_01/gGiLetterToMamaEnvelopeLetterDL",
+        "objects/object_gi_reserve_c_00/gGiLetterToKafeiEnvelopeLetterDL",
+        "objects/object_fr/gFrogSkel"
+    ],
+    "description": "Presentation-only rewards from the other world, shown with Majora's Mask's own icons, names and models. No duplicate pool copies."
 }

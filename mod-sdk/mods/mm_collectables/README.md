@@ -20,7 +20,7 @@ file, pause, transition and game-over changes cancel pending playback.
 
 ## Manual verification
 
-1. Restart the game to load `mm_collectables` 2.10.
+1. Restart the game to load `mm_collectables` 2.11.
 2. Open the MM quest page and move between all four remains, both song rows,
    and the shared vanilla items. Check cursor alignment and clean song icons.
 3. Hover an owned MM song. Check that its complete button sequence appears and
@@ -37,9 +37,20 @@ Build and install from `Shipwright-unbound` using
 
 ## MM-only page and NEI parity
 
-Only the seven MM-exclusive songs plus Fugue of Home, Command Melody and Ballad
-of Hero occupy this page. Saria and Sun remain on the native OoT page.
+This mod registers the seven MM-exclusive songs plus Fugue of Home and Ballad
+of Hero. Saria and Sun remain on the native OoT page.
+Songs owned by other mods join the page themselves: they place their item on the
+`nei.mm_collectables` layout page and call `FindService("nei.mm_collectables.add_song")`
+(`mm_song_page.h`) for the staff preview and A-to-play. Command Melody does this;
+its item, recognition and effect stay in `command_melody`.
 The preview accepts both native and wide vertex commands, so its cursor/staff
-insertion works with the current vertex format. The three custom songs use the
+insertion works with the current vertex format. The two custom songs use the
 NEI branch fingering and its original playback notes, including ornaments/cycles.
-mic_ocarina 1.2 recognizes these ten owned songs during free play.
+
+## Song of Soaring in Fleet
+
+Inside Fleet, Soaring shows MM's owl warp map over OoT, drawn with MM's own textures. It shows the statues MM has
+activated and the clouds it has cleared, both read from MM's save. Move with the stick or the D-Pad, press A to
+choose (`Soar to ...? Yes/No`), or press B or Start to close. Choosing switches to MM, and Link flies in at that
+statue. With no statue activated, MM's own refusal text appears in OoT. Outside Fleet the song keeps its list of
+OoT owl spots.

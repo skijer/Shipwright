@@ -5,10 +5,6 @@
 
 #include "../../sw97_mod.h"
 
-// ============================================================
-// Struct (merged from z_magic_ice.h)
-// ============================================================
-
 struct MagicIce;
 
 typedef struct MagicIce {
@@ -21,11 +17,6 @@ typedef struct MagicIce {
     /*        */ SkelAnimeCurve skelCurve;
     /*        */ Vec3f colliderScale;
 } MagicIce;
-
-
-// ============================================================
-// Forward declarations
-// ============================================================
 
 #define FLAGS 0x02000010
 #define THIS ((MagicIce*)thisx)
@@ -42,10 +33,6 @@ typedef enum {
     /* 0x02 */ ACTION_STOP_GROWING,
     /* 0x03 */ ACTION_GROW_QUICKLY
 } MagicIceAction;
-
-// ============================================================
-// Collider
-// ============================================================
 
 static ColliderCylinderInit sIceCylinderInit = {
     {
@@ -66,10 +53,6 @@ static ColliderCylinderInit sIceCylinderInit = {
     },
     { 9, 9, 0, { 0, 0, 0 } },
 };
-
-// ============================================================
-// Vertex + Texture data
-// ============================================================
 
 static Vtx sIceCylinderVtx[] = {
     VTX(707, 0, -707, 1536, 2048, 0xFF, 0xFF, 0xFF, 0xFF),  VTX(0, 0, -1000, 2048, 2048, 0xFF, 0xFF, 0xFF, 0xFF),
@@ -437,10 +420,6 @@ static Gfx sDList4[] = {
     gsSPEndDisplayList(),
 };
 
-// ============================================================
-// SkelCurve data
-// ============================================================
-
 static u8 sIceTransformRefIdx[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x00, 0x00, 0x00, 0x02,
     0x00, 0x02, 0x02, 0x02, 0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x02, 0x02, 0x02, 0x02, 0x00, 0x00,
@@ -508,10 +487,6 @@ static SkelCurveLimbList sIceLimbList = {
     0x05,
 };
 
-// ============================================================
-// Ice shelter melt helper
-// ============================================================
-
 static void Sw97_MagicIce_MeltIceShelters(PlayState* play, Vec3f* center, f32 radius) {
     Actor* actor;
     for (actor = play->actorCtx.actorLists[ACTORCAT_BG].head; actor != NULL; actor = actor->next) {
@@ -525,10 +500,6 @@ static void Sw97_MagicIce_MeltIceShelters(PlayState* play, Vec3f* center, f32 ra
         }
     }
 }
-
-// ============================================================
-// Actor functions
-// ============================================================
 
 void Sw97_MagicIce_Init(Actor* thisx, PlayState* play) {
     MagicIce* this = THIS;
@@ -593,17 +564,15 @@ void Sw97_MagicIce_Update(Actor* thisx, PlayState* play) {
     this->collider.dim.yShift = (this->colliderScale.y * -225.0f);
     CollisionCheck_SetAT(play, &play->colChkCtx, &this->collider.base);
 
-    // Freeze enemies on AT hit (like ice rod but longer duration)
     if (this->collider.base.atFlags & AT_HIT) {
         Actor* hitActor = this->collider.base.at;
         if (hitActor != NULL && hitActor->update != NULL) {
-            hitActor->freezeTimer = 120; // 6 seconds (ice rod = 60)
+            hitActor->freezeTimer = 120;
             Actor_SetColorFilter(hitActor, 0x4000, 255, 0x2000, 120);
         }
         this->collider.base.atFlags &= ~AT_HIT;
     }
 
-    // Melt nearby ice shelters / red ice
     if (this->action > ACTION_INITIALIZE) {
         f32 meltRadius = this->colliderScale.x * 325.0f + 50.0f;
         Sw97_MagicIce_MeltIceShelters(play, &this->actor.world.pos, meltRadius);

@@ -54,8 +54,7 @@ void Player_ZeroSpeedXZ(Player* player);
 void func_80839FFC(Player* player, PlayState* play);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void TimeGateAction(Player* player, PlayState* play);
@@ -116,8 +115,7 @@ static bool HasMagicForGate(void) {
     return gSaveContext.isMagicAcquired && gSaveContext.magic >= TIME_GATE_MAGIC_COST;
 }
 
-// The meter drains over several frames and the travel reloads the scene in this one, so the cost is settled
-// by hand: asking the interface for it would give the magic back with the scene.
+// The scene reloads before the meter finishes draining, so the cost is settled by hand.
 static void SpendMagic(PlayState* play) {
     if (Magic_RequestChange(play, TIME_GATE_MAGIC_COST, MAGIC_CONSUME_NOW)) {
         gSaveContext.magic = gSaveContext.magicTarget;
@@ -142,8 +140,6 @@ static void BeginCasting(PlayState* play, Player* player) {
     Player_PlayVoiceSfx(player, NA_SE_VO_LI_MAGIC_NALE);
 }
 
-// Pressing the button while running lands in the middle of vanilla's own state change, which would replace the
-// action func the same frame: the cast waits for the next one.
 static void OpenGate(PlayState* play, Player* player) {
     if (!HasMagicForGate()) {
         PlaySfxAt(NA_SE_SY_ERROR, &player->actor.world.pos);
@@ -311,7 +307,7 @@ static void DrawPortalLayer(PlayState* play, u32 scroll, f32 height, f32 width) 
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Modelled on DoorWarp1's blue warp: segment 0x0A holds the base matrix, 0x09 each layer's, 0x08 the scroll.
+// Segment 0x0A holds the base matrix, 0x09 each layer's, 0x08 the scroll, as in DoorWarp1.
 static void DrawPortal(Player* player, PlayState* play) {
     f32 height = 0.3f * sPortalScale;
 
@@ -362,7 +358,6 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, TIME_GATE_KEY, TIME_GATE_KEY, "",
 };

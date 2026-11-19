@@ -23,17 +23,15 @@
 static const ALIGN_ASSET(2) char sIconTex[] = "__OTR__textures/icon_item_custom/gItemIconShovelTex";
 static const ALIGN_ASSET(2) char sNameTex[] = "__OTR__textures/item_name_custom/gShovelNameTex";
 static const ALIGN_ASSET(2) char sDigAnim[] = "__OTR__misc/link_animetion/gPlayerAnim_nei_dampe_dig";
-// The one mesh for both hand and pedestal. NEI's held copy is the same geometry exported WITHOUT its
-// Blender object transform, so it keeps a 0.16 squash on one axis that the archive copy already bakes in.
 static const ALIGN_ASSET(2) char sShovelDL[] = "__OTR__objects/object_nei_shovel/gShovelGiveDL_opaque_dl";
 
 static Color_RGBA8 sDustColor = { 139, 90, 43, 255 };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnActorDrawEnd", "OnPlayerUpdate", "OnPlayerResolveItemActionInit" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnActorDrawEnd", "OnPlayerUpdate",
+                                              "OnPlayerResolveItemActionInit" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
-// Measured in game against the dig pose.
 #define SHOVEL_HELD_SCALE 0.11f
 #define SHOVEL_HELD_OFFSET_X 5.56f
 #define SHOVEL_HELD_OFFSET_Y -1.49f
@@ -67,8 +65,7 @@ void func_80839FFC(Player* this, PlayState* play);
 void Player_ZeroSpeedXZ(Player* this);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void SpawnDust(PlayState* play, Vec3f* pos, u8 count) {
@@ -84,7 +81,6 @@ static void SpawnDust(PlayState* play, Vec3f* pos, u8 count) {
 static s16 RollDrop(void) {
     f32 roll = Rand_ZeroOne() * 100.0f;
 
-    // Item_DropCollectible turns ITEM00_FLEXIBLE into a healing fairy; NEI's ITEM00_FAIRY was 0x0A, large arrows.
     if (roll < SHOVEL_FAIRY_CHANCE) {
         return ITEM00_FLEXIBLE;
     }
@@ -127,7 +123,6 @@ static void ActivateSoftSoil(PlayState* play, ObjMakekinsuta* soil) {
     SpawnDust(play, &soil->actor.world.pos, 6);
 }
 
-// Hidden grottos keep their "needs a bomb" or "needs the Song of Storms" bits in params 0x300.
 static void RevealGrotto(PlayState* play, DoorAna* grotto) {
     if ((grotto->actor.params & 0x300) == 0) {
         return;
@@ -167,7 +162,6 @@ static void Dig(Player* player, PlayState* play) {
     DropTreasure(play, &digPos);
 }
 
-// Vanilla hands first person its own action func; digging out of it would fight over who owns the player.
 static bool CanDig(Player* player, PlayState* play) {
     return !(player->stateFlags1 & (PLAYER_STATE1_IN_WATER | PLAYER_STATE1_FIRST_PERSON)) &&
            (player->meleeWeaponState == 0) && (player->actor.bgCheckFlags & 1);
@@ -175,7 +169,6 @@ static bool CanDig(Player* player, PlayState* play) {
 
 static void DigAction(Player* player, PlayState* play);
 
-// The engine owns the dig: anything that takes the player over (damage, a cutscene) replaces this action func.
 static bool IsDigging(Player* player) {
     return player->actionFunc == DigAction;
 }
@@ -188,12 +181,10 @@ static void StopDigging(Player* player, PlayState* play) {
         return;
     }
     sDigFrame = 0;
-    // Same exit as a vanilla item action: back to idle, or to the targeting stance if one is held.
     func_80839FFC(player, play);
     PlaySfxAt(NA_SE_PL_CHANGE_ARMS, &player->actor.world.pos);
 }
 
-// The dig is timed by the animation, so without the resource the shovel never enters the dig.
 static void StartDigging(Player* player, PlayState* play) {
     if (IsDigging(player) || !CanDig(player, play)) {
         return;
@@ -209,8 +200,6 @@ static void StartDigging(Player* player, PlayState* play) {
     PlaySfxAt(NA_SE_PL_CHANGE_ARMS, &player->actor.world.pos);
 }
 
-// Taking the shovel out runs the item-change animation, and that plays an idle animation over the body until it
-// ends. Digging from here would be overwritten mid-swing, so the first dig of a scene waits for the change.
 static void TakeOutShovel(PlayState* play, Player* player) {
     sIsDigPending = true;
 }
@@ -253,7 +242,7 @@ static void DigAction(Player* player, PlayState* play) {
     }
 }
 
-// Through s32: 180 degrees is 32768, which a float-to-s16 conversion may not represent.
+// 180 degrees is 32768, which a float-to-s16 conversion may not represent, so go through s32.
 static s16 DegreesToBinang(f32 degrees) {
     return (s16)(s32)(degrees * (32768.0f / 180.0f));
 }
@@ -265,7 +254,6 @@ static void ApplyHeldTransform(void) {
     Matrix_Scale(SHOVEL_HELD_SCALE, SHOVEL_HELD_SCALE, SHOVEL_HELD_SCALE, MTXMODE_APPLY);
 }
 
-// A two-handed tool: it sits between both hands and points from the right hand to the left.
 static void DrawShovelInHands(Player* player, PlayState* play) {
     if (!IsDigging(player)) {
         return;
@@ -290,7 +278,6 @@ static void DrawShovelInHands(Player* player, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Same spot as NEI: after the whole skeleton, outside the per-limb matrices frame interpolation records.
 static void DrawAfterPlayer(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     if (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) {
@@ -313,11 +300,9 @@ static void UseShovel(Player* player, PlayState* play) {
     StartDigging(player, play);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SHOVEL_KEY, SHOVEL_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -336,8 +321,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
     if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.shovel.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -360,9 +345,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (IsDigging(player));
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -395,7 +378,6 @@ static void InitRemoteVisuals(void) {
     }
 }
 
-
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -410,6 +392,7 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&shovel, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&shovel, 0, 22, 0);
+    shovel.displayName = "Dampe's Shovel";
     Z64Items_SetTextbox(&shovel, "You got %rDampé's Shovel%w! The&old gravekeeper's tool, worn&"
                                  "smooth by years of work.^Press %y\xA1%w to dig. %ySoft soil%w wakes&"
                                  "what sleeps beneath it, and a&%yhidden grotto%w opens where the&"

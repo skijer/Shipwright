@@ -52,7 +52,6 @@ static const ALIGN_ASSET(2) char sSpinPose[] = "__OTR__objects/gameplay_keep/gPl
 static const u16 sItemButtons[SPINNER_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                         BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-// Hammer damage lets small, bronze and brown rocks break through their own vanilla logic, drops and all.
 static ColliderCylinderInit sAttackColliderInit = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK2,
@@ -64,8 +63,10 @@ static ColliderCylinderInit sAttackColliderInit = {
     { SPINNER_ATTACK_RADIUS, SPINNER_COLLIDER_HEIGHT, 0, { 0, 0, 0 } },
 };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnActorDrawEnd", "OnPlayerFilterInput",
-                                              "OnSceneInit", "OnPlayerResolveItemActionInit" };
+static const char* const sRequiredHooks[] = {
+    "OnGameFrameUpdate",   "OnPlayerUpdate", "OnActorDrawEnd",
+    "OnPlayerFilterInput", "OnSceneInit",    "OnPlayerResolveItemActionInit"
+};
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -101,8 +102,7 @@ void Player_AnimPlayLoop(PlayState* play, Player* player, LinkAnimationHeader* a
 LinkAnimationHeader* Player_GetIdleAnim(Player* player);
 
 static void PlaySfxAt(u16 sfxId, Vec3f* pos) {
-    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale,
-                           &gSfxDefaultReverb);
+    Audio_PlaySfxGeneral(sfxId, pos, 4, &gSfxDefaultFreqAndVolScale, &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
 }
 
 static void SpawnFloorShockwave(Actor* actor, PlayState* play) {
@@ -137,14 +137,11 @@ static void SilenceSpinner(void) {
     Audio_StopSfxById(NA_SE_IT_HAMMER_SWING);
 }
 
-// Riding borrows the spin-attack flags, the same ones vanilla uses to keep the camera and turning off Link's back.
 static void HoldRidingFlags(Player* player) {
     player->stateFlags1 |= PLAYER_STATE1_CHARGING_SPIN_ATTACK;
     player->stateFlags2 |= PLAYER_STATE2_DISABLE_ROTATION_Z_TARGET;
 }
 
-// The ride drives Link's own skeleton, and his walking action func only picks an animation when its state
-// changes: leaving him mid-spin would keep that pose until something else replaced it.
 static void RestoreIdleAnimation(Player* player, PlayState* play) {
     player->skelAnime.playSpeed = 1.0f;
     Player_AnimPlayLoop(play, player, Player_GetIdleAnim(player));
@@ -265,28 +262,26 @@ void EnIshi_SpawnFragmentsLarge(EnIshi* rock, PlayState* play);
 void EnIshi_SpawnDustLarge(EnIshi* rock, PlayState* play);
 
 static void ShatterLargeSilverRocks(Player* player, PlayState* play) {
-    for (Actor* actor=play->actorCtx.actorLists[ACTORCAT_PROP].head;actor!=NULL;) {
-        Actor* next=actor->next;
-        if (actor->update!=NULL && actor->id==ACTOR_EN_ISHI && (actor->params&1)==ROCK_LARGE &&
-            actor->parent==NULL) {
-            EnIshi* rock=(EnIshi*)actor;
-            f32 bottom=actor->world.pos.y+rock->collider.dim.yShift;
-            f32 attackBottom=sAttackCollider.dim.pos.y;
-            if (rock->actionFunc==EnIshi_Wait &&
-                IsWithinXZ(actor,player,sAttackCollider.dim.radius+rock->collider.dim.radius) &&
-                attackBottom+sAttackCollider.dim.height>=bottom &&
-                attackBottom<=bottom+rock->collider.dim.height) {
-                // Native hammer damage deliberately excludes ROCK_LARGE. Preserve the
-                // rock's own drop hook, fragments and saved switch when Spinner breaks it.
-                EnIshi_DropCollectible(rock,play);
-                Flags_SetSwitch(play,((actor->params>>0xA)&0x3C)|((actor->params>>6)&3));
-                EnIshi_SpawnFragmentsLarge(rock,play);
-                EnIshi_SpawnDustLarge(rock,play);
-                SoundSource_PlaySfxAtFixedWorldPos(play,&actor->world.pos,40,NA_SE_EV_WALL_BROKEN);
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_PROP].head; actor != NULL;) {
+        Actor* next = actor->next;
+        if (actor->update != NULL && actor->id == ACTOR_EN_ISHI && (actor->params & 1) == ROCK_LARGE &&
+            actor->parent == NULL) {
+            EnIshi* rock = (EnIshi*)actor;
+            f32 bottom = actor->world.pos.y + rock->collider.dim.yShift;
+            f32 attackBottom = sAttackCollider.dim.pos.y;
+            if (rock->actionFunc == EnIshi_Wait &&
+                IsWithinXZ(actor, player, sAttackCollider.dim.radius + rock->collider.dim.radius) &&
+                attackBottom + sAttackCollider.dim.height >= bottom &&
+                attackBottom <= bottom + rock->collider.dim.height) {
+                EnIshi_DropCollectible(rock, play);
+                Flags_SetSwitch(play, ((actor->params >> 0xA) & 0x3C) | ((actor->params >> 6) & 3));
+                EnIshi_SpawnFragmentsLarge(rock, play);
+                EnIshi_SpawnDustLarge(rock, play);
+                SoundSource_PlaySfxAtFixedWorldPos(play, &actor->world.pos, 40, NA_SE_EV_WALL_BROKEN);
                 Actor_Kill(actor);
             }
         }
-        actor=next;
+        actor = next;
     }
 }
 
@@ -481,10 +476,6 @@ static bool WasDismountPressed(PlayState* play) {
     return (play->state.input[0].press.button & (BTN_A | BTN_B)) != 0;
 }
 
-// The upper action, the same slot vanilla items use: Link keeps his own action func and the spinner only
-// pins his speed, height and heading while the ride lasts.
-// The return value is Link's "upper body is busy" flag: claiming it while merely holding the spinner would
-// block his rolls and his other item buttons for as long as it stayed in hand.
 static int32_t UpdateSpinnerInHand(Player* player, PlayState* play) {
     if (!IsRiding()) {
         return 0;
@@ -524,7 +515,6 @@ static int32_t UpdateSpinnerInHand(Player* player, PlayState* play) {
     return 1;
 }
 
-// Taking the spinner out runs the item-change animation over the body, so the first ride waits for it.
 static void TakeOutSpinner(PlayState* play, Player* player) {
     if (!sIsColliderReady) {
         Collider_InitCylinder(play, &sAttackCollider);
@@ -570,8 +560,6 @@ static void MountWhenReady(void) {
     }
 }
 
-// The ride hovers, and in the air vanilla reads A and B as "put the item away" or "draw the sword" on the
-// same frame the mod reads them to get off. They only stay off Link's copy while the ride lasts.
 static void KeepRideButtons(Player* player, Input* input) {
     if (!IsRiding()) {
         return;
@@ -580,7 +568,6 @@ static void KeepRideButtons(Player* player, Input* input) {
     input->press.button &= ~(BTN_A | BTN_B | BTN_R);
 }
 
-// The ride belongs to the scene that is ending: its phase must not outlive it holding buttons hostage.
 static void ForgetScene(int16_t sceneNum) {
     sIsMountPending = false;
     sPhase = SPINNER_STOWED;
@@ -614,11 +601,9 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SPINNER_KEY, SPINNER_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -634,11 +619,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.spinner.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.spinner.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -661,9 +647,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (IsRiding());
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -695,7 +679,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;

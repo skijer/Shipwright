@@ -1,4 +1,3 @@
-// Effects implemented through existing actor and player callbacks.
 #include "overlays/actors/ovl_En_Rd/z_en_rd.h"
 #include "overlays/actors/ovl_En_Gs/z_en_gs.h"
 #include "overlays/actors/ovl_En_Elf/z_en_elf.h"
@@ -26,12 +25,12 @@ static void MakeRedeadDance(void* actorRef) {
         "__OTR__objects/object_rd/gGibdoRedeadClappingDanceAnim",
         "__OTR__objects/object_rd/gGibdoRedeadPirouetteAnim",
     };
-    if (!IsWearing(MASK_GIBDO) || rd->actionFunc == FriendlyRedeadDance ||
-        rd->actor.colChkInfo.health <= 0 || rd->action == 8 ||
-        (GET_PLAYER(gPlayState)->stateFlags2 & PLAYER_STATE2_GRABBED_BY_ENEMY)) return;
+    if (!IsWearing(MASK_GIBDO) || rd->actionFunc == FriendlyRedeadDance || rd->actor.colChkInfo.health <= 0 ||
+        rd->action == 8 || (GET_PLAYER(gPlayState)->stateFlags2 & PLAYER_STATE2_GRABBED_BY_ENEMY))
+        return;
     const char* path = paths[((uintptr_t)rd >> 4) % 3];
-    AnimationHeader* anim = sApi->HasResource(path) ? (AnimationHeader*)ResourceMgr_LoadAnimByName(path) :
-                                                    (AnimationHeader*)&gGibdoRedeadIdleAnim;
+    AnimationHeader* anim = sApi->HasResource(path) ? (AnimationHeader*)ResourceMgr_LoadAnimByName(path)
+                                                    : (AnimationHeader*)&gGibdoRedeadIdleAnim;
     Animation_Change(&rd->skelAnime, anim, 1.0f, 0, Animation_GetLastFrame(anim), ANIMMODE_LOOP, -8.0f);
     rd->collider.base.acFlags &= ~(AC_ON | AC_HIT);
     rd->actor.speedXZ = 0;
@@ -41,7 +40,6 @@ static void MakeRedeadDance(void* actorRef) {
 
 static Actor* sTruthLastStone;
 static bool SpawnTruthFairy(EnGs* stone, PlayState* play, bool big) {
-    // Reuse the existing shuffle-fairies behavior, including its location identity and duplicate check.
     int16_t oldSong = play->msgCtx.unk_E3F2;
     int16_t oldMode = play->msgCtx.ocarinaMode;
     play->msgCtx.ocarinaMode = OCARINA_MODE_04;
@@ -49,21 +47,25 @@ static bool SpawnTruthFairy(EnGs* stone, PlayState* play, bool big) {
     bool vanilla = GameInteractor_Should(VB_SPAWN_GOSSIP_STONE_FAIRY, true, stone);
     play->msgCtx.ocarinaMode = oldMode;
     play->msgCtx.unk_E3F2 = oldSong;
-    if (!vanilla) return true;
+    if (!vanilla)
+        return true;
     return Actor_Spawn(&play->actorCtx, play, ACTOR_EN_ELF, stone->actor.world.pos.x + (big ? 12 : -12),
-        stone->actor.world.pos.y + (big ? 50 : 40), stone->actor.world.pos.z, 0, 0, 0,
-        big ? FAIRY_HEAL_BIG : FAIRY_HEAL_TIMED) != NULL;
+                       stone->actor.world.pos.y + (big ? 50 : 40), stone->actor.world.pos.z, 0, 0, 0,
+                       big ? FAIRY_HEAL_BIG : FAIRY_HEAL_TIMED) != NULL;
 }
 static void TruthStoneFairies(void* actorRef) {
     EnGs* stone = actorRef;
     PlayState* play = gPlayState;
-    if (play == NULL) return;
+    if (play == NULL)
+        return;
     if (stone->unk_19C != 2 || GET_PLAYER(play)->talkActor != &stone->actor) {
-        if (sTruthLastStone == &stone->actor) sTruthLastStone = NULL;
+        if (sTruthLastStone == &stone->actor)
+            sTruthLastStone = NULL;
         return;
     }
     if (!IsWearing(MASK_TRUTH) || sTruthLastStone == &stone->actor ||
-        (!IS_RANDO && Flags_GetSwitch(play, (stone->actor.params >> 8) & 0x3F))) return;
+        (!IS_RANDO && Flags_GetSwitch(play, (stone->actor.params >> 8) & 0x3F)))
+        return;
     bool small = SpawnTruthFairy(stone, play, false);
     bool big = SpawnTruthFairy(stone, play, true);
     if (small || big) {

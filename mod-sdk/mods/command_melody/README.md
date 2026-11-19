@@ -1,10 +1,12 @@
 # Command Melody
 
-Implements the existing `nei.mm_song_command_melody` song. No second song item
-is registered. Its description and pause text explain the controls with native
-button glyphs.
+Registers and recognises the `nei.mm_song_command_melody` song itself, with its
+icon, name, chime and ocarina close. Its description and pause text explain the
+controls with native button glyphs. It needs no other mod. With Majora's Mask
+Collectables installed, the song also sits on its MM quest page and gets that
+page's staff preview through `nei.mm_collectables.add_song` (`mm_song_page.h`).
 
-Play **A, A, C-Up, C-Right, C-Left, C-Down** after learning the song. A targeted
+Play **A, C-Left, A, C-Right, A, C-Left, A, C-Right** after learning the song. A targeted
 registered partner is preferred; otherwise the nearest available partner is
 chosen. Uses an independent subcamera, keeps Link standing in his actual
 location and returns control on C-Up, interruption, damage or transitions.

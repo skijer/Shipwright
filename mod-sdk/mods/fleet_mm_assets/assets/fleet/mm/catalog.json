@@ -1,0 +1,4054 @@
+{
+  "schema": 1,
+  "owner": "mm",
+  "sourceDrawRows": 118,
+  "resourceSymbols": 24752,
+  "items": [
+    {
+      "nativeToken": "RI_UNKNOWN",
+      "name": "Unknown",
+      "key": "fleet.mm.c592307ea80f16b9",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:32"
+    },
+    {
+      "nativeToken": "RI_ABILITY_SWIM",
+      "name": "Ability to Swim",
+      "key": "fleet.mm.4770a9dbe949776e",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:33"
+    },
+    {
+      "nativeToken": "RI_ARROW_FIRE",
+      "name": "Fire Arrows",
+      "key": "fleet.mm.47c69210a5995a59",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROW_FIRE",
+      "nativeInventoryId": "ITEM_ARROW_FIRE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:34",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawMagicArrow",
+        "resources": [
+          "gGiMagicArrowAmmoDL",
+          "gGiMagicArrowFireColorDL",
+          "gGiMagicArrowGlowDL"
+        ],
+        "index": 71,
+        "paths": [
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowAmmoDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowFireColorDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowGlowDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ARROW_ICE",
+      "name": "Ice Arrows",
+      "key": "fleet.mm.c60af05856b5883e",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROW_ICE",
+      "nativeInventoryId": "ITEM_ARROW_ICE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:35",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawMagicArrow",
+        "resources": [
+          "gGiMagicArrowAmmoDL",
+          "gGiMagicArrowIceColorDL",
+          "gGiMagicArrowGlowDL"
+        ],
+        "index": 72,
+        "paths": [
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowAmmoDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowIceColorDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowGlowDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ARROW_LIGHT",
+      "name": "Light Arrows",
+      "key": "fleet.mm.20961d4624d98cb7",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROW_LIGHT",
+      "nativeInventoryId": "ITEM_ARROW_LIGHT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:36",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawMagicArrow",
+        "resources": [
+          "gGiMagicArrowAmmoDL",
+          "gGiMagicArrowLightColorDL",
+          "gGiMagicArrowGlowDL"
+        ],
+        "index": 73,
+        "paths": [
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowAmmoDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowLightColorDL",
+          "__OTR__objects/object_gi_m_arrow/gGiMagicArrowGlowDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ARROWS_10",
+      "name": "10 Arrows",
+      "key": "fleet.mm.14b442fb863ef9da",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROWS_SMALL",
+      "nativeInventoryId": "ITEM_ARROWS_10",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:37",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiArrowSmallDL"
+        ],
+        "index": 35,
+        "paths": [
+          "__OTR__objects/object_gi_arrow/gGiArrowSmallDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ARROWS_30",
+      "name": "30 Arrows",
+      "key": "fleet.mm.f25a2a700d30a294",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROWS_MEDIUM",
+      "nativeInventoryId": "ITEM_ARROWS_30",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:38",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiArrowMediumDL"
+        ],
+        "index": 36,
+        "paths": [
+          "__OTR__objects/object_gi_arrow/gGiArrowMediumDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ARROWS_50",
+      "name": "50 Arrows",
+      "key": "fleet.mm.8c9cd3efedfcb0de",
+      "owner": "mm",
+      "nativeDrawId": "GID_ARROWS_LARGE",
+      "nativeInventoryId": "ITEM_ARROWS_50",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:39",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiArrowLargeDL"
+        ],
+        "index": 37,
+        "paths": [
+          "__OTR__objects/object_gi_arrow/gGiArrowLargeDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BLUE_POTION_REFILL",
+      "name": "Blue Potion Refill",
+      "key": "fleet.mm.30387a92041fe694",
+      "owner": "mm",
+      "nativeDrawId": "GID_POTION_BLUE",
+      "nativeInventoryId": "ITEM_POTION_BLUE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:40",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawPotion",
+        "resources": [
+          "gGiPotionContainerPotDL",
+          "gGiPotionContainerBluePotColorDL",
+          "gGiPotionContainerBlueLiquidColorDL",
+          "gGiPotionContainerLiquidDL",
+          "gGiPotionContainerBluePatternColorDL",
+          "gGiPotionContainerPatternDL"
+        ],
+        "index": 50,
+        "paths": [
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPotDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerBluePotColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerBlueLiquidColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerLiquidDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerBluePatternColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPatternDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMB_BAG_20",
+      "name": "Bomb Bag",
+      "key": "fleet.mm.daed9f5c37068723",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB_BAG_20",
+      "nativeInventoryId": "ITEM_BOMB_BAG_20",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:41",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiBombBagDL",
+          "gGiBombBag20BagColorDL",
+          "gGiBombBag20RingColorDL",
+          "gGiBombBagRingDL"
+        ],
+        "index": 23,
+        "paths": [
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag20BagColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag20RingColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagRingDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMB_BAG_30",
+      "name": "Big Bomb Bag",
+      "key": "fleet.mm.5444f5142aa383b5",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB_BAG_30",
+      "nativeInventoryId": "ITEM_BOMB_BAG_30",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:42",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiBombBagDL",
+          "gGiBombBag30BagColorDL",
+          "gGiBombBag30RingColorDL",
+          "gGiBombBagRingDL"
+        ],
+        "index": 24,
+        "paths": [
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag30BagColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag30RingColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagRingDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMB_BAG_40",
+      "name": "Biggest Bomb Bag",
+      "key": "fleet.mm.bb1e65acfad1ebc0",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB_BAG_40",
+      "nativeInventoryId": "ITEM_BOMB_BAG_40",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:43",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiBombBagDL",
+          "gGiBombBag40BagColorDL",
+          "gGiBombBag40RingColorDL",
+          "gGiBombBagRingDL"
+        ],
+        "index": 25,
+        "paths": [
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag40BagColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag40RingColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagRingDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBCHU_10",
+      "name": "10 Bombchus",
+      "key": "fleet.mm.8ae346997c47b5d7",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMBCHU",
+      "nativeInventoryId": "ITEM_BOMBCHUS_10",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:44",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawBombchu",
+        "resources": [
+          "gGiBombchuDL"
+        ],
+        "index": 38,
+        "paths": [
+          "__OTR__objects/object_gi_bomb_2/gGiBombchuDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBCHU_5",
+      "name": "5 Bombchus",
+      "key": "fleet.mm.09009773ce45fe63",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMBCHU",
+      "nativeInventoryId": "ITEM_BOMBCHUS_5",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:45",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawBombchu",
+        "resources": [
+          "gGiBombchuDL"
+        ],
+        "index": 38,
+        "paths": [
+          "__OTR__objects/object_gi_bomb_2/gGiBombchuDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBCHU",
+      "name": "Bombchu",
+      "key": "fleet.mm.f3b1dde244cc505d",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMBCHU",
+      "nativeInventoryId": "ITEM_BOMBCHUS_1",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:46",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawBombchu",
+        "resources": [
+          "gGiBombchuDL"
+        ],
+        "index": 38,
+        "paths": [
+          "__OTR__objects/object_gi_bomb_2/gGiBombchuDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBERS_NOTEBOOK",
+      "name": "Bomber's Notebook",
+      "key": "fleet.mm.fac925d79a43e255",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMBERS_NOTEBOOK",
+      "nativeInventoryId": "ITEM_BOMBERS_NOTEBOOK",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:47",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBombersNotebookEmptyDL",
+          "gGiBombersNotebookDL"
+        ],
+        "index": 11,
+        "paths": [
+          "__OTR__objects/object_gi_schedule/gGiBombersNotebookEmptyDL",
+          "__OTR__objects/object_gi_schedule/gGiBombersNotebookDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBS_10",
+      "name": "10 Bombs",
+      "key": "fleet.mm.4f2f16cbab62857d",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB",
+      "nativeInventoryId": "ITEM_BOMBS_10",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:48",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiBombDL"
+        ],
+        "index": 30,
+        "paths": [
+          "__OTR__objects/object_gi_bomb_1/gGiBombDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOMBS_5",
+      "name": "5 Bombs",
+      "key": "fleet.mm.c39c6776de8ef1a9",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB",
+      "nativeInventoryId": "ITEM_BOMBS_5",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:49",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiBombDL"
+        ],
+        "index": 30,
+        "paths": [
+          "__OTR__objects/object_gi_bomb_1/gGiBombDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOTTLE_CHATEAU_ROMANI",
+      "name": "Bottle of Chateau Romani",
+      "key": "fleet.mm.f129c9646b2389d3",
+      "owner": "mm",
+      "nativeDrawId": "GID_CHATEAU",
+      "nativeInventoryId": "ITEM_CHATEAU",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:50",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiChateauRomaniBottleEmptyDL",
+          "gGiChateauRomaniBottleDL"
+        ],
+        "index": 115,
+        "paths": [
+          "__OTR__objects/object_gi_bottle_21/gGiChateauRomaniBottleEmptyDL",
+          "__OTR__objects/object_gi_bottle_21/gGiChateauRomaniBottleDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOTTLE_EMPTY",
+      "name": "Empty Bottle",
+      "key": "fleet.mm.2b65813863756eca",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOTTLE",
+      "nativeInventoryId": "ITEM_BOTTLE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:51",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiEmptyBottleCorkDL",
+          "gGiEmptyBottleGlassDL"
+        ],
+        "index": 0,
+        "paths": [
+          "__OTR__objects/object_gi_bottle/gGiEmptyBottleCorkDL",
+          "__OTR__objects/object_gi_bottle/gGiEmptyBottleGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOTTLE_GOLD_DUST",
+      "name": "Bottle With Gold Dust",
+      "key": "fleet.mm.6019331581062bb5",
+      "owner": "mm",
+      "nativeDrawId": "GID_SEAHORSE",
+      "nativeInventoryId": "ITEM_GOLD_DUST",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:52",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiSeahorseBottleEmptyDL",
+          "gGiSeahorseBottleGlassAndCorkDL"
+        ],
+        "index": 95,
+        "paths": [
+          "__OTR__objects/object_gi_bottle_16/gGiSeahorseBottleEmptyDL",
+          "__OTR__objects/object_gi_bottle_16/gGiSeahorseBottleGlassAndCorkDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOTTLE_MILK",
+      "name": "Bottle of Milk",
+      "key": "fleet.mm.1f4a302a8465bab9",
+      "owner": "mm",
+      "nativeDrawId": "GID_MILK",
+      "nativeInventoryId": "ITEM_MILK_BOTTLE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:53",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiMilkBottleContentsDL",
+          "gGiMilkBottleGlassDL"
+        ],
+        "index": 43,
+        "paths": [
+          "__OTR__objects/object_gi_milk/gGiMilkBottleContentsDL",
+          "__OTR__objects/object_gi_milk/gGiMilkBottleGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOTTLE_RED_POTION",
+      "name": "Bottle with Red Potion",
+      "key": "fleet.mm.2b452f17a8ec0357",
+      "owner": "mm",
+      "nativeDrawId": "GID_57",
+      "nativeInventoryId": "ITEM_POTION_RED",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:54",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiRedPotionBottleEmptyDL",
+          "gGiRedPotionBottleDL"
+        ],
+        "index": 87,
+        "paths": [
+          "__OTR__objects/object_gi_bottle_red/gGiRedPotionBottleEmptyDL",
+          "__OTR__objects/object_gi_bottle_red/gGiRedPotionBottleDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_BOW",
+      "name": "Bow",
+      "key": "fleet.mm.16565119b102f66b",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOW",
+      "nativeInventoryId": "ITEM_BOW",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:55",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiBowHandleDL",
+          "gGiBowStringDL"
+        ],
+        "index": 46,
+        "paths": [
+          "__OTR__objects/object_gi_bow/gGiBowHandleDL",
+          "__OTR__objects/object_gi_bow/gGiBowStringDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_CHATEAU_ROMANI_REFILL",
+      "name": "Chateau Romani Refill",
+      "key": "fleet.mm.232db3a9a613a4d4",
+      "owner": "mm",
+      "nativeDrawId": "GID_CHATEAU",
+      "nativeInventoryId": "ITEM_CHATEAU_2",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:56",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiChateauRomaniBottleEmptyDL",
+          "gGiChateauRomaniBottleDL"
+        ],
+        "index": 115,
+        "paths": [
+          "__OTR__objects/object_gi_bottle_21/gGiChateauRomaniBottleEmptyDL",
+          "__OTR__objects/object_gi_bottle_21/gGiChateauRomaniBottleDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_CLOCK_TOWN_STRAY_FAIRY",
+      "name": "Clock Town Stray Fairy",
+      "key": "fleet.mm.893308064e599787",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_STRAY_FAIRIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:57"
+    },
+    {
+      "nativeToken": "RI_DEED_LAND",
+      "name": "Land Title Deed",
+      "key": "fleet.mm.1dde0e3d56f06750",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEED_LAND",
+      "nativeInventoryId": "ITEM_DEED_LAND",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:58",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTitleDeedEmptyDL",
+          "gGiTitleDeedLandColorDL"
+        ],
+        "index": 90,
+        "paths": [
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedEmptyDL",
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedLandColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEED_MOUNTAIN",
+      "name": "Mountain Title Deed",
+      "key": "fleet.mm.34b786c764b4b77a",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEED_MOUNTAIN",
+      "nativeInventoryId": "ITEM_DEED_MOUNTAIN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:59",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTitleDeedEmptyDL",
+          "gGiTitleDeedMountainColorDL"
+        ],
+        "index": 65,
+        "paths": [
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedEmptyDL",
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedMountainColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEED_OCEAN",
+      "name": "Ocean Title Deed",
+      "key": "fleet.mm.5da5f4a1de63b377",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEED_OCEAN",
+      "nativeInventoryId": "ITEM_DEED_OCEAN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:60",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTitleDeedEmptyDL",
+          "gGiTitleDeedOceanColorDL"
+        ],
+        "index": 67,
+        "paths": [
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedEmptyDL",
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedOceanColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEED_SWAMP",
+      "name": "Swamp Title Deed",
+      "key": "fleet.mm.f96a4a1c71f9ab01",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEED_SWAMP",
+      "nativeInventoryId": "ITEM_DEED_SWAMP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:61",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTitleDeedEmptyDL",
+          "gGiTitleDeedSwampColorDL"
+        ],
+        "index": 64,
+        "paths": [
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedEmptyDL",
+          "__OTR__objects/object_gi_reserve01/gGiTitleDeedSwampColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEKU_NUT",
+      "name": "Deku Nut",
+      "key": "fleet.mm.3fd667195c9730e1",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEKU_NUTS",
+      "nativeInventoryId": "ITEM_DEKU_NUT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:62",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawDekuNuts",
+        "resources": [
+          "gGiNutDL"
+        ],
+        "index": 17,
+        "paths": [
+          "__OTR__objects/object_gi_nuts/gGiNutDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEKU_NUTS_10",
+      "name": "10 Deku Nuts",
+      "key": "fleet.mm.f0fdfbd09bc3963d",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEKU_NUTS",
+      "nativeInventoryId": "ITEM_DEKU_NUTS_10",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:63",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawDekuNuts",
+        "resources": [
+          "gGiNutDL"
+        ],
+        "index": 17,
+        "paths": [
+          "__OTR__objects/object_gi_nuts/gGiNutDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEKU_NUTS_5",
+      "name": "5 Deku Nuts",
+      "key": "fleet.mm.bcee357cddc13f79",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEKU_NUTS",
+      "nativeInventoryId": "ITEM_DEKU_NUTS_5",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:64",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawDekuNuts",
+        "resources": [
+          "gGiNutDL"
+        ],
+        "index": 17,
+        "paths": [
+          "__OTR__objects/object_gi_nuts/gGiNutDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEKU_STICK",
+      "name": "Deku Stick",
+      "key": "fleet.mm.3af6feb3277952b6",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEKU_STICK",
+      "nativeInventoryId": "ITEM_DEKU_STICK",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:65",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiStickDL"
+        ],
+        "index": 26,
+        "paths": [
+          "__OTR__objects/object_gi_stick/gGiStickDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DEKU_STICKS_5",
+      "name": "5 Deku Sticks",
+      "key": "fleet.mm.e3e7b805828477a4",
+      "owner": "mm",
+      "nativeDrawId": "GID_DEKU_STICK",
+      "nativeInventoryId": "ITEM_DEKU_STICKS_5",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:66",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiStickDL"
+        ],
+        "index": 26,
+        "paths": [
+          "__OTR__objects/object_gi_stick/gGiStickDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DOUBLE_DEFENSE",
+      "name": "Double Defense",
+      "key": "fleet.mm.6e58e933b936ca24",
+      "owner": "mm",
+      "nativeDrawId": "GID_HEART_CONTAINER",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:67",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawXlu01",
+        "resources": [
+          "gGiHeartBorderDL",
+          "gGiHeartContainerDL"
+        ],
+        "index": 18,
+        "paths": [
+          "__OTR__objects/object_gi_hearts/gGiHeartBorderDL",
+          "__OTR__objects/object_gi_hearts/gGiHeartContainerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_DOUBLE_MAGIC",
+      "name": "Magic Upgrade",
+      "key": "fleet.mm.db1289413d5ee0c8",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_JAR_BIG",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:68",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiMagicJarLargeDL"
+        ],
+        "index": 29,
+        "paths": [
+          "__OTR__objects/object_gi_magicpot/gGiMagicJarLargeDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_FAIRY_REFILL",
+      "name": "Fairy",
+      "key": "fleet.mm.58b45727a301421e",
+      "owner": "mm",
+      "nativeDrawId": "GID_FAIRY_2",
+      "nativeInventoryId": "ITEM_FAIRY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:69",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawFairyBottle",
+        "resources": [
+          "gGiFairyContainerBaseCapDL",
+          "gGiFairyContainerGlassDL",
+          "gGiFairyContainerContentsDL"
+        ],
+        "index": 78,
+        "paths": [
+          "__OTR__objects/object_gi_soul/gGiFairyContainerBaseCapDL",
+          "__OTR__objects/object_gi_soul/gGiFairyContainerGlassDL",
+          "__OTR__objects/object_gi_soul/gGiFairyContainerContentsDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_FROG_BLUE",
+      "name": "Blue Frog",
+      "key": "fleet.mm.760da0c248ba72d9",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:70"
+    },
+    {
+      "nativeToken": "RI_FROG_CYAN",
+      "name": "Cyan Frog",
+      "key": "fleet.mm.f18ddd65828b436c",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:71"
+    },
+    {
+      "nativeToken": "RI_FROG_PINK",
+      "name": "Pink Frog",
+      "key": "fleet.mm.a6a66a40de118419",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:72"
+    },
+    {
+      "nativeToken": "RI_FROG_WHITE",
+      "name": "White Frog",
+      "key": "fleet.mm.61f8e09bb0ebac08",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:73"
+    },
+    {
+      "nativeToken": "RI_GOLD_DUST_REFILL",
+      "name": "Gold Dust Refill",
+      "key": "fleet.mm.5113f7821dff7aff",
+      "owner": "mm",
+      "nativeDrawId": "GID_GOLD_DUST",
+      "nativeInventoryId": "ITEM_GOLD_DUST_2",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:74",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiGoldDustPowderDL",
+          "gGiGoldDustPowderEmptyDL"
+        ],
+        "index": 94,
+        "paths": [
+          "__OTR__objects/object_gi_gold_dust/gGiGoldDustPowderDL",
+          "__OTR__objects/object_gi_gold_dust/gGiGoldDustPowderEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_BAY_BOSS_KEY",
+      "name": "Great Bay Boss Key",
+      "key": "fleet.mm.d16524902d766bf8",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_BOSS",
+      "nativeInventoryId": "ITEM_KEY_BOSS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:75",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBossKeyDL",
+          "gGiBossKeyGemDL"
+        ],
+        "index": 9,
+        "paths": [
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyDL",
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyGemDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_BAY_COMPASS",
+      "name": "Great Bay Compass",
+      "key": "fleet.mm.331fe2411c02732e",
+      "owner": "mm",
+      "nativeDrawId": "GID_COMPASS",
+      "nativeInventoryId": "ITEM_COMPASS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:76",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawCompass",
+        "resources": [
+          "gGiCompassDL",
+          "gGiCompassGlassDL"
+        ],
+        "index": 10,
+        "paths": [
+          "__OTR__objects/object_gi_compass/gGiCompassDL",
+          "__OTR__objects/object_gi_compass/gGiCompassGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_BAY_MAP",
+      "name": "Great Bay Map",
+      "key": "fleet.mm.8d1e971ec306645c",
+      "owner": "mm",
+      "nativeDrawId": "GID_DUNGEON_MAP",
+      "nativeInventoryId": "ITEM_DUNGEON_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:77",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiDungeonMapDL"
+        ],
+        "index": 27,
+        "paths": [
+          "__OTR__objects/object_gi_map/gGiDungeonMapDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_BAY_SMALL_KEY",
+      "name": "Great Bay Small Key",
+      "key": "fleet.mm.1c84d8a4cb1a5caa",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_SMALL",
+      "nativeInventoryId": "ITEM_KEY_SMALL",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:78",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiSmallKeyDL"
+        ],
+        "index": 1,
+        "paths": [
+          "__OTR__objects/object_gi_key/gGiSmallKeyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_BAY_STRAY_FAIRY",
+      "name": "Great Bay Stray Fairy",
+      "key": "fleet.mm.98f098033a3eeb56",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_STRAY_FAIRIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:79"
+    },
+    {
+      "nativeToken": "RI_GREAT_FAIRY_SWORD",
+      "name": "Great Fairy's Sword",
+      "key": "fleet.mm.94a7015365e32a3c",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_GREAT_FAIRY",
+      "nativeInventoryId": "ITEM_SWORD_GREAT_FAIRY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:80",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiGreatFairysSwordBladeDL",
+          "gGiGreatFairysSwordHiltEmblemDL"
+        ],
+        "index": 104,
+        "paths": [
+          "__OTR__objects/object_gi_sword_4/gGiGreatFairysSwordBladeDL",
+          "__OTR__objects/object_gi_sword_4/gGiGreatFairysSwordHiltEmblemDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREAT_SPIN_ATTACK",
+      "name": "Great Spin Attack",
+      "key": "fleet.mm.785fac2515bd7da2",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_KOKIRI",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:81",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiKokiriSwordBladeHiltDL",
+          "gGiKokiriSwordGuardDL"
+        ],
+        "index": 85,
+        "paths": [
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordBladeHiltDL",
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordGuardDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GREEN_POTION_REFILL",
+      "name": "Green Potion Refill",
+      "key": "fleet.mm.f235bf177ce0acd5",
+      "owner": "mm",
+      "nativeDrawId": "GID_POTION_GREEN",
+      "nativeInventoryId": "ITEM_POTION_GREEN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:82",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawPotion",
+        "resources": [
+          "gGiPotionContainerPotDL",
+          "gGiPotionContainerGreenPotColorDL",
+          "gGiPotionContainerGreenLiquidColorDL",
+          "gGiPotionContainerLiquidDL",
+          "gGiPotionContainerGreenPatternColorDL",
+          "gGiPotionContainerPatternDL"
+        ],
+        "index": 48,
+        "paths": [
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPotDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerGreenPotColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerGreenLiquidColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerLiquidDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerGreenPatternColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPatternDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GS_TOKEN_OCEAN",
+      "name": "Ocean Gold Skulltula Token",
+      "key": "fleet.mm.cf352413bf935b2d",
+      "owner": "mm",
+      "nativeDrawId": "GID_SKULL_TOKEN_2",
+      "nativeInventoryId": "ITEM_SKULL_TOKEN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:83",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawSkullToken",
+        "resources": [
+          "gSkulltulaTokenDL",
+          "gSkulltulaTokenFlameDL"
+        ],
+        "index": 86,
+        "paths": [
+          "__OTR__objects/object_st/gSkulltulaTokenDL",
+          "__OTR__objects/object_st/gSkulltulaTokenFlameDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_GS_TOKEN_SWAMP",
+      "name": "Swamp Gold Skulltula Token",
+      "key": "fleet.mm.38118888afc7689b",
+      "owner": "mm",
+      "nativeDrawId": "GID_SKULL_TOKEN_2",
+      "nativeInventoryId": "ITEM_SKULL_TOKEN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:84",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawSkullToken",
+        "resources": [
+          "gSkulltulaTokenDL",
+          "gSkulltulaTokenFlameDL"
+        ],
+        "index": 86,
+        "paths": [
+          "__OTR__objects/object_st/gSkulltulaTokenDL",
+          "__OTR__objects/object_st/gSkulltulaTokenFlameDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_HEART_CONTAINER",
+      "name": "Heart Container",
+      "key": "fleet.mm.e57f00063f6ff26c",
+      "owner": "mm",
+      "nativeDrawId": "GID_HEART_CONTAINER",
+      "nativeInventoryId": "ITEM_HEART_CONTAINER",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:85",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawXlu01",
+        "resources": [
+          "gGiHeartBorderDL",
+          "gGiHeartContainerDL"
+        ],
+        "index": 18,
+        "paths": [
+          "__OTR__objects/object_gi_hearts/gGiHeartBorderDL",
+          "__OTR__objects/object_gi_hearts/gGiHeartContainerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_HEART_PIECE",
+      "name": "Heart Piece",
+      "key": "fleet.mm.d459d16e43694171",
+      "owner": "mm",
+      "nativeDrawId": "GID_HEART_PIECE",
+      "nativeInventoryId": "ITEM_HEART_PIECE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:86",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawXlu01",
+        "resources": [
+          "gGiHeartBorderDL",
+          "gGiHeartPieceDL"
+        ],
+        "index": 19,
+        "paths": [
+          "__OTR__objects/object_gi_hearts/gGiHeartBorderDL",
+          "__OTR__objects/object_gi_hearts/gGiHeartPieceDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_HOOKSHOT",
+      "name": "Hookshot",
+      "key": "fleet.mm.badb3640345bd3d2",
+      "owner": "mm",
+      "nativeDrawId": "GID_HOOKSHOT",
+      "nativeInventoryId": "ITEM_HOOKSHOT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:87",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiHookshotEmptyDL",
+          "gGiHookshotDL"
+        ],
+        "index": 40,
+        "paths": [
+          "__OTR__objects/object_gi_hookshot/gGiHookshotEmptyDL",
+          "__OTR__objects/object_gi_hookshot/gGiHookshotDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_JUNK",
+      "name": "Junk",
+      "key": "fleet.mm.15a854e9f9a5130b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:88"
+    },
+    {
+      "nativeToken": "RI_LENS",
+      "name": "Lens of Truth",
+      "key": "fleet.mm.c4f6882ad22200e7",
+      "owner": "mm",
+      "nativeDrawId": "GID_LENS",
+      "nativeInventoryId": "ITEM_LENS_OF_TRUTH",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:89",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiLensDL",
+          "gGiLensGlassDL"
+        ],
+        "index": 47,
+        "paths": [
+          "__OTR__objects/object_gi_glasses/gGiLensDL",
+          "__OTR__objects/object_gi_glasses/gGiLensGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_LETTER_TO_KAFEI",
+      "name": "Letter to Kafei",
+      "key": "fleet.mm.575adc9386b8be36",
+      "owner": "mm",
+      "nativeDrawId": "GID_LETTER_TO_KAFEI",
+      "nativeInventoryId": "ITEM_LETTER_TO_KAFEI",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:90",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiLetterToKafeiEnvelopeLetterDL",
+          "gGiLetterToKafeiInscriptionsDL"
+        ],
+        "index": 109,
+        "paths": [
+          "__OTR__objects/object_gi_reserve_c_00/gGiLetterToKafeiEnvelopeLetterDL",
+          "__OTR__objects/object_gi_reserve_c_00/gGiLetterToKafeiInscriptionsDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_LETTER_TO_MAMA",
+      "name": "Letter to Mama",
+      "key": "fleet.mm.ab9428210d110722",
+      "owner": "mm",
+      "nativeDrawId": "GID_LETTER_MAMA",
+      "nativeInventoryId": "ITEM_LETTER_MAMA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:91",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiLetterToMamaEnvelopeLetterDL",
+          "gGiLetterToMamaInscriptionsDL"
+        ],
+        "index": 54,
+        "paths": [
+          "__OTR__objects/object_gi_reserve_b_01/gGiLetterToMamaEnvelopeLetterDL",
+          "__OTR__objects/object_gi_reserve_b_01/gGiLetterToMamaInscriptionsDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MAGIC_BEAN",
+      "name": "Magic Bean",
+      "key": "fleet.mm.35e8c795282f9276",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_BEANS",
+      "nativeInventoryId": "ITEM_MAGIC_BEANS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:92",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiBeanDL"
+        ],
+        "index": 52,
+        "paths": [
+          "__OTR__objects/object_gi_bean/gGiBeanDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MAGIC_JAR_BIG",
+      "name": "Large Magic Refill",
+      "key": "fleet.mm.17f313f41ee15be1",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_JAR_BIG",
+      "nativeInventoryId": "ITEM_MAGIC_JAR_BIG",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:93",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiMagicJarLargeDL"
+        ],
+        "index": 29,
+        "paths": [
+          "__OTR__objects/object_gi_magicpot/gGiMagicJarLargeDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MAGIC_JAR_SMALL",
+      "name": "Small Magic Refill",
+      "key": "fleet.mm.c1aaf2b9bfb22979",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_JAR_SMALL",
+      "nativeInventoryId": "ITEM_MAGIC_JAR_SMALL",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:94",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiMagicJarSmallDL"
+        ],
+        "index": 28,
+        "paths": [
+          "__OTR__objects/object_gi_magicpot/gGiMagicJarSmallDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_ALL_NIGHT",
+      "name": "All-Night Mask",
+      "key": "fleet.mm.18928f8bfe115f05",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_ALL_NIGHT",
+      "nativeInventoryId": "ITEM_MASK_ALL_NIGHT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:95",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiAllNightMaskEyesDL",
+          "gGiAllNightMaskFaceDL"
+        ],
+        "index": 16,
+        "paths": [
+          "__OTR__objects/object_gi_mask06/gGiAllNightMaskEyesDL",
+          "__OTR__objects/object_gi_mask06/gGiAllNightMaskFaceDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_BLAST",
+      "name": "Blast Mask",
+      "key": "fleet.mm.3dba6455e9016e2f",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_BLAST",
+      "nativeInventoryId": "ITEM_MASK_BLAST",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:96",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBlastMaskEmptyDL",
+          "gGiBlastMaskDL"
+        ],
+        "index": 58,
+        "paths": [
+          "__OTR__objects/object_gi_mask21/gGiBlastMaskEmptyDL",
+          "__OTR__objects/object_gi_mask21/gGiBlastMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_BREMEN",
+      "name": "Bremen Mask",
+      "key": "fleet.mm.09ce6f0cee21e7a0",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_BREMEN",
+      "nativeInventoryId": "ITEM_MASK_BREMEN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:97",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiBremenMaskDL",
+          "gGiBremenMaskEmptyDL"
+        ],
+        "index": 15,
+        "paths": [
+          "__OTR__objects/object_gi_mask20/gGiBremenMaskDL",
+          "__OTR__objects/object_gi_mask20/gGiBremenMaskEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_BUNNY",
+      "name": "Bunny Hood",
+      "key": "fleet.mm.5c2660aa59ee694b",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_BUNNY",
+      "nativeInventoryId": "ITEM_MASK_BUNNY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:98",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBunnyHoodDL",
+          "gGiBunnyHoodEyesDL"
+        ],
+        "index": 62,
+        "paths": [
+          "__OTR__objects/object_gi_rabit_mask/gGiBunnyHoodDL",
+          "__OTR__objects/object_gi_rabit_mask/gGiBunnyHoodEyesDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_CAPTAIN",
+      "name": "Captain's Hat",
+      "key": "fleet.mm.06b83e4e4d42bc08",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_CAPTAIN",
+      "nativeInventoryId": "ITEM_MASK_CAPTAIN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:99",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiCaptainsHatBodyDL",
+          "gGiCaptainsHatFaceDL"
+        ],
+        "index": 61,
+        "paths": [
+          "__OTR__objects/object_gi_mask18/gGiCaptainsHatBodyDL",
+          "__OTR__objects/object_gi_mask18/gGiCaptainsHatFaceDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_CIRCUS_LEADER",
+      "name": "Circus Leader's Mask",
+      "key": "fleet.mm.3e460637c2bad5ef",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_CIRCUS_LEADER",
+      "nativeInventoryId": "ITEM_MASK_CIRCUS_LEADER",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:100",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiCircusLeaderMaskFaceDL",
+          "gGiCircusLeaderMaskEyebrowsDL"
+        ],
+        "index": 14,
+        "paths": [
+          "__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskFaceDL",
+          "__OTR__objects/object_gi_mask11/gGiCircusLeaderMaskEyebrowsDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_COUPLE",
+      "name": "Couples Mask",
+      "key": "fleet.mm.06f51288d21f7e7e",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_COUPLE",
+      "nativeInventoryId": "ITEM_MASK_COUPLE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:101",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiCouplesMaskFullDL",
+          "gGiCouplesMaskHalfDL"
+        ],
+        "index": 3,
+        "paths": [
+          "__OTR__objects/object_gi_mask13/gGiCouplesMaskFullDL",
+          "__OTR__objects/object_gi_mask13/gGiCouplesMaskHalfDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_DEKU",
+      "name": "Deku Mask",
+      "key": "fleet.mm.34863630edd8a89e",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_DEKU",
+      "nativeInventoryId": "ITEM_MASK_DEKU",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:102",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiDekuMaskEmptyDL",
+          "gGiDekuMaskDL"
+        ],
+        "index": 91,
+        "paths": [
+          "__OTR__objects/object_gi_nutsmask/gGiDekuMaskEmptyDL",
+          "__OTR__objects/object_gi_nutsmask/gGiDekuMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_DON_GERO",
+      "name": "Don Gero Mask",
+      "key": "fleet.mm.dc46d36f6180a32f",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_DON_GERO",
+      "nativeInventoryId": "ITEM_MASK_DON_GERO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:103",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiDonGeroMaskFaceDL",
+          "gGiDonGeroMaskBodyDL"
+        ],
+        "index": 34,
+        "paths": [
+          "__OTR__objects/object_gi_mask16/gGiDonGeroMaskFaceDL",
+          "__OTR__objects/object_gi_mask16/gGiDonGeroMaskBodyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_FIERCE_DEITY",
+      "name": "Fierce Deity Mask",
+      "key": "fleet.mm.db347e22cac0a082",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_FIERCE_DEITY",
+      "nativeInventoryId": "ITEM_MASK_FIERCE_DEITY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:104",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiFierceDeityMaskFaceDL",
+          "gGiFierceDeityMaskHairAndHatDL"
+        ],
+        "index": 117,
+        "paths": [
+          "__OTR__objects/object_gi_mask03/gGiFierceDeityMaskFaceDL",
+          "__OTR__objects/object_gi_mask03/gGiFierceDeityMaskHairAndHatDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_GARO",
+      "name": "Garo's Mask",
+      "key": "fleet.mm.db81467f494e3e50",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_GARO",
+      "nativeInventoryId": "ITEM_MASK_GARO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:105",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiGarosMaskCloakDL",
+          "gGiGarosMaskFaceDL"
+        ],
+        "index": 105,
+        "paths": [
+          "__OTR__objects/object_gi_mask09/gGiGarosMaskCloakDL",
+          "__OTR__objects/object_gi_mask09/gGiGarosMaskFaceDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_GIANT",
+      "name": "Giant's Mask",
+      "key": "fleet.mm.faa59bf515fa7f10",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_GIANT",
+      "nativeInventoryId": "ITEM_MASK_GIANT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:106",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiGiantMaskEmptyDL",
+          "gGiGiantMaskDL"
+        ],
+        "index": 114,
+        "paths": [
+          "__OTR__objects/object_gi_mask23/gGiGiantMaskEmptyDL",
+          "__OTR__objects/object_gi_mask23/gGiGiantMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_GIBDO",
+      "name": "Gibdo Mask",
+      "key": "fleet.mm.ff76876372200b94",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_GIBDO",
+      "nativeInventoryId": "ITEM_MASK_GIBDO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:107",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiGibdoMaskEmptyDL",
+          "gGiGibdoMaskDL"
+        ],
+        "index": 107,
+        "paths": [
+          "__OTR__objects/object_gi_mask15/gGiGibdoMaskEmptyDL",
+          "__OTR__objects/object_gi_mask15/gGiGibdoMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_GORON",
+      "name": "Goron Mask",
+      "key": "fleet.mm.1450f5d49242316a",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_GORON",
+      "nativeInventoryId": "ITEM_MASK_GORON",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:108",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiGoronMaskEmptyDL",
+          "gGiGoronMaskDL"
+        ],
+        "index": 68,
+        "paths": [
+          "__OTR__objects/object_gi_golonmask/gGiGoronMaskEmptyDL",
+          "__OTR__objects/object_gi_golonmask/gGiGoronMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_GREAT_FAIRY",
+      "name": "Great Fairy Mask",
+      "key": "fleet.mm.1ace2b708ff502cd",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_GREAT_FAIRY",
+      "nativeInventoryId": "ITEM_MASK_GREAT_FAIRY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:109",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiGreatFairyMaskFaceDL",
+          "gGiGreatFairyMaskLeavesDL"
+        ],
+        "index": 106,
+        "paths": [
+          "__OTR__objects/object_gi_mask14/gGiGreatFairyMaskFaceDL",
+          "__OTR__objects/object_gi_mask14/gGiGreatFairyMaskLeavesDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_KAFEIS_MASK",
+      "name": "Kafei's Mask",
+      "key": "fleet.mm.28c3bcb39359d59b",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_KAFEIS_MASK",
+      "nativeInventoryId": "ITEM_MASK_KAFEIS_MASK",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:110",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiKafeiMaskDL",
+          "gGiKafeiMaskEmptyDL"
+        ],
+        "index": 13,
+        "paths": [
+          "__OTR__objects/object_gi_mask05/gGiKafeiMaskDL",
+          "__OTR__objects/object_gi_mask05/gGiKafeiMaskEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_KAMARO",
+      "name": "Kamaro's Mask",
+      "key": "fleet.mm.95aa02af528addbe",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_KAMARO",
+      "nativeInventoryId": "ITEM_MASK_KAMARO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:111",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiKamaroMaskDL",
+          "gGiKamaroMaskEmptyDL"
+        ],
+        "index": 2,
+        "paths": [
+          "__OTR__objects/object_gi_mask17/gGiKamaroMaskDL",
+          "__OTR__objects/object_gi_mask17/gGiKamaroMaskEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_KEATON",
+      "name": "Keaton Mask",
+      "key": "fleet.mm.d9ac4c9824ebe8ff",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_KEATON",
+      "nativeInventoryId": "ITEM_MASK_KEATON",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:112",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiKeatonMaskDL",
+          "gGiKeatonMaskEyesDL"
+        ],
+        "index": 44,
+        "paths": [
+          "__OTR__objects/object_gi_ki_tan_mask/gGiKeatonMaskDL",
+          "__OTR__objects/object_gi_ki_tan_mask/gGiKeatonMaskEyesDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_POSTMAN",
+      "name": "Postman's Hat",
+      "key": "fleet.mm.f8ae397b526cea8e",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_POSTMAN",
+      "nativeInventoryId": "ITEM_MASK_POSTMAN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:113",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiPostmanHatCapDL",
+          "gGiPostmanHatBunnyLogoDL"
+        ],
+        "index": 113,
+        "paths": [
+          "__OTR__objects/object_gi_mask12/gGiPostmanHatCapDL",
+          "__OTR__objects/object_gi_mask12/gGiPostmanHatBunnyLogoDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_ROMANI",
+      "name": "Romani's Mask",
+      "key": "fleet.mm.0851d53418223785",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_ROMANI",
+      "nativeInventoryId": "ITEM_MASK_ROMANI",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:114",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiRomaniMaskCapDL",
+          "gGiRomaniMaskNoseEyeDL"
+        ],
+        "index": 112,
+        "paths": [
+          "__OTR__objects/object_gi_mask10/gGiRomaniMaskCapDL",
+          "__OTR__objects/object_gi_mask10/gGiRomaniMaskNoseEyeDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_SCENTS",
+      "name": "Mask of Scents",
+      "key": "fleet.mm.407a5b2bd37c11da",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_SCENTS",
+      "nativeInventoryId": "ITEM_MASK_SCENTS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:115",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiMaskOfScentsFaceDL",
+          "gGiMaskOfScentsTeethDL"
+        ],
+        "index": 60,
+        "paths": [
+          "__OTR__objects/object_gi_mask22/gGiMaskOfScentsFaceDL",
+          "__OTR__objects/object_gi_mask22/gGiMaskOfScentsTeethDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_STONE",
+      "name": "Stone Mask",
+      "key": "fleet.mm.e9acccd7c454b21e",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_STONE",
+      "nativeInventoryId": "ITEM_MASK_STONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:116",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiStoneMaskEmptyDL",
+          "gGiStoneMaskDL"
+        ],
+        "index": 12,
+        "paths": [
+          "__OTR__objects/object_gi_stonemask/gGiStoneMaskEmptyDL",
+          "__OTR__objects/object_gi_stonemask/gGiStoneMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_TRUTH",
+      "name": "Mask of Truth",
+      "key": "fleet.mm.06d6f70dedc49193",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_TRUTH",
+      "nativeInventoryId": "ITEM_MASK_TRUTH",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:117",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiMaskOfTruthDL",
+          "gGiMaskOfTruthAccentsDL"
+        ],
+        "index": 63,
+        "paths": [
+          "__OTR__objects/object_gi_truth_mask/gGiMaskOfTruthDL",
+          "__OTR__objects/object_gi_truth_mask/gGiMaskOfTruthAccentsDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MASK_ZORA",
+      "name": "Zora Mask",
+      "key": "fleet.mm.0241c568f38f3769",
+      "owner": "mm",
+      "nativeDrawId": "GID_MASK_ZORA",
+      "nativeInventoryId": "ITEM_MASK_ZORA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:118",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiZoraMaskEmptyDL",
+          "gGiZoraMaskDL"
+        ],
+        "index": 69,
+        "paths": [
+          "__OTR__objects/object_gi_zoramask/gGiZoraMaskEmptyDL",
+          "__OTR__objects/object_gi_zoramask/gGiZoraMaskDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MILK_REFILL",
+      "name": "Milk Refill",
+      "key": "fleet.mm.6600dc16f102ccda",
+      "owner": "mm",
+      "nativeDrawId": "GID_MILK",
+      "nativeInventoryId": "ITEM_MILK",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:119",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiMilkBottleContentsDL",
+          "gGiMilkBottleGlassDL"
+        ],
+        "index": 43,
+        "paths": [
+          "__OTR__objects/object_gi_milk/gGiMilkBottleContentsDL",
+          "__OTR__objects/object_gi_milk/gGiMilkBottleGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MOONS_TEAR",
+      "name": "Moon's Tear",
+      "key": "fleet.mm.72b3bc317ebf76be",
+      "owner": "mm",
+      "nativeDrawId": "GID_MOONS_TEAR",
+      "nativeInventoryId": "ITEM_MOONS_TEAR",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:120",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawMoonsTear",
+        "resources": [
+          "gGiMoonsTearItemDL",
+          "gGiMoonsTearGlowDL"
+        ],
+        "index": 89,
+        "paths": [
+          "__OTR__objects/object_gi_reserve00/gGiMoonsTearItemDL",
+          "__OTR__objects/object_gi_reserve00/gGiMoonsTearGlowDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_MUSHROOM",
+      "name": "Magic Mushroom",
+      "key": "fleet.mm.b2c3ca1ad7e05646",
+      "owner": "mm",
+      "nativeDrawId": "GID_MUSHROOM",
+      "nativeInventoryId": "ITEM_MUSHROOM",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:121",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiMagicMushroomEmptyDL",
+          "gGiMagicMushroomDL"
+        ],
+        "index": 111,
+        "paths": [
+          "__OTR__objects/object_gi_magicmushroom/gGiMagicMushroomEmptyDL",
+          "__OTR__objects/object_gi_magicmushroom/gGiMagicMushroomDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_NONE",
+      "name": "literally nothing",
+      "key": "fleet.mm.d66f6e045607543e",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:122"
+    },
+    {
+      "nativeToken": "RI_OCARINA_BUTTON_A",
+      "name": "A Button",
+      "key": "fleet.mm.72d8ca78f2680c40",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:123"
+    },
+    {
+      "nativeToken": "RI_OCARINA_BUTTON_C_DOWN",
+      "name": "C Down Button",
+      "key": "fleet.mm.e0c449cca36061e2",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:124"
+    },
+    {
+      "nativeToken": "RI_OCARINA_BUTTON_C_RIGHT",
+      "name": "C Right Button",
+      "key": "fleet.mm.6ef0988d667d7810",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:125"
+    },
+    {
+      "nativeToken": "RI_OCARINA_BUTTON_C_LEFT",
+      "name": "C Left Button",
+      "key": "fleet.mm.849a8cf5bd8b09dd",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:126"
+    },
+    {
+      "nativeToken": "RI_OCARINA_BUTTON_C_UP",
+      "name": "C Up Button",
+      "key": "fleet.mm.6881a6365434f6a5",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:127"
+    },
+    {
+      "nativeToken": "RI_OCARINA",
+      "name": "Ocarina of Time",
+      "key": "fleet.mm.2dfbfb6b39ca157c",
+      "owner": "mm",
+      "nativeDrawId": "GID_OCARINA",
+      "nativeInventoryId": "ITEM_OCARINA_OF_TIME",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:128",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiOcarinaOfTimeDL",
+          "gGiOcarinaOfTimeHolesDL"
+        ],
+        "index": 42,
+        "paths": [
+          "__OTR__objects/object_gi_ocarina/gGiOcarinaOfTimeDL",
+          "__OTR__objects/object_gi_ocarina/gGiOcarinaOfTimeHolesDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_OWL_CLOCK_TOWN_SOUTH",
+      "name": "Clock Town Owl Statue",
+      "key": "fleet.mm.c611248c2287308b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:129"
+    },
+    {
+      "nativeToken": "RI_OWL_GREAT_BAY_COAST",
+      "name": "Great Bay Coast Owl Statue",
+      "key": "fleet.mm.17875be8a2eb44a6",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:130"
+    },
+    {
+      "nativeToken": "RI_OWL_IKANA_CANYON",
+      "name": "Ikana Canyon Owl Statue",
+      "key": "fleet.mm.a8d68a6d32cc9307",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:131"
+    },
+    {
+      "nativeToken": "RI_OWL_MILK_ROAD",
+      "name": "Milk Road Owl Statue",
+      "key": "fleet.mm.29ec70d4a3733c2a",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:132"
+    },
+    {
+      "nativeToken": "RI_OWL_MOUNTAIN_VILLAGE",
+      "name": "Mountain Village Owl Statue",
+      "key": "fleet.mm.64774add5d09c990",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:133"
+    },
+    {
+      "nativeToken": "RI_OWL_SNOWHEAD",
+      "name": "Snowhead Owl Statue",
+      "key": "fleet.mm.cf5632a6fb978c02",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:134"
+    },
+    {
+      "nativeToken": "RI_OWL_SOUTHERN_SWAMP",
+      "name": "Southern Swamp Owl Statue",
+      "key": "fleet.mm.b24cd20a13a9de81",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:135"
+    },
+    {
+      "nativeToken": "RI_OWL_STONE_TOWER",
+      "name": "Stone Tower Owl Statue",
+      "key": "fleet.mm.aba1fa280f99b773",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:136"
+    },
+    {
+      "nativeToken": "RI_OWL_WOODFALL",
+      "name": "Woodfall Owl Statue",
+      "key": "fleet.mm.082ed7ddf147fbc1",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:137"
+    },
+    {
+      "nativeToken": "RI_OWL_ZORA_CAPE",
+      "name": "Zora Cape Owl Statue",
+      "key": "fleet.mm.8c301a701ae93520",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:138"
+    },
+    {
+      "nativeToken": "RI_PENDANT_OF_MEMORIES",
+      "name": "Pendant of Memories",
+      "key": "fleet.mm.1e96c0e90701de75",
+      "owner": "mm",
+      "nativeDrawId": "GID_PENDANT_OF_MEMORIES",
+      "nativeInventoryId": "ITEM_PENDANT_OF_MEMORIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:139",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiPendantOfMemoriesEmptyDL",
+          "gGiPendantOfMemoriesDL"
+        ],
+        "index": 110,
+        "paths": [
+          "__OTR__objects/object_gi_reserve_c_01/gGiPendantOfMemoriesEmptyDL",
+          "__OTR__objects/object_gi_reserve_c_01/gGiPendantOfMemoriesDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PICTOGRAPH_BOX",
+      "name": "Pictograph Box",
+      "key": "fleet.mm.7747771956f3c97f",
+      "owner": "mm",
+      "nativeDrawId": "GID_PICTOGRAPH_BOX",
+      "nativeInventoryId": "ITEM_PICTOGRAPH_BOX",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:140",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiPictoBoxFrameDL",
+          "gGiPictoBoxBodyAndLensDL"
+        ],
+        "index": 116,
+        "paths": [
+          "__OTR__objects/object_gi_camera/gGiPictoBoxFrameDL",
+          "__OTR__objects/object_gi_camera/gGiPictoBoxBodyAndLensDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_POWDER_KEG",
+      "name": "Powder Keg",
+      "key": "fleet.mm.2b14cb31ec14f4a1",
+      "owner": "mm",
+      "nativeDrawId": "GID_POWDER_KEG",
+      "nativeInventoryId": "ITEM_POWDER_KEG",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:141",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiPowderKegBarrelDL",
+          "gGiPowderKegGoronSkullAndFuseDL"
+        ],
+        "index": 93,
+        "paths": [
+          "__OTR__objects/object_gi_bigbomb/gGiPowderKegBarrelDL",
+          "__OTR__objects/object_gi_bigbomb/gGiPowderKegGoronSkullAndFuseDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_BOMB_BAG",
+      "name": "Progressive Bomb Bag",
+      "key": "fleet.mm.32213e42c5582762",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOMB_BAG_20",
+      "nativeInventoryId": "ITEM_BOMB_BAG_20",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:142",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiBombBagDL",
+          "gGiBombBag20BagColorDL",
+          "gGiBombBag20RingColorDL",
+          "gGiBombBagRingDL"
+        ],
+        "index": 23,
+        "paths": [
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag20BagColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBag20RingColorDL",
+          "__OTR__objects/object_gi_bombpouch/gGiBombBagRingDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_BOW",
+      "name": "Progressive Bow",
+      "key": "fleet.mm.a95222b44b231820",
+      "owner": "mm",
+      "nativeDrawId": "GID_BOW",
+      "nativeInventoryId": "ITEM_BOW",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:143",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiBowHandleDL",
+          "gGiBowStringDL"
+        ],
+        "index": 46,
+        "paths": [
+          "__OTR__objects/object_gi_bow/gGiBowHandleDL",
+          "__OTR__objects/object_gi_bow/gGiBowStringDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_LULLABY",
+      "name": "Progressive Goron Lullaby",
+      "key": "fleet.mm.661140040070dd36",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:144"
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_MAGIC",
+      "name": "Progressive Magic",
+      "key": "fleet.mm.95534be0e3f8b71f",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_JAR_SMALL",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:145",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiMagicJarSmallDL"
+        ],
+        "index": 28,
+        "paths": [
+          "__OTR__objects/object_gi_magicpot/gGiMagicJarSmallDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_SWORD",
+      "name": "Progressive Sword",
+      "key": "fleet.mm.e048025a2c77f1fd",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_KOKIRI",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:146",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiKokiriSwordBladeHiltDL",
+          "gGiKokiriSwordGuardDL"
+        ],
+        "index": 85,
+        "paths": [
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordBladeHiltDL",
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordGuardDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_PROGRESSIVE_WALLET",
+      "name": "Progressive Wallet",
+      "key": "fleet.mm.74f0f87b9eee3cb1",
+      "owner": "mm",
+      "nativeDrawId": "GID_WALLET_ADULT",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:147",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawWallet",
+        "resources": [
+          "gGiWalletDL",
+          "gGiAdultWalletColorDL",
+          "gGiAdultWalletRupeeOuterColorDL",
+          "gGiWalletRupeeOuterDL",
+          "gGiAdultWalletStringColorDL",
+          "gGiWalletStringDL",
+          "gGiAdultWalletRupeeInnerColorDL",
+          "gGiWalletRupeeInnerDL"
+        ],
+        "index": 32,
+        "paths": [
+          "__OTR__objects/object_gi_purse/gGiWalletDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletColorDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletRupeeOuterColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeOuterDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletStringColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletStringDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletRupeeInnerColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeInnerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_QUIVER_40",
+      "name": "Large Quiver",
+      "key": "fleet.mm.68680ca2b468200a",
+      "owner": "mm",
+      "nativeDrawId": "GID_QUIVER_40",
+      "nativeInventoryId": "ITEM_QUIVER_40",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:148",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiQuiverInnerDL",
+          "gGiQuiver40InnerColorDL",
+          "gGiQuiver40OuterColorDL",
+          "gGiQuiverOuterDL"
+        ],
+        "index": 21,
+        "paths": [
+          "__OTR__objects/object_gi_arrowcase/gGiQuiverInnerDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiver40InnerColorDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiver40OuterColorDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiverOuterDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_QUIVER_50",
+      "name": "Largest Quiver",
+      "key": "fleet.mm.ded5942696c67c73",
+      "owner": "mm",
+      "nativeDrawId": "GID_QUIVER_50",
+      "nativeInventoryId": "ITEM_QUIVER_50",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:149",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawUpgrades",
+        "resources": [
+          "gGiQuiverInnerDL",
+          "gGiQuiver50InnerColorDL",
+          "gGiQuiver50OuterColorDL",
+          "gGiQuiverOuterDL"
+        ],
+        "index": 22,
+        "paths": [
+          "__OTR__objects/object_gi_arrowcase/gGiQuiverInnerDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiver50InnerColorDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiver50OuterColorDL",
+          "__OTR__objects/object_gi_arrowcase/gGiQuiverOuterDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RECOVERY_HEART",
+      "name": "Recovery Heart",
+      "key": "fleet.mm.d9a008a3c33b31d6",
+      "owner": "mm",
+      "nativeDrawId": "GID_RECOVERY_HEART",
+      "nativeInventoryId": "ITEM_RECOVERY_HEART",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:150",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRecoveryHeart",
+        "resources": [
+          "gGiRecoveryHeartDL"
+        ],
+        "index": 8,
+        "paths": [
+          "__OTR__objects/object_gi_heart/gGiRecoveryHeartDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RED_POTION_REFILL",
+      "name": "Red Potion Refill",
+      "key": "fleet.mm.f72fc8c3ad353b35",
+      "owner": "mm",
+      "nativeDrawId": "GID_POTION_RED",
+      "nativeInventoryId": "ITEM_POTION_RED",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:151",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawPotion",
+        "resources": [
+          "gGiPotionContainerPotDL",
+          "gGiPotionContainerRedPotColorDL",
+          "gGiPotionContainerRedLiquidColorDL",
+          "gGiPotionContainerLiquidDL",
+          "gGiPotionContainerRedPatternColorDL",
+          "gGiPotionContainerPatternDL"
+        ],
+        "index": 49,
+        "paths": [
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPotDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerRedPotColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerRedLiquidColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerLiquidDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerRedPatternColorDL",
+          "__OTR__objects/object_gi_liquid/gGiPotionContainerPatternDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_REMAINS_GOHT",
+      "name": "Goht's Remains",
+      "key": "fleet.mm.e3c0a36c637beb10",
+      "owner": "mm",
+      "nativeDrawId": "GID_REMAINS_GOHT",
+      "nativeInventoryId": "ITEM_REMAINS_GOHT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:152",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRemains",
+        "resources": [
+          "gRemainsGohtDL",
+          "gRemainsGohtDL"
+        ],
+        "index": 99,
+        "paths": [
+          "__OTR__objects/object_bsmask/gRemainsGohtDL",
+          "__OTR__objects/object_bsmask/gRemainsGohtDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_REMAINS_GYORG",
+      "name": "Gyorg's Remains",
+      "key": "fleet.mm.43631312cfbf96be",
+      "owner": "mm",
+      "nativeDrawId": "GID_REMAINS_GYORG",
+      "nativeInventoryId": "ITEM_REMAINS_GYORG",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:153",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRemains",
+        "resources": [
+          "gRemainsGyorgDL",
+          "gRemainsGyorgDL"
+        ],
+        "index": 100,
+        "paths": [
+          "__OTR__objects/object_bsmask/gRemainsGyorgDL",
+          "__OTR__objects/object_bsmask/gRemainsGyorgDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_REMAINS_ODOLWA",
+      "name": "Odolwa's Remains",
+      "key": "fleet.mm.ddcb8fbe2baa6aea",
+      "owner": "mm",
+      "nativeDrawId": "GID_REMAINS_ODOLWA",
+      "nativeInventoryId": "ITEM_REMAINS_ODOLWA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:154",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRemains",
+        "resources": [
+          "gRemainsOdolwaDL",
+          "gRemainsOdolwaDL"
+        ],
+        "index": 92,
+        "paths": [
+          "__OTR__objects/object_bsmask/gRemainsOdolwaDL",
+          "__OTR__objects/object_bsmask/gRemainsOdolwaDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_REMAINS_TWINMOLD",
+      "name": "Twinmold's Remains",
+      "key": "fleet.mm.63b1b99686dc7ac0",
+      "owner": "mm",
+      "nativeDrawId": "GID_REMAINS_TWINMOLD",
+      "nativeInventoryId": "ITEM_REMAINS_TWINMOLD",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:155",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRemains",
+        "resources": [
+          "gRemainsTwinmoldDL",
+          "gRemainsTwinmoldDL"
+        ],
+        "index": 101,
+        "paths": [
+          "__OTR__objects/object_bsmask/gRemainsTwinmoldDL",
+          "__OTR__objects/object_bsmask/gRemainsTwinmoldDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_ROOM_KEY",
+      "name": "Room Key",
+      "key": "fleet.mm.2da8297f80e9a775",
+      "owner": "mm",
+      "nativeDrawId": "GID_ROOM_KEY",
+      "nativeInventoryId": "ITEM_ROOM_KEY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:156",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiRoomKeyEmptyDL",
+          "gGiRoomKeyDL"
+        ],
+        "index": 108,
+        "paths": [
+          "__OTR__objects/object_gi_reserve_b_00/gGiRoomKeyEmptyDL",
+          "__OTR__objects/object_gi_reserve_b_00/gGiRoomKeyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_BLUE",
+      "name": "Blue Rupee",
+      "key": "fleet.mm.048413ff71e23b68",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_BLUE",
+      "nativeInventoryId": "ITEM_RUPEE_BLUE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:157",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawSmallRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiBlueRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiBlueRupeeOuterColorDL"
+        ],
+        "index": 80,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiBlueRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiBlueRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_GREEN",
+      "name": "Green Rupee",
+      "key": "fleet.mm.80a81bcfa75908c1",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_GREEN",
+      "nativeInventoryId": "ITEM_RUPEE_GREEN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:158",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawSmallRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiGreenRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiGreenRupeeOuterColorDL"
+        ],
+        "index": 79,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiGreenRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiGreenRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_HUGE",
+      "name": "Huge Rupee",
+      "key": "fleet.mm.f601e697b40962ab",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_HUGE",
+      "nativeInventoryId": "ITEM_RUPEE_HUGE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:159",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiGoldRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiGoldRupeeOuterColorDL"
+        ],
+        "index": 66,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiGoldRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiGoldRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_PURPLE",
+      "name": "Purple Rupee",
+      "key": "fleet.mm.75e1027d24bcfbd6",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_PURPLE",
+      "nativeInventoryId": "ITEM_RUPEE_PURPLE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:160",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiPurpleRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiPurpleRupeeOuterColorDL"
+        ],
+        "index": 83,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiPurpleRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiPurpleRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_RED",
+      "name": "Red Rupee",
+      "key": "fleet.mm.c6cc40d28da8c5e1",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_RED",
+      "nativeInventoryId": "ITEM_RUPEE_RED",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:161",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawSmallRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiRedRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiRedRupeeOuterColorDL"
+        ],
+        "index": 81,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiRedRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiRedRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_RUPEE_SILVER",
+      "name": "Silver Rupee",
+      "key": "fleet.mm.ac65d912a7752f5d",
+      "owner": "mm",
+      "nativeDrawId": "GID_RUPEE_SILVER",
+      "nativeInventoryId": "ITEM_RUPEE_SILVER",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:162",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawRupee",
+        "resources": [
+          "gGiRupeeInnerDL",
+          "gGiSilverRupeeInnerColorDL",
+          "gGiRupeeOuterDL",
+          "gGiSilverRupeeOuterColorDL"
+        ],
+        "index": 84,
+        "paths": [
+          "__OTR__objects/object_gi_rupy/gGiRupeeInnerDL",
+          "__OTR__objects/object_gi_rupy/gGiSilverRupeeInnerColorDL",
+          "__OTR__objects/object_gi_rupy/gGiRupeeOuterDL",
+          "__OTR__objects/object_gi_rupy/gGiSilverRupeeOuterColorDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SHIELD_HERO",
+      "name": "Hero's Shield",
+      "key": "fleet.mm.1cea73ec15179844",
+      "owner": "mm",
+      "nativeDrawId": "GID_SHIELD_HERO",
+      "nativeInventoryId": "ITEM_SHIELD_HERO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:163",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiHerosShieldEmblemDL",
+          "gGiHerosShieldDL"
+        ],
+        "index": 39,
+        "paths": [
+          "__OTR__objects/object_gi_shield_2/gGiHerosShieldEmblemDL",
+          "__OTR__objects/object_gi_shield_2/gGiHerosShieldDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SHIELD_MIRROR",
+      "name": "Mirror Shield",
+      "key": "fleet.mm.f08577308397116b",
+      "owner": "mm",
+      "nativeDrawId": "GID_SHIELD_MIRROR",
+      "nativeInventoryId": "ITEM_SHIELD_MIRROR",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:164",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiMirrorShieldEmptyDL",
+          "gGiMirrorShieldDL"
+        ],
+        "index": 51,
+        "paths": [
+          "__OTR__objects/object_gi_shield_3/gGiMirrorShieldEmptyDL",
+          "__OTR__objects/object_gi_shield_3/gGiMirrorShieldDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SINGLE_MAGIC",
+      "name": "Power of Magic",
+      "key": "fleet.mm.441030c43a066948",
+      "owner": "mm",
+      "nativeDrawId": "GID_MAGIC_JAR_SMALL",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:165",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiMagicJarSmallDL"
+        ],
+        "index": 28,
+        "paths": [
+          "__OTR__objects/object_gi_magicpot/gGiMagicJarSmallDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SKELETON_KEY",
+      "name": "Skeleton Key",
+      "key": "fleet.mm.f21ce1b22ee89901",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:166"
+    },
+    {
+      "nativeToken": "RI_SNOWHEAD_BOSS_KEY",
+      "name": "Snowhead Boss Key",
+      "key": "fleet.mm.ce0848bb9b5938ee",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_BOSS",
+      "nativeInventoryId": "ITEM_KEY_BOSS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:167",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBossKeyDL",
+          "gGiBossKeyGemDL"
+        ],
+        "index": 9,
+        "paths": [
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyDL",
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyGemDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SNOWHEAD_COMPASS",
+      "name": "Snowhead Compass",
+      "key": "fleet.mm.c37be7a438e5576c",
+      "owner": "mm",
+      "nativeDrawId": "GID_COMPASS",
+      "nativeInventoryId": "ITEM_COMPASS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:168",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawCompass",
+        "resources": [
+          "gGiCompassDL",
+          "gGiCompassGlassDL"
+        ],
+        "index": 10,
+        "paths": [
+          "__OTR__objects/object_gi_compass/gGiCompassDL",
+          "__OTR__objects/object_gi_compass/gGiCompassGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SNOWHEAD_MAP",
+      "name": "Snowhead Map",
+      "key": "fleet.mm.ada9991666a0c05a",
+      "owner": "mm",
+      "nativeDrawId": "GID_DUNGEON_MAP",
+      "nativeInventoryId": "ITEM_DUNGEON_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:169",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiDungeonMapDL"
+        ],
+        "index": 27,
+        "paths": [
+          "__OTR__objects/object_gi_map/gGiDungeonMapDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SNOWHEAD_SMALL_KEY",
+      "name": "Snowhead Small Key",
+      "key": "fleet.mm.ae21c95b76a2fc88",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_SMALL",
+      "nativeInventoryId": "ITEM_KEY_SMALL",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:170",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiSmallKeyDL"
+        ],
+        "index": 1,
+        "paths": [
+          "__OTR__objects/object_gi_key/gGiSmallKeyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SNOWHEAD_STRAY_FAIRY",
+      "name": "Snowhead Stray Fairy",
+      "key": "fleet.mm.ade24fed24debcec",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_STRAY_FAIRIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:171"
+    },
+    {
+      "nativeToken": "RI_SONG_DOUBLE_TIME",
+      "name": "Song of Double Time",
+      "key": "fleet.mm.820d08f5d624a667",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:172"
+    },
+    {
+      "nativeToken": "RI_SONG_ELEGY",
+      "name": "Elegy of Emptiness",
+      "key": "fleet.mm.5451c2b87e127bf6",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_ELEGY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:173"
+    },
+    {
+      "nativeToken": "RI_SONG_EPONA",
+      "name": "Epona's Song",
+      "key": "fleet.mm.dcc7cb58cf2620af",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_EPONA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:174"
+    },
+    {
+      "nativeToken": "RI_SONG_HEALING",
+      "name": "Song of Healing",
+      "key": "fleet.mm.12449744a601e37b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_HEALING",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:175"
+    },
+    {
+      "nativeToken": "RI_SONG_INVERTED_TIME",
+      "name": "Inverted Song of Time",
+      "key": "fleet.mm.401b541a650a7433",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:176"
+    },
+    {
+      "nativeToken": "RI_SONG_LULLABY_INTRO",
+      "name": "Goron Lullaby Intro",
+      "key": "fleet.mm.b3a4804dbdc30d4f",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_LULLABY_INTRO",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:177"
+    },
+    {
+      "nativeToken": "RI_SONG_LULLABY",
+      "name": "Goron Lullaby",
+      "key": "fleet.mm.447ba947738d7e91",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_LULLABY",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:178"
+    },
+    {
+      "nativeToken": "RI_SONG_NOVA",
+      "name": "New Wave Bossa Nova",
+      "key": "fleet.mm.792e8bde2215e238",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_NOVA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:179"
+    },
+    {
+      "nativeToken": "RI_SONG_OATH",
+      "name": "Oath to Order",
+      "key": "fleet.mm.0381069c2ca60bea",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_OATH",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:180"
+    },
+    {
+      "nativeToken": "RI_SONG_SARIA",
+      "name": "Saria's Song",
+      "key": "fleet.mm.bd87b8f94af8068e",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_SARIA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:181"
+    },
+    {
+      "nativeToken": "RI_SONG_SOARING",
+      "name": "Song of Soaring",
+      "key": "fleet.mm.fb0785b1798caf12",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_SOARING",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:182"
+    },
+    {
+      "nativeToken": "RI_SONG_SONATA",
+      "name": "Sonata of Awakening",
+      "key": "fleet.mm.07da9b9c1d2ea11f",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_SONATA",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:183"
+    },
+    {
+      "nativeToken": "RI_SONG_STORMS",
+      "name": "Song of Storms",
+      "key": "fleet.mm.3ef8c1fedf2e6bd1",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_STORMS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:184"
+    },
+    {
+      "nativeToken": "RI_SONG_SUN",
+      "name": "Sun's Song",
+      "key": "fleet.mm.a4db9fbc0e426b20",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_SUN",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:185"
+    },
+    {
+      "nativeToken": "RI_SONG_TIME",
+      "name": "Song of Time",
+      "key": "fleet.mm.cf25933b6cde5bf6",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_SONG_TIME",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:186"
+    },
+    {
+      "nativeToken": "RI_SOUL_BOSS_GOHT",
+      "name": "Soul of Goht",
+      "key": "fleet.mm.ed428ca47c65021b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:187"
+    },
+    {
+      "nativeToken": "RI_SOUL_BOSS_GYORG",
+      "name": "Soul of Gyorg",
+      "key": "fleet.mm.a28118f5691fb6fd",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:188"
+    },
+    {
+      "nativeToken": "RI_SOUL_BOSS_MAJORA",
+      "name": "Soul of Majora",
+      "key": "fleet.mm.b50149ed62115045",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:189"
+    },
+    {
+      "nativeToken": "RI_SOUL_BOSS_ODOLWA",
+      "name": "Soul of Odolwa",
+      "key": "fleet.mm.7dcb03828d8e0c31",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:190"
+    },
+    {
+      "nativeToken": "RI_SOUL_BOSS_TWINMOLD",
+      "name": "Soul of Twinmold",
+      "key": "fleet.mm.19edc46c0394808b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:191"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_ALIEN",
+      "name": "Soul of Aliens",
+      "key": "fleet.mm.743a345931cf1a51",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:192"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_ARMOS",
+      "name": "Soul of Armos",
+      "key": "fleet.mm.5efbb683a03aee8b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:193"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_BAD_BAT",
+      "name": "Soul of Bad Bats",
+      "key": "fleet.mm.3a10c1721000e414",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:194"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_BEAMOS",
+      "name": "Soul of Beamos",
+      "key": "fleet.mm.56b2ec1265eea0d8",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:195"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_BOE",
+      "name": "Soul of Boes",
+      "key": "fleet.mm.be61818c6f096c32",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:196"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_BUBBLE",
+      "name": "Soul of Bubbles",
+      "key": "fleet.mm.ef127942558aaea0",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:197"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_CAPTAIN_KEETA",
+      "name": "Soul of Captain Keeta",
+      "key": "fleet.mm.6290cd03cd963bc7",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:198"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_CHUCHU",
+      "name": "Soul of Chuchus",
+      "key": "fleet.mm.c674cc4c32b8711e",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:199"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DEATH_ARMOS",
+      "name": "Soul of Death Armos",
+      "key": "fleet.mm.3afe51680fb6cc8d",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:200"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DEEP_PYTHON",
+      "name": "Soul of Deep Pythons",
+      "key": "fleet.mm.bedf501756c2a810",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:201"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DEKU_BABA",
+      "name": "Soul of Deku Babas",
+      "key": "fleet.mm.387c3a6cf8e297e7",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:202"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DEXIHAND",
+      "name": "Soul of Dexihands",
+      "key": "fleet.mm.16c10cd536b169dd",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:203"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DINOLFOS",
+      "name": "Soul of Dinolfos",
+      "key": "fleet.mm.56bd8c605768c095",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:204"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DODONGO",
+      "name": "Soul of Dodongos",
+      "key": "fleet.mm.675a201e13b466f8",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:205"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_DRAGONFLY",
+      "name": "Soul of Dragonflies",
+      "key": "fleet.mm.b5c8a4545d548273",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:206"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_EENO",
+      "name": "Soul of Eenos",
+      "key": "fleet.mm.62361eb6a0eb9be9",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:207"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_EYEGORE",
+      "name": "Soul of Eyegores",
+      "key": "fleet.mm.ac6e22bb1d37647a",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:208"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_FREEZARD",
+      "name": "Soul of Freezards",
+      "key": "fleet.mm.7eed2aefdb97b1a5",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:209"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_GARO",
+      "name": "Soul of Garos",
+      "key": "fleet.mm.8ebf812b959cbceb",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:210"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_GEKKO",
+      "name": "Soul of Gekkos",
+      "key": "fleet.mm.fd25c88e0dbea3e5",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:211"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_GIANT_BEE",
+      "name": "Soul of Giant Bees",
+      "key": "fleet.mm.1e86937c84256e93",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:212"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_GOMESS",
+      "name": "Soul of Gomess",
+      "key": "fleet.mm.be5bbf458814db0f",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:213"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_GUAY",
+      "name": "Soul of Guays",
+      "key": "fleet.mm.7cc256d28fbd03c4",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:214"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_HIPLOOP",
+      "name": "Soul of Hiploops",
+      "key": "fleet.mm.c01567774f8b3ed9",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:215"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_IGOS_DU_IKANA",
+      "name": "Soul of Igos du Ikana",
+      "key": "fleet.mm.aa3bca0a27fa9a84",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:216"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_IRON_KNUCKLE",
+      "name": "Soul of Iron Knuckles",
+      "key": "fleet.mm.a8bc27a2c26e4237",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:217"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_KEESE",
+      "name": "Soul of Keese",
+      "key": "fleet.mm.00a8348aa3888b08",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:218"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_LEEVER",
+      "name": "Soul of Leevers",
+      "key": "fleet.mm.7bc2776c510b4ea7",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:219"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_LIKE_LIKE",
+      "name": "Soul of Like Likes",
+      "key": "fleet.mm.74c3f945820af8ba",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:220"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_MAD_SCRUB",
+      "name": "Soul of Mad Scrubs",
+      "key": "fleet.mm.243e88a3a9f9ccab",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:221"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_NEJIRON",
+      "name": "Soul of Nejirons",
+      "key": "fleet.mm.2f5b1083cc87c191",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:222"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_OCTOROK",
+      "name": "Soul of Octoroks",
+      "key": "fleet.mm.0fe444778f5e0fff",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:223"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_PEAHAT",
+      "name": "Soul of Peahats",
+      "key": "fleet.mm.95c6dea3d930cb3f",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:224"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_PIRATE",
+      "name": "Soul of Pirates",
+      "key": "fleet.mm.1769e2f6c2682b2d",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:225"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_POE",
+      "name": "Soul of Poes",
+      "key": "fleet.mm.692f98f2ed7f0ad0",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:226"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_REDEAD",
+      "name": "Soul of Redeads",
+      "key": "fleet.mm.a6bfdcf2aa80e2bb",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:227"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_SHELLBLADE",
+      "name": "Soul of Shellblades",
+      "key": "fleet.mm.5dbdcb4a8e923dee",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:228"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_SKULLFISH",
+      "name": "Soul of Skullfish",
+      "key": "fleet.mm.9f2c9ef234390f10",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:229"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_SKULLTULA",
+      "name": "Soul of Skulltulas",
+      "key": "fleet.mm.da8c7331304194ab",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:230"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_SNAPPER",
+      "name": "Soul of Snappers",
+      "key": "fleet.mm.1a7b43baed833939",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:231"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_STALCHILD",
+      "name": "Soul of Stalchildren",
+      "key": "fleet.mm.6d80b22b7877fb44",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:232"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_TAKKURI",
+      "name": "Soul of Takkuri",
+      "key": "fleet.mm.cf468b624ff18162",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:233"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_TEKTITE",
+      "name": "Soul of Tektites",
+      "key": "fleet.mm.39b59bb8b9de4470",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:234"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_WALLMASTER",
+      "name": "Soul of Wallmasters",
+      "key": "fleet.mm.61f781a004474a04",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:235"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_WART",
+      "name": "Soul of Warts",
+      "key": "fleet.mm.da0f9259416a7834",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:236"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_WIZROBE",
+      "name": "Soul of Wizrobes",
+      "key": "fleet.mm.86b66e051e37e4b4",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:237"
+    },
+    {
+      "nativeToken": "RI_SOUL_ENEMY_WOLFOS",
+      "name": "Soul of Wolfos",
+      "key": "fleet.mm.8c911de084931347",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:238"
+    },
+    {
+      "nativeToken": "RI_STONE_TOWER_BOSS_KEY",
+      "name": "Stone Tower Boss Key",
+      "key": "fleet.mm.7d0f084aa0c99f4f",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_BOSS",
+      "nativeInventoryId": "ITEM_KEY_BOSS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:239",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBossKeyDL",
+          "gGiBossKeyGemDL"
+        ],
+        "index": 9,
+        "paths": [
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyDL",
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyGemDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_STONE_TOWER_COMPASS",
+      "name": "Stone Tower Compass",
+      "key": "fleet.mm.058c834c53198ac3",
+      "owner": "mm",
+      "nativeDrawId": "GID_COMPASS",
+      "nativeInventoryId": "ITEM_COMPASS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:240",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawCompass",
+        "resources": [
+          "gGiCompassDL",
+          "gGiCompassGlassDL"
+        ],
+        "index": 10,
+        "paths": [
+          "__OTR__objects/object_gi_compass/gGiCompassDL",
+          "__OTR__objects/object_gi_compass/gGiCompassGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_STONE_TOWER_MAP",
+      "name": "Stone Tower Map",
+      "key": "fleet.mm.f8c06d97a35287bd",
+      "owner": "mm",
+      "nativeDrawId": "GID_DUNGEON_MAP",
+      "nativeInventoryId": "ITEM_DUNGEON_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:241",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiDungeonMapDL"
+        ],
+        "index": 27,
+        "paths": [
+          "__OTR__objects/object_gi_map/gGiDungeonMapDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_STONE_TOWER_SMALL_KEY",
+      "name": "Stone Tower Small Key",
+      "key": "fleet.mm.5909040502ff3977",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_SMALL",
+      "nativeInventoryId": "ITEM_KEY_SMALL",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:242",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiSmallKeyDL"
+        ],
+        "index": 1,
+        "paths": [
+          "__OTR__objects/object_gi_key/gGiSmallKeyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_STONE_TOWER_STRAY_FAIRY",
+      "name": "Stone Tower Stray Fairy",
+      "key": "fleet.mm.3fde31eee9a35aef",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_STRAY_FAIRIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:243"
+    },
+    {
+      "nativeToken": "RI_SWORD_GILDED",
+      "name": "Gilded Sword",
+      "key": "fleet.mm.fee5699e6c6c452d",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_GILDED",
+      "nativeInventoryId": "ITEM_SWORD_GILDED",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:244",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiGildedSwordDL",
+          "gGiGildedSwordEmptyDL"
+        ],
+        "index": 103,
+        "paths": [
+          "__OTR__objects/object_gi_sword_3/gGiGildedSwordDL",
+          "__OTR__objects/object_gi_sword_3/gGiGildedSwordEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SWORD_KOKIRI",
+      "name": "Kokiri Sword",
+      "key": "fleet.mm.31387d9119e6bcdb",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_KOKIRI",
+      "nativeInventoryId": "ITEM_SWORD_KOKIRI",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:245",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiKokiriSwordBladeHiltDL",
+          "gGiKokiriSwordGuardDL"
+        ],
+        "index": 85,
+        "paths": [
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordBladeHiltDL",
+          "__OTR__objects/object_gi_sword_1/gGiKokiriSwordGuardDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_SWORD_RAZOR",
+      "name": "Razor Sword",
+      "key": "fleet.mm.9f52d08648eaac0e",
+      "owner": "mm",
+      "nativeDrawId": "GID_SWORD_RAZOR",
+      "nativeInventoryId": "ITEM_SWORD_RAZOR",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:246",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiRazorSwordDL",
+          "gGiRazorSwordEmptyDL"
+        ],
+        "index": 102,
+        "paths": [
+          "__OTR__objects/object_gi_sword_2/gGiRazorSwordDL",
+          "__OTR__objects/object_gi_sword_2/gGiRazorSwordEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TIME_DAY_1",
+      "name": "Time (Day 1)",
+      "key": "fleet.mm.a0754befff643a90",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:247"
+    },
+    {
+      "nativeToken": "RI_TIME_DAY_2",
+      "name": "Time (Day 2)",
+      "key": "fleet.mm.a06b2befff5bafab",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:248"
+    },
+    {
+      "nativeToken": "RI_TIME_DAY_3",
+      "name": "Time (Day 3)",
+      "key": "fleet.mm.a06e4fefff5e22ae",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:249"
+    },
+    {
+      "nativeToken": "RI_TIME_NIGHT_1",
+      "name": "Time (Night 1)",
+      "key": "fleet.mm.9100846b4bef7924",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:250"
+    },
+    {
+      "nativeToken": "RI_TIME_NIGHT_2",
+      "name": "Time (Night 2)",
+      "key": "fleet.mm.90f6846b4be7249f",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:251"
+    },
+    {
+      "nativeToken": "RI_TIME_NIGHT_3",
+      "name": "Time (Night 3)",
+      "key": "fleet.mm.90f9a86b4be997a2",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:252"
+    },
+    {
+      "nativeToken": "RI_TIME_PROGRESSIVE",
+      "name": "Progressive Time",
+      "key": "fleet.mm.85986aa7e63ca5d5",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:253"
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_CLOCK_TOWN",
+      "name": "Tingle's Clock Town Map",
+      "key": "fleet.mm.33cfc42769a25274",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:254",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_GREAT_BAY",
+      "name": "Tingle's Great Bay Map",
+      "key": "fleet.mm.03e0a2add0ebcfef",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:255",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_ROMANI_RANCH",
+      "name": "Tingle's Romani Ranch Map",
+      "key": "fleet.mm.4422376c56f7f588",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:256",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_SNOWHEAD",
+      "name": "Tingle's Snowhead Map",
+      "key": "fleet.mm.b236923747d1b577",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:257",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_STONE_TOWER",
+      "name": "Tingle's Stone Tower Map",
+      "key": "fleet.mm.6ab250b4140775ae",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:258",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TINGLE_MAP_WOODFALL",
+      "name": "Tingle's Woodfall Map",
+      "key": "fleet.mm.93f7c88dc71729ea",
+      "owner": "mm",
+      "nativeDrawId": "GID_TINGLE_MAP",
+      "nativeInventoryId": "ITEM_TINGLE_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:259",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa01",
+        "resources": [
+          "gGiTingleMapDL",
+          "gGiTingleMapEmptyDL"
+        ],
+        "index": 45,
+        "paths": [
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapDL",
+          "__OTR__objects/object_gi_fieldmap/gGiTingleMapEmptyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_TRAP",
+      "name": "Knockoff Item",
+      "key": "fleet.mm.3c35f9ed2426cc1b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:260"
+    },
+    {
+      "nativeToken": "RI_TRIFORCE_PIECE_PREVIOUS",
+      "name": "RI_TRIFORCE_PIECE_PREVIOUS",
+      "key": "fleet.mm.d6bf22b95528fe64",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:261"
+    },
+    {
+      "nativeToken": "RI_TRIFORCE_PIECE",
+      "name": "Piece of the Triforce",
+      "key": "fleet.mm.5e381ed5a237535b",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:262"
+    },
+    {
+      "nativeToken": "RI_WALLET_ADULT",
+      "name": "Adult's Wallet",
+      "key": "fleet.mm.aee4207b0dc39a96",
+      "owner": "mm",
+      "nativeDrawId": "GID_WALLET_ADULT",
+      "nativeInventoryId": "ITEM_WALLET_ADULT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:263",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawWallet",
+        "resources": [
+          "gGiWalletDL",
+          "gGiAdultWalletColorDL",
+          "gGiAdultWalletRupeeOuterColorDL",
+          "gGiWalletRupeeOuterDL",
+          "gGiAdultWalletStringColorDL",
+          "gGiWalletStringDL",
+          "gGiAdultWalletRupeeInnerColorDL",
+          "gGiWalletRupeeInnerDL"
+        ],
+        "index": 32,
+        "paths": [
+          "__OTR__objects/object_gi_purse/gGiWalletDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletColorDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletRupeeOuterColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeOuterDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletStringColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletStringDL",
+          "__OTR__objects/object_gi_purse/gGiAdultWalletRupeeInnerColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeInnerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WALLET_GIANT",
+      "name": "Giant's Wallet",
+      "key": "fleet.mm.35ed8f655f08a1ad",
+      "owner": "mm",
+      "nativeDrawId": "GID_WALLET_GIANT",
+      "nativeInventoryId": "ITEM_WALLET_GIANT",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:264",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawWallet",
+        "resources": [
+          "gGiWalletDL",
+          "gGiGiantsWalletColorDL",
+          "gGiGiantsWalletRupeeOuterColorDL",
+          "gGiWalletRupeeOuterDL",
+          "gGiGiantsWalletStringColorDL",
+          "gGiWalletStringDL",
+          "gGiGiantsWalletRupeeInnerColorDL",
+          "gGiWalletRupeeInnerDL"
+        ],
+        "index": 33,
+        "paths": [
+          "__OTR__objects/object_gi_purse/gGiWalletDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletColorDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletRupeeOuterColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeOuterDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletStringColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletStringDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletRupeeInnerColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeInnerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WALLET_TYCOON",
+      "name": "Tycoon's Wallet",
+      "key": "fleet.mm.50d522bdf78bba78",
+      "owner": "mm",
+      "nativeDrawId": "GID_WALLET_GIANT",
+      "nativeInventoryId": "ITEM_NONE",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:265",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawWallet",
+        "resources": [
+          "gGiWalletDL",
+          "gGiGiantsWalletColorDL",
+          "gGiGiantsWalletRupeeOuterColorDL",
+          "gGiWalletRupeeOuterDL",
+          "gGiGiantsWalletStringColorDL",
+          "gGiWalletStringDL",
+          "gGiGiantsWalletRupeeInnerColorDL",
+          "gGiWalletRupeeInnerDL"
+        ],
+        "index": 33,
+        "paths": [
+          "__OTR__objects/object_gi_purse/gGiWalletDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletColorDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletRupeeOuterColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeOuterDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletStringColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletStringDL",
+          "__OTR__objects/object_gi_purse/gGiGiantsWalletRupeeInnerColorDL",
+          "__OTR__objects/object_gi_purse/gGiWalletRupeeInnerDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WOODFALL_BOSS_KEY",
+      "name": "Woodfall Boss Key",
+      "key": "fleet.mm.af7f8da5d502c33d",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_BOSS",
+      "nativeInventoryId": "ITEM_KEY_BOSS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:266",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0Xlu1",
+        "resources": [
+          "gGiBossKeyDL",
+          "gGiBossKeyGemDL"
+        ],
+        "index": 9,
+        "paths": [
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyDL",
+          "__OTR__objects/object_gi_bosskey/gGiBossKeyGemDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WOODFALL_COMPASS",
+      "name": "Woodfall Compass",
+      "key": "fleet.mm.63533092417adfe9",
+      "owner": "mm",
+      "nativeDrawId": "GID_COMPASS",
+      "nativeInventoryId": "ITEM_COMPASS",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:267",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawCompass",
+        "resources": [
+          "gGiCompassDL",
+          "gGiCompassGlassDL"
+        ],
+        "index": 10,
+        "paths": [
+          "__OTR__objects/object_gi_compass/gGiCompassDL",
+          "__OTR__objects/object_gi_compass/gGiCompassGlassDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WOODFALL_MAP",
+      "name": "Woodfall Map",
+      "key": "fleet.mm.d18fa74217bb9613",
+      "owner": "mm",
+      "nativeDrawId": "GID_DUNGEON_MAP",
+      "nativeInventoryId": "ITEM_DUNGEON_MAP",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:268",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiDungeonMapDL"
+        ],
+        "index": 27,
+        "paths": [
+          "__OTR__objects/object_gi_map/gGiDungeonMapDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WOODFALL_SMALL_KEY",
+      "name": "Woodfall Small Key",
+      "key": "fleet.mm.355f70959cb9e7bd",
+      "owner": "mm",
+      "nativeDrawId": "GID_KEY_SMALL",
+      "nativeInventoryId": "ITEM_KEY_SMALL",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:269",
+      "nativeRecipe": {
+        "handler": "GetItem_DrawOpa0",
+        "resources": [
+          "gGiSmallKeyDL"
+        ],
+        "index": 1,
+        "paths": [
+          "__OTR__objects/object_gi_key/gGiSmallKeyDL"
+        ]
+      }
+    },
+    {
+      "nativeToken": "RI_WOODFALL_STRAY_FAIRY",
+      "name": "Woodfall Stray Fairy",
+      "key": "fleet.mm.13eb60f727dc6cc5",
+      "owner": "mm",
+      "nativeDrawId": "GID_NONE",
+      "nativeInventoryId": "ITEM_STRAY_FAIRIES",
+      "poolCount": 0,
+      "source": "mm/2s2h/Rando/StaticData/Items.cpp:270"
+    }
+  ]
+}

@@ -1,9 +1,5 @@
 #include <string.h>
 #include <math.h>
-/**
- * Magic Tunic: while the wallet holds rupees every hit is paid in rupees instead of hearts, and heat and water
- * stop counting down. A third of each payment spills out as real rupees. Broke, it is a heavy black shirt.
- */
 
 #include "z64items.h"
 
@@ -21,7 +17,6 @@
 #define ABSORB_INTANGIBILITY 20
 #define SPILL_RADIUS_MIN 8.0f
 #define SPILL_RADIUS_MAX 20.0f
-// Rupees collect within 50 units vertically: spawning above that window keeps them from being swallowed at once.
 #define SPILL_HEIGHT_MARGIN 40.0f
 
 static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gItemIconMagicTunicTex";
@@ -50,7 +45,6 @@ static bool IsWorn(void) {
     return CustomEquipRegistry_IsWorn(MAGIC_TUNIC_KEY);
 }
 
-// The accumulator holds what the wallet is still paying out, so it counts against the balance.
 static s16 GetSpendableRupees(void) {
     return gSaveContext.rupees + gSaveContext.rupeeAccumulator;
 }
@@ -105,8 +99,6 @@ static void FeelAbsorbedHit(Player* player) {
     Rumble_Request(0.0f, 180, 20, 100);
 }
 
-// Runs before Player_UpdateCommon consumes the hit: paid for, it plays like a block, with no knockback, no hurt
-// animation and no voice.
 static void AbsorbHit(Player* player, Input* input) {
     PlayState* play = gPlayState;
 
@@ -128,7 +120,6 @@ static void AbsorbHit(Player* player, Input* input) {
     }
 }
 
-// Burning floors, falls and voids take health without a collider: the loss is handed back the moment it lands.
 static void RefundOtherDamage(int16_t amount) {
     PlayState* play = gPlayState;
 
@@ -219,7 +210,8 @@ static void ResetDrain(const char* key) {
     sDrainTimer = 0;
 }
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnPlayerFilterInput", "OnPlayerHealthChange",
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate",          "OnPlayerUpdate",
+                                              "OnPlayerFilterInput",        "OnPlayerHealthChange",
                                               "OnPlayerResolveMotionScale", "OnResolveEnvHazard" };
 
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
@@ -247,11 +239,12 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.magic_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.magic_tunic.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -294,8 +287,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -306,9 +297,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
@@ -340,10 +328,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.toggles = 1;
     definition.onUnequip = ResetDrain;
     definition.getItemEntry.drawFunc = DrawGetItem;
-    // The equipment registry creates the pickup; this block also puts it into new seeds.
     static const SOHCustomItemRandomizer randomizer = {
-        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1,
-        MAGIC_TUNIC_KEY, MAGIC_TUNIC_KEY, "",
+        sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_EQUIP, 0, 1, MAGIC_TUNIC_KEY, MAGIC_TUNIC_KEY, "",
     };
     definition.randomizer = &randomizer;
     if (!CustomEquipRegistry_Register(&definition)) {

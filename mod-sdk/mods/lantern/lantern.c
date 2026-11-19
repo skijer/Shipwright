@@ -16,7 +16,6 @@
 
 #define LANTERN_KEY "nei.lantern"
 #define LANTERN_BUTTON_COUNT 8
-// The lamp is modelled at 2842 units and hangs upside down, so it rides the hand at a hundredth of that.
 #define LANTERN_HELD_SCALE 0.004f
 #define LANTERN_FLAME_SCALE 0.0008f
 #define LANTERN_FLAME_DROP 7.0f
@@ -96,7 +95,6 @@ static const ALIGN_ASSET(2) char sFlameIcons[LANTERN_FLAME_MAX][64] = {
     "__OTR__textures/icon_item_custom/gItemIconLanternGreenTex",
 };
 
-// Every flame keeps DMG_ARROW_FIRE so all four light torches and burn webs; spawnParams picks En_Light's colour.
 static const LanternFire sFires[LANTERN_FLAME_MAX] = {
     { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 }, 0x0000, 0, 0, 0 },
     { { 255, 180, 80 }, { 255, 200, 0 }, { 255, 0, 0 }, 0x0000, DMG_ARROW_FIRE, 2, LANTERN_FLAME_LIFETIME },
@@ -123,10 +121,8 @@ static const Z64WheelEntry sWheelEntries[LANTERN_FLAME_MAX] = {
     { sFlameIcons[LANTERN_GREEN], "Green Fire" },
 };
 
-// The order the Poe sisters and their torch stands cycle: Meg, Joelle, Beth, Amy.
 static const u8 sPoeColorToFlame[] = { LANTERN_POE, LANTERN_FIRE, LANTERN_BLUE, LANTERN_GREEN };
 
-// En_Light's sixteen colours (params & 0xF) mapped onto the four the lamp can hold.
 static const u8 sEnLightToFlame[16] = {
     LANTERN_FIRE, LANTERN_FIRE, LANTERN_BLUE, LANTERN_GREEN, LANTERN_FIRE, LANTERN_FIRE, LANTERN_GREEN, LANTERN_BLUE,
     LANTERN_FIRE, LANTERN_FIRE, LANTERN_FIRE, LANTERN_GREEN, LANTERN_POE,  LANTERN_POE,  LANTERN_BLUE,  LANTERN_BLUE,
@@ -141,8 +137,8 @@ static ColliderCylinderInit sFlameColliderInit = {
 static const u16 sItemButtons[LANTERN_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                         BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
-static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate", "OnSceneInit", "OnActorDrawEnd", "OnInterfaceDrawEnd",
-                                              "OnLoadFile" };
+static const char* const sRequiredHooks[] = { "OnGameFrameUpdate", "OnPlayerUpdate",     "OnSceneInit",
+                                              "OnActorDrawEnd",    "OnInterfaceDrawEnd", "OnLoadFile" };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
@@ -202,7 +198,6 @@ static u16 FindEquippedButtonMask(void) {
     return 0;
 }
 
-// A lit lamp stays in the hand that is otherwise empty; unlit, it only shows while it is being swung.
 static bool IsLanternShowing(Player* player, u8 fire) {
     if (FindEquippedButtonMask() == 0) {
         return false;
@@ -213,7 +208,6 @@ static bool IsLanternShowing(Player* player, u8 fire) {
     return fire != LANTERN_OFF && player->heldItemAction == PLAYER_IA_NONE;
 }
 
-// A Poe recolours its lamp as it changes mood, so its fire has to be read from the colour, not a table.
 static u8 ClassifyFlameColor(u8 red, u8 green, u8 blue) {
     u8 strongest = MAX(red, MAX(green, blue));
     u8 weakest = MIN(red, MIN(green, blue));
@@ -292,7 +286,6 @@ static Actor* FindNearbyFire(Player* player, PlayState* play, u8* flame) {
     return NULL;
 }
 
-// The Poe itself is swallowed with its fire; torches and loose flames keep burning.
 static void SwallowPoe(PlayState* play, Actor* source) {
     switch (source->id) {
         case ACTOR_EN_PO_SISTERS:
@@ -346,7 +339,6 @@ static void TrackFlame(PlayState* play, Actor* flame, u8 fire) {
     flame->scale.z *= LANTERN_FLAME_SEED_SCALE;
 }
 
-// En_Light lights its own halo on spawn; a lamp's flame is a bare point light instead.
 static Actor* SpawnFlameActor(PlayState* play, Vec3f* pos, u8 fire) {
     Actor* flame =
         Actor_Spawn(&play->actorCtx, play, ACTOR_EN_LIGHT, pos->x, pos->y, pos->z, 0, 0, 0, sFires[fire].spawnParams);
@@ -421,7 +413,6 @@ static void IgniteGrassAround(PlayState* play, Vec3f* center, f32 range, u8 fire
     }
 }
 
-// Burning grass throws Link upward: the heat is what carries him, so his own jump keeps whatever it had.
 static void LiftPlayerOverFire(Player* player, Vec3f* firePos) {
     f32 deltaX = player->actor.world.pos.x - firePos->x;
     f32 deltaZ = player->actor.world.pos.z - firePos->z;
@@ -515,7 +506,6 @@ static void ReleaseCatchCamera(Player* player, PlayState* play) {
     func_80839FFC(player, play);
 }
 
-// The swing is the bottle's: the catch lands on the same frames a bug would be scooped up.
 static void SwingAction(Player* player, PlayState* play) {
     s32 activeFrame = (s32)player->skelAnime.curFrame;
 
@@ -549,7 +539,6 @@ static void SwingAction(Player* player, PlayState* play) {
         func_80839FFC(player, play);
         return;
     }
-    // The box takes a few frames to come up, so Link only lets go once it has been on screen and closed again.
     if (play->msgCtx.msgMode != MSGMODE_NONE) {
         sWasCatchMessageUp = true;
     }
@@ -598,7 +587,6 @@ static void GetLampPos(Player* player, Vec3f* pos) {
     *pos = player->bodyPartsPos[PLAYER_BODYPART_L_HAND];
 }
 
-// Stowed, the glow falls back to Link's chest so a lit lamp still lights the room from his belt.
 static void HoldLight(PlayState* play, Player* player, u8 fire) {
     if (fire == LANTERN_OFF) {
         if (sLightNode != NULL) {
@@ -623,7 +611,6 @@ static void HoldLight(PlayState* play, Player* player, u8 fire) {
     }
 }
 
-// Ghost fire shows what hides from ordinary eyes, without spending the magic the Lens would.
 static void HoldLens(PlayState* play, u8 fire) {
     bool wantsLens = fire == LANTERN_POE && play->csCtx.state == CS_STATE_IDLE;
 
@@ -651,7 +638,6 @@ static void SpawnHealSparks(PlayState* play, Player* player, f32 height, s16 lif
     EffectSsKiraKira_SpawnFocused(play, &pos, &velocity, &accel, &primary, &secondary, life, size);
 }
 
-// Green fire only mends someone who stands still under it.
 static void HealWhileStill(PlayState* play, Player* player, u8 fire) {
     f32 moved = SQ(player->actor.world.pos.x - sLastPlayerPos.x) + SQ(player->actor.world.pos.y - sLastPlayerPos.y) +
                 SQ(player->actor.world.pos.z - sLastPlayerPos.z);
@@ -694,7 +680,6 @@ static void DrawLampFlame(PlayState* play, Player* player, Vec3f* lampPos, u8 fi
     sFlameTexScroll++;
 }
 
-// The lamp hangs from the hand, upside down as the model is authored, and burns in its flame's colour.
 static void DrawLantern(Actor* actor, PlayState* play) {
     Player* player = (Player*)actor;
     u8 fire = CurrentFlame();
@@ -774,7 +759,6 @@ static void UpdateLantern(void) {
     HealWhileStill(play, player, fire);
 }
 
-// The scene rebuilds the light list and every actor, so the lamp's own bookkeeping starts over with it.
 static void ForgetSceneState(int16_t sceneNum) {
     sLightNode = NULL;
     sIsLensBorrowed = false;
@@ -791,11 +775,9 @@ static void ForgetSceneState(int16_t sceneNum) {
     }
 }
 
-// Shuffled once by the randomizer; no vanilla logic needs it.
 static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, LANTERN_KEY, LANTERN_KEY, "",
 };
-
 
 static bool sRemoteVisualReady;
 static bool sRemoteVisualSent;
@@ -811,7 +793,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
         return false;
     }
     uint32_t peerId = sApi->GetNetPeerIdForActor(&player->actor);
-    if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.lantern.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
+    if (peerId == 0 ||
+        sApi->GetNetPeerState(peerId, "nei.lantern.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
     if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
@@ -872,7 +855,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnActorDrawEnd, DrawRemotePlayer);
     }
 }
-
 
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;

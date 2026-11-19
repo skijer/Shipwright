@@ -1,4 +1,3 @@
-/** Cane of Byrna: the requested MHR actions, original-frame events, 1.4x playback and wrapped-angle interpolation. */
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,7 +41,6 @@
 #define CANE_AXIS_MAX 223.0f
 #define DEG_TO_BINANG 182.04f
 
-
 typedef enum {
     CLIP_SHEATHE,
     CLIP_DRAW,
@@ -62,7 +60,10 @@ typedef enum {
     CLIP_RUN,
     CLIP_MAX
 } ClipId;
-typedef struct { const char* path; bool ground; } ClipSource;
+typedef struct {
+    const char* path;
+    bool ground;
+} ClipSource;
 static const ClipSource sClipSources[CLIP_MAX] = {
     { "__OTR__misc/link_animetion/nei_byrna_ForwardMultiHitAerialStaffStrike", true },
     { "__OTR__misc/link_animetion/nei_byrna_ForwardRisingDoubleChargedStaffCombo", true },
@@ -82,11 +83,11 @@ static const ClipSource sClipSources[CLIP_MAX] = {
     { "__OTR__misc/link_animetion/nei_byrna_ForwardStaffRun", true },
 };
 
-static const ALIGN_ASSET(2) char sIcon[]="__OTR__textures/icon_item_custom/gItemIconCaneOfByrnaTex";
-static const ALIGN_ASSET(2) char sName[]="__OTR__textures/item_name_custom/gCaneOfByrnaNameTex";
-static const ALIGN_ASSET(2) char sCaneDL[]="__OTR__objects/object_somaria/g_byrna_cane_dl";
-static const ALIGN_ASSET(2) char sCaneGiveDL[]="__OTR__objects/object_somaria/g_byrna_cane_give_dl";
-static const char* const sGripDL[]={gLinkAdultLeftHandNearDL,gLinkChildLeftHandNearDL};
+static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gItemIconCaneOfByrnaTex";
+static const ALIGN_ASSET(2) char sName[] = "__OTR__textures/item_name_custom/gCaneOfByrnaNameTex";
+static const ALIGN_ASSET(2) char sCaneDL[] = "__OTR__objects/object_somaria/g_byrna_cane_dl";
+static const ALIGN_ASSET(2) char sCaneGiveDL[] = "__OTR__objects/object_somaria/g_byrna_cane_give_dl";
+static const char* const sGripDL[] = { gLinkAdultLeftHandNearDL, gLinkChildLeftHandNearDL };
 static const SOHModApi* sApi;
 #define REMOTE_VISUAL_INTERVAL 5u
 
@@ -102,28 +103,28 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
 static void InitRemoteVisuals(void);
 static uint32_t CaptureRemoteLimbEnv(PlayState* play);
 static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
-s32 Player_SetupAction(PlayState*,Player*,PlayerActionFunc,s32);
-void func_80839FFC(Player*,PlayState*);
+s32 Player_SetupAction(PlayState*, Player*, PlayerActionFunc, s32);
+void func_80839FFC(Player*, PlayState*);
 void func_8008EC70(Player*);
 int Player_IsZTargeting(Player*);
-void Player_PlayVoiceSfx(Player*,u16);
+void Player_PlayVoiceSfx(Player*, u16);
 s8 Player_ItemToItemAction(s32);
 static void ApplyCaneMatrix(void);
 #include "byrna_runtime.inc.c"
 void BossGoma_SetupFloorStunned(BossGoma*);
 void BossGoma_SetupFallStruckDown(BossGoma*);
-void BossGoma_FloorStunned(BossGoma*,PlayState*);
-void BossGoma_FallStruckDown(BossGoma*,PlayState*);
-void BossGoma_FloorLandStruckDown(BossGoma*,PlayState*);
-void BossGoma_CeilingMoveToCenter(BossGoma*,PlayState*);
-void BossGoma_CeilingIdle(BossGoma*,PlayState*);
-void BossGoma_CeilingPrepareSpawnGohmas(BossGoma*,PlayState*);
-void BossGoma_CeilingSpawnGohmas(BossGoma*,PlayState*);
-void BossGoma_Defeated(BossGoma*,PlayState*);
-void BossDodongo_LayDown(BossDodongo*,PlayState*);
-void BossDodongo_Vulnerable(BossDodongo*,PlayState*);
-void BossDodongo_DeathCutscene(BossDodongo*,PlayState*);
-static void StunByrnaBoss(Actor*,PlayState*);
+void BossGoma_FloorStunned(BossGoma*, PlayState*);
+void BossGoma_FallStruckDown(BossGoma*, PlayState*);
+void BossGoma_FloorLandStruckDown(BossGoma*, PlayState*);
+void BossGoma_CeilingMoveToCenter(BossGoma*, PlayState*);
+void BossGoma_CeilingIdle(BossGoma*, PlayState*);
+void BossGoma_CeilingPrepareSpawnGohmas(BossGoma*, PlayState*);
+void BossGoma_CeilingSpawnGohmas(BossGoma*, PlayState*);
+void BossGoma_Defeated(BossGoma*, PlayState*);
+void BossDodongo_LayDown(BossDodongo*, PlayState*);
+void BossDodongo_Vulnerable(BossDodongo*, PlayState*);
+void BossDodongo_DeathCutscene(BossDodongo*, PlayState*);
+static void StunByrnaBoss(Actor*, PlayState*);
 #include "byrna_damage.inc.c"
 #include "byrna_boss_stun.inc.c"
 static void WieldWithBothHands(Player* player, int32_t itemAction, int32_t* modelGroup) {
@@ -174,8 +175,8 @@ static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual) {
     if (peerId == 0 || sApi->GetNetPeerState(peerId, "nei.byrna.visual", visual, sizeof(*visual)) != sizeof(*visual)) {
         return false;
     }
-    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum ||
-        visual->flags[0] > 255 || (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
+    if (visual->active != 1 || visual->adult > 1 || visual->scene != gPlayState->sceneNum || visual->flags[0] > 255 ||
+        (player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW)) {
         return false;
     }
     for (uint32_t i = 0; i < ARRAY_COUNT(visual->values); i++) {
@@ -198,9 +199,7 @@ static void PublishRemoteVisual(void) {
         visual.scene = play->sceneNum;
         visual.adult = LINK_IS_ADULT;
         visual.active = (IsWielding(player));
-        if (visual.active) {
-
-        }
+        if (visual.active) {}
         if (sRemoteVisualSent && (uint32_t)(play->gameplayFrames - sRemoteVisualFrame) < REMOTE_VISUAL_INTERVAL) {
             return;
         }
@@ -214,8 +213,6 @@ static void PublishRemoteVisual(void) {
     }
 }
 
-
-
 static void InitRemoteVisuals(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterNetChannel) || !SOH_MOD_API_HAS(sApi, SetNetPeerState) ||
         !SOH_MOD_API_HAS(sApi, GetNetPeerState) || !SOH_MOD_API_HAS(sApi, GetNetPeerIdForActor)) {
@@ -226,8 +223,6 @@ static void InitRemoteVisuals(void) {
         SOH_REGISTER_HOOK(sApi, OnGameFrameUpdate, PublishRemoteVisual);
     }
 }
-
-
 
 static uint32_t CaptureRemoteLimbEnv(PlayState* play) {
     Gfx* begin = play->state.gfxCtx->polyOpa.bufp;

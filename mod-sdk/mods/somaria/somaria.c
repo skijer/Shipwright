@@ -119,7 +119,6 @@ typedef struct {
     bool isPiloted;
 } SomariaPlatformActor;
 
-// Cost is held while a construct stands. The old level column is retained for saved progressive-cane data.
 static const SomariaModeRule sModeRules[SOMARIA_MODE_MAX] = {
     { 1, 1 }, { 2, 1 }, { 1, 2 }, { 3, 2 }, { 2, 3 },
 };
@@ -146,8 +145,8 @@ static const ALIGN_ASSET(2) char sModeIcons[SOMARIA_MODE_MAX][64] = {
 };
 
 static const Z64WheelEntry sWheelEntries[SOMARIA_MODE_MAX] = {
-    { sModeIcons[SOMARIA_STATUE], "Statue (1 point)" }, { sModeIcons[SOMARIA_CRATE], "Crate (2 points)" },
-    { sModeIcons[SOMARIA_BIRD], "Bird (1 point)" },     { sModeIcons[SOMARIA_BLOCK], "Block (3 points)" },
+    { sModeIcons[SOMARIA_STATUE], "Statue (1 point)" },      { sModeIcons[SOMARIA_CRATE], "Crate (2 points)" },
+    { sModeIcons[SOMARIA_BIRD], "Bird (1 point)" },          { sModeIcons[SOMARIA_BLOCK], "Block (3 points)" },
     { sModeIcons[SOMARIA_PLATFORM], "Platform (2 points)" },
 };
 
@@ -216,8 +215,6 @@ static void PlayErrorSfx(void) {
     Sfx_PlaySfxCentered(NA_SE_SY_ERROR);
 }
 
-// Level and budget.
-
 static uint8_t CurrentMode(void) {
     uint32_t selection = Z64Wheel_GetSelection();
 
@@ -252,7 +249,6 @@ static uint8_t SpentPoints(void) {
 }
 
 static bool CanAffordMode(uint8_t mode) {
-    // An existing construct can be retired to make room when the cast succeeds.
     return sModeRules[mode].cost <= BudgetPoints();
 }
 
@@ -277,54 +273,52 @@ static bool IsTrackedSummon(Actor* actor) {
 }
 
 static bool IsModeUnlocked(uint8_t mode) {
-    if (mode>=SOMARIA_MODE_MAX) return false;
-    if (sApi->GetRandoOption(SOMARIA_SHUFFLE_OPTION)==0)
-        return sApi->IsCustomItemOwned(SOMARIA_KEY) || sLevel>0;
-    return (sUnlockedModes&(1<<mode))!=0;
+    if (mode >= SOMARIA_MODE_MAX)
+        return false;
+    if (sApi->GetRandoOption(SOMARIA_SHUFFLE_OPTION) == 0)
+        return sApi->IsCustomItemOwned(SOMARIA_KEY) || sLevel > 0;
+    return (sUnlockedModes & (1 << mode)) != 0;
 }
 static void SyncWheelUnlocks(void) {
     for (uint8_t mode = 0; mode < SOMARIA_MODE_MAX; mode++) {
         Z64Wheel_SetEntryUnlocked(mode, IsModeUnlocked(mode));
     }
     if (!IsModeUnlocked(CurrentMode())) {
-        for(uint8_t mode=0;mode<SOMARIA_MODE_MAX;mode++) if(IsModeUnlocked(mode)) {
-            Z64Wheel_SetSelection(mode);break;
-        }
+        for (uint8_t mode = 0; mode < SOMARIA_MODE_MAX; mode++)
+            if (IsModeUnlocked(mode)) {
+                Z64Wheel_SetSelection(mode);
+                break;
+            }
     }
 }
 
 static void LoadLevel(void) {
     sLevel = 0;
     sApi->StorageGet(SOMARIA_MOD, SOMARIA_LEVEL_FIELD, &sLevel, sizeof(sLevel));
-    sUnlockedModes=0;
-    sApi->StorageGet(SOMARIA_MOD,SOMARIA_SUMMONS_FIELD,&sUnlockedModes,sizeof(sUnlockedModes));
+    sUnlockedModes = 0;
+    sApi->StorageGet(SOMARIA_MOD, SOMARIA_SUMMONS_FIELD, &sUnlockedModes, sizeof(sUnlockedModes));
     if (sLevel > SOMARIA_MAX_LEVEL) {
         sLevel = SOMARIA_MAX_LEVEL;
     }
     SyncWheelUnlocks();
 }
 
-// Every cane found is the same pickup, so the level is what the mod counts, not which key arrived.
 static void RaiseLevel(const char* key) {
-    sLevel=SOMARIA_MAX_LEVEL;
-    sUnlockedModes=(1<<SOMARIA_MODE_MAX)-1;
-    sApi->StorageSet(SOMARIA_MOD,SOMARIA_SUMMONS_FIELD,&sUnlockedModes,sizeof(sUnlockedModes));
+    sLevel = SOMARIA_MAX_LEVEL;
+    sUnlockedModes = (1 << SOMARIA_MODE_MAX) - 1;
+    sApi->StorageSet(SOMARIA_MOD, SOMARIA_SUMMONS_FIELD, &sUnlockedModes, sizeof(sUnlockedModes));
     sApi->StorageSet(SOMARIA_MOD, SOMARIA_LEVEL_FIELD, &sLevel, sizeof(sLevel));
     SyncWheelUnlocks();
 }
 
 static void ForgetLevel(const char* key) {
     sLevel = 0;
-    sUnlockedModes=0;
-    sApi->StorageSet(SOMARIA_MOD,SOMARIA_SUMMONS_FIELD,&sUnlockedModes,sizeof(sUnlockedModes));
+    sUnlockedModes = 0;
+    sApi->StorageSet(SOMARIA_MOD, SOMARIA_SUMMONS_FIELD, &sUnlockedModes, sizeof(sUnlockedModes));
     sApi->StorageSet(SOMARIA_MOD, SOMARIA_LEVEL_FIELD, &sLevel, sizeof(sLevel));
     SyncWheelUnlocks();
 }
 
-// Shared construct behaviour.
-
-// Vanilla gates YELLOW_HEAVY switches behind something heavy enough to hold them down, which is exactly
-// what a conjured statue or crate is for.
 static void PressHeavySwitches(Actor* construct, PlayState* play) {
     for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_SWITCH].head; actor != NULL; actor = actor->next) {
         if (actor->id != ACTOR_BG_BDAN_SWITCH || (actor->params & 0xFF) != YELLOW_HEAVY) {
@@ -358,8 +352,6 @@ static void GrowIntoPlace(Actor* actor, s16* growTimer, f32 fullScale) {
 
     Actor_SetScale(actor, grown);
 }
-
-// Statue.
 
 static bool HasElegyShell(void) {
     return ResourceMgr_FileExists(sElegyShellDL);
@@ -431,8 +423,6 @@ static void StatueDraw(Actor* thisx, PlayState* play) {
     Gfx_DrawDListOpa(play, (Gfx*)sElegyShellDL);
 }
 
-// Crate.
-
 static void CrateInit(Actor* thisx, PlayState* play) {
     SomariaCrateActor* this = (SomariaCrateActor*)thisx;
 
@@ -440,7 +430,6 @@ static void CrateInit(Actor* thisx, PlayState* play) {
     Collider_SetCylinder(play, &this->collider, thisx, &sCrateColliderInit);
     thisx->gravity = SOMARIA_GRAVITY;
     thisx->minVelocityY = SOMARIA_MIN_VEL_Y;
-    // At scale 0.1 a Link-sized shadow (30 at scale 0.01) would be ten times too large.
     ActorShape_Init(&thisx->shape, 0.0f, ActorShadow_DrawCircle, 3.0f);
     this->growTimer = SOMARIA_GROW_FRAMES;
     Actor_SetScale(thisx, 0.0f);
@@ -450,7 +439,6 @@ static void CrateDestroy(Actor* thisx, PlayState* play) {
     Collider_DestroyCylinder(play, &((SomariaCrateActor*)thisx)->collider);
 }
 
-// Unlike a real crate this one never breaks: thrown, it simply lands and waits to be picked up again.
 static void CrateUpdate(Actor* thisx, PlayState* play) {
     SomariaCrateActor* this = (SomariaCrateActor*)thisx;
 
@@ -489,8 +477,6 @@ static void CrateDraw(Actor* thisx, PlayState* play) {
     }
 }
 
-// Bird.
-
 static bool IsPressableSwitch(Actor* actor) {
     if (actor->id != ACTOR_OBJ_SWITCH || actor->update == NULL) {
         return false;
@@ -519,8 +505,6 @@ static Actor* FindNearestOfCategory(PlayState* play, Vec3f* from, uint8_t catego
     return nearest;
 }
 
-// The bird goes for what Link is locked on to first, then the nearest enemy, and failing both it presses a
-// switch — which is the only reason it bothers with anything that is not alive.
 static Actor* PickBirdTarget(Actor* bird, PlayState* play) {
     Player* player = GET_PLAYER(play);
 
@@ -593,7 +577,6 @@ static void BirdUpdate(Actor* thisx, PlayState* play) {
     }
     BirdFlyTowards(this, &this->target->world.pos);
 
-    // A switch is pressed by landing on it; anything alive is hit by the touch collider instead.
     if (IsPressableSwitch(this->target)) {
         thisx->flags |= ACTOR_FLAG_CAN_PRESS_SWITCHES;
     }
@@ -612,8 +595,6 @@ static void BirdDraw(Actor* thisx, PlayState* play) {
 
     SkelAnime_DrawOpa(play, this->skelAnime.skeleton, this->skelAnime.jointTable, NULL, NULL, thisx);
 }
-
-// Platform.
 
 static bool IsPlayerStandingStill(PlayState* play, SomariaPlatformActor* this) {
     Player* player = GET_PLAYER(play);
@@ -637,7 +618,6 @@ static void PlatformStopPiloting(SomariaPlatformActor* this) {
     Sfx_PlaySfxCentered(NA_SE_SY_PIECE_OF_HEART);
 }
 
-// Steering is read raw because the player's own copy of the input is blocked while he rides.
 static void PlatformSteer(SomariaPlatformActor* this, PlayState* play) {
     Input* input = &play->state.input[0];
     u16 held = input->cur.button;
@@ -726,13 +706,10 @@ static void PlatformDraw(Actor* thisx, PlayState* play) {
     Gfx_DrawDListOpa(play, (Gfx*)sPlatformDL);
 }
 
-// Placement.
-
 static bool IsAimedMode(uint8_t mode) {
     return mode < SOMARIA_MODE_MAX;
 }
 
-// Placement follows the camera rather than Link's body, so a construct lands where the player is looking.
 static s16 CameraYaw(PlayState* play, Player* player) {
     Vec3f eye = play->view.eye;
     Vec3f at = play->view.lookAt;
@@ -785,17 +762,18 @@ static void UpdateGhost(Player* player, PlayState* play, uint8_t mode) {
     s16 yaw = CameraYaw(play, player);
     Vec3f pos = player->actor.world.pos;
 
-    if(mode != SOMARIA_STATUE && mode != SOMARIA_BIRD) {
+    if (mode != SOMARIA_STATUE && mode != SOMARIA_BIRD) {
         pos.x += Math_SinS(yaw) * SOMARIA_PLACE_DIST;
         pos.z += Math_CosS(yaw) * SOMARIA_PLACE_DIST;
     }
     sGhostYaw = yaw;
-    if(mode==SOMARIA_STATUE || mode==SOMARIA_BIRD) {
-        pos.y += mode==SOMARIA_BIRD ? 40 : 0;
-        sGhostPos=pos;sIsGhostValid=true;return;
+    if (mode == SOMARIA_STATUE || mode == SOMARIA_BIRD) {
+        pos.y += mode == SOMARIA_BIRD ? 40 : 0;
+        sGhostPos = pos;
+        sIsGhostValid = true;
+        return;
     }
 
-    // The platform is meant to float: it needs no floor, and half-buried in a wall it makes a ledge.
     if (mode == SOMARIA_PLATFORM) {
         pos.y = player->actor.world.pos.y + 10.0f;
         sGhostPos = pos;
@@ -848,8 +826,6 @@ static void DrawGhost(PlayState* play, uint8_t mode) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-// Summoning.
-
 static Actor* SpawnRegistered(PlayState* play, int16_t actorId, Vec3f* pos, s16 yaw) {
     if (actorId < 0) {
         return NULL;
@@ -857,8 +833,6 @@ static Actor* SpawnRegistered(PlayState* play, int16_t actorId, Vec3f* pos, s16 
     return Actor_Spawn(&play->actorCtx, play, actorId, pos->x, pos->y, pos->z, 0, yaw, 0, 0);
 }
 
-// The pushable block is the vanilla actor: its object only lives in dungeons, so outside one the bank is
-// requested and the next press lands.
 static Actor* SpawnBlock(PlayState* play, Vec3f* pos, s16 yaw) {
     if (Object_GetIndex(&play->objectCtx, OBJECT_GAMEPLAY_DANGEON_KEEP) < 0) {
         Object_Spawn(&play->objectCtx, OBJECT_GAMEPLAY_DANGEON_KEEP);
@@ -906,8 +880,7 @@ static void MakeRoomForSummon(PlayState* play, Player* player, uint8_t mode) {
     while (SpentPoints() + sModeRules[mode].cost > BudgetPoints()) {
         int oldest = -1;
         for (uint8_t index = 0; index < SOMARIA_MAX_SUMMONS; index++) {
-            if (sSummons[index].actor != NULL &&
-                (oldest < 0 || sSummons[index].order < sSummons[oldest].order)) {
+            if (sSummons[index].actor != NULL && (oldest < 0 || sSummons[index].order < sSummons[oldest].order)) {
                 oldest = index;
             }
         }
@@ -944,7 +917,6 @@ static void FireCast(Player* player, PlayState* play) {
         PlayErrorSfx();
         return;
     }
-    // Keep existing constructs when placement/spawning fails. Retire oldest only for a successful cast.
     MakeRoomForSummon(play, player, mode);
     TrackSummon(summon, mode);
     summon->room = -1;
@@ -956,8 +928,6 @@ static void FireCast(Player* player, PlayState* play) {
     EffectSsBlast_SpawnWhiteShockwave(play, &flash, &zero, &zero);
     PlaySfxAt(NA_SE_PL_MAGIC_SOUL_BALL, &summon->world.pos);
 }
-
-// The cane itself.
 
 static u16 FindEquippedButtonMask(void) {
     for (uint8_t button = 0; button < SOMARIA_BUTTON_COUNT; button++) {
@@ -1015,7 +985,6 @@ static void StartCast(Player* player, PlayState* play) {
     sCastTimer = 0;
 }
 
-// The cast lives in the upper action so Link keeps walking with it, and returning 1 is what claims his arms.
 static s32 UpdateCane(Player* player, PlayState* play) {
     if (!sIsCaneOut || !sIsCasting) {
         return 0;
@@ -1024,9 +993,11 @@ static s32 UpdateCane(Player* player, PlayState* play) {
         sIsCasting = false;
         return 0;
     }
-    bool done=LinkAnimation_Update(play, &player->upperSkelAnime);
-    if (!sCastHasFired && (player->upperSkelAnime.curFrame>=MIN(SOMARIA_CAST_FIRE_FRAME,player->upperSkelAnime.endFrame) || done)) {
-        sCastHasFired=true;FireCast(player,play);
+    bool done = LinkAnimation_Update(play, &player->upperSkelAnime);
+    if (!sCastHasFired &&
+        (player->upperSkelAnime.curFrame >= MIN(SOMARIA_CAST_FIRE_FRAME, player->upperSkelAnime.endFrame) || done)) {
+        sCastHasFired = true;
+        FireCast(player, play);
     }
     if (done) {
         sIsCasting = false;
@@ -1034,11 +1005,13 @@ static s32 UpdateCane(Player* player, PlayState* play) {
     return 1;
 }
 
+#define CANE_GIVE_SCALE 0.18f
+
 static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     OPEN_DISPS(play->state.gfxCtx);
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
-    Matrix_Scale(0.15f * 0.15f, 0.15f * 0.15f, 0.15f * 0.15f, MTXMODE_APPLY);
+    Matrix_Scale(CANE_GIVE_SCALE, CANE_GIVE_SCALE, CANE_GIVE_SCALE, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sCaneGiveDL);
     CLOSE_DISPS(play->state.gfxCtx);
@@ -1106,7 +1079,6 @@ static void DrawSomariaGhost(Actor* actor, PlayState* play) {
     }
 }
 
-// A scene change takes every construct with it, and the platform must not keep the player's input.
 static void ForgetSceneState(int16_t sceneNum) {
     sSummonOrder = 0;
     for (uint8_t index = 0; index < SOMARIA_MAX_SUMMONS; index++) {
@@ -1164,36 +1136,56 @@ static bool RegisterSummonActors(void) {
     return sStatueId >= 0 && sCrateId >= 0 && sBirdId >= 0 && sPlatformId >= 0;
 }
 
-static const char* const sShuffleValues[]={"Cane","Summons"};
-static const char* const sSummonVariants[]={"statue","crate","bird","block","platform"};
-static const char* const sSummonPickupKeys[]={"nei.somaria.summon.statue","nei.somaria.summon.crate",
-    "nei.somaria.summon.bird","nei.somaria.summon.block","nei.somaria.summon.platform"};
-static const char* const sSummonTexts[]={
-    "You learned Somaria's %rStatue%w!&It holds switches in place.&Cost: %y1 point%w.",
-    "You learned Somaria's %rCrate%w!&A wooden box you can carry.&Cost: %y2 points%w.",
-    "You learned Somaria's %rBird%w!&Call a flying helper.&Cost: %y1 point%w.",
-    "You learned Somaria's %rBlock%w!&Create a pushable block.&Cost: %y3 points%w.",
-    "You learned Somaria's %rPlatform%w!&Create a platform to ride.&Cost: %y2 points%w."};
-static void ReceiveSummon(const char* itemKey,const char* variantKey) {
-    for(uint8_t mode=0;mode<SOMARIA_MODE_MAX;mode++) if(!strcmp(variantKey,sSummonVariants[mode])) {
-        sUnlockedModes|=1<<mode;
-        sApi->StorageSet(SOMARIA_MOD,SOMARIA_SUMMONS_FIELD,&sUnlockedModes,sizeof(sUnlockedModes));
-        sApi->SetCustomItemOwned(SOMARIA_KEY,true);
-        SyncWheelUnlocks();Z64Wheel_SetSelection(mode);return;
-    }
+static const char* const sShuffleValues[] = { "Cane", "Summons" };
+static const char* const sSummonVariants[] = { "statue", "crate", "bird", "block", "platform" };
+static const char* const sSummonPickupKeys[] = { "nei.somaria.summon.statue", "nei.somaria.summon.crate",
+                                                 "nei.somaria.summon.bird", "nei.somaria.summon.block",
+                                                 "nei.somaria.summon.platform" };
+static const char* const sSummonTexts[] = {
+    "You learned %rSomaria's Statue%w!&It holds switches in place.&Cost: %y1 point%w.",
+    "You learned %rSomaria's Crate%w!&A wooden box you can carry.&Cost: %y2 points%w.",
+    "You learned %rSomaria's Bird%w!&Call a flying helper.&Cost: %y1 point%w.",
+    "You learned %rSomaria's Block%w!&Create a pushable block.&Cost: %y3 points%w.",
+    "You learned %rSomaria's Platform%w!&Create a platform to ride.&Cost: %y2 points%w."
+};
+static void ReceiveSummon(const char* itemKey, const char* variantKey) {
+    for (uint8_t mode = 0; mode < SOMARIA_MODE_MAX; mode++)
+        if (!strcmp(variantKey, sSummonVariants[mode])) {
+            sUnlockedModes |= 1 << mode;
+            sApi->StorageSet(SOMARIA_MOD, SOMARIA_SUMMONS_FIELD, &sUnlockedModes, sizeof(sUnlockedModes));
+            sApi->SetCustomItemOwned(SOMARIA_KEY, true);
+            SyncWheelUnlocks();
+            Z64Wheel_SetSelection(mode);
+            return;
+        }
 }
 static const SOHCustomItemRandomizer sRandomizerItem = {
-    sizeof(SOHCustomItemRandomizer), SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, SOMARIA_KEY, SOMARIA_KEY, "",
+    sizeof(SOHCustomItemRandomizer),
+    SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
+    SOH_CUSTOM_ITEM_TYPE_ITEM,
+    0,
+    1,
+    SOMARIA_KEY,
+    SOMARIA_KEY,
+    "",
 };
 static bool RegisterSummonPickups(void) {
-    for(uint8_t mode=0;mode<SOMARIA_MODE_MAX;mode++) {
-        SOHCustomPickupVariant pickup=Z64Items_DefinePickup(SOMARIA_KEY,sSummonVariants[mode],sSummonPickupKeys[mode]);
-        SOHCustomItemRandomizer logic=sRandomizerItem;
-        logic.logicKey=logic.hintKey=sSummonPickupKeys[mode];
-        logic.poolModeOption=SOMARIA_SHUFFLE_OPTION;logic.poolModeValue=1;
-        pickup.iconPath=sModeIcons[mode];pickup.getItemModelPath=sCaneGiveDL;
-        pickup.getItemText=sSummonTexts[mode];pickup.onReceive=ReceiveSummon;pickup.randomizer=&logic;
-        if(!Z64Items_RegisterPickup(sApi,&pickup)) return false;
+    for (uint8_t mode = 0; mode < SOMARIA_MODE_MAX; mode++) {
+        SOHCustomItemRandomizer logic = sRandomizerItem;
+        logic.logicKey = sSummonPickupKeys[mode];
+        logic.hintKey = sSummonPickupKeys[mode];
+        logic.poolModeOption = SOMARIA_SHUFFLE_OPTION;
+        logic.poolModeValue = 1;
+
+        SOHCustomPickupVariant pickup =
+            Z64Items_DefinePickup(SOMARIA_KEY, sSummonVariants[mode], sSummonPickupKeys[mode]);
+        pickup.iconPath = sModeIcons[mode];
+        pickup.getItemText = sSummonTexts[mode];
+        pickup.onReceive = ReceiveSummon;
+        pickup.randomizer = &logic;
+        if (!Z64Items_RegisterPickup(sApi, &pickup)) {
+            return false;
+        }
     }
     return true;
 }
@@ -1218,10 +1210,11 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&cane, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&cane, 0, 21, 0);
-    Z64Items_SetTextbox(&cane, "You got the %rCane of Somaria%w!&It has %y5 points%w. New summons&"
-                               "replace the oldest when full.^Statue: %y1%w  Bird: %y1%w&Crate: %y2%w  Platform: %y2%w&"
-                               "Pushable block: %y3%w^Press %y\xA1%w to draw, then conjure.&%y\xA2%w selects a construct.&"
-                               "One cane holds all five types.");
+    Z64Items_SetTextbox(&cane,
+                        "You got the %rCane of Somaria%w!&It has %y5 points%w. New summons&"
+                        "replace the oldest when full.^Statue: %y1%w  Bird: %y1%w&Crate: %y2%w  Platform: %y2%w&"
+                        "Pushable block: %y3%w^Press %y\xA1%w to draw, then conjure.&%y\xA2%w selects a construct.&"
+                        "One cane holds all five types.");
     Z64Items_SetPauseText(&cane, "%rCane of Somaria&%w%y5 points%w; oldest replaced if full.&"
                                  "%y\xA1%w conjures; %y\xA2%w selects.^Statue: %y1%w  Bird: %y1%w&"
                                  "Crate: %y2%w  Platform: %y2%w&Pushable block: %y3%w");
@@ -1233,16 +1226,24 @@ SOH_MOD_EXPORT void ModInit(void) {
     cane.onReceive = RaiseLevel;
     cane.onRemove = ForgetLevel;
 
-    SOHCustomItemRandomizer caneLogic=sRandomizerItem;
-    caneLogic.poolModeOption=SOMARIA_SHUFFLE_OPTION;caneLogic.poolModeValue=1;caneLogic.poolModeInvert=true;
+    SOHCustomItemRandomizer caneLogic = sRandomizerItem;
+    caneLogic.poolModeOption = SOMARIA_SHUFFLE_OPTION;
+    caneLogic.poolModeValue = 1;
+    caneLogic.poolModeInvert = true;
     Z64Items_SetLogic(&cane, &caneLogic);
     if (!Z64Items_Register(sApi, &cane) || !RegisterSummonPickups()) {
         return;
     }
     Z64Wheel_Register(sApi, SOMARIA_KEY, SOMARIA_KEY, sWheelEntries, ARRAY_COUNT(sWheelEntries), false);
-    SOHModRandoOption shuffle={sizeof(SOHModRandoOption),SOMARIA_SHUFFLE_OPTION,"Somaria",
-        "Cane: one pickup unlocks all five summons. Summons: shuffle the five abilities separately; each grants the cane.",
-        sShuffleValues,ARRAY_COUNT(sShuffleValues),0,SOH_MOD_RANDO_WIDGET_COMBOBOX};
+    SOHModRandoOption shuffle = { sizeof(SOHModRandoOption),
+                                  SOMARIA_SHUFFLE_OPTION,
+                                  "Somaria",
+                                  "Cane: one pickup unlocks all five summons. Summons: shuffle the five abilities "
+                                  "separately; each grants the cane.",
+                                  sShuffleValues,
+                                  ARRAY_COUNT(sShuffleValues),
+                                  0,
+                                  SOH_MOD_RANDO_WIDGET_COMBOBOX };
     sApi->RegisterRandoOption(&shuffle);
     LoadLevel();
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, UpdateSomaria);
