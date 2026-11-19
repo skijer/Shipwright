@@ -14,7 +14,7 @@ on:
   workflow_dispatch:
     inputs:
       resign_all:
-        description: Rebuild every listed mod against another Unbound (publish-release.yml sets this)
+        description: Rebuild every listed mod against another Unbound (after a ModAPI major change)
         type: boolean
         default: false
       unbound_ref:

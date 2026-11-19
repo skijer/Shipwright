@@ -7,4 +7,4 @@ Run **Actions > generate-builds > Run workflow** on `unbound-modapi`, leaving th
 
 `update-downloads` can also be run manually with a successful build's run ID to retry publication without recompiling. It requires the `unbound-download-source` artifact from this flow. Older runs cannot overwrite a newer published run. Tagged releases and pull requests do not update these pages.
 
-Versioned releases and their signed in-game updater manifest remain managed by `publish-release`. Rolling download publication does not change the mod catalog, signing keys, updater manifest or existing release tags. `build-info.json` and each page identify the commit and build run of the current downloads.
+The players' release is the repository's latest release and carries `unbound-release.json`, the signed manifest the in-game updater reads. Bump `PROJECT_FORK_VERSION` before a build that players should be offered. Publication does not change the mod catalog or the signing keys. Each page identifies the commit and build run of the current downloads.

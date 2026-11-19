@@ -134,9 +134,9 @@ The in-game updater has a key of its own, so a leaked mod key cannot ship an Unb
 5. `python mod-sdk/tools/mod_signature.py generate-key --kind release --private-key-output release.key`
    writes `soh/soh/ModApi/ModTrust/TrustedReleaseKey.h`. Store `release.key` as the secret
    `UNBOUND_RELEASE_SIGNING_KEY` of **mod-signing**, delete the file and commit the header.
-6. To release, run **publish-release** from the branch the environment allows, with the id of a successful
-   generate-builds run less than a day old (artifacts expire after that). It drafts the release with a signed
-   `unbound-release.json` and publishes it as latest.
+6. Every successful generate-builds run on `unbound-modapi` goes to the fixed `nei-unbound-release` through
+   **update-downloads**, which adds a signed `unbound-release.json` and marks the release latest. Bump
+   `PROJECT_FORK_VERSION` first so players are offered the build.
 
 ## Running the queue (maintainers)
 
