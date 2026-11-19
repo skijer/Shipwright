@@ -37,9 +37,9 @@ jobs:
         RUN_ID: ${{ inputs.run_id }}
       run: |
         # Only the signed builds are released, so the unsafe edition does not hold a release back.
-        FAILED=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq \
-          '[.jobs[] | select(.name == "build-linux" or .name == "build-macos" or (.name | startswith("build-windows (signed"))) | select(.conclusion != "success")] | length')
-        if [ "$FAILED" != 0 ]; then
+        SUCCEEDED=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq \
+          '[.jobs[] | select(.name == "build-linux" or .name == "build-macos" or (.name | startswith("build-windows (signed"))) | select(.conclusion == "success")] | length')
+        if [ "$SUCCEEDED" != 3 ]; then
           echo "::error::Run $RUN_ID has signed builds that did not succeed; only successful builds can be released"
           exit 1
         fi
