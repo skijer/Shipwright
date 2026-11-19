@@ -279,9 +279,19 @@ jobs:
         key: ${{ steps.restore-cache-deps.outputs.cache-primary-key }}
         path: deps
 
+  # The unsafe edition asks before loading each unsigned mod. It builds in its own job:
+  # reconfiguring the signed build in place loses the vcpkg toolchain on current runners.
   build-windows:
     needs: generate-soh-otr
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - policy: signed
+            package: soh-windows
+          - policy: ask
+            package: soh-unbound-unsafe-windows
     steps:
     - name: Install dependencies
       run: |
@@ -298,9 +308,9 @@ jobs:
         max-size: "2G"
         evict-old-files: job
         save: ${{ github.event_name == 'push' }}
-        key: ${{ runner.os }}-ccache-${{ github.ref }}-${{ github.sha }}
+        key: ${{ runner.os }}-ccache-${{ matrix.policy }}-${{ github.ref }}-${{ github.sha }}
         restore-keys: |
-          ${{ runner.os }}-ccache-${{ github.ref }}
+          ${{ runner.os }}-ccache-${{ matrix.policy }}-${{ github.ref }}
           ${{ runner.os }}-ccache
     - name: Restore Cached VCPKG folder
       id: restore-cache-vcpkg
@@ -325,49 +335,30 @@ jobs:
         VCPKG_ROOT: ${{github.workspace}}/vcpkg
       run: |
         set $env:PATH="$env:USERPROFILE/.cargo/bin;$env:PATH"
-        cmake -S . -B build-windows -G Ninja -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_REMOTE_CONTROL=1 -DUNBOUND_MOD_POLICY=signed
+        cmake -S . -B build-windows -G Ninja -DCMAKE_MAKE_PROGRAM=ninja -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBUILD_REMOTE_CONTROL=1 -DUNBOUND_MOD_POLICY=${{ matrix.policy }}
         cmake --build build-windows --config Release --parallel 10
 
         (cd build-windows && cpack)
         cd ..
-        mv _packages/*.zip _packages/soh-windows.zip
+        mv _packages/*.zip _packages/${{ matrix.package }}.zip
     - name: Upload mod SDK import library
+      if: matrix.policy == 'signed'
       uses: actions/upload-artifact@v7
       with:
         name: unbound-mod-sdk-windows
         if-no-files-found: error
         path: x64/Release/soh.lib
     - name: Unzip package
-      run: Expand-Archive -Path _packages/soh-windows.zip -DestinationPath soh-windows
+      run: Expand-Archive -Path _packages/${{ matrix.package }}.zip -DestinationPath ${{ matrix.package }}
     - name: Ship the mod import library next to soh.exe
-      run: Copy-Item -Path x64/Release/soh.lib -Destination soh-windows/soh.lib
+      run: Copy-Item -Path x64/Release/soh.lib -Destination ${{ matrix.package }}/soh.lib
     - name: Upload build
       uses: actions/upload-artifact@v7
       with:
-        name: soh-windows
-        path: soh-windows
-    # The mod developers' edition asks before loading each unsigned mod; only ModLoader.cpp and the link rebuild.
-    - name: Build the unsafe mods edition
-      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
-      env:
-        VCPKG_ROOT: ${{github.workspace}}/vcpkg
-      run: |
-        Remove-Item -Path _packages/*.zip -Force
-        cmake -S . -B build-windows -DUNBOUND_MOD_POLICY=ask
-        cmake --build build-windows --config Release --parallel 10
-        (cd build-windows && cpack)
-        cd ..
-        mv _packages/*.zip _packages/soh-unbound-unsafe-windows.zip
-        Expand-Archive -Path _packages/soh-unbound-unsafe-windows.zip -DestinationPath soh-unbound-unsafe-windows
-        Copy-Item -Path x64/Release/soh.lib -Destination soh-unbound-unsafe-windows/soh.lib
-    - name: Upload the unsafe mods edition
-      if: hashFiles('soh/soh/ModApi/ModLoader.cpp') != ''
-      uses: actions/upload-artifact@v7
-      with:
-        name: soh-unbound-unsafe-windows
-        path: soh-unbound-unsafe-windows
+        name: ${{ matrix.package }}
+        path: ${{ matrix.package }}
     - name: Save Cache VCPKG folder
-      if: ${{ github.event_name == 'push' }}
+      if: github.event_name == 'push' && matrix.policy == 'signed'
       uses: actions/cache/save@v5
       with:
         key: ${{ steps.restore-cache-vcpkg.outputs.cache-primary-key }}
