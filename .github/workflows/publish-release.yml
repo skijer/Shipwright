@@ -36,9 +36,11 @@ jobs:
         GH_TOKEN: ${{ github.token }}
         RUN_ID: ${{ inputs.run_id }}
       run: |
-        CONCLUSION=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq .conclusion)
-        if [ "$CONCLUSION" != success ]; then
-          echo "::error::Run $RUN_ID finished as '$CONCLUSION'; only a successful build can be released"
+        # Only the signed builds are released, so the unsafe edition does not hold a release back.
+        FAILED=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json jobs --jq \
+          '[.jobs[] | select(.name == "build-linux" or .name == "build-macos" or (.name | startswith("build-windows (signed"))) | select(.conclusion != "success")] | length')
+        if [ "$FAILED" != 0 ]; then
+          echo "::error::Run $RUN_ID has signed builds that did not succeed; only successful builds can be released"
           exit 1
         fi
         echo "sha=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)" >> "$GITHUB_OUTPUT"
