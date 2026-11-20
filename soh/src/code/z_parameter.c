@@ -1731,13 +1731,18 @@ void func_800849EC(PlayState* play) {
     Interface_LoadItemIcon1(play, 0);
 }
 
-void Interface_LoadItemIcon1(PlayState* play, u16 button) {
-    InterfaceContext* interfaceCtx = &play->interfaceCtx;
+// Items given without a PlayState (starting items, Fleet deliveries to a parked OoT) skip the copy: the HUD draws
+// button icons from their texture paths.
+static bool Interface_CanLoadItemIcon(PlayState* play, u16 button) {
+    return play != NULL && !(button < 8 && gSaveContext.equips.buttonItems[button] == ITEM_CUSTOM);
+}
 
-    if (button < 8 && gSaveContext.equips.buttonItems[button] == ITEM_CUSTOM) {
+void Interface_LoadItemIcon1(PlayState* play, u16 button) {
+    if (!Interface_CanLoadItemIcon(play, button)) {
         return;
     }
 
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
     osCreateMesgQueue(&interfaceCtx->loadQueue, &interfaceCtx->loadMsg, OS_MESG_BLOCK);
     DmaMgr_SendRequest2(&interfaceCtx->dmaRequest_160, interfaceCtx->iconItemSegment + button * 0x1000,
                         (uintptr_t)_icon_item_staticSegmentRomStart +
@@ -1747,12 +1752,11 @@ void Interface_LoadItemIcon1(PlayState* play, u16 button) {
 }
 
 void Interface_LoadItemIcon2(PlayState* play, u16 button) {
-    InterfaceContext* interfaceCtx = &play->interfaceCtx;
-
-    if (button < 8 && gSaveContext.equips.buttonItems[button] == ITEM_CUSTOM) {
+    if (!Interface_CanLoadItemIcon(play, button)) {
         return;
     }
 
+    InterfaceContext* interfaceCtx = &play->interfaceCtx;
     osCreateMesgQueue(&interfaceCtx->loadQueue, &interfaceCtx->loadMsg, OS_MESG_BLOCK);
     DmaMgr_SendRequest2(&interfaceCtx->dmaRequest_180, interfaceCtx->iconItemSegment + button * 0x1000,
                         (uintptr_t)_icon_item_staticSegmentRomStart +

@@ -1,4 +1,5 @@
 #include "FleetGame.h"
+#include "FleetFieldTest.h"
 #include "FleetPortal.h"
 #include "FleetRuntime.h"
 #include "FleetRando.h"
@@ -214,6 +215,7 @@ extern "C" void FleetGame_LeaveHostContext(void) {
 
 extern "C" void FleetGame_FrameEnd(void) {
     FleetRuntime_FrameEnd();
+    FleetFieldTest_FrameEnd();
     FleetPortal_FrameEnd();
     if (sFrameEnd != nullptr) {
         sFrameEnd(GameName);
