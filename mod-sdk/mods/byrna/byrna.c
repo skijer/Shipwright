@@ -19,7 +19,7 @@
 #include "objects/object_kingdodongo/object_kingdodongo.h"
 #define BYRNA_KEY "nei.equip.byrna"
 #define BYRNA_SAMPLES 4
-#define BYRNA_PLAY_SPEED 1.4f
+#define BYRNA_PLAY_SPEED 2.1f
 #define BYRNA_NORMAL_DAMAGE 1
 #define BYRNA_BOSS_DAMAGE 4
 #define BYRNA_SWORD_FLAGS (DMG_SLASH_KOKIRI | DMG_SLASH_MASTER)

@@ -12,6 +12,7 @@
 #include "macros.h"
 #include "variables.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "overlays/actors/ovl_Obj_Oshihiki/z_obj_oshihiki.h"
 
@@ -44,7 +45,7 @@ typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
 
 #define SWORD_LENGTH 5500.0f
 #define SWORD_QUAD_REACH 1200.0f
-#define BACK_SWORD_X (-1714.0f)
+#define BACK_SWORD_X 1714.0f
 #define BACK_SWORD_Y (-310.0f)
 #define BACK_SWORD_Z 78.0f
 #define SLASH_DMG_FLAGS DMG_SLASH_GIANT
@@ -62,6 +63,8 @@ typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
 #define BEAM_TARGET_SCALE 12.0f
 #define BEAM_DRAW_SCALE 0.02f
 #define BEAM_DAMAGE 4
+#define SUPER_REACH_BEAM 70.0f
+#define SUPER_REACH_BLADE 30.0f
 // OoT names that bit the Kokiri jump slash.
 #define BEAM_DMG_FLAGS DMG_JUMP_KOKIRI
 
@@ -857,11 +860,13 @@ static void StretchBrokenBlade(PlayState* play, Player* player) {
     }
 }
 
-// The sheathed Master Sword is its held mesh moved by (-714, -310, 78) in the sheath limb (measured in oot.o2r).
+// The FD body's sheath limb runs the other way from Link's, so the blade is turned half a turn around its thickness
+// axis (Z) to hang point-down, with the grip moved to the far side of the limb.
 static void DrawSwordOnBack(PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     Matrix_Push();
     Matrix_Translate(BACK_SWORD_X, BACK_SWORD_Y, BACK_SWORD_Z, MTXMODE_APPLY);
+    Matrix_RotateZ(M_PI, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sSwordDL);
     Matrix_Pop();
@@ -1310,6 +1315,71 @@ static void RegisterBeam(void) {
     sBeamActorId = sApi->RegisterActor(&beam);
 }
 
+static bool IsSwinging(PlayState* play) {
+    return IsFierceDeity() && GET_PLAYER(play)->meleeWeaponState != 0;
+}
+
+static bool IsSuperFormActive(PlayState* play) {
+    return IsFierceDeity();
+}
+
+static bool IsWithinSegment(Vec3f* point, Vec3f* start, Vec3f* end, f32 range) {
+    Vec3f segment = { end->x - start->x, end->y - start->y, end->z - start->z };
+    Vec3f toPoint = { point->x - start->x, point->y - start->y, point->z - start->z };
+    f32 lengthSq = SQ(segment.x) + SQ(segment.y) + SQ(segment.z);
+    f32 t = 0.0f;
+
+    if (lengthSq >= 0.001f) {
+        f32 projection = toPoint.x * segment.x + toPoint.y * segment.y + toPoint.z * segment.z;
+        t = CLAMP(projection / lengthSq, 0.0f, 1.0f);
+    }
+    Vec3f closest = { start->x + segment.x * t, start->y + segment.y * t, start->z + segment.z * t };
+    return Math_Vec3f_DistXYZ(point, &closest) < range;
+}
+
+// Touching a part counts, and so does the long blade anywhere along it while it swings.
+static bool DoesSuperAttackReach(PlayState* play, Vec3f* targetPos, f32 range) {
+    Player* player = GET_PLAYER(play);
+
+    if (!IsFierceDeity()) {
+        return false;
+    }
+    if (Math_Vec3f_DistXYZ(&player->actor.world.pos, targetPos) < range) {
+        return true;
+    }
+    if (player->meleeWeaponState == 0) {
+        return false;
+    }
+    for (s32 i = 0; i < ARRAY_COUNT(player->meleeWeaponInfo); i++) {
+        if (IsWithinSegment(targetPos, &player->meleeWeaponInfo[i].base, &player->meleeWeaponInfo[i].tip, range)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// At full health the swing fires the beam, which reaches farther than the blade.
+static f32 GetSuperAttackReach(PlayState* play) {
+    if (!IsSwinging(play)) {
+        return 0.0f;
+    }
+    return gSaveContext.health >= gSaveContext.healthCapacity ? SUPER_REACH_BEAM : SUPER_REACH_BLADE;
+}
+
+static u8 GetSuperAttackDamage(PlayState* play) {
+    return BEAM_DAMAGE;
+}
+
+static const SOHBossSuperAttack sBossSuperAttack = {
+    IsSwinging, IsSuperFormActive, DoesSuperAttackReach, GetSuperAttackReach, GetSuperAttackDamage,
+};
+
+static void PublishBossSuperAttack(void) {
+    if (SOH_MOD_API_HAS(sApi, PublishService)) {
+        sApi->PublishService(SOH_BOSS_SUPER_ATTACK_SERVICE, (void*)&sBossSuperAttack);
+    }
+}
+
 SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -1322,6 +1392,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     RegisterBeam();
     RegisterMask();
     RegisterForm();
+    PublishBossSuperAttack();
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, ResolveFdBody);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawBlade);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveFaceTextures, ResolveFdFace);

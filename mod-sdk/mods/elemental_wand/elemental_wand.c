@@ -117,7 +117,8 @@ static const u16 sItemButtons[WAND_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDO
 static const char* const sRequiredHooks[] = {
     "OnGameFrameUpdate", "OnPlayerPostLimbDraw", "OnPlayerFilterInput",  "OnActorResolveBgCheckFlags",
     "OnPlayerUpdate",    "OnActorDrawEnd",       "OnActorDraw",          "OnActorDestroy",
-    "OnSceneInit",       "OnLoadFile",           "OnPlayerPostLimbDraw", "OnInterfaceDrawEnd"
+    "OnSceneInit",       "OnLoadFile",           "OnPlayerPostLimbDraw", "OnInterfaceDrawEnd",
+    "ShouldActorUpdate", "OnActorUpdate"
 };
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
@@ -245,6 +246,9 @@ typedef enum {
 #define STORM_BOLT_LIFE 6
 #define STORM_BOLT_BRANCHES 2
 #define STORM_BOLT_EVERY 2
+#define STORM_GROTTO_FRAMES 400
+#define DOOR_ANA_HIDDEN_PARAMS 0x300
+#define DOOR_ANA_STORMS_PARAMS 0x100
 // The effect's yaw is a SCREEN-SPACE roll applied after billboarding, not a world direction, so the ray's own
 // yaw left the sprite near upright. 0x4000 lays it along the ray instead.
 #define STORM_BOLT_ROLL 0x4000
@@ -335,6 +339,8 @@ static struct {
 } sStormRay;
 static ColliderCylinder sStormRayCollider;
 static bool sIsStormColliderReady;
+static s16 sStormGrottoFrames;
+static bool sIsLendingStormFlag;
 
 static struct {
     Vec3f pos;
@@ -1332,7 +1338,33 @@ static bool CallStorm(Player* player, PlayState* play) {
                                player->actor.world.pos.y + STORM_SPAWN_Y_OFFSET, player->actor.world.pos.z, 0, 0, 0,
                                STORM_OKARINA_PARAMS);
 
-    return storm != NULL;
+    if (storm == NULL) {
+        return false;
+    }
+    sStormGrottoFrames = STORM_GROTTO_FRAMES;
+    return true;
+}
+
+// The storm raises the grotto flag for a single frame, which a moving caster misses; the rod holds it for the
+// whole storm, set right before each grotto updates and cleared right after so nothing else reads it.
+static void LendStormFlagToGrotto(void* actorRef, bool* shouldUpdate) {
+    Actor* grotto = actorRef;
+
+    sIsLendingStormFlag = false;
+    if (!*shouldUpdate || sStormGrottoFrames <= 0 || gPlayState == NULL ||
+        (grotto->params & DOOR_ANA_HIDDEN_PARAMS) != DOOR_ANA_STORMS_PARAMS || Flags_GetEnv(gPlayState, 5)) {
+        return;
+    }
+    Flags_SetEnv(gPlayState, 5);
+    sIsLendingStormFlag = true;
+}
+
+static void ReturnStormFlag(void* actorRef) {
+    if (!sIsLendingStormFlag || gPlayState == NULL) {
+        return;
+    }
+    sIsLendingStormFlag = false;
+    Flags_UnsetEnv(gPlayState, 5);
 }
 
 static bool CastStorm(Player* player, PlayState* play) {
@@ -1823,6 +1855,9 @@ static void UpdateWand(void) {
         return;
     }
     player = GET_PLAYER(play);
+    if (sStormGrottoFrames > 0) {
+        sStormGrottoFrames--;
+    }
 
     if (sLastScene != play->sceneNum) {
         sLastScene = play->sceneNum;
@@ -2060,6 +2095,7 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
 
 static void ForgetSceneState(int16_t sceneNum) {
     sLastScene = sceneNum;
+    sStormGrottoFrames = 0;
     ForgetSandSlabs();
     ForgetGeyser();
     ForgetShadowBolt();
@@ -2269,6 +2305,8 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(sApi, OnActorDestroy, ForgetMeteorActor);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDraw, ACTOR_PLAYER, PoseActivation);
     SOH_REGISTER_HOOK(sApi, OnSceneInit, ForgetSceneState);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, ShouldActorUpdate, ACTOR_DOOR_ANA, LendStormFlagToGrotto);
+    SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorUpdate, ACTOR_DOOR_ANA, ReturnStormFlag);
     SOH_REGISTER_HOOK(sApi, OnLoadFile, ReloadRods);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, CaptureHandMatrix);
     SOH_REGISTER_HOOK_FOR_ID(sApi, OnActorDrawEnd, ACTOR_PLAYER, DrawWand);

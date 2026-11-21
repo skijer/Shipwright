@@ -34,10 +34,11 @@
 #define ROD_BOLT_MIN_FRAMES 10
 #define ROD_BOLT_SPARK_SCALE 0.4f
 #define ROD_BOLT_COLLIDER_SCALE 0.6f
+#define ROD_BOLT_HIT_RADIUS 10.0f
+#define ROD_BOLT_HIT_HEIGHT 20.0f
 #define ROD_FREEZE_FRAMES 60
 #define ROD_STUN_FRAMES 60
 #define ROD_BACKFIRE_INVINCIBILITY 20
-#define ROD_AIM_RANGE 0.0f
 #define ROD_HELD_SCALE 0.05f
 #define ROD_HELD_ROT_Z (-90.0f)
 #define ROD_HELD_SIDE_OFFSET 0.5f
@@ -427,16 +428,22 @@ static ColliderCylinderInit sIceLineCollider = {
     { 5, 10, 0, { 0, 0, 0 } },
 };
 
+// Sun switches only answer the mirror ray, so the light rod carries it next to the light arrow.
 static ColliderCylinderInit sLightBoltCollider = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK2, { DMG_ARROW_LIGHT, 0x01, 4 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK2,
+      { DMG_ARROW_LIGHT | DMG_MIR_RAY, 0x01, 4 },
+      { 0, 0, 0 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 10, 20, 0, { 0, 0, 0 } },
 };
 
 static ColliderCylinderInit sLightSpinCollider = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
     { ELEMTYPE_UNK2,
-      { DMG_MAGIC_LIGHT | DMG_SLASH, 0x01, 8 },
+      { DMG_MAGIC_LIGHT | DMG_MIR_RAY | DMG_SLASH, 0x01, 8 },
       { 0, 0, 0 },
       TOUCH_ON | TOUCH_SFX_NORMAL,
       BUMP_NONE,
@@ -446,7 +453,12 @@ static ColliderCylinderInit sLightSpinCollider = {
 
 static ColliderCylinderInit sLightLineCollider = {
     { COLTYPE_NONE, AT_ON | AT_TYPE_PLAYER, AC_NONE, OC1_NONE, OC2_NONE, COLSHAPE_CYLINDER },
-    { ELEMTYPE_UNK2, { DMG_ARROW_LIGHT, 0x01, 4 }, { 0, 0, 0 }, TOUCH_ON | TOUCH_SFX_NORMAL, BUMP_NONE, OCELEM_NONE },
+    { ELEMTYPE_UNK2,
+      { DMG_ARROW_LIGHT | DMG_MIR_RAY, 0x01, 4 },
+      { 0, 0, 0 },
+      TOUCH_ON | TOUCH_SFX_NORMAL,
+      BUMP_NONE,
+      OCELEM_NONE },
     { 5, 10, 0, { 0, 0, 0 } },
 };
 
@@ -770,8 +782,9 @@ static void LaunchBolts(const RodConfig* cfg, Player* player, PlayState* play, V
 }
 
 static void SizeBoltCollider(const RodConfig* cfg, ColliderCylinder* collider, Vec3f* pos, f32 scale, PlayState* play) {
-    collider->dim.radius = (s16)(scale * 1.5f + 2.0f);
-    collider->dim.height = (s16)(scale * 2.0f + 3.0f);
+    collider->dim.radius = (s16)(scale * 5.0f + ROD_BOLT_HIT_RADIUS);
+    collider->dim.height = (s16)(scale * 8.0f + ROD_BOLT_HIT_HEIGHT);
+    collider->dim.yShift = -collider->dim.height / 2;
     collider->dim.pos.x = (s16)pos->x;
     collider->dim.pos.y = (s16)pos->y;
     collider->dim.pos.z = (s16)pos->z;
@@ -1673,8 +1686,8 @@ static void DrawRodEffects(void) {
             DrawSpinCylinder(cfg, player, play);
         }
         if (cfg->state->aiming) {
-            Z64Aiming_DrawReticle(play, player, ROD_AIM_RANGE,
-                                  (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_LAUNCH });
+            Z64Aiming_DrawReticle(play, player, cfg->boltSpeed * cfg->boltLifetime,
+                                  (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_LAUNCH });
         }
     }
 }

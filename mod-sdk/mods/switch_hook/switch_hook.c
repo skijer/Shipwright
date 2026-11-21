@@ -757,6 +757,14 @@ static bool IsChangingHeldItem(Player* player) {
            player->upperActionFunc == Player_UpperAction_ChangeHeldItem;
 }
 
+static void AimOnCUp(Player* player, PlayState* play) {
+    if (sPhase != SWITCH_HOOK_IN_HAND || player->heldItemAction != PLAYER_IA_CUSTOM || IsChangingHeldItem(player) ||
+        !(play->state.input[0].press.button & BTN_CUP) || !CanUseSwitchHook(player, play)) {
+        return;
+    }
+    StartAiming(player, play);
+}
+
 static void MarkSelection(Player* player, PlayState* play) {
     if (sPhase != SWITCH_HOOK_IN_HAND) {
         return;
@@ -789,6 +797,7 @@ static void UpdateSwitchHook(void) {
         } else
             ReturnHookToHand(player, play);
     }
+    AimOnCUp(player, play);
     MarkSelection(player, play);
     if (sSettleTimer > 0) {
         ReanchorColliders(play);

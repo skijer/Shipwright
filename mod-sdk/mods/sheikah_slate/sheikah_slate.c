@@ -2904,6 +2904,10 @@ SOH_MOD_EXPORT void ModInit(void) {
         return;
     }
     sApi->RegisterVB(VB_THROW_OR_PUT_DOWN_HELD_ITEM, HoldOntoRemoteBomb);
+    sApi->RegisterVB(VB_DRAW_EPONA_BOOST_CARROTS, MasterCycle_HideCarrots);
+    if (SOH_MOD_API_HAS(sApi, PublishService)) {
+        sApi->PublishService("nei.master_cycle.place_beside_rider", (void*)MasterCycle_PlaceBesideRider);
+    }
     SOH_REGISTER_HOOK(sApi, OnPlayerUpdate, RunSlate);
     SOH_REGISTER_HOOK(sApi, OnPlayDrawEnd, DrawStasis);
     SOH_REGISTER_HOOK(sApi, OnPlayerFilterInput, MasterCycle_FilterInput);

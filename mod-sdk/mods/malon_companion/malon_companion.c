@@ -15,8 +15,10 @@
 #ifdef _MSC_VER
 #pragma warning(error : 4013)
 __declspec(dllimport) void EnArrow_Fly(EnArrow*, PlayState*);
+__declspec(dllimport) void SkelAnime_GetFrameData(AnimationHeader*, s32, s32, Vec3s*);
 #else
 void EnArrow_Fly(EnArrow*, PlayState*);
+void SkelAnime_GetFrameData(AnimationHeader*, s32, s32, Vec3s*);
 #endif
 
 #define MALON_ENABLED "gMods.MalonCompanion.Enabled"
@@ -24,6 +26,11 @@ void EnArrow_Fly(EnArrow*, PlayState*);
 #define MALON_JOINTS 19
 #define MALON_FOLLOW_DISTANCE 65.0f
 #define MALON_ATTACK_RANGE 550.0f
+#define CYCLE_SIDE_OFFSET 6.0f
+#define CYCLE_BACK_OFFSET 20.0f
+#define CYCLE_SEAT_RISE_ADULT 18.0f
+#define CYCLE_SEAT_RISE_CHILD 14.0f
+#define CYCLE_SIDE_YAW 0x4000
 #include "bow_socket.inc.c"
 
 typedef enum {
@@ -61,6 +68,7 @@ typedef struct {
     u8 child, ready, colliderReady, shot;
     Actor* target;
     Actor* horse;
+    bool isSideSaddle;
     Vec3f hand;
     u8 handReady;
     u8 controlled;
@@ -280,16 +288,48 @@ static void Walk(Malon* self, PlayState* play, Vec3f goal, f32 stop, bool aiming
         self->cooldown = MAX(self->cooldown, 1);
 }
 
-static void RidePosition(Malon* self, PlayState* play) {
-    Player* player = GET_PLAYER(play);
-    Actor* horse = player->rideActor;
-    if (!ActorExists(play, horse))
-        return;
+typedef bool (*PlaceBesideRiderFunc)(Actor* ride, Vec3f* local, Vec3f* pos, Vec3s* rot);
+
+// On the Master Cycle Malon rides side-saddle behind Link, turned to the bike's left, and follows its lean and wheelie.
+static bool SitSideSaddle(Malon* self, Actor* ride) {
+    static PlaceBesideRiderFunc sPlaceBesideRider;
+    Vec3f local = { CYCLE_SIDE_OFFSET, self->child ? CYCLE_SEAT_RISE_CHILD : CYCLE_SEAT_RISE_ADULT,
+                    -CYCLE_BACK_OFFSET };
+    Vec3s rot;
+
+    if (sPlaceBesideRider == NULL && SOH_MOD_API_HAS(sApi, FindService)) {
+        sPlaceBesideRider = (PlaceBesideRiderFunc)sApi->FindService("nei.master_cycle.place_beside_rider");
+    }
+    if (sPlaceBesideRider == NULL || !sPlaceBesideRider(ride, &local, &self->actor.world.pos, &rot)) {
+        return false;
+    }
+    self->actor.shape.rot = rot;
+    self->actor.shape.rot.y += CYCLE_SIDE_YAW;
+    self->actor.world.rot.y = self->actor.shape.rot.y;
+    return true;
+}
+
+static void SitBehindLink(Malon* self, Player* player) {
     self->actor.world.pos = player->actor.world.pos;
     self->actor.world.pos.x -= Math_SinS(player->actor.shape.rot.y) * 22;
     self->actor.world.pos.z -= Math_CosS(player->actor.shape.rot.y) * 22;
     self->actor.world.pos.y += self->child ? 8 : -5;
     self->actor.world.rot.y = self->actor.shape.rot.y = player->actor.shape.rot.y;
+}
+
+static MalonClip RideClip(Malon* self) {
+    return self->isSideSaddle ? CLIP_SIT : CLIP_RIDE;
+}
+
+static void RidePosition(Malon* self, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+    Actor* horse = player->rideActor;
+    if (!ActorExists(play, horse))
+        return;
+    self->isSideSaddle = SitSideSaddle(self, horse);
+    if (!self->isSideSaddle) {
+        SitBehindLink(self, player);
+    }
     self->actor.velocity = (Vec3f){ 0, 0, 0 };
     self->actor.gravity = 0;
     self->actor.speedXZ = 0;
@@ -492,17 +532,23 @@ static void UpdateActor(Actor* actor, PlayState* play) {
 
     bool riding = ActorExists(play, player->rideActor);
     if (riding && self->state != MALON_THROWN && self->state != MALON_LAND) {
-        if (self->horse != player->rideActor) {
+        bool isNewMount = self->horse != player->rideActor;
+        RidePosition(self, play);
+        if (isNewMount && self->isSideSaddle) {
+            SetState(self, MALON_RIDE);
+            PlayClip(self, CLIP_SIT, false);
+        } else if (isNewMount) {
             SetState(self, MALON_MOUNT);
             PlayClip(self, CLIP_MOUNT, true);
         }
-        RidePosition(self, play);
         if (self->state == MALON_MOUNT && self->stateTicks >= 27) {
             SetState(self, MALON_RIDE);
-            PlayClip(self, CLIP_RIDE, false);
+            PlayClip(self, RideClip(self), false);
         }
     } else if (self->horse != NULL) {
         self->horse = NULL;
+        self->isSideSaddle = false;
+        actor->shape.rot.x = actor->shape.rot.z = 0;
         actor->gravity = -1;
         SetState(self, MALON_FALL);
         PlayClip(self, CLIP_FALL, false);
@@ -531,7 +577,7 @@ static void UpdateActor(Actor* actor, PlayState* play) {
         if (self->target != NULL && !CanTarget(self, play, self->target)) {
             self->target = NULL;
             SetState(self, riding ? MALON_RIDE : MALON_FOLLOW);
-            PlayClip(self, riding ? CLIP_RIDE : CLIP_IDLE, false);
+            PlayClip(self, riding ? RideClip(self) : CLIP_IDLE, false);
         }
         if (self->state != MALON_SHOOT && self->cooldown == 0)
             self->target = FindTarget(self, play);
@@ -556,7 +602,7 @@ static void UpdateActor(Actor* actor, PlayState* play) {
                 if (self->skel.curFrame >= self->skel.endFrame) {
                     self->cooldown = 35;
                     SetState(self, riding ? MALON_RIDE : MALON_FOLLOW);
-                    PlayClip(self, riding ? CLIP_RIDE : CLIP_IDLE, false);
+                    PlayClip(self, riding ? RideClip(self) : CLIP_IDLE, false);
                 }
             }
         } else if (!riding) {
@@ -591,8 +637,29 @@ static void UpdateActor(Actor* actor, PlayState* play) {
         CollisionCheck_SetOC(play, &play->colChkCtx, &self->collider.base);
 }
 
+static bool IsLegLimb(Malon* self, s32 limb) {
+    s32 firstLeg = self->child ? 2 : 3;
+    return limb >= firstLeg && limb < firstLeg + 6;
+}
+
+// The thighs live inside the dress, so the sitting bend would leave the shins floating in front of the seat.
+static void HangLegUnderSkirt(Malon* self, s32 limb, Vec3s* rot) {
+    static Vec3s sStandingPose[2][MALON_JOINTS];
+    static bool sHasStandingPose[2];
+
+    if (!sHasStandingPose[self->child]) {
+        AnimationHeader* idle = (AnimationHeader*)ResourceMgr_LoadAnimByName(sClipPaths[self->child][CLIP_IDLE]);
+        SkelAnime_GetFrameData(idle, 0, self->skel.limbCount, sStandingPose[self->child]);
+        sHasStandingPose[self->child] = true;
+    }
+    *rot = sStandingPose[self->child][limb];
+}
+
 static s32 OverrideLimb(PlayState* play, s32 limb, Gfx** dl, Vec3f* pos, Vec3s* rot, void* arg) {
     Malon* self = arg;
+    if (self->isSideSaddle && IsLegLimb(self, limb)) {
+        HangLegUnderSkirt(self, limb, rot);
+    }
     if (limb == (self->child ? 15 : 18)) {
         rot->x += self->headYaw;
         rot->z += self->headPitch;

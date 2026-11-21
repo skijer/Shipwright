@@ -18,6 +18,8 @@
 #define SLOPE_STEEP 1
 #define BGCHECK_ON_GROUND 0x0001
 #define GI_DL_CAPACITY 512
+#define BOOT_SCALE_ADULT 0.85f
+#define BOOT_SCALE_CHILD 0.55f
 
 static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gItemIconClimbBootsTex";
 static const ALIGN_ASSET(2) char sName[] = "__OTR__textures/item_name_custom/gClimbBootsNameTex";
@@ -230,9 +232,8 @@ static void DrawClimbBootsOnFeet(PlayState* play, Player* player, int32_t limbIn
     gDPSetGrayscaleColor(POLY_OPA_DISP++, 205, 210, 220, 150);
     gSPGrayscale(POLY_OPA_DISP++, true);
     Matrix_Push();
-    if (!LINK_IS_ADULT) {
-        Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY);
-    }
+    f32 bootScale = LINK_IS_ADULT ? BOOT_SCALE_ADULT : BOOT_SCALE_CHILD;
+    Matrix_Scale(bootScale, bootScale, bootScale, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
     Matrix_Pop();

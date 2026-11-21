@@ -27,6 +27,8 @@
 #define DOMROD_ORB_SPEED_HOMING 22.0f
 #define DOMROD_ORB_RETURN_SPEED 20.0f
 #define DOMROD_MAX_RANGE 2500.0f
+#define DOMROD_SELECT_RANGE 800.0f
+#define DOMROD_SELECT_CONE 0x1800
 #define DOMROD_CATCH_DISTANCE 60.0f
 #define DOMROD_LAUNCH_HEIGHT 45.0f
 #define DOMROD_LAUNCH_REACH 30.0f
@@ -103,7 +105,9 @@ static void RestoreRemoteLimbEnv(PlayState* play, uint32_t color);
 static void DrawRemoteLimb(PlayState* play, Player* player, int32_t limb);
 static ColliderCylinder sCollider;
 static bool sIsColliderReady;
-static bool sIsAimPending;
+static bool sIsFirePending;
+static Actor* sSelection;
+static Actor* sOrbTarget;
 static bool sWasButtonHeld;
 static bool sIsDamagePaused;
 static bool sWasLinkAirborne;
@@ -264,7 +268,9 @@ static void Stow(Player* player, PlayState* play) {
     sCollider.base.atFlags &= ~(AT_ON | AT_HIT);
     RestoreBeamosAttack();
     sPossessed = NULL;
-    sIsAimPending = false;
+    sSelection = NULL;
+    sOrbTarget = NULL;
+    sIsFirePending = false;
     sIsDamagePaused = false;
     sAttackCooldown = 0;
     Audio_StopSfxById(NA_SE_EN_FANTOM_FIRE);
@@ -297,12 +303,7 @@ static void StopAiming(Player* player, PlayState* play) {
     PlaySfxAt(NA_SE_PL_CHANGE_ARMS, &player->actor.world.pos);
 }
 
-static void Launch(Player* player, PlayState* play) {
-    s16 yaw;
-    s16 pitch;
-
-    Z64Aiming_GetDirection(player, &yaw, &pitch);
-    Z64Aiming_Release(player, play);
+static void LaunchAlong(Player* player, PlayState* play, s16 yaw, s16 pitch) {
     sOrbPos.x = player->actor.world.pos.x + Math_SinS(yaw) * DOMROD_LAUNCH_REACH;
     sOrbPos.y = player->actor.world.pos.y + DOMROD_LAUNCH_HEIGHT;
     sOrbPos.z = player->actor.world.pos.z + Math_CosS(yaw) * DOMROD_LAUNCH_REACH;
@@ -317,6 +318,28 @@ static void Launch(Player* player, PlayState* play) {
     Collider_SetCylinder(play, &sCollider, &player->actor, &sColliderInit);
     CreateLight(play);
     PlaySfxAt(NA_SE_IT_ARROW_SHOT, &player->actor.world.pos);
+}
+
+static void LaunchAimed(Player* player, PlayState* play) {
+    s16 yaw;
+    s16 pitch;
+
+    Z64Aiming_GetDirection(player, &yaw, &pitch);
+    Z64Aiming_Release(player, play);
+    sOrbTarget = NULL;
+    LaunchAlong(player, play, yaw, pitch);
+}
+
+static void LaunchAtWill(Player* player, PlayState* play) {
+    sOrbTarget = (sSelection != NULL && sSelection->update != NULL) ? sSelection : NULL;
+    if (sOrbTarget == NULL) {
+        LaunchAlong(player, play, player->actor.shape.rot.y, 0);
+        return;
+    }
+    Vec3f origin = { player->actor.world.pos.x, player->actor.world.pos.y + DOMROD_LAUNCH_HEIGHT,
+                     player->actor.world.pos.z };
+    LaunchAlong(player, play, Math_Vec3f_Yaw(&origin, &sOrbTarget->focus.pos),
+                Math_Vec3f_Pitch(&origin, &sOrbTarget->focus.pos));
 }
 
 static void StartPossession(Player* player, Actor* target) {
@@ -383,11 +406,21 @@ static bool HasHitGeometry(PlayState* play, Vec3f* previousPos) {
     return true;
 }
 
-static void HomeOnFocus(Player* player) {
+static Actor* FindHomingTarget(Player* player) {
     Actor* focus = player->focusActor;
 
-    Math_ApproachS(&sOrbRot.y, Math_Vec3f_Yaw(&sOrbPos, &focus->focus.pos), 1, DOMROD_HOMING_TURN);
-    Math_ApproachS(&sOrbRot.x, Math_Vec3f_Pitch(&sOrbPos, &focus->focus.pos), 1, DOMROD_HOMING_TURN);
+    if (Player_IsZTargeting(player) && focus != NULL && focus->update != NULL) {
+        return focus;
+    }
+    if (sOrbTarget != NULL && sOrbTarget->update == NULL) {
+        sOrbTarget = NULL;
+    }
+    return sOrbTarget;
+}
+
+static void HomeOn(Actor* target) {
+    Math_ApproachS(&sOrbRot.y, Math_Vec3f_Yaw(&sOrbPos, &target->focus.pos), 1, DOMROD_HOMING_TURN);
+    Math_ApproachS(&sOrbRot.x, Math_Vec3f_Pitch(&sOrbPos, &target->focus.pos), 1, DOMROD_HOMING_TURN);
 }
 
 static void UpdateFlying(Player* player, PlayState* play) {
@@ -401,13 +434,13 @@ static void UpdateFlying(Player* player, PlayState* play) {
         StartPossession(player, target);
         return;
     }
-    bool isHoming = Player_IsZTargeting(player) && player->focusActor != NULL && player->focusActor->update != NULL;
+    Actor* homingTarget = FindHomingTarget(player);
     Vec3f previousPos = sOrbPos;
 
-    if (isHoming) {
-        HomeOnFocus(player);
+    if (homingTarget != NULL) {
+        HomeOn(homingTarget);
     }
-    MoveOrb(isHoming ? DOMROD_ORB_SPEED_HOMING : DOMROD_ORB_SPEED);
+    MoveOrb(homingTarget != NULL ? DOMROD_ORB_SPEED_HOMING : DOMROD_ORB_SPEED);
     sCollider.dim.pos.x = (s16)sOrbPos.x;
     sCollider.dim.pos.y = (s16)sOrbPos.y;
     sCollider.dim.pos.z = (s16)sOrbPos.z;
@@ -657,7 +690,7 @@ static void UpdateAiming(Player* player, PlayState* play) {
 
     Z64Aiming_Update(player, play);
     Player_ZeroSpeedXZ(player);
-    if (play->state.input[0].press.button & (BTN_B | BTN_A)) {
+    if (play->state.input[0].press.button & (BTN_B | BTN_A | BTN_CUP)) {
         StopAiming(player, play);
         return;
     }
@@ -666,7 +699,7 @@ static void UpdateAiming(Player* player, PlayState* play) {
         return;
     }
     if (sWasButtonHeld || (play->state.input[0].press.button & rodButton)) {
-        Launch(player, play);
+        LaunchAimed(player, play);
     }
 }
 
@@ -684,15 +717,15 @@ static void TakeOutRod(PlayState* play, Player* player) {
         sIsColliderReady = true;
     }
     sPhase = DOMROD_IN_HAND;
-    sIsAimPending = true;
+    sIsFirePending = false;
     sLastInvincibility = player->invincibilityTimer;
 }
 
-// Acts from the end of the player's update: what the item-button pass sets on the camera is undone the same frame.
-static void RequestAim(Player* player, PlayState* play) {
+// Acts from the end of the player's update: what the item-button pass sets on the player is undone the same frame.
+static void RequestFire(Player* player, PlayState* play) {
     if (sPhase == DOMROD_STOWED || sPhase == DOMROD_IN_HAND) {
         sPhase = DOMROD_IN_HAND;
-        sIsAimPending = true;
+        sIsFirePending = true;
     }
 }
 
@@ -708,13 +741,70 @@ static bool WasJustHurt(Player* player) {
     return isHurt;
 }
 
-static void RunPendingAim(Player* player, PlayState* play) {
-    if (!sIsAimPending || (player->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM)) {
+static bool IsReadyInHand(Player* player) {
+    return sPhase == DOMROD_IN_HAND && player->heldItemAction == PLAYER_IA_CUSTOM &&
+           !(player->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM);
+}
+
+static void RunPendingFire(Player* player, PlayState* play) {
+    if (!sIsFirePending || (player->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM)) {
         return;
     }
-    sIsAimPending = false;
-    if (player->heldItemAction == PLAYER_IA_CUSTOM && sPhase == DOMROD_IN_HAND) {
+    sIsFirePending = false;
+    if (IsReadyInHand(player)) {
+        LaunchAtWill(player, play);
+    }
+}
+
+static void AimOnCUp(Player* player, PlayState* play) {
+    if (IsReadyInHand(player) && (play->state.input[0].press.button & BTN_CUP)) {
         StartAiming(player, play);
+    }
+}
+
+static bool IsOrbTarget(Actor* actor) {
+    return IsPossessable(actor) || IsSomariaSummon(actor);
+}
+
+static Actor* ScanForSelection(Player* player, PlayState* play) {
+    Actor* best = NULL;
+    s16 bestError = DOMROD_SELECT_CONE;
+
+    for (s32 category = 0; category < ACTORCAT_MAX; category++) {
+        for (Actor* actor = play->actorCtx.actorLists[category].head; actor != NULL; actor = actor->next) {
+            if (actor->update == NULL || !IsOrbTarget(actor) ||
+                Math_Vec3f_DistXZ(&player->actor.world.pos, &actor->world.pos) > DOMROD_SELECT_RANGE) {
+                continue;
+            }
+            s16 error = ABS((s16)(Math_Vec3f_Yaw(&player->actor.world.pos, &actor->world.pos) -
+                                  player->actor.shape.rot.y));
+            if (error < bestError) {
+                bestError = error;
+                best = actor;
+            }
+        }
+    }
+    return best;
+}
+
+// What is tinted is exactly what the orb will be fired at: the lock-on first, else the best match ahead.
+static Actor* PickOrbTarget(Player* player, PlayState* play) {
+    Actor* focus = player->focusActor;
+
+    if (Player_IsZTargeting(player) && focus != NULL && focus->update != NULL) {
+        return focus;
+    }
+    return ScanForSelection(player, play);
+}
+
+static void MarkSelection(Player* player, PlayState* play) {
+    if (!IsReadyInHand(player)) {
+        sSelection = NULL;
+        return;
+    }
+    sSelection = PickOrbTarget(player, play);
+    if (sSelection != NULL) {
+        Actor_SetColorFilter(sSelection, 0, 255, 0, 4);
     }
 }
 
@@ -732,7 +822,9 @@ static void UpdateRodWorld(void) {
         StopAiming(player, play);
         return;
     }
-    RunPendingAim(player, play);
+    RunPendingFire(player, play);
+    AimOnCUp(player, play);
+    MarkSelection(player, play);
     if (sSlashActive) {
         sSlashActive = !LinkAnimation_Update(play, &player->upperSkelAnime);
     }
@@ -802,7 +894,9 @@ static void ForgetScene(int16_t sceneNum) {
     sPoundFrames = sCommandFrames = 0;
     sSlashActive = false;
     sPossessed = NULL;
-    sIsAimPending = false;
+    sSelection = NULL;
+    sOrbTarget = NULL;
+    sIsFirePending = false;
     sPhase = DOMROD_STOWED;
 }
 
@@ -890,7 +984,7 @@ static void DrawRodEffects(void) {
     }
     if (sPhase == DOMROD_AIMING) {
         Z64Aiming_DrawReticle(play, GET_PLAYER(play), DOMROD_MAX_RANGE,
-                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_CONTROL });
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_CONTROL });
     } else if (sPhase == DOMROD_FLYING || sPhase == DOMROD_RETURNING || sPhase == DOMROD_CONTROLLING) {
         DrawOrb(play);
     }
@@ -1048,15 +1142,15 @@ SOH_MOD_EXPORT void ModInit(void) {
 
     Z64Items_SetButtons(&rod, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&rod, 0, 22, -1);
-    Z64Items_SetTextbox(&rod, "You got the %pDominion Rod%w!&Hold %y\xA1%w to aim and release it to&"
-                              "fire a control orb.^Possess Beamos, Armos or&"
+    Z64Items_SetTextbox(&rod, "You got the %pDominion Rod%w!&Ready it with %y\xA1%w and press %y\xA1%w&"
+                              "to fire a control orb at the&foe that glows blue. %y\xA5%w aims.^Possess Beamos, Armos or&"
                               "Anubis. Hold %y\xA4%w and press %y\x9F%w to&command an attack, even&"
                               "without a locked target.^Press %y\xA1%w without targeting to&"
                               "detonate or ignite the&possessed enemy.");
-    Z64Items_SetPauseText(&rod, "%pDominion Rod&%wHold %y\xA1%w to aim, release to fire. A&"
-                                "possessed foe copies your steps.");
+    Z64Items_SetPauseText(&rod, "%pDominion Rod&%wPress %y\xA1%w to fire at the blue foe.&"
+                                "%y\xA5%w aims. A possessed foe copies&your steps.");
     Z64Items_SetAction(&rod, TakeOutRod, UpdateRodInHand);
-    Z64Items_SetHeldCallbacks(&rod, RequestAim, PutRodAway, NULL);
+    Z64Items_SetHeldCallbacks(&rod, RequestFire, PutRodAway, NULL);
     Z64Items_SetHeldModel(&rod, NULL, PLAYER_MODELGROUP_SWORD_AND_SHIELD);
     Z64Items_SetMeleeWeapon(&rod, Z64ITEMS_MELEE_KOKIRI_SWORD);
     rod.getItemEntry.drawFunc = DrawGetItem;

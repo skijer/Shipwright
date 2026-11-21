@@ -76,6 +76,7 @@ extern void MmTax_Init(const SOHModApi* api);
 #define GIANT_FILL_START 56
 #define GIANT_FILL_IN_STEP 45
 #define GIANT_FILL_OUT_STEP 30
+#define INSTANT_TRANSFORM_CVAR "gEnhancements.Forms.InstantTransform"
 
 #define FROG_LOG_X 990.0f
 #define FROG_LOG_Z (-1220.0f)
@@ -104,6 +105,7 @@ extern void MmTax_Init(const SOHModApi* api);
 #define MASK_BUTTON_OWNER "skijer.mm_wearables"
 
 #define SCENTS_IDLE_SPEED 0.5f
+#define SCENTS_GRUNT_SFX 0x68E0
 
 #define FAIRY_HAIR_MATRICES 6
 #define FAIRY_HAIR_SEGMENT 0x0B
@@ -519,6 +521,18 @@ static void TakeOff(PlayState* play, Player* player) {
 
 static void ResetFairyHair(void);
 
+static void StartGiantTransform(Player* player) {
+    sGiantMagicTimer = GIANT_MAGIC_INTERVAL;
+    sGiantFillAlpha = 0;
+    if (CVarGetInteger(INSTANT_TRANSFORM_CVAR, 0)) {
+        Actor_SetScale(&player->actor, GIANT_SCALE);
+        return;
+    }
+    sGiantTransformTimer = 0;
+    player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
+    player->linearVelocity = 0.0f;
+}
+
 static void PutOn(Player* player, int32_t index) {
     if (index == MASK_GREAT_FAIRY)
         ResetFairyHair();
@@ -531,11 +545,7 @@ static void PutOn(Player* player, int32_t index) {
         player->currentMask = sMasks[index].vanillaMask;
     }
     if (index == MASK_GIANT) {
-        sGiantMagicTimer = GIANT_MAGIC_INTERVAL;
-        sGiantTransformTimer = 0;
-        sGiantFillAlpha = 0;
-        player->stateFlags1 |= PLAYER_STATE1_INPUT_DISABLED;
-        player->linearVelocity = 0.0f;
+        StartGiantTransform(player);
     }
     ClaimButtonB();
 }
@@ -896,10 +906,36 @@ static void UpdateDonGeroMask(PlayState* play, Player* player) {
     ConductFrogChoir(play, player);
 }
 
-static void UpdateScentsMask(PlayState* play, Player* player) {
-    bool idle = (player->linearVelocity < SCENTS_IDLE_SPEED) && (player->actor.bgCheckFlags & BG_ON_GROUND);
+// Any other action owns the skeleton: posing over it keeps its animation from ever ending, which locks Link.
+static bool IsStandingIdle(Player* player) {
+    LinkAnimationHeader* anim = player->skelAnime.animation;
 
-    if (!idle || IsPlayerBusy(player) || sSniffAnim == NULL) {
+    return (player->linearVelocity < SCENTS_IDLE_SPEED) && (player->actor.bgCheckFlags & BG_ON_GROUND) &&
+           (anim == sSniffAnim || anim == Player_GetIdleAnim(player));
+}
+
+// MM's pig grunts on these frames of the sniff (sFidgetAnimSfxPigGrunt).
+static void GruntWhileSniffing(Player* player, f32 frame) {
+    static const s16 sGruntFrames[] = { 4, 12, 30, 61, 68 };
+    typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
+    static MmSfxPlayFunc sPlayMmSfx;
+
+    if (sPlayMmSfx == NULL && SOH_MOD_API_HAS(sApi, FindService)) {
+        sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService("mm.sfx.play");
+    }
+    if (sPlayMmSfx == NULL) {
+        return;
+    }
+    for (u32 i = 0; i < ARRAY_COUNT(sGruntFrames); i++) {
+        if ((s16)frame == sGruntFrames[i]) {
+            sPlayMmSfx(SCENTS_GRUNT_SFX, &player->actor.projectedPos);
+            return;
+        }
+    }
+}
+
+static void UpdateScentsMask(PlayState* play, Player* player) {
+    if (sSniffAnim == NULL || !IsStandingIdle(player) || IsPlayerBusy(player)) {
         sScentsSniffing = false;
         return;
     }
@@ -907,6 +943,7 @@ static void UpdateScentsMask(PlayState* play, Player* player) {
         sScentsSniffing = true;
         sPoseFrame = 0.0f;
     }
+    GruntWhileSniffing(player, sPoseFrame);
     PlayPoseLoop(play, player, sSniffAnim);
 }
 
@@ -1353,7 +1390,7 @@ static void HideNativeWearables(bool* draw, va_list args) {
 
 static void RegisterMaskOptions(void) {
     static const char* const sLabels[] = { "Hide MM masks", "Instant transformation masks", "Instant Blast Mask" };
-    static const char* const sCvars[] = { "gMods.MMMasks.Hide", "gEnhancements.Forms.InstantTransform",
+    static const char* const sCvars[] = { "gMods.MMMasks.Hide", INSTANT_TRANSFORM_CVAR,
                                           "gMods.MMMasks.InstantBlast" };
 
     if (!SOH_MOD_API_HAS(sApi, RegisterMenuWidget)) {

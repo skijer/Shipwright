@@ -24,7 +24,8 @@
 #define GPOUND_STALL_FRAMES 4
 #define GPOUND_FALL_VELOCITY (-18.0f)
 #define GPOUND_FALL_GRAVITY (-2.5f)
-#define GPOUND_LANDING_FRAMES 25
+#define GPOUND_LANDING_FRAMES 25.0f
+#define GPOUND_POSE_FRAME 89.0f
 #define GPOUND_SHOCKWAVE_FRAMES 6
 #define GPOUND_BOUNCE_VELOCITY 8.0f
 #define GPOUND_TIMEOUT 60
@@ -317,8 +318,9 @@ static void PlantSwordPose(Player* player, PlayState* play, f32 playSpeed, f32 m
     LinkAnimationHeader* clip = ResourceMgr_LoadPlayerAnimAsHeader(sGroundPoundAnim);
     if (clip == NULL)
         return;
-    LinkAnimation_Change(play, &player->skelAnime, clip, playSpeed, 89.0f, playSpeed < 0.0f ? 0.0f : 89.0f,
-                         playSpeed < 0.0f ? ANIMMODE_ONCE : ANIMMODE_LOOP, morph);
+    LinkAnimation_Change(play, &player->skelAnime, clip, playSpeed, GPOUND_POSE_FRAME,
+                         playSpeed < 0.0f ? 0.0f : GPOUND_POSE_FRAME, playSpeed < 0.0f ? ANIMMODE_ONCE : ANIMMODE_LOOP,
+                         morph);
 }
 
 static void StartGroundPound(Player* player, PlayState* play) {
@@ -351,7 +353,7 @@ static void LandGroundPound(Player* player, PlayState* play) {
     Rumble_Request(0.0f, 255, 20, 150);
     ShakeCamera(play, 28000, 14, 2, 100, 16);
     PlaySfx(player, NA_SE_IT_HAMMER_HIT);
-    PlantSwordPose(player, play, -1.0f, -3.0f);
+    PlantSwordPose(player, play, -GPOUND_POSE_FRAME / GPOUND_LANDING_FRAMES, -3.0f);
     player->actor.gravity = sSavedGravity;
     player->stateFlags3 &= ~PLAYER_STATE3_MIDAIR;
     player->stateFlags1 &= ~PLAYER_STATE1_JUMPING;
@@ -389,7 +391,7 @@ static void UpdateGroundPoundLanding(Player* player, PlayState* play) {
             PlaySfx(player, NA_SE_IT_SWORD_STRIKE);
         }
     }
-    if (LinkAnimation_Update(play, &player->skelAnime)) {
+    if (LinkAnimation_Update(play, &player->skelAnime) || sPendant.timer >= GPOUND_LANDING_FRAMES) {
         player->actor.gravity = sSavedGravity;
         ReturnToIdle();
     }

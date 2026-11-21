@@ -1,6 +1,8 @@
+#include <math.h>
 #include <string.h>
 
 #include "z64items.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -12,6 +14,7 @@
 #define ROCS_PROGRESSIVE_KEY "nei.progressive_rocs"
 #define ROCS_JUMP_VELOCITY 11.0f
 #define ROCS_WATER_JUMP_VELOCITY 5.5f
+#define ROCS_PLAYER_SCALE 0.01f
 #define ROCS_FEATHER_GIVE_SCALE 0.5f
 #define ROCS_CAPE_GIVE_SCALE 0.6f
 #define ROCS_BUTTON_COUNT 8
@@ -77,14 +80,24 @@ static void KeepLedgesGrabbable(Player* player) {
     player->stateFlags2 &= ~PLAYER_STATE2_HOPPING;
 }
 
+// Gravity does not follow Link's size, so the launch scales with the square root to keep the height in proportion.
+static f32 ScaleToLinkSize(Player* player, f32 velocity) {
+    return velocity * sqrtf(player->actor.scale.y / ROCS_PLAYER_SCALE);
+}
+
 static void Jump(Player* player, PlayState* play, const char* animation) {
-    func_80838940(player, (LinkAnimationHeader*)animation, ROCS_JUMP_VELOCITY, play, NA_SE_VO_LI_AUTO_JUMP);
+    func_80838940(player, (LinkAnimationHeader*)animation, ScaleToLinkSize(player, ROCS_JUMP_VELOCITY), play,
+                  NA_SE_VO_LI_AUTO_JUMP);
     KeepLedgesGrabbable(player);
     SpawnSparkles(player, play);
 }
 
+static bool IsBlockedByForm(void) {
+    return sApi->GetActiveForm() != NULL && !CVarGetInteger("gCheats.TimelessEquipment", 0);
+}
+
 static bool CanJumpFromGround(Player* player, PlayState* play) {
-    return sApi->GetActiveForm() == NULL && (player->actor.bgCheckFlags & 1) &&
+    return !IsBlockedByForm() && (player->actor.bgCheckFlags & 1) &&
            !(player->stateFlags1 & ROCS_BLOCKING_STATES);
 }
 
@@ -117,7 +130,7 @@ static void JumpFromAirOrWater(Player* player, PlayState* play) {
         return;
     }
     if (player->stateFlags1 & PLAYER_STATE1_IN_WATER) {
-        player->actor.velocity.y = ROCS_WATER_JUMP_VELOCITY;
+        player->actor.velocity.y = ScaleToLinkSize(player, ROCS_WATER_JUMP_VELOCITY);
         Player_PlaySfx(&player->actor, NA_SE_PL_SKIP);
         SpawnSparkles(player, play);
         return;
@@ -150,7 +163,7 @@ static void UpdateRocs(void) {
         return;
     }
     UpgradeFeatherToCape();
-    if (sApi->GetActiveForm() != NULL) {
+    if (IsBlockedByForm()) {
         sHasDoubleJumped = false;
         return;
     }

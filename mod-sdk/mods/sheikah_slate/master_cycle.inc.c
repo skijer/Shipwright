@@ -472,6 +472,26 @@ static void MasterCycle_SeatPos(Actor* actor, Vec3f* out) {
     MasterCycle_BodyPoint(actor, MC_SEAT_X, MC_SEAT_Y, MC_SEAT_Z, out);
 }
 
+// Published for companions: places a point given relative to Link (x left, y up, z forward) on the cycle, measured from
+// where Link actually sits so it follows the lean and the wheelie exactly as he does.
+static bool MasterCycle_PlaceBesideRider(Actor* ride, Vec3f* local, Vec3f* pos, Vec3s* rot) {
+    Vec3f seat;
+    Vec3f point;
+
+    if ((sMc.actor == NULL) || (ride != sMc.actor) || (gPlayState == NULL) || (local == NULL) || (pos == NULL) ||
+        (rot == NULL)) {
+        return false;
+    }
+    MasterCycle_SeatPos(ride, &seat);
+    MasterCycle_BodyPoint(ride, MC_SEAT_X + local->x, MC_SEAT_Y + local->y, MC_SEAT_Z + local->z, &point);
+    *pos = GET_PLAYER(gPlayState)->actor.world.pos;
+    pos->x += point.x - seat.x;
+    pos->y += point.y - seat.y;
+    pos->z += point.z - seat.z;
+    *rot = ride->shape.rot;
+    return true;
+}
+
 static s16 MasterCycle_RideYaw(Actor* ride) {
     if ((sMc.actor == NULL) || (ride != sMc.actor)) {
         return ride->shape.rot.y;
@@ -601,6 +621,23 @@ static u8 sMcCarry = 0;
 static f32 sMcCarrySpeed = 0.0f;
 static u8 sMcSceneChanged = 1;
 
+// The cycle has no carrot boosts, but the HUD draws Epona's for any ridden horse.
+static void MasterCycle_HideCarrots(bool* should, va_list args) {
+    if (MasterCycle_IsRiding()) {
+        *should = false;
+    }
+}
+
+// Riding drops the HUD to A/B/minimap; vanilla only raises it again when a button status flips on the dismount.
+static void MasterCycle_RestoreHud(void) {
+    if (gSaveContext.hudVisibilityMode != HUD_VISIBILITY_A_B_MINIMAP &&
+        gSaveContext.hudVisibilityMode != HUD_VISIBILITY_A_HEARTS_MAGIC_MINIMAP_FORCE) {
+        return;
+    }
+    gSaveContext.hudVisibilityMode = HUD_VISIBILITY_NO_CHANGE;
+    Interface_ChangeHudVisibilityMode(HUD_VISIBILITY_ALL);
+}
+
 static void MasterCycle_Tick(PlayState* play, Player* player) {
     static s16 sLastScene = -1;
 
@@ -649,6 +686,7 @@ static void MasterCycle_Tick(PlayState* play, Player* player) {
 
     if ((sMc.wasRiding == 2) && !MasterCycle_IsRiding() && !(player->stateFlags1 & PLAYER_STATE1_ON_HORSE)) {
         sMc.wasRiding = 0;
+        MasterCycle_RestoreHud();
         MasterCycle_BeginDismiss();
     }
 }

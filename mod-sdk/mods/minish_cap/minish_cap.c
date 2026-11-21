@@ -3,6 +3,7 @@
 #include <math.h>
 
 #include "z64items.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -29,7 +30,6 @@
 #define PLAYER_SCALE_NORMAL 0.01f
 #define MINISH_SCALE 0.001f
 #define MINISH_SIZE_FACTOR (MINISH_SCALE / PLAYER_SCALE_NORMAL)
-#define MINISH_SPEED_FACTOR 0.2f
 #define WARP_SCALE 0.0005f
 #define SCALE_STEP 0.0005f
 #define MINISH_CAMERA_FLOOR 0.14f
@@ -803,12 +803,9 @@ static void DrawMap(PlayState* play) {
     DrawSoilName(play, language);
 }
 
+// The wall probe is sized for a full-size Link, so tiny Link reads as hugging a wall and vanilla throttles the cap.
 static void ResolveMotionScale(Player* player, s32 kind, f32* scale) {
-    if (sSizePhase != MINISH_SIZE_TINY) {
-        return;
-    }
-    if (kind == SOH_PLAYER_MOTION_STICK_SPEED) {
-        *scale *= MINISH_SPEED_FACTOR;
+    if (sSizePhase != MINISH_SIZE_TINY || kind != SOH_PLAYER_MOTION_SPEED_CAP) {
         return;
     }
     *scale = R_RUN_SPEED_LIMIT / 100.0f;
@@ -901,7 +898,7 @@ static void StartPendingUse(Player* player, PlayState* play) {
         OpenMap(play);
         return;
     }
-    if (sApi->GetActiveForm() != NULL) {
+    if (sApi->GetActiveForm() != NULL && !CVarGetInteger("gCheats.TimelessEquipment", 0)) {
         PlaySfx(NA_SE_SY_ERROR);
         return;
     }

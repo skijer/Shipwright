@@ -54,6 +54,7 @@ typedef enum {
     HOURGLASS_IDLE,
     HOURGLASS_AIMING,
     HOURGLASS_RECALLING,
+    HOURGLASS_REWINDING,
 } HourglassState;
 
 typedef enum {
@@ -139,6 +140,8 @@ static u32 sRecallStartFrame;
 static s16 sCastPoseFrames;
 static s8 sPreviousInvincibility;
 static bool sIsSelfRewinding;
+static bool sIsInHand;
+static bool sIsUsePending;
 static bool sIsColliderReady;
 static ColliderCylinder sImpactCollider;
 static Vtx sRibbonVtx[HOURGLASS_RIBBON_QUADS * 4];
@@ -851,10 +854,10 @@ static void BeginRecall(Player* player, PlayState* play, Actor* target) {
     Rumble_Request(300.0f, 150, 20, 60);
 }
 
-static bool TickSelfRewind(Player* player, PlayState* play) {
-    if (!(play->state.input[0].cur.button & BTN_R)) {
+static bool TickSelfRewind(Player* player, PlayState* play, bool isHeld, bool isBackToAim) {
+    if (!isHeld) {
         if (sIsSelfRewinding) {
-            EndSelfRewind(player, play, true);
+            EndSelfRewind(player, play, isBackToAim);
         }
         return false;
     }
@@ -871,7 +874,7 @@ static bool TickSelfRewind(Player* player, PlayState* play) {
     }
     sRecallFrames++;
     if ((sRecallFrames % HOURGLASS_DRAIN_INTERVAL) == 0 && !SpendMagic(play, HOURGLASS_DRAIN_COST)) {
-        EndSelfRewind(player, play, true);
+        EndSelfRewind(player, play, isBackToAim);
         return false;
     }
     player->invincibilityTimer = -HOURGLASS_SELF_IFRAMES;
@@ -881,13 +884,13 @@ static bool TickSelfRewind(Player* player, PlayState* play) {
     return true;
 }
 
-static Actor* OfferedActor(Player* player, PlayState* play) {
+static Actor* OfferedActor(Player* player, PlayState* play, s16 aimYaw) {
     Actor* locked = player->focusActor;
 
     if (locked != NULL && locked->update != NULL && IsRecallable(player, locked) && HasEnoughHistory(locked)) {
         return locked;
     }
-    return ScanForTarget(play, player, player->actor.focus.rot.y);
+    return ScanForTarget(play, player, aimYaw);
 }
 
 static void ResolveAimingHand(Player* player, int32_t limbIndex, Gfx** dList, Gfx* limbDList, Vec3f* pos) {
@@ -910,14 +913,14 @@ static void AimAction(Player* player, PlayState* play) {
         func_80839FFC(player, play);
         return;
     }
-    if (TickSelfRewind(player, play)) {
+    if (TickSelfRewind(player, play, (play->state.input[0].cur.button & BTN_R) != 0, true)) {
         return;
     }
     Z64Aiming_Update(player, play);
     Player_ZeroSpeedXZ(player);
     LinkAnimation_Update(play, &player->skelAnime);
     LinkAnimation_Update(play, &player->upperSkelAnime);
-    sOffer = OfferedActor(player, play);
+    sOffer = OfferedActor(player, play, player->actor.focus.rot.y);
     if (!(play->state.input[0].press.button & buttonMask)) {
         return;
     }
@@ -961,6 +964,87 @@ static void TickRecalling(Player* player, PlayState* play, u16 buttonMask) {
     }
 }
 
+static void TickRewinding(Player* player, PlayState* play, u16 buttonMask) {
+    bool isHeld = (play->state.input[0].cur.button & buttonMask) != 0;
+
+    if (IsLinkBusy(player) || !TickSelfRewind(player, play, isHeld, false)) {
+        Stow(player, play);
+    }
+}
+
+static void StartRewinding(Player* player, PlayState* play) {
+    sState = HOURGLASS_REWINDING;
+    if (!TickSelfRewind(player, play, true, false)) {
+        sState = HOURGLASS_IDLE;
+        PlayError(player);
+    }
+}
+
+static bool IsReadyInHand(Player* player) {
+    return sIsInHand && sState == HOURGLASS_IDLE && player->heldItemAction == PLAYER_IA_CUSTOM &&
+           !(player->stateFlags1 & PLAYER_STATE1_START_CHANGING_HELD_ITEM) && !IsLinkBusy(player);
+}
+
+// What keeps its colour is what a press recalls; holding R skips it so the press rewinds Link instead.
+static void MarkOffer(Player* player, PlayState* play) {
+    if (sState != HOURGLASS_IDLE) {
+        return;
+    }
+    if (!IsReadyInHand(player) || (play->state.input[0].cur.button & BTN_R)) {
+        sOffer = NULL;
+        return;
+    }
+    sOffer = OfferedActor(player, play, player->actor.shape.rot.y);
+}
+
+// With nothing offered the press rewinds Link himself, which works in midair too.
+static void UseHourglass(PlayState* play, Player* player) {
+    if (sOffer != NULL && sOffer->update != NULL) {
+        BeginRecall(player, play, sOffer);
+        return;
+    }
+    StartRewinding(player, play);
+}
+
+static void RunPendingUse(Player* player, PlayState* play) {
+    if (!sIsUsePending) {
+        return;
+    }
+    sIsUsePending = false;
+    if (IsReadyInHand(player)) {
+        UseHourglass(play, player);
+    }
+}
+
+static void AimOnCUp(Player* player, PlayState* play) {
+    if (IsReadyInHand(player) && (play->state.input[0].press.button & BTN_CUP)) {
+        RaiseHourglass(play, player);
+    }
+}
+
+static void TakeOutHourglass(PlayState* play, Player* player) {
+    sIsInHand = true;
+    sIsUsePending = false;
+}
+
+static int32_t HoldHourglass(Player* player, PlayState* play) {
+    return 0;
+}
+
+// Acts from the end of the player's update: an action set inside the item-button pass is overwritten the same frame.
+static void RequestUse(Player* player, PlayState* play) {
+    sIsUsePending = sState == HOURGLASS_IDLE;
+}
+
+static void PutHourglassAway(Player* player, PlayState* play) {
+    if (sState != HOURGLASS_IDLE) {
+        Stow(player, play);
+    }
+    sIsInHand = false;
+    sIsUsePending = false;
+    sOffer = NULL;
+}
+
 static void TickHourglass(void) {
     PlayState* play = gPlayState;
     Player* player = gPlayState == NULL ? NULL : GET_PLAYER(gPlayState);
@@ -976,6 +1060,8 @@ static void TickHourglass(void) {
         sTarget = NULL;
         sOffer = NULL;
         sIsSelfRewinding = false;
+        sIsInHand = false;
+        sIsUsePending = false;
         Z64Aiming_Drop();
     }
     buttonMask = FindEquippedButtons();
@@ -995,9 +1081,12 @@ static void TickHourglass(void) {
     }
     if (sState == HOURGLASS_RECALLING) {
         TickRecalling(player, play, buttonMask);
-    } else if (sState == HOURGLASS_IDLE && (play->state.input[0].press.button & buttonMask) && !IsLinkBusy(player)) {
-        RaiseHourglass(play, player);
+    } else if (sState == HOURGLASS_REWINDING) {
+        TickRewinding(player, play, buttonMask);
     }
+    RunPendingUse(player, play);
+    AimOnCUp(player, play);
+    MarkOffer(player, play);
 }
 
 static bool IsDrawnGray(Actor* actor) {
@@ -1009,6 +1098,9 @@ static bool IsDrawnGray(Actor* actor) {
     }
     if (sState == HOURGLASS_RECALLING) {
         return actor == NULL || (actor->category != ACTORCAT_PLAYER && actor != sTarget);
+    }
+    if (sIsInHand) {
+        return actor == NULL || (actor->category != ACTORCAT_PLAYER && actor != sOffer);
     }
     return false;
 }
@@ -1136,7 +1228,7 @@ static void DrawHourglass(Actor* actor, PlayState* play) {
 
     Actor* path = PathActor();
 
-    if (sState == HOURGLASS_IDLE) {
+    if (sState == HOURGLASS_IDLE && !sIsInHand) {
         return;
     }
     if (!(player->stateFlags2 & PLAYER_STATE2_DISABLE_DRAW) && !(player->stateFlags1 & PLAYER_STATE1_FIRST_PERSON)) {
@@ -1147,7 +1239,7 @@ static void DrawHourglass(Actor* actor, PlayState* play) {
     }
     if (sState == HOURGLASS_AIMING && !sIsSelfRewinding) {
         Z64Aiming_DrawReticle(play, player, HOURGLASS_TRACK_RANGE,
-                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_BOW, Z64AIMING_TINT_CONTROL });
+                              (Z64AimingReticleStyle){ Z64AIMING_TOGGLE_HOOKSHOT, Z64AIMING_TINT_CONTROL });
     }
 }
 
@@ -1269,14 +1361,15 @@ SOH_MOD_EXPORT void ModInit(void) {
     Z64Items_SetButtons(&hourglass, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&hourglass, 0, 17, 0);
     Z64Items_SetTextbox(&hourglass, "You got the %rPhantom&Hourglass%w! Sand that&remembers where everything&"
-                                    "has been.^Press %y\xA1%w to hold the world still,&"
-                                    "look at something and press&again: it walks its own path&backwards.^"
-                                    "Hold %y\xA3%w while it is up and %gyou%w go&"
-                                    "back instead. It spends %gmagic%w.");
-    Z64Items_SetPauseText(&hourglass, "%rPhantom Hourglass&%wPress %y\xA1%w to stop time and aim,&again to recall. "
-                                      "%y\xA3%w rewinds you.");
-    // Runs after the engine has finished with the press, so an item action cannot read it a second time as the confirm.
-    hourglass.flags |= SOH_CUSTOM_ITEM_INSTANT;
+                                    "has been.^Ready it with %y\xA1%w: the world&greys but what you face. Press %y\xA1%w&"
+                                    "and it walks its path back.^With nothing there, or %y\xA3%w held,&"
+                                    "%gyou%w go back while %y\xA1%w is held.&"
+                                    "%y\xA5%w stops time to aim. It spends&%gmagic%w.");
+    Z64Items_SetPauseText(&hourglass, "%rPhantom Hourglass&%wPress %y\xA1%w to recall what keeps colour;&"
+                                      "hold it to rewind yourself. %y\xA5%w aims.");
+    Z64Items_SetAction(&hourglass, TakeOutHourglass, HoldHourglass);
+    Z64Items_SetHeldCallbacks(&hourglass, RequestUse, PutHourglassAway, NULL);
+    hourglass.modelGroup = PLAYER_MODELGROUP_DEFAULT;
     hourglass.getItemEntry.drawFunc = DrawGetItem;
 
     Z64Items_SetLogic(&hourglass, &sRandomizerItem);

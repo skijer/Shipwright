@@ -32,6 +32,7 @@
 #define BALL_HOLD_DROP 5.0f
 #define BALL_CHARGE_MAX 60
 #define BALL_CHARGE_MIN 15
+#define BALL_CHARGE_TAP 5
 #define BALL_SPIN_RADIUS 20.0f
 #define BALL_SPIN_HEIGHT_MIN 50.0f
 #define BALL_SPIN_HEIGHT_MAX 55.0f
@@ -45,6 +46,7 @@
 #define BALL_LEAN_MAX 910.0f
 #define BALL_HOLD_POSE_FRAME 8
 #define BALL_SPIN_POSE_FRAME 0
+#define BALL_LAUNCH_SPEED_SHORT 10.0f
 #define BALL_LAUNCH_SPEED_MIN 22.0f
 #define BALL_LAUNCH_SPEED_MAX 32.0f
 #define BALL_LAUNCH_LIFT 7.0f
@@ -506,9 +508,16 @@ static void AimLaunch(Player* player, f32 launchSpeed) {
     LaunchAlong(player->actor.shape.rot.y, 0, launchSpeed);
 }
 
+static f32 GetLaunchSpeed(void) {
+    if (sCharge < BALL_CHARGE_MIN) {
+        f32 windUp = (f32)(sCharge - BALL_CHARGE_TAP) / (BALL_CHARGE_MIN - BALL_CHARGE_TAP);
+        return BALL_LAUNCH_SPEED_SHORT + (BALL_LAUNCH_SPEED_MIN - BALL_LAUNCH_SPEED_SHORT) * windUp;
+    }
+    return BALL_LAUNCH_SPEED_MIN + (BALL_LAUNCH_SPEED_MAX - BALL_LAUNCH_SPEED_MIN) * sCharge / BALL_CHARGE_MAX;
+}
+
 static void ThrowBall(Player* player, PlayState* play) {
-    f32 launchSpeed =
-        BALL_LAUNCH_SPEED_MIN + (BALL_LAUNCH_SPEED_MAX - BALL_LAUNCH_SPEED_MIN) * sCharge / BALL_CHARGE_MAX;
+    f32 launchSpeed = GetLaunchSpeed();
 
     sBallPos.x = player->actor.world.pos.x + Math_SinS(player->actor.shape.rot.y) * 20.0f;
     sBallPos.y = player->actor.world.pos.y + 45.0f;
@@ -547,6 +556,10 @@ static bool IsBallSwungUp(void) {
     return sCharge >= BALL_CHARGE_MIN;
 }
 
+static bool IsBallWoundUp(void) {
+    return sCharge >= BALL_CHARGE_TAP;
+}
+
 static void UpdateSpinning(Player* player, PlayState* play) {
     if (play->state.input[0].press.button & (BTN_A | BTN_B)) {
         sPhase = BALL_HOLDING;
@@ -560,7 +573,7 @@ static void UpdateSpinning(Player* player, PlayState* play) {
         FaceThrowDirection(player);
         player->upperLimbYawSecondary = 0;
     }
-    if (sQuickSpinFrames == 0 && !IsButtonHeld(play) && !IsBallSwungUp() && CanAimBall()) {
+    if (sQuickSpinFrames == 0 && !IsButtonHeld(play) && !IsBallWoundUp() && CanAimBall()) {
         sQuickSpinFrames = 1;
         s32 step = SpinStep();
         sQuickSpinFrames = (s16)((0x10000 + step - 1) / step);
@@ -582,7 +595,7 @@ static void UpdateSpinning(Player* player, PlayState* play) {
     if (IsButtonHeld(play)) {
         return;
     }
-    if (!IsBallSwungUp()) {
+    if (!IsBallWoundUp()) {
         sPhase = BALL_HOLDING;
         return;
     }

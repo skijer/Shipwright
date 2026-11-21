@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "z64items.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -290,8 +291,12 @@ static void SwingAction(Player* player, PlayState* play) {
     }
 }
 
+static bool IsBlockedByForm(void) {
+    return sApi->GetActiveForm() != NULL && !CVarGetInteger("gCheats.TimelessEquipment", 0);
+}
+
 static bool CanSwingLeaf(Player* player, PlayState* play) {
-    return sApi->GetActiveForm() == NULL && IsGrounded(player) && !(player->stateFlags1 & DEKU_LEAF_BLOCKING_STATES) &&
+    return !IsBlockedByForm() && IsGrounded(player) && !(player->stateFlags1 & DEKU_LEAF_BLOCKING_STATES) &&
            (player->meleeWeaponState == 0) && HasMagic(DEKU_LEAF_SWING_MAGIC);
 }
 
@@ -373,7 +378,7 @@ static void UpdateDekuLeaf(void) {
         StopGliding();
         return;
     }
-    if (sApi->GetActiveForm() != NULL) {
+    if (IsBlockedByForm()) {
         StopGliding();
         return;
     }

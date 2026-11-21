@@ -17,6 +17,8 @@
 #define DEKU_LEAF_KEY "nei.deku_leaf"
 #define BGCHECK_ON_GROUND 0x0001
 #define GI_DL_CAPACITY 512
+#define BOOT_SCALE_ADULT 0.85f
+#define BOOT_SCALE_CHILD 0.55f
 
 static const ALIGN_ASSET(2) char sIcon[] = "__OTR__textures/icon_item_custom/gItemIconRocBootsTex";
 static const ALIGN_ASSET(2) char sName[] = "__OTR__textures/item_name_custom/gRocBootsNameTex";
@@ -201,9 +203,8 @@ static void DrawGoldBootsOnFeet(PlayState* play, Player* player, int32_t limbInd
     gDPSetGrayscaleColor(POLY_OPA_DISP++, 255, 198, 65, 255);
     gSPGrayscale(POLY_OPA_DISP++, true);
     Matrix_Push();
-    if (!LINK_IS_ADULT) {
-        Matrix_Scale(0.65f, 0.65f, 0.65f, MTXMODE_APPLY);
-    }
+    f32 bootScale = LINK_IS_ADULT ? BOOT_SCALE_ADULT : BOOT_SCALE_CHILD;
+    Matrix_Scale(bootScale, bootScale, bootScale, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)path);
     Matrix_Pop();
