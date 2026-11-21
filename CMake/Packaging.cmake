@@ -43,9 +43,7 @@ set(CPACK_DEB_COMPONENT_INSTALL YES)
 set(CPACK_EXTERNAL_ENABLE_STAGING YES)
 set(CPACK_EXTERNAL_PACKAGE_SCRIPT "${PROJECT_BINARY_DIR}/appimage-generate.cmake")
 
-file(GENERATE
-  OUTPUT "${PROJECT_BINARY_DIR}/appimage-generate.cmake"
-  CONTENT [[
+set(APPIMAGE_GENERATE_SCRIPT [[
 include(CMakePrintHelpers)
 cmake_print_variables(CPACK_TEMPORARY_DIRECTORY)
 cmake_print_variables(CPACK_TOPLEVEL_DIRECTORY)
@@ -76,13 +74,18 @@ execute_process(
     ${LINUXDEPLOY_EXECUTABLE}
     --appimage-extract-and-run
     --appdir=${CPACK_TEMPORARY_DIRECTORY}
-    --executable=$<TARGET_FILE:soh>
-    $<$<BOOL:$<TARGET_PROPERTY:soh,APPIMAGE_DESKTOP_FILE>>:--desktop-file=$<TARGET_PROPERTY:soh,APPIMAGE_DESKTOP_FILE>>
-    $<$<BOOL:$<TARGET_PROPERTY:soh,APPIMAGE_ICON_FILE>>:--icon-file=$<TARGET_PROPERTY:soh,APPIMAGE_ICON_FILE>>
+    --executable=$<TARGET_FILE:LAUNCHER_TARGET>
+    $<$<BOOL:$<TARGET_PROPERTY:LAUNCHER_TARGET,APPIMAGE_DESKTOP_FILE>>:--desktop-file=$<TARGET_PROPERTY:LAUNCHER_TARGET,APPIMAGE_DESKTOP_FILE>>
+    $<$<BOOL:$<TARGET_PROPERTY:LAUNCHER_TARGET,APPIMAGE_ICON_FILE>>:--icon-file=$<TARGET_PROPERTY:LAUNCHER_TARGET,APPIMAGE_ICON_FILE>>
     --output=appimage
     # --verbosity=2
 )
 ]])
+# The executable is the launcher; with a shared game module the "soh" target is a library.
+string(REPLACE "LAUNCHER_TARGET" "${SOH_LAUNCHER_TARGET}" APPIMAGE_GENERATE_SCRIPT "${APPIMAGE_GENERATE_SCRIPT}")
+file(GENERATE
+  OUTPUT "${PROJECT_BINARY_DIR}/appimage-generate.cmake"
+  CONTENT "${APPIMAGE_GENERATE_SCRIPT}")
 
 endif()
 

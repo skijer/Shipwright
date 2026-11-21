@@ -3,7 +3,6 @@
 #include "variables.h"
 #include "z64.h"
 #include "z64actor.h"
-#include <string.h>
 #include <stdio.h>
 #include <array>
 #include "soh/ActorDB.h"
@@ -34,7 +33,6 @@ static void append_line(char* buf, size_t* len, const char* str) {
 }
 
 static void CrashHandler_WriteActorData(char* buffer, size_t* pos) {
-    char intCharBuffer[16];
     for (unsigned int i = 0; i < ACTORCAT_MAX; i++) {
 
         ActorListEntry* entry = &gPlayState->actorCtx.actorLists[i];
@@ -67,7 +65,6 @@ extern "C" void CrashHandler_PrintSohData(char* buffer, size_t* pos) {
     WRITE_VAR_LINE(buffer, pos, "  Build Date: ", (const char*)gBuildDate);
 
     if (gPlayState != nullptr) {
-        // SOH [Unbound] the registry names vanilla and custom scenes alike
         WRITE_VAR_LINE(buffer, pos, "Scene: ", SceneDB_GetDisplayName(gPlayState->sceneNum));
 
         snprintf(intCharBuffer, sizeof(intCharBuffer), "%i", gPlayState->roomCtx.curRoom.num);

@@ -1,8 +1,6 @@
-#include "soh/Network/Anchor/Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
-#include "soh/Enhancements/game-interactor/GameInteractor.h"
-#include "soh/OTRGlobals.h"
+
+#include "soh/Network/Anchor/Anchor.h"
 
 /**
  * HANDSHAKE
@@ -14,7 +12,7 @@
 void Anchor::SendPacket_Handshake() {
     nlohmann::json payload;
     payload["type"] = HANDSHAKE;
-    payload["roomId"] = CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), "");
+    payload["roomId"] = RoomToJoin();
     payload["roomState"] = PrepRoomState();
     payload["clientState"] = PrepClientState();
 

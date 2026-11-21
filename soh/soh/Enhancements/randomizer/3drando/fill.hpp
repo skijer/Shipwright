@@ -1,6 +1,5 @@
 #pragma once
 
-#include "../randomizerTypes.h"
 #include "../location_access.h"
 #include "../entrance.h"
 
@@ -14,6 +13,7 @@ struct GetAccessibleLocationsStruct {
     int gsCount;
     int maxGsCount;
     std::vector<LogicVal> buyIgnores;
+    std::vector<RandomizerCheck> lateLocations;
 
     // Variables for search
     std::vector<Rando::ItemLocation*> newItemLocations;
@@ -57,6 +57,7 @@ struct GetAccessibleLocationsStruct {
 void ClearProgress();
 void VanillaFill();
 int Fill();
+bool FillConfinedItems();
 void SetAreas();
 
 std::vector<RandomizerCheck> GetEmptyLocations(std::vector<RandomizerCheck> allowedLocations);
@@ -69,7 +70,7 @@ std::vector<RandomizerCheck> ReachabilitySearch(const std::vector<RandomizerChec
                                                 RandomizerRegion startingRegion = RR_ROOT,
                                                 RandoAgeTime startingAgeTime = RAT_NONE);
 
-void GeneratePlaythrough();
+std::vector<RandomizerCheck> GeneratePlaythrough();
 
 bool CheckBeatable(RandomizerGet ignore = RG_NONE);
 

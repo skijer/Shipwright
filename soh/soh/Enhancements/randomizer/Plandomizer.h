@@ -1,6 +1,4 @@
 #pragma once
-#ifndef PLANDOMIZER_H
-#define PLANDOMIZER_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,9 +8,7 @@ extern "C" {
 }
 #endif
 
-#endif // PLANDOMIZER_H
-
-#include <libultraship/libultraship.h>
+#include <ship/window/gui/GuiWindow.h>
 #include "soh/Enhancements/randomizer/item.h"
 
 #ifdef __cplusplus
@@ -48,5 +44,14 @@ typedef enum PlandoHints {
     HINT_SINGLE,
     HINT_ALL,
 } PlandoHints;
+
+struct PlandomizerItemImage {
+    ImTextureID texture;
+    ImVec2 uv0;
+    ImVec2 uv1;
+    ImVec4 tint;
+};
+
+PlandomizerItemImage Plandomizer_GetItemImage(const Rando::Item& item);
 
 #endif

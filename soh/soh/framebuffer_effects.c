@@ -1,9 +1,10 @@
 #include "framebuffer_effects.h"
-#include "global.h"
+#include "variables.h"
 #include "OTRGlobals.h"
 
+// The C++ declaration defaults forceFixedAspect, which C cannot see; a mismatched call traps in wasm.
 int gfx_create_framebuffer(uint32_t width, uint32_t height, uint32_t native_width, uint32_t native_height,
-                           uint8_t resize);
+                           uint8_t resize, bool forceFixedAspect);
 
 s32 gPauseFrameBuffer = -1;
 s32 gBlurFrameBuffer = -1;
@@ -16,19 +17,23 @@ s32 gN64ResFrameBuffer = -1;
 
 void FB_CreateFramebuffers(void) {
     if (gPauseFrameBuffer == -1) {
-        gPauseFrameBuffer = gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        gPauseFrameBuffer =
+            gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true, false);
     }
 
     if (gBlurFrameBuffer == -1) {
-        gBlurFrameBuffer = gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        gBlurFrameBuffer =
+            gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true, false);
     }
 
     if (gReusableFrameBuffer == -1) {
-        gReusableFrameBuffer = gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true);
+        gReusableFrameBuffer =
+            gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, true, false);
     }
 
     if (gN64ResFrameBuffer == -1) {
-        gN64ResFrameBuffer = gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, false);
+        gN64ResFrameBuffer =
+            gfx_create_framebuffer(SCREEN_WIDTH, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT, false, false);
     }
 }
 
@@ -93,7 +98,7 @@ void FB_WriteFramebufferSliceToCPU(Gfx** gfxp, void* buffer, u8 byteSwap) {
     // Adjust the texture coordinates so that only a 4:3 region from the center is drawn
     // to the N64 resolution buffer. Currently ratios smaller than 4:3 will just stretch to fill.
     if (aspectRatio > fourByThree) {
-        int16_t adjustedWidth = OTRGetGameRenderWidth() / (aspectRatio / fourByThree);
+        int16_t adjustedWidth = (s16)(OTRGetGameRenderWidth() / (aspectRatio / fourByThree));
         s0 = (OTRGetGameRenderWidth() - adjustedWidth) / 2;
         s1 -= s0;
     }

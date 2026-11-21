@@ -5,6 +5,7 @@
  */
 
 #include "z_oceff_wipe4.h"
+#include "soh/OTRGlobals.h"
 #include "vt.h"
 #include "soh/ResourceManagerHelpers.h"
 
@@ -94,6 +95,7 @@ void OceffWipe4_Draw(Actor* thisx, PlayState* play) {
     Matrix_Translate(eye.x + vec.x, eye.y + vec.y, eye.z + vec.z, MTXMODE_NEW);
     Matrix_Scale(0.1f, 0.1f, 0.1f, MTXMODE_APPLY);
     Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(MAX(OTRGetAspectRatio() / (4.0f / 3.0f), 1.0f), 1.0f, 1.0f, MTXMODE_APPLY);
     Matrix_Translate(0.0f, 0.0f, -z, MTXMODE_APPLY);
 
     gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);

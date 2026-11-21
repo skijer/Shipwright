@@ -1,15 +1,14 @@
 #include "global.h"
 
 #include "soh/frame_interpolation.h"
+#include "soh/Enhancements/savestate_serialize.h"
 #include <assert.h>
 
-// SOH [Unbound] every Mtx writer below assumes the libultraship GBI_FLOAT_MTX option (float Mtx, no s16.16 packing)
 #ifndef GBI_FLOAT_MTX
 #error "SoH: Unbound requires libultraship built with GBI_FLOAT_MTX (see unbound-docs/extent.md)"
 #endif
 
 // clang-format off
-// SOH [Unbound] Mtx is float (GBI_FLOAT_MTX); this is the identity, not the s16.16 packing of it.
 Mtx gMtxClear = {
     1.0f, 0.0f, 0.0f, 0.0f,
     0.0f, 1.0f, 0.0f, 0.0f,
@@ -25,8 +24,13 @@ MtxF gMtxFClear = {
 };
 // clang-format on
 
-MtxF* sMatrixStack;   // "Matrix_stack"
-MtxF* sCurrentMatrix; // "Matrix_now"
+static MtxF* sMatrixStack;   // "Matrix_stack"
+static MtxF* sCurrentMatrix; // "Matrix_now"
+
+void Matrix_SaveState(SaveStateCtx* ctx) {
+    SaveState_Blob(ctx, sMatrixStack, sizeof(MtxF) * 20);
+    SaveState_Blob(ctx, sCurrentMatrix, sizeof(MtxF));
+}
 
 void Matrix_Init(GameState* gameState) {
     sCurrentMatrix = GAMESTATE_ALLOC_MC(gameState, 20 * sizeof(MtxF));
@@ -943,7 +947,6 @@ void Matrix_SetTranslateUniformScaleMtx(Mtx* mtx, f32 scale, f32 translateX, f32
     guMtxF2L(&mf, mtx);
 }
 
-// SOH [Unbound] Mtx is float; the vanilla hand-packed s16.16 writers become plain float fills.
 void Matrix_SetTranslateUniformScaleMtx2(Mtx* mtx, f32 scale, f32 translateX, f32 translateY, f32 translateZ) {
     MtxF mtxf = {
         { { scale, 0, 0, 0 }, { 0, scale, 0, 0 }, { 0, 0, scale, 0 }, { translateX, translateY, translateZ, 1 } }

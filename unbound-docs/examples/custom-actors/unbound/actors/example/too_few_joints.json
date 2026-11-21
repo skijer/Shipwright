@@ -1,0 +1,7 @@
+{
+  "name": "Example: an animation for a smaller skeleton (does not spawn)",
+  "model": {
+    "skeleton": "objects/object_ma1/gMalonChildSkel",
+    "animation": "objects/object_toryo/object_toryo_Anim_000E50"
+  }
+}

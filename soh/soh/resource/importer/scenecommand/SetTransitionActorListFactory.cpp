@@ -1,8 +1,8 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetTransitionActorListFactory.h"
 #include "soh/resource/type/scenecommand/SetTransitionActorList.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 
 namespace SOH {
 std::shared_ptr<Ship::IResource>
@@ -17,9 +17,9 @@ SetTransitionActorListFactory::ReadResource(std::shared_ptr<Ship::ResourceInitDa
     for (uint32_t i = 0; i < setTransitionActorList->numTransitionActors; i++) {
         TransitionActorEntry entry;
 
-        entry.sides[0].room = reader->ReadInt8(); // SOH [Unbound] sign-extend: 0xFF means "no room"
+        entry.sides[0].room = reader->ReadInt8();
         entry.sides[0].effects = reader->ReadUByte();
-        entry.sides[1].room = reader->ReadInt8(); // SOH [Unbound] sign-extend: 0xFF means "no room"
+        entry.sides[1].room = reader->ReadInt8();
         entry.sides[1].effects = reader->ReadUByte();
         entry.id = reader->ReadInt16();
         entry.pos.x = reader->ReadInt16();
@@ -56,9 +56,9 @@ SetTransitionActorListFactoryXML::ReadResource(std::shared_ptr<Ship::ResourceIni
             entry.sides[1].room = child->IntAttribute("BackSideRoom");
             entry.sides[1].effects = child->IntAttribute("BackSideEffects");
             entry.id = child->IntAttribute("Id");
-            entry.pos.x = child->IntAttribute("PosX");
-            entry.pos.y = child->IntAttribute("PosY");
-            entry.pos.z = child->IntAttribute("PosZ");
+            entry.pos.x = child->FloatAttribute("PosX");
+            entry.pos.y = child->FloatAttribute("PosY");
+            entry.pos.z = child->FloatAttribute("PosZ");
             entry.rotY = child->IntAttribute("RotY");
             entry.params = child->IntAttribute("Params");
             setTransitionActorList->transitionActorList.push_back(entry);
@@ -67,7 +67,7 @@ SetTransitionActorListFactoryXML::ReadResource(std::shared_ptr<Ship::ResourceIni
         child = child->NextSiblingElement();
     }
 
-    setTransitionActorList->numTransitionActors = setTransitionActorList->transitionActorList.size();
+    setTransitionActorList->numTransitionActors = static_cast<u32>(setTransitionActorList->transitionActorList.size());
 
     return setTransitionActorList;
 }

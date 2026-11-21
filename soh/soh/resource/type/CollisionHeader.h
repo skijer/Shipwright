@@ -1,31 +1,30 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include <vector>
 #include <ship/resource/Resource.h>
-#include <libultraship/libultra.h>
 #include "z64math.h"
 
 namespace SOH {
 
-// SOH [Unbound] Must mirror CollisionPoly in soh/include/z64bgcheck.h (u32 vertex words, flags in bits 29-31)
+// Must mirror CollisionPoly in soh/include/z64bgcheck.h
 typedef struct {
     u16 type;
     union {
         u32 vtxData[3];
         struct {
-            u32 flags_vIA; // bits 29-31 poly exclusion flags (xpFlags), bits 0-28 vtxId
-            u32 flags_vIB; // bit 29 = poly IsConveyor surface, bits 0-28 vtxId
+            u32 flags_vIA;
+            u32 flags_vIB;
             u32 vIC;
         };
     };
     Vec3s normal; // Unit normal vector
                   // Value ranges from -0x7FFF to 0x7FFF, representing -1.0 to 1.0; 0x8000 is invalid
 
-    s32 dist; // Plane distance from origin along the normal. // SOH [Unbound] s16 -> s32 (world extent)
+    s32 dist; // Plane distance from origin along the normal.
 } CollisionPoly;
 
-// SOH [Unbound] Must mirror WaterBox in soh/include/z64bgcheck.h (s32 extents, unpacked properties)
+// Must mirror WaterBox in soh/include/z64bgcheck.h
 typedef struct {
     s32 xMin;
     s32 ySurface;
@@ -44,7 +43,7 @@ typedef struct {
     /* 0x04 */ Vec3s* camPosData;
 } CamData;
 
-// SOH [Unbound] Must mirror SurfaceType in soh/include/z64bgcheck.h (unpacked fields)
+// Must mirror SurfaceType in soh/include/z64bgcheck.h
 typedef struct {
     s32 camera;
     s32 exit;
@@ -64,12 +63,10 @@ typedef struct {
     u8 isWallDamage;
 } SurfaceType;
 
-// SOH [Unbound] Legacy archives carry the packed vanilla words; defined in CollisionHeaderFactory.cpp, which
-// can see the game header (this mirror header deliberately does not include it).
 SurfaceType UnpackSurfaceType(uint32_t data0, uint32_t data1);
 void UnpackWaterBoxProperties(WaterBox& waterBox, uint32_t properties);
 
-// SOH [Unbound] Must mirror CollisionHeader in soh/include/z64bgcheck.h (s32 bounds/vertices, u32 counts)
+// Must mirror CollisionHeader in soh/include/z64bgcheck.h
 typedef struct {
     Vec3i minBounds; // minimum coordinates of poly bounding box
     Vec3i maxBounds; // maximum coordinates of poly bounding box

@@ -1,14 +1,19 @@
 #include "Network.h"
 #include <spdlog/spdlog.h>
-#include <libultraship/libultraship.h>
+#include <ship/GameRegistry.h>
 
 // MARK: - Public
 
 void Network::Enable(const char* host, uint16_t port) {
-#ifdef ENABLE_REMOTE_CONTROL
     if (isEnabled) {
         return;
     }
+
+#ifdef __EMSCRIPTEN__
+    // Constructing a receive thread aborts in the browser build.
+    SPDLOG_WARN("[Network] Networking is not available in the browser build");
+    return;
+#endif
 
     if (SDLNet_ResolveHost(&networkAddress, host, port) == -1) {
         SPDLOG_ERROR("[Network] SDLNet_ResolveHost: {}", SDLNet_GetError());
@@ -21,8 +26,10 @@ void Network::Enable(const char* host, uint16_t port) {
         receiveThread.join();
     }
 
-    receiveThread = std::thread(&Network::ReceiveFromServer, this);
-#endif
+    receiveThread = std::thread([this, game = Ship::GameRegistry::GetCurrent()] {
+        Ship::GameScope scope(game);
+        ReceiveFromServer();
+    });
 }
 
 void Network::Disable() {
@@ -50,10 +57,8 @@ void Network::ProcessOutgoingPackets() {
 }
 
 void Network::SendDataToRemote(const char* payload) {
-#ifdef ENABLE_REMOTE_CONTROL
     SPDLOG_DEBUG("[Network] Sending data: {}", payload);
-    SDLNet_TCP_Send(networkSocket, payload, strlen(payload) + 1);
-#endif
+    SDLNet_TCP_Send(networkSocket, payload, static_cast<int>(strlen(payload) + 1));
 }
 
 void Network::SendJsonToRemote(nlohmann::json payload) {
@@ -63,7 +68,6 @@ void Network::SendJsonToRemote(nlohmann::json payload) {
 // MARK: - Private
 
 void Network::ReceiveFromServer() {
-#ifdef ENABLE_REMOTE_CONTROL
     while (isEnabled) {
         while (!isConnected && isEnabled) {
             SPDLOG_TRACE("[Network] Attempting to make connection to server...");
@@ -140,7 +144,6 @@ void Network::ReceiveFromServer() {
             SPDLOG_INFO("[Network] Ending receiving thread...");
         }
     }
-#endif
 }
 
 void Network::HandleRemoteData(char payload[512]) {
@@ -157,5 +160,9 @@ void Network::HandleRemoteJson(std::string payload) {
         return;
     }
 
-    OnIncomingJson(jsonPayload);
+    try {
+        OnIncomingJson(jsonPayload);
+    } catch (const std::exception& e) {
+        SPDLOG_ERROR("[Network] Exception handling incoming JSON: {}", e.what());
+    } catch (...) { SPDLOG_ERROR("[Network] Unknown exception handling incoming JSON"); }
 }

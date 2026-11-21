@@ -9,8 +9,10 @@
 #include <assert.h>
 
 #include <libultraship/bridge/gfxbridge.h>
+#include <libultraship/bridge/resourcebridge.h>
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 void func_80095AB4(PlayState* play, Room* room, u32 flags);
 void func_80095D04(PlayState* play, Room* room, u32 flags);
@@ -33,7 +35,7 @@ Gfx D_801270B0[] = {
     gsSPEndDisplayList(),
 };
 
-s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum);
+s32 OTRRoom_RequestNewRoom(PlayState* play, RoomContext* roomCtx, s32 roomNum);
 s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx);
 
 void (*sRoomDrawHandlers[])(PlayState* play, Room* room, u32 flags) = {
@@ -84,7 +86,7 @@ void func_80095AB4(PlayState* play, Room* room, u32 flags) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
-#define SHAPE_SORT_MAX 1024 // SOH [Unbound] was 64
+#define SHAPE_SORT_MAX 1024
 
 typedef struct struct_80095D04 {
     /* 0x00 */ PolygonDlist2* unk_00;
@@ -104,7 +106,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
     s32 pad;
     struct_80095D04* spA4;
     s32 phi_v1;
-    s32 numEntries; // SOH [Unbound] entries actually sorted/drawn (SHAPE_SORT_MAX cap)
+    s32 numEntries;
     s32 sp9C;
     Vec3f sp90;
     Vec3f sp84;
@@ -132,7 +134,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
     polygonDlist = SEGMENTED_TO_VIRTUAL(polygon2->start);
     spA4 = spB8;
 
-    if (polygon2->num > SHAPE_SORT_MAX) { // SOH [Unbound] SPEC.md §9: type-2 mesh entries are capped
+    if (polygon2->num > SHAPE_SORT_MAX) {
         osSyncPrintf("[Unbound] room %d: %d mesh entries exceed SHAPE_SORT_MAX (%d); extra entries are not drawn\n",
                      room->num, polygon2->num, SHAPE_SORT_MAX);
     }
@@ -146,7 +148,7 @@ void func_80095D04(PlayState* play, Room* room, u32 flags) {
         SkinMatrix_Vec3fMtxFMultXYZW(&play->viewProjectionMtxF, &sp90, &sp84, &sp80);
         if (-polygonDlist->unk_06 < sp84.z) {
             temp_f2 = sp84.z - polygonDlist->unk_06;
-            if (temp_f2 < play->lightCtx.zFar) { // SOH [Unbound] was fogFar (<= 12800)
+            if (temp_f2 < play->lightCtx.zFar) {
                 phi_v0 = spB4;
                 spA4->unk_00 = polygonDlist;
                 spA4->unk_04 = temp_f2;
@@ -420,7 +422,7 @@ BgImage* func_80096A74(PolygonType1* polygon1, PlayState* play) {
     camId = camera->camDataIdx;
     if (GameInteractor_Should(VB_SHOULD_LOAD_BG_IMAGE, true, &camId)) {
         // jfifid
-        camId2 = func_80041C10(&play->colCtx, camId, BGCHECK_SCENE)[2].y;
+        camId2 = BgCheck_GetBgCamFuncDataImpl(&play->colCtx, camId, BGCHECK_SCENE)[2].y;
         if (camId2 >= 0) {
             camId = camId2;
         }
@@ -574,20 +576,20 @@ u32 func_80096FE8(PlayState* play, RoomContext* roomCtx) {
     // "Room buffer end pointer=%08x"
     osSyncPrintf("部屋バッファ終了ポインタ=%08x\n", roomCtx->bufPtrs[1]);
     osSyncPrintf(VT_RST);
-    roomCtx->unk_30 = 0;
+    roomCtx->activeBufPage = 0;
     roomCtx->status = 0;
 
     frontRoom = gSaveContext.respawnFlag > 0 ? ((void)0, gSaveContext.respawn[gSaveContext.respawnFlag - 1].roomIndex)
                                              : play->setupEntranceList[play->curSpawn].room;
-    func_8009728C(play, roomCtx, frontRoom);
+    Room_RequestNewRoom(play, roomCtx, frontRoom);
 
     return maxRoomSize;
 }
 
-s32 func_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
+s32 Room_RequestNewRoom(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
     size_t size;
 
-    return OTRfunc_8009728C(play, roomCtx, roomNum);
+    return OTRRoom_RequestNewRoom(play, roomCtx, roomNum);
 
     if (roomCtx->status == 0) {
         roomCtx->prevRoom = roomCtx->curRoom;
@@ -598,13 +600,13 @@ s32 func_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
         assert(roomNum < play->numRooms);
 
         size = play->roomList[roomNum].vromEnd - play->roomList[roomNum].vromStart;
-        roomCtx->unk_34 =
-            (void*)ALIGN16((intptr_t)roomCtx->bufPtrs[roomCtx->unk_30] - ((size + 8) * roomCtx->unk_30 + 7));
+        roomCtx->unk_34 = (void*)ALIGN16((intptr_t)roomCtx->bufPtrs[roomCtx->activeBufPage] -
+                                         ((size + 8) * roomCtx->activeBufPage + 7));
 
         osCreateMesgQueue(&roomCtx->loadQueue, &roomCtx->loadMsg, 1);
         DmaMgr_SendRequest2(&roomCtx->dmaRequest, roomCtx->unk_34, play->roomList[roomNum].vromStart, size, 0,
                             &roomCtx->loadQueue, OS_MESG_PTR(NULL), __FILE__, __LINE__);
-        roomCtx->unk_30 ^= 1;
+        roomCtx->activeBufPage ^= 1;
 
         return 1;
     }
@@ -638,11 +640,34 @@ void Room_Draw(PlayState* play, Room* room, u32 flags) {
     if (room->segment != NULL) {
         gSegments[3] = VIRTUAL_TO_PHYSICAL(room->segment);
         assert(room->meshHeader->base.type < ARRAY_COUNTU(sRoomDrawHandlers));
+
+        Color_RGBA8 grayscale = { 0, 0, 0, 0 };
+        GameInteractor_ExecuteOnRoomResolveGrayscale(play, room, &grayscale);
+        bool isGrayscale = grayscale.a != 0;
+
+        OPEN_DISPS(play->state.gfxCtx);
+        if (isGrayscale) {
+            gDPPipeSync(POLY_OPA_DISP++);
+            gDPSetGrayscaleColor(POLY_OPA_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+            gSPGrayscale(POLY_OPA_DISP++, true);
+            gDPPipeSync(POLY_XLU_DISP++);
+            gDPSetGrayscaleColor(POLY_XLU_DISP++, grayscale.r, grayscale.g, grayscale.b, grayscale.a);
+            gSPGrayscale(POLY_XLU_DISP++, true);
+        }
+        CLOSE_DISPS(play->state.gfxCtx);
+
         sRoomDrawHandlers[room->meshHeader->base.type](play, room, flags);
+
+        OPEN_DISPS(play->state.gfxCtx);
+        if (isGrayscale) {
+            gSPGrayscale(POLY_OPA_DISP++, false);
+            gSPGrayscale(POLY_XLU_DISP++, false);
+        }
+        CLOSE_DISPS(play->state.gfxCtx);
     }
 }
 
-void func_80097534(PlayState* play, RoomContext* roomCtx) {
+void Room_FinishRoomChange(PlayState* play, RoomContext* roomCtx) {
     roomCtx->prevRoom.num = -1;
     roomCtx->prevRoom.segment = NULL;
     func_80031B14(play, &play->actorCtx); // kills all actors without room num set to -1

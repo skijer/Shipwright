@@ -1,8 +1,8 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetEntranceListFactory.h"
 #include "soh/resource/type/scenecommand/SetEntranceList.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 
 namespace SOH {
 std::shared_ptr<Ship::IResource> SetEntranceListFactory::ReadResource(std::shared_ptr<Ship::ResourceInitData> initData,
@@ -17,7 +17,7 @@ std::shared_ptr<Ship::IResource> SetEntranceListFactory::ReadResource(std::share
         EntranceEntry entranceEntry;
 
         entranceEntry.spawn = reader->ReadInt8();
-        entranceEntry.room = reader->ReadUByte(); // SOH [Unbound] 0..255 spawn room
+        entranceEntry.room = reader->ReadUByte();
 
         setEntranceList->entrances.push_back(entranceEntry);
     }
@@ -50,7 +50,7 @@ SetEntranceListFactoryXML::ReadResource(std::shared_ptr<Ship::ResourceInitData> 
         child = child->NextSiblingElement();
     }
 
-    setEntranceList->numEntrances = setEntranceList->entrances.size();
+    setEntranceList->numEntrances = static_cast<u32>(setEntranceList->entrances.size());
 
     return setEntranceList;
 }

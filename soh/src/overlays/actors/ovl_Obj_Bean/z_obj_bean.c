@@ -235,7 +235,7 @@ void ObjBean_SetupPathCount(ObjBean* this, PlayState* play) {
 
 void ObjBean_SetupPath(ObjBean* this, PlayState* play) {
     Path* path = &play->setupPathList[(this->dyna.actor.params >> 8) & 0x1F];
-    this->pathPoints = *(Vec3f*)SEGMENTED_TO_VIRTUAL(path->points); // SOH [Unbound]
+    this->pathPoints = *(Vec3f*)SEGMENTED_TO_VIRTUAL(path->points);
 }
 
 void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
@@ -255,7 +255,7 @@ void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
     path = &play->setupPathList[(this->dyna.actor.params >> 8) & 0x1F];
     nextPathPoint = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[this->nextPointIndex];
 
-    pathPointsFloat = *nextPathPoint; // SOH [Unbound]
+    pathPointsFloat = *nextPathPoint;
 
     Math_Vec3f_Diff(&pathPointsFloat, &this->pathPoints, &acell);
     mag = Math3D_Vec3fMagnitude(&acell);
@@ -272,7 +272,6 @@ void ObjBean_FollowPath(ObjBean* this, PlayState* play) {
             this->nextPointIndex++;
         }
         sp4C = &((Vec3f*)SEGMENTED_TO_VIRTUAL(path->points))[this->nextPointIndex];
-        // SOH [Unbound] path points are f32; the Vec3s reader would decode their bytes as shorts
         Math_Vec3f_Diff(nextPathPoint, currentPoint, &sp40);
         Math_Vec3f_Diff(sp4C, nextPathPoint, &sp34);
         if (Math3D_CosOut(&sp40, &sp34, &sp30)) {
@@ -540,12 +539,12 @@ void ObjBean_SetupWaitForBean(ObjBean* this) {
 
 void ObjBean_WaitForBean(ObjBean* this, PlayState* play) {
     if (Actor_ProcessTalkRequest(&this->dyna.actor, play)) {
-        if (func_8002F368(play) == EXCH_ITEM_BEAN) {
+        if (Actor_GetPlayerExchangeItemId(play) == EXCH_ITEM_BEAN) {
             func_80B8FE00(this);
             Flags_SetSwitch(play, this->dyna.actor.params & 0x3F);
         }
     } else {
-        func_8002F298(&this->dyna.actor, play, 40.0f, EXCH_ITEM_BEAN);
+        Actor_OfferTalkExchangeEquiCylinder(&this->dyna.actor, play, 40.0f, EXCH_ITEM_BEAN);
     }
 }
 
@@ -585,7 +584,7 @@ void func_80B8FEAC(ObjBean* this, PlayState* play) {
     } else {
         this->timer = 1;
     }
-    func_8002F974(&this->dyna.actor, NA_SE_PL_PLANT_GROW_UP - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->dyna.actor, NA_SE_PL_PLANT_GROW_UP - SFX_FLAG);
 }
 
 void func_80B8FF50(ObjBean* this) {
@@ -640,7 +639,7 @@ void ObjBean_WaitForWater(ObjBean* this, PlayState* play) {
         (this->dyna.actor.xzDistToPlayer < 50.0f)) {
         ObjBean_SetupGrowWaterPhase1(this);
         D_80B90E30 = this;
-        OnePointCutscene_Init(play, 2210, -99, &this->dyna.actor, MAIN_CAM);
+        OnePointCutscene_Init(play, 2210, -99, &this->dyna.actor, CAM_ID_MAIN);
         this->dyna.actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
         return;
     }
@@ -681,7 +680,7 @@ void ObjBean_GrowWaterPhase2(ObjBean* this, PlayState* play) {
     if (this->stalkSizeMultiplier >= 0.1f) { // 100 Frames
         ObjBean_SetupGrowWaterPhase3(this);
     }
-    func_8002F974(&this->dyna.actor, NA_SE_PL_PLANT_TALLER - SFX_FLAG);
+    Actor_PlaySfx_Flagged(&this->dyna.actor, NA_SE_PL_PLANT_TALLER - SFX_FLAG);
 }
 
 void ObjBean_SetupGrowWaterPhase3(ObjBean* this) {
@@ -759,9 +758,9 @@ void ObjBean_WaitForPlayer(ObjBean* this, PlayState* play) {
     if (DynaPolyActor_IsPlayerOnTop(&this->dyna)) { // Player is standing on
         ObjBean_SetupFly(this);
         if (play->sceneNum == SCENE_LOST_WOODS) { // Lost woods
-            Camera_ChangeSetting(play->cameraPtrs[MAIN_CAM], CAM_SET_BEAN_LOST_WOODS);
+            Camera_RequestSetting(play->cameraPtrs[CAM_ID_MAIN], CAM_SET_BEAN_LOST_WOODS);
         } else {
-            Camera_ChangeSetting(play->cameraPtrs[MAIN_CAM], CAM_SET_BEAN_GENERIC);
+            Camera_RequestSetting(play->cameraPtrs[CAM_ID_MAIN], CAM_SET_BEAN_GENERIC);
         }
     }
     ObjBean_UpdatePosition(this);
@@ -784,26 +783,26 @@ void ObjBean_Fly(ObjBean* this, PlayState* play) {
         ObjBean_SetupWaitForStepOff(this);
 
         this->dyna.actor.flags &= ~ACTOR_FLAG_UPDATE_CULLING_DISABLED; // Never stop updating (disable)
-        camera = play->cameraPtrs[MAIN_CAM];
+        camera = play->cameraPtrs[CAM_ID_MAIN];
 
         if ((camera->setting == CAM_SET_BEAN_LOST_WOODS) || (camera->setting == CAM_SET_BEAN_GENERIC)) {
-            Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+            Camera_RequestSetting(camera, CAM_SET_NORMAL0);
         }
 
     } else if (DynaPolyActor_IsPlayerOnTop(&this->dyna) != 0) { // Player is on top
 
-        func_8002F974(&this->dyna.actor, NA_SE_PL_PLANT_MOVE - SFX_FLAG);
+        Actor_PlaySfx_Flagged(&this->dyna.actor, NA_SE_PL_PLANT_MOVE - SFX_FLAG);
 
         if (play->sceneNum == SCENE_LOST_WOODS) {
-            Camera_ChangeSetting(play->cameraPtrs[MAIN_CAM], CAM_SET_BEAN_LOST_WOODS);
+            Camera_RequestSetting(play->cameraPtrs[CAM_ID_MAIN], CAM_SET_BEAN_LOST_WOODS);
         } else {
-            Camera_ChangeSetting(play->cameraPtrs[MAIN_CAM], CAM_SET_BEAN_GENERIC);
+            Camera_RequestSetting(play->cameraPtrs[CAM_ID_MAIN], CAM_SET_BEAN_GENERIC);
         }
     } else if (this->stateFlags & BEAN_STATE_PLAYER_ON_TOP) {
-        camera = play->cameraPtrs[MAIN_CAM];
+        camera = play->cameraPtrs[CAM_ID_MAIN];
 
         if ((camera->setting == CAM_SET_BEAN_LOST_WOODS) || (camera->setting == CAM_SET_BEAN_GENERIC)) {
-            Camera_ChangeSetting(camera, CAM_SET_NORMAL0);
+            Camera_RequestSetting(camera, CAM_SET_NORMAL0);
         }
     }
 

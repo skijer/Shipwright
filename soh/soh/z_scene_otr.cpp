@@ -1,20 +1,14 @@
-#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
-#include "ResourceManagerHelpers.h"
-#include <libultraship/libultraship.h>
-#include "soh/resource/type/Scene.h"
-#include <ship/utils/StringHelper.h>
-#include "global.h"
-#include "vt.h"
-#include "soh/resource/type/CollisionHeader.h"
-#include <fast/resource/type/DisplayList.h>
-#include "soh/resource/type/Cutscene.h"
-#include "soh/resource/type/Path.h"
-#include "soh/resource/type/Text.h"
-#include <ship/resource/type/Blob.h>
 #include <memory>
 #include <cassert>
 #include <algorithm>
 #include <vector>
+
+#include <ship/resource/type/Blob.h>
+#include <spdlog/spdlog.h>
+
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "ResourceManagerHelpers.h"
+#include "soh/resource/type/Scene.h"
 #include "soh/resource/type/scenecommand/SetCameraSettings.h"
 #include "soh/resource/type/scenecommand/SetAnimatedMaterialList.h"
 #include "soh/unbound/UnboundAudio.h"
@@ -41,6 +35,13 @@
 #include "soh/resource/type/scenecommand/SetEchoSettings.h"
 #include "soh/resource/type/scenecommand/SetAlternateHeaders.h"
 
+extern "C" {
+#include "functions.h"
+#include "macros.h"
+#include "variables.h"
+#include "vt.h"
+}
+
 extern Ship::IResource* OTRPlay_LoadFile(PlayState* play, const char* fileName);
 extern "C" s32 Object_Spawn(ObjectContext* objectCtx, s16 objectId);
 extern "C" RomFile sNaviMsgFiles[];
@@ -52,8 +53,8 @@ bool Scene_CommandSpawnList(PlayState* play, SOH::ISceneCommand* cmd) {
     ActorEntry* entries = (ActorEntry*)cmdStartPos->GetRawPointer();
 
     play->linkActorEntry = &entries[play->setupEntranceList[play->curSpawn].spawn];
-    play->linkAgeOnLoad = ((void)0, gSaveContext.linkAge);
-    s16 linkObjectId = gLinkObjectIds[((void)0, gSaveContext.linkAge)];
+    play->linkAgeOnLoad = gSaveContext.linkAge;
+    s16 linkObjectId = gLinkObjectIds[gSaveContext.linkAge];
 
     Object_Spawn(&play->objectCtx, linkObjectId);
 
@@ -149,13 +150,8 @@ bool OTRfunc_800982FC(ObjectContext* objectCtx, s32 bankIndex, s16 objectId) {
     return false;
 }
 
-// SOH [Unbound] The object list a room's command actually installs. Epona is spawned from the registry rather
-// than from any room's actor list, so a custom scene that allows her (SPEC.md §7 "horse") needs her object in
-// every one of its rooms: an object past the room's own list is dropped the next time this command runs, taking
-// the actor with it. A room that already lists her is left alone, and so is every vanilla scene — the five that
-// allow her ship object lists that already account for her.
-// `scratch` holds the appended list when one is needed, so the common case returns the room's own list
-// without copying it.
+// Epona is spawned from the registry, not a room's actor list, so her object is appended to every room's list;
+// an object outside the room's own list is dropped the next time the command runs, taking the actor with it.
 static const std::vector<int16_t>& EffectiveObjectList(PlayState* play, const std::vector<int16_t>& roomObjects,
                                                        std::vector<int16_t>& scratch) {
     if (!SceneDB_IsCustom(play->sceneNum) || !SceneDB_HorseAllowed(play->sceneNum) ||
@@ -180,22 +176,22 @@ bool Scene_CommandObjectList(PlayState* play, SOH::ISceneCommand* cmd) {
     // Loop until a mismatch in the object lists
     // Then clear all object ids past that in the context object list and kill actors for those objects
     for (i = play->objectCtx.unk_09, k = 0; i < play->objectCtx.num; i++, k++) {
-        if (k >= objects.size() || play->objectCtx.status[i].id != objects[k]) {
+        if (static_cast<size_t>(k) >= objects.size() || play->objectCtx.status[i].id != objects[k]) {
             for (j = i; j < play->objectCtx.num; j++) {
                 play->objectCtx.status[j].id = OBJECT_INVALID;
             }
-            func_80031A28(play, &play->actorCtx);
+            Actor_KillAllWithMissingObject(play, &play->actorCtx);
             break;
         }
     }
 
     // Continuing from the last index, add the remaining object ids from the command object list
-    for (; k < objects.size(); k++, i++) {
+    for (; static_cast<size_t>(k) < objects.size(); k++, i++) {
         if (i < OBJECT_EXCHANGE_BANK_MAX) {
             OTRfunc_800982FC(&play->objectCtx, i, objects[k]);
         } else {
             SPDLOG_ERROR("[Unbound] object list exceeds the bank ({} slots); dropping object {:#x}",
-                         OBJECT_EXCHANGE_BANK_MAX, objects[k]); // SOH [Unbound] was a silent drop
+                         OBJECT_EXCHANGE_BANK_MAX, objects[k]);
         }
     }
 
@@ -218,7 +214,7 @@ bool Scene_CommandLightList(PlayState* play, SOH::ISceneCommand* cmd) {
 bool Scene_CommandPathList(PlayState* play, SOH::ISceneCommand* cmd) {
     // SOH::SetPathways* cmdPath = static_pointer_cast<SOH::SetPathways>(cmd);
     SOH::SetPathways* cmdPath = (SOH::SetPathways*)cmd;
-    play->setupPathList = (Path*)cmdPath->GetPathList(); // SOH [Unbound] every listed path document, concatenated
+    play->setupPathList = (Path*)cmdPath->GetPathList();
 
     return false;
 }
@@ -230,6 +226,12 @@ bool Scene_CommandTransitionActorList(PlayState* play, SOH::ISceneCommand* cmd) 
     play->transiActorCtx.numActors = cmdActor->numTransitionActors;
     play->transiActorCtx.list = (TransitionActorEntry*)cmdActor->GetRawPointer();
 
+    // Loops transition actors and sets them to default values (not spawned yet)
+    // used as fix for doors / crawlspaces not loading after they've already been loaded once.
+    for (s32 i = 0; i < play->transiActorCtx.numActors; i++) {
+        play->transiActorCtx.list[i].id = ABS(play->transiActorCtx.list[i].id);
+    }
+
     return false;
 }
 
@@ -238,7 +240,6 @@ bool Scene_CommandTransitionActorList(PlayState* play, SOH::ISceneCommand* cmd) 
 //}
 
 bool Scene_CommandLightSettingsList(PlayState* play, SOH::ISceneCommand* cmd) {
-    // SOH [Unbound] Mirror z_scene.c: the count bounds the light-setting index (func_80074CE8).
     SOH::SetLightingSettings* cmdLight = (SOH::SetLightingSettings*)cmd;
     play->envCtx.numLightSettings = (u8)cmdLight->settings.size();
     play->envCtx.lightSettingsList = (EnvLightSettings*)cmd->GetRawPointer();
@@ -273,8 +274,8 @@ bool Scene_CommandTimeSettings(PlayState* play, SOH::ISceneCommand* cmd) {
     SOH::SetTimeSettings* cmdTime = (SOH::SetTimeSettings*)cmd;
 
     if ((cmdTime->settings.hour != 0xFF) && (cmdTime->settings.minute != 0xFF)) {
-        gSaveContext.skyboxTime = gSaveContext.dayTime =
-            ((cmdTime->settings.hour + (cmdTime->settings.minute / 60.0f)) * 60.0f) / ((f32)(24 * 60) / 0x10000);
+        gSaveContext.skyboxTime = gSaveContext.dayTime = static_cast<u16>(
+            ((cmdTime->settings.hour + (cmdTime->settings.minute / 60.0f)) * 60.0f) / ((f32)(24 * 60) / 0x10000));
     }
 
     if (cmdTime->settings.timeIncrement != 0xFF) {
@@ -284,16 +285,16 @@ bool Scene_CommandTimeSettings(PlayState* play, SOH::ISceneCommand* cmd) {
     }
 
     if (gSaveContext.sunsSongState == SUNSSONG_INACTIVE) {
-        gTimeIncrement = play->envCtx.timeIncrement;
+        gTimeSpeed = play->envCtx.timeIncrement;
     }
 
-    play->envCtx.sunPos.x = -(Math_SinS(((void)0, gSaveContext.dayTime) - 0x8000) * 120.0f) * 25.0f;
-    play->envCtx.sunPos.y = (Math_CosS(((void)0, gSaveContext.dayTime) - 0x8000) * 120.0f) * 25.0f;
-    play->envCtx.sunPos.z = (Math_CosS(((void)0, gSaveContext.dayTime) - 0x8000) * 20.0f) * 25.0f;
+    play->envCtx.sunPos.x = -(Math_SinS(gSaveContext.dayTime - 0x8000) * 120.0f) * 25.0f;
+    play->envCtx.sunPos.y = (Math_CosS(gSaveContext.dayTime - 0x8000) * 120.0f) * 25.0f;
+    play->envCtx.sunPos.z = (Math_CosS(gSaveContext.dayTime - 0x8000) * 20.0f) * 25.0f;
 
     if (((play->envCtx.timeIncrement == 0) && (gSaveContext.cutsceneIndex < 0xFFF0)) ||
         (gSaveContext.entranceIndex == ENTR_LAKE_HYLIA_WARP_PAD)) {
-        gSaveContext.skyboxTime = ((void)0, gSaveContext.dayTime);
+        gSaveContext.skyboxTime = gSaveContext.dayTime;
         if ((gSaveContext.skyboxTime >= 0x2AAC) && (gSaveContext.skyboxTime < 0x4555)) {
             gSaveContext.skyboxTime = 0x3556;
         } else if ((gSaveContext.skyboxTime >= 0x4555) && (gSaveContext.skyboxTime < 0x5556)) {
@@ -337,7 +338,7 @@ bool Scene_CommandSoundSettings(PlayState* play, SOH::ISceneCommand* cmd) {
 
     play->sequenceCtx.seqId = cmdSnd->settings.seqId;
     play->sequenceCtx.natureAmbienceId = cmdSnd->settings.natureAmbienceId;
-    Unbound_BindSceneSong(play, cmdSnd->unboundSongSeqId); // SOH [Unbound]
+    Unbound_BindSceneSong(play, cmdSnd->unboundSongSeqId);
 
     if (gSaveContext.seqId == 0xFF) {
         Audio_QueueSeqCmd(cmdSnd->settings.reverb | 0xF0000000);
@@ -362,19 +363,18 @@ bool Scene_CommandAlternateHeaderList(PlayState* play, SOH::ISceneCommand* cmd) 
     // s32 pad;
     // SceneCmd* altHeader;
 
-    // osSyncPrintf("\n[ZU]sceneset age    =[%X]", ((void)0, gSaveContext.linkAge));
-    // osSyncPrintf("\n[ZU]sceneset time   =[%X]", ((void)0, gSaveContext.cutsceneIndex));
-    // osSyncPrintf("\n[ZU]sceneset counter=[%X]", ((void)0, gSaveContext.sceneSetupIndex));
+    // osSyncPrintf("\n[ZU]sceneset age    =[%X]", gSaveContext.linkAge);
+    // osSyncPrintf("\n[ZU]sceneset time   =[%X]", gSaveContext.cutsceneIndex);
+    // osSyncPrintf("\n[ZU]sceneset counter=[%X]", gSaveContext.sceneLayer);
 
-    // SOH [Unbound] A setup index past the last defined header behaves like an empty one (falls back below).
     auto headerAt = [&](size_t index) -> SOH::Scene* {
         return index < cmdHeaders->headers.size()
                    ? std::static_pointer_cast<SOH::Scene>(cmdHeaders->headers[index]).get()
                    : nullptr;
     };
 
-    if (gSaveContext.sceneSetupIndex != 0) {
-        SOH::Scene* desiredHeader = headerAt(gSaveContext.sceneSetupIndex - 1);
+    if (gSaveContext.sceneLayer != 0) {
+        SOH::Scene* desiredHeader = headerAt(gSaveContext.sceneLayer - 1);
 
         if (desiredHeader != nullptr) {
             OTRScene_ExecuteCommands(play, desiredHeader);
@@ -383,8 +383,8 @@ bool Scene_CommandAlternateHeaderList(PlayState* play, SOH::ISceneCommand* cmd) 
             // "Coughh! There is no specified dataaaaa!"
             osSyncPrintf("\nげぼはっ！ 指定されたデータがないでええっす！");
 
-            if (gSaveContext.sceneSetupIndex == 3) {
-                SOH::Scene* desiredHeader = headerAt(gSaveContext.sceneSetupIndex - 2);
+            if (gSaveContext.sceneLayer == 3) {
+                SOH::Scene* desiredHeader = headerAt(gSaveContext.sceneLayer - 2);
 
                 // "Using adult day data there!"
                 osSyncPrintf("\nそこで、大人の昼データを使用するでええっす！！");
@@ -410,7 +410,6 @@ bool Scene_CommandCutsceneData(PlayState* play, SOH::ISceneCommand* cmd) {
 }
 
 // Camera & World Map Area
-// SOH [Unbound] `materialAnims` (SPEC.md §4.2): the list lives in the command resource for as long as the scene does.
 bool Scene_CommandAnimatedMaterials(PlayState* play, SOH::ISceneCommand* cmd) {
     SOH::SetAnimatedMaterialList* list = (SOH::SetAnimatedMaterialList*)cmd;
     play->sceneMaterialAnims = list->GetPointer();
@@ -469,13 +468,13 @@ bool (*sceneCommands[])(PlayState*, SOH::ISceneCommand*) = {
     Scene_CommandCutsceneData,        // SCENE_CMD_ID_CUTSCENE_DATA
     Scene_CommandAlternateHeaderList, // SCENE_CMD_ID_ALTERNATE_HEADER_LIST
     Scene_CommandMiscSettings,        // SCENE_CMD_ID_MISC_SETTINGS
-    Scene_CommandAnimatedMaterials,   // SOH [Unbound] SceneCommandID::SetAnimatedMaterialList (0x1A)
+    Scene_CommandAnimatedMaterials,
 };
 
 s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene) {
     SOH::SceneCommandID cmdCode;
 
-    for (int i = 0; i < scene->commands.size(); i++) {
+    for (size_t i = 0; i < scene->commands.size(); i++) {
         auto sceneCmd = scene->commands[i];
 
         if (sceneCmd == nullptr) // UH OH
@@ -489,7 +488,6 @@ s32 OTRScene_ExecuteCommands(PlayState* play, SOH::Scene* scene) {
             break;
         }
 
-        // SOH [Unbound] the table grew past the vanilla 0x19 (materialAnims); bound it by its size
         if ((size_t)cmdCode < sizeof(sceneCommands) / sizeof(sceneCommands[0])) {
             if (sceneCommands[(int)cmdCode](play, sceneCmd.get()))
                 break;
@@ -512,7 +510,7 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
             roomCtx->curRoom.segment = roomCtx->unk_34;
             gSegments[3] = VIRTUAL_TO_PHYSICAL(roomCtx->unk_34);
 
-            if (roomCtx->roomToLoad == nullptr) { // SOH [Unbound] a room that failed to load must not crash the scene
+            if (roomCtx->roomToLoad == nullptr) {
                 SPDLOG_ERROR("Room {} of scene {:#x} did not load; skipping its commands", roomCtx->curRoom.num,
                              play->sceneNum);
             } else {
@@ -533,7 +531,7 @@ extern "C" s32 OTRfunc_800973FC(PlayState* play, RoomContext* roomCtx) {
     return 1;
 }
 
-extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
+extern "C" s32 OTRRoom_RequestNewRoom(PlayState* play, RoomContext* roomCtx, s32 roomNum) {
     u32 size;
 
     if (roomCtx->status == 0) {
@@ -547,9 +545,9 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
         if (roomNum >= play->numRooms)
             return 0; // UH OH
 
-        size = play->roomList[roomNum].vromEnd - play->roomList[roomNum].vromStart;
-        roomCtx->unk_34 =
-            (void*)ALIGN16((uintptr_t)roomCtx->bufPtrs[roomCtx->unk_30] - ((size + 8) * roomCtx->unk_30 + 7));
+        size = static_cast<u32>(play->roomList[roomNum].vromEnd - play->roomList[roomNum].vromStart);
+        roomCtx->unk_34 = (void*)ALIGN16((uintptr_t)roomCtx->bufPtrs[roomCtx->activeBufPage] -
+                                         ((size + 8) * roomCtx->activeBufPage + 7));
 
         osCreateMesgQueue(&roomCtx->loadQueue, &roomCtx->loadMsg, 1);
         // DmaMgr_SendRequest2(&roomCtx->dmaRequest, roomCtx->unk_34, play->roomList[roomNum].vromStart, size, 0,
@@ -560,7 +558,7 @@ extern "C" s32 OTRfunc_8009728C(PlayState* play, RoomContext* roomCtx, s32 roomN
         roomCtx->status = 1;
         roomCtx->roomToLoad = roomData.get();
 
-        roomCtx->unk_30 ^= 1;
+        roomCtx->activeBufPage ^= 1;
 
         SPDLOG_INFO("Room Init - curRoom.num: {0:#x}", roomCtx->curRoom.num);
 

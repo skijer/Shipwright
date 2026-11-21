@@ -1,13 +1,13 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/CollisionHeaderFactory.h"
 #include "soh/resource/type/CollisionHeader.h"
 #include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 #include <cstddef>
 #include <cstring>
 #include "z64bgcheck.h"
 
 namespace SOH {
-// SOH [Unbound] The mirrors are cast to the game structs by z_scene_otr.cpp; the game helpers own the bit layout.
 static_assert(sizeof(SurfaceType) == sizeof(::SurfaceType), "SOH::SurfaceType must mirror ::SurfaceType");
 static_assert(sizeof(WaterBox) == sizeof(::WaterBox), "SOH::WaterBox must mirror ::WaterBox");
 static_assert(offsetof(SurfaceType, lightSetting) == offsetof(::SurfaceType, lightSetting) &&
@@ -15,7 +15,6 @@ static_assert(offsetof(SurfaceType, lightSetting) == offsetof(::SurfaceType, lig
               "SOH::SurfaceType field order must mirror ::SurfaceType");
 static_assert(offsetof(WaterBox, room) == offsetof(::WaterBox, room),
               "SOH::WaterBox field order must mirror ::WaterBox");
-// SOH [Unbound] The widened structs too: a mirror that lags a widening reads every field after it as garbage.
 static_assert(sizeof(CollisionPoly) == sizeof(::CollisionPoly) &&
                   offsetof(CollisionPoly, dist) == offsetof(::CollisionPoly, dist),
               "SOH::CollisionPoly must mirror ::CollisionPoly");
@@ -40,9 +39,7 @@ void UnpackWaterBoxProperties(WaterBox& waterBox, uint32_t properties) {
 
 namespace SOH {
 
-// SOH [Unbound] The legacy (N64) poly layout packs a 13-bit vertex index and 3 flag bits into
-// each u16. The in-memory CollisionPoly is 32-bit with the flags in bits 29-31; unpack here so
-// every existing archive keeps loading. See unbound-docs/SPEC.md §8 (and collision.md for the why).
+// The legacy N64 poly layout packs a 13-bit vertex index and 3 flag bits into each u16.
 static uint32_t UnpackLegacyVtxWord(uint16_t packed) {
     return (uint32_t)(packed & 0x1FFF) | ((uint32_t)(packed >> 13) << 29);
 }
@@ -72,7 +69,7 @@ ResourceFactoryBinaryCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File>
     collisionHeader->collisionHeaderData.numVertices = reader->ReadInt32();
     collisionHeader->vertices.reserve(collisionHeader->collisionHeaderData.numVertices);
     for (uint32_t i = 0; i < collisionHeader->collisionHeaderData.numVertices; i++) {
-        Vec3i vtx; // SOH [Unbound] collision vertices are s32; the vanilla source is s16, so this is exact
+        Vec3i vtx;
         vtx.x = reader->ReadInt16();
         vtx.y = reader->ReadInt16();
         vtx.z = reader->ReadInt16();
@@ -95,7 +92,7 @@ ResourceFactoryBinaryCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File>
         polygon.normal.y = reader->ReadUInt16();
         polygon.normal.z = reader->ReadUInt16();
 
-        polygon.dist = reader->ReadInt16(); // SOH [Unbound] dist is s32 now; the u16 read no longer wraps negative
+        polygon.dist = reader->ReadInt16();
 
         collisionHeader->polygons.push_back(polygon);
     }
@@ -107,7 +104,7 @@ ResourceFactoryBinaryCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File>
         uint32_t data1 = reader->ReadUInt32();
         uint32_t data0 = reader->ReadUInt32();
 
-        collisionHeader->surfaceTypes.push_back(UnpackSurfaceType(data0, data1)); // SOH [Unbound]
+        collisionHeader->surfaceTypes.push_back(UnpackSurfaceType(data0, data1));
     }
     collisionHeader->collisionHeaderData.surfaceTypeList = collisionHeader->surfaceTypes.data();
 
@@ -161,7 +158,7 @@ ResourceFactoryBinaryCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File>
         waterBox.zMin = reader->ReadInt16();
         waterBox.xLength = reader->ReadInt16();
         waterBox.zLength = reader->ReadInt16();
-        UnpackWaterBoxProperties(waterBox, reader->ReadUInt32()); // SOH [Unbound]
+        UnpackWaterBoxProperties(waterBox, reader->ReadUInt32());
 
         collisionHeader->waterBoxes.push_back(waterBox);
     }
@@ -199,7 +196,7 @@ ResourceFactoryXMLCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File> fi
     while (child != nullptr) {
         std::string childName = child->Name();
         if (childName == "Vertex") {
-            Vec3i vtx; // SOH [Unbound] collision vertices are s32; the attributes are integers already
+            Vec3i vtx;
             vtx.x = child->IntAttribute("X");
             vtx.y = child->IntAttribute("Y");
             vtx.z = child->IntAttribute("Z");
@@ -209,8 +206,7 @@ ResourceFactoryXMLCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File> fi
 
             polygon.type = child->UnsignedAttribute("Type");
 
-            // SOH [Unbound] New form: VertexA/B/C are plain indices, flags live in XpFlags / Conveyor.
-            // Legacy form (neither attribute present): VertexA/B carry the N64 packed u16 words.
+            // Without XpFlags / Conveyor, VertexA/B/C carry the N64 packed u16 words.
             if (child->FindAttribute("XpFlags") != nullptr || child->FindAttribute("Conveyor") != nullptr) {
                 polygon.flags_vIA =
                     PackVtxWord(child->UnsignedAttribute("VertexA"), child->UnsignedAttribute("XpFlags"));
@@ -232,7 +228,6 @@ ResourceFactoryXMLCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File> fi
 
             collisionHeader->polygons.push_back(polygon);
         } else if (childName == "PolygonType") {
-            // SOH [Unbound]
             collisionHeader->surfaceTypes.push_back(
                 UnpackSurfaceType(child->UnsignedAttribute("Data1"), child->UnsignedAttribute("Data2")));
         } else if (childName == "CameraData") {
@@ -267,7 +262,7 @@ ResourceFactoryXMLCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File> fi
             waterBox.zMin = child->IntAttribute("ZMin");
             waterBox.xLength = child->IntAttribute("XLength");
             waterBox.zLength = child->IntAttribute("ZLength");
-            UnpackWaterBoxProperties(waterBox, child->UnsignedAttribute("Properties")); // SOH [Unbound]
+            UnpackWaterBoxProperties(waterBox, child->UnsignedAttribute("Properties"));
 
             collisionHeader->waterBoxes.push_back(waterBox);
         }
@@ -285,12 +280,12 @@ ResourceFactoryXMLCollisionHeaderV0::ReadResource(std::shared_ptr<Ship::File> fi
         }
     }
 
-    collisionHeader->collisionHeaderData.numVertices = collisionHeader->vertices.size();
-    collisionHeader->collisionHeaderData.numPolygons = collisionHeader->polygons.size();
-    collisionHeader->surfaceTypesCount = collisionHeader->surfaceTypes.size();
-    collisionHeader->camDataCount = collisionHeader->camData.size();
-    collisionHeader->camPosCount = collisionHeader->camPosData.size();
-    collisionHeader->collisionHeaderData.numWaterBoxes = collisionHeader->waterBoxes.size();
+    collisionHeader->collisionHeaderData.numVertices = static_cast<u32>(collisionHeader->vertices.size());
+    collisionHeader->collisionHeaderData.numPolygons = static_cast<u32>(collisionHeader->polygons.size());
+    collisionHeader->surfaceTypesCount = static_cast<uint32_t>(collisionHeader->surfaceTypes.size());
+    collisionHeader->camDataCount = static_cast<uint32_t>(collisionHeader->camData.size());
+    collisionHeader->camPosCount = static_cast<int32_t>(collisionHeader->camPosData.size());
+    collisionHeader->collisionHeaderData.numWaterBoxes = static_cast<u16>(collisionHeader->waterBoxes.size());
 
     collisionHeader->collisionHeaderData.vtxList = collisionHeader->vertices.data();
     collisionHeader->collisionHeaderData.polyList = collisionHeader->polygons.data();

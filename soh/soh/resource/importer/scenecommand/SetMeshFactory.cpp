@@ -1,9 +1,9 @@
+#include <spdlog/spdlog.h>
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetMeshFactory.h"
 #include "soh/resource/type/scenecommand/SetMesh.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
-#include "libultraship/libultraship.h"
 
 namespace SOH {
 std::shared_ptr<Ship::IResource> SetMeshFactory::ReadResource(std::shared_ptr<Ship::ResourceInitData> initData,
@@ -18,7 +18,7 @@ std::shared_ptr<Ship::IResource> SetMeshFactory::ReadResource(std::shared_ptr<Sh
     int32_t polyNum = 1;
 
     if (setMesh->meshHeader.base.type != 1) {
-        polyNum = reader->ReadUByte(); // SOH [Unbound] binary v0 stores a u8 count
+        polyNum = reader->ReadUByte();
         if (setMesh->meshHeader.base.type == 0) {
             setMesh->meshHeader.polygon0.num = polyNum;
         } else if (setMesh->meshHeader.base.type == 2) {
@@ -32,8 +32,7 @@ std::shared_ptr<Ship::IResource> SetMeshFactory::ReadResource(std::shared_ptr<Sh
     if (setMesh->meshHeader.base.type == 2) {
         setMesh->dlists2.reserve(polyNum);
     } else {
-        // SOH [Unbound] polyNum, not polygon0.num: for a type 1 mesh that union member overlaps unread fields, and
-        // since num is u32 an uninitialised value asks for up to 4G entries (std::length_error on wasm32)
+        // polygon0.num overlaps unread fields for a type 1 mesh and would reserve a garbage count.
         setMesh->dlists.reserve(polyNum);
     }
 
@@ -131,8 +130,7 @@ std::shared_ptr<Ship::IResource> SetMeshFactory::ReadResource(std::shared_ptr<Sh
     } else if (setMesh->meshHeader.base.type == 0) {
         setMesh->meshHeader.polygon0.start = setMesh->dlists.data();
     } else if (setMesh->meshHeader.base.type == 1) {
-        // SOH [Unbound] multi only: single shares these bytes, and the pointer overwrote single.unk_0C, which the
-        // Unbound converter writes out (a heap address in the archive made its output differ run to run)
+        // Multi only: single shares these bytes, and the pointer would overwrite single.unk_0C.
         if (setMesh->meshHeader.polygon1.format != 1) {
             setMesh->meshHeader.polygon1.multi.list = setMesh->images.data();
         }
@@ -175,8 +173,7 @@ std::shared_ptr<Ship::IResource> SetMeshFactoryXML::ReadResource(std::shared_ptr
     if (setMesh->meshHeader.base.type == 2) {
         setMesh->dlists2.reserve(polyNum);
     } else {
-        // SOH [Unbound] polyNum, not polygon0.num: for a type 1 mesh that union member overlaps unread fields, and
-        // since num is u32 an uninitialised value asks for up to 4G entries (std::length_error on wasm32)
+        // polygon0.num overlaps unread fields for a type 1 mesh and would reserve a garbage count.
         setMesh->dlists.reserve(polyNum);
     }
 
@@ -263,10 +260,10 @@ std::shared_ptr<Ship::IResource> SetMeshFactoryXML::ReadResource(std::shared_ptr
             dlist.xlu = nullptr;
 
             int32_t polyType = child->IntAttribute("PolyType"); // Unused
-            dlist.pos.x = child->IntAttribute("PosX");
-            dlist.pos.y = child->IntAttribute("PosY");
-            dlist.pos.z = child->IntAttribute("PosZ");
-            dlist.unk_06 = child->IntAttribute("Unknown");
+            dlist.pos.x = child->FloatAttribute("PosX");
+            dlist.pos.y = child->FloatAttribute("PosY");
+            dlist.pos.z = child->FloatAttribute("PosZ");
+            dlist.unk_06 = child->FloatAttribute("Unknown");
 
             std::string meshOpa = child->Attribute("MeshOpa");
             std::string meshXlu = child->Attribute("MeshXlu");
@@ -288,8 +285,7 @@ std::shared_ptr<Ship::IResource> SetMeshFactoryXML::ReadResource(std::shared_ptr
     } else if (setMesh->meshHeader.base.type == 0) {
         setMesh->meshHeader.polygon0.start = setMesh->dlists.data();
     } else if (setMesh->meshHeader.base.type == 1) {
-        // SOH [Unbound] multi only: single shares these bytes, and the pointer overwrote single.unk_0C, which the
-        // Unbound converter writes out (a heap address in the archive made its output differ run to run)
+        // Multi only: single shares these bytes, and the pointer would overwrite single.unk_0C.
         if (setMesh->meshHeader.polygon1.format != 1) {
             setMesh->meshHeader.polygon1.multi.list = setMesh->images.data();
         }

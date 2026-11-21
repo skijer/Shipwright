@@ -5,8 +5,9 @@
 #include "overlays/actors/ovl_Door_Shutter/z_door_shutter.h"
 #include "overlays/actors/ovl_Door_Warp1/z_door_warp1.h"
 #include "soh/OTRGlobals.h"
-#include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
+#include <libultraship/bridge/consolevariablebridge.h>
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -889,7 +890,7 @@ void BossGoma_Encounter(BossGoma* this, PlayState* play) {
             Math_ApproachS(&this->actor.world.rot.y, Actor_WorldYawTowardActor(&this->actor, &GET_PLAYER(play)->actor),
                            2, 0x7D0);
 
-            if (this->actor.bgCheckFlags & 1) {
+            if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
                 this->actionState = 130;
                 this->actor.velocity.y = 0.0f;
                 Animation_Change(&this->skelanime, &gGohmaInitialLandingAnim, 1.0f, 0.0f,
@@ -1114,7 +1115,7 @@ void BossGoma_Defeated(BossGoma* this, PlayState* play) {
             Math_SmoothStepToF(&this->subCameraAt.y, this->actor.focus.pos.y, 0.5f, 100.0f, 0.1f);
             Math_SmoothStepToF(&this->subCameraAt.z, this->firstTailLimbWorldPos.z, 0.2f, 50.0f, 0.1f);
 
-            if (this->timer == 80) {
+            if (GameInteractor_Should(VB_GOHMA_DEATH_SCENE, this->timer == 80, this)) {
                 Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | NA_BGM_BOSS_CLEAR);
             }
 
@@ -1183,7 +1184,7 @@ void BossGoma_Defeated(BossGoma* this, PlayState* play) {
                 }
             }
 
-            if (this->timer == 0) {
+            if (GameInteractor_Should(VB_GOHMA_DEATH_SCENE, this->timer == 0, this)) {
                 if (Math_SmoothStepToF(&this->actor.scale.y, 0, 1.0f, 0.00075f, 0.0f) <= 0.001f) {
                     camera = Play_GetCamera(play, 0);
                     camera->eye = this->subCameraEye;
@@ -1320,7 +1321,7 @@ void BossGoma_FloorAttack(BossGoma* this, PlayState* play) {
 
             if (Animation_OnFrame(&this->skelanime, 10.0f)) {
                 BossGoma_PlayEffectsAndSfx(this, play, 3, 5);
-                func_80033E88(&this->actor, play, 5, 15);
+                Actor_RequestQuakeAndRumble(&this->actor, play, 5, 15);
             }
 
             if (Animation_OnFrame(&this->skelanime, Animation_GetLastFrame(&gGohmaAttackAnim))) {
@@ -1441,11 +1442,11 @@ void BossGoma_FallJump(BossGoma* this, PlayState* play) {
     Math_ApproachS(&this->actor.world.rot.y, Actor_WorldYawTowardActor(&this->actor, &GET_PLAYER(play)->actor), 2,
                    0x7D0);
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         BossGoma_SetupFloorLand(this);
         this->actor.velocity.y = 0.0f;
         BossGoma_PlayEffectsAndSfx(this, play, 0, 8);
-        func_80033E88(&this->actor, play, 5, 0xF);
+        Actor_RequestQuakeAndRumble(&this->actor, play, 5, 0xF);
     }
 }
 
@@ -1458,11 +1459,11 @@ void BossGoma_FallStruckDown(BossGoma* this, PlayState* play) {
     Math_ApproachS(&this->actor.world.rot.y, Actor_WorldYawTowardActor(&this->actor, &GET_PLAYER(play)->actor), 3,
                    0x7D0);
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         BossGoma_SetupFloorLandStruckDown(this);
         this->actor.velocity.y = 0.0f;
         BossGoma_PlayEffectsAndSfx(this, play, 0, 8);
-        func_80033E88(&this->actor, play, 0xA, 0xF);
+        Actor_RequestQuakeAndRumble(&this->actor, play, 0xA, 0xF);
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_DAM1);
     }
 }
@@ -1651,11 +1652,11 @@ void BossGoma_FloorMain(BossGoma* this, PlayState* play) {
         }
     }
 
-    if (this->actor.bgCheckFlags & 1) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
         this->actor.velocity.y = 0.0f;
     }
 
-    if (this->actor.bgCheckFlags & 8) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) {
         BossGoma_SetupWallClimb(this);
     }
 
@@ -1702,7 +1703,7 @@ void BossGoma_CeilingMoveToCenter(BossGoma* this, PlayState* play) {
     Math_ApproachS(&this->actor.shape.rot.x, -0x8000, 3, 0x3E8);
 
     // avoid walking into a wall?
-    if (this->actor.bgCheckFlags & 8) {
+    if (this->actor.bgCheckFlags & BGCHECKFLAG_WALL) {
         angle = this->actor.shape.rot.y + 0x8000;
 
         if (angle < this->actor.wallYaw) {
@@ -1820,12 +1821,61 @@ void BossGoma_UpdateTailLimbsScale(BossGoma* this) {
     }
 }
 
+static void BossGoma_ReactToStunnedDamage(BossGoma* this, PlayState* play) {
+    if ((s8)this->actor.colChkInfo.health > 0) {
+        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_DAM1);
+        BossGoma_SetupFloorDamaged(this);
+        EffectSsSibuki_SpawnBurst(play, &this->actor.focus.pos);
+        return;
+    }
+    this->actor.colChkInfo.health = 0;
+    BossGoma_SetupDefeated(this, play);
+    Enemy_StartFinishingBlow(play, &this->actor);
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+}
+
+static bool BossGoma_IsOnCeiling(BossGoma* this) {
+    return this->actionFunc == BossGoma_CeilingMoveToCenter || this->actionFunc == BossGoma_CeilingIdle ||
+           this->actionFunc == BossGoma_CeilingPrepareSpawnGohmas || this->actionFunc == BossGoma_CeilingSpawnGohmas;
+}
+
+// A super hit ignores the closed eye and the spawning shield: it knocks her off the ceiling or stuns her on the floor,
+// and damages her once she is stunned.
+static bool BossGoma_TakeSuperHit(BossGoma* this, PlayState* play) {
+    if (!(this->collider.elements[0].info.bumperFlags & BUMP_HIT) || !BossSuperDamage_IsActive(play)) {
+        return false;
+    }
+    this->collider.elements[0].info.bumperFlags &= ~BUMP_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->invincibilityFrames = 10;
+    if (this->actionFunc == BossGoma_FloorStunned) {
+        this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+        BossGoma_ReactToStunnedDamage(this, play);
+        return true;
+    }
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_DAM2);
+    if (BossGoma_IsOnCeiling(this)) {
+        BossGoma_SetupFallStruckDown(this);
+        return true;
+    }
+    Audio_StopSfxById(NA_SE_EN_GOMA_CRY1);
+    BossGoma_SetupFloorStunned(this);
+    this->sfxFaintTimer = 100;
+    this->framesUntilNextAction = 90;
+    this->timer = 4;
+    return true;
+}
+
 void BossGoma_UpdateHit(BossGoma* this, PlayState* play) {
     if (this->invincibilityFrames != 0) {
         this->invincibilityFrames--;
     } else {
         ColliderInfo* acHitInfo = this->collider.elements[0].info.acHitInfo;
         s32 damage;
+
+        if (BossGoma_TakeSuperHit(this, play)) {
+            return;
+        }
 
         if (this->eyeClosedTimer == 0 && this->actionFunc != BossGoma_CeilingSpawnGohmas &&
             (this->collider.elements[0].info.bumperFlags & BUMP_HIT)) {
@@ -1839,16 +1889,7 @@ void BossGoma_UpdateHit(BossGoma* this, PlayState* play) {
                        (damage = CollisionCheck_GetSwordDamage(acHitInfo->toucher.dmgFlags, play)) != 0) {
                 this->actor.colChkInfo.health -= damage;
 
-                if ((s8)this->actor.colChkInfo.health > 0) {
-                    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_DAM1);
-                    BossGoma_SetupFloorDamaged(this);
-                    EffectSsSibuki_SpawnBurst(play, &this->actor.focus.pos);
-                } else {
-                    BossGoma_SetupDefeated(this, play);
-                    Enemy_StartFinishingBlow(play, &this->actor);
-                    GameInteractor_ExecuteOnBossDefeat(&this->actor);
-                }
-
+                BossGoma_ReactToStunnedDamage(this, play);
                 this->invincibilityFrames = 10;
             } else if (this->actionFunc != BossGoma_FloorStunned && this->patienceTimer != 0 &&
                        (acHitInfo->toucher.dmgFlags & 0x00000005)) {
@@ -1865,7 +1906,7 @@ void BossGoma_UpdateHit(BossGoma* this, PlayState* play) {
                 }
 
                 this->timer = 4;
-                func_80033E88(&this->actor, play, 4, 0xC);
+                Actor_RequestQuakeAndRumble(&this->actor, play, 4, 0xC);
             }
         }
     }
@@ -2084,6 +2125,27 @@ s32 BossGoma_OverrideLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f
     return doNotDrawLimb;
 }
 
+static const s32 sSparkLimbs[] = {
+    BOSSGOMA_LIMB_BODY,           BOSSGOMA_LIMB_BODY_SHELL, BOSSGOMA_LIMB_EYE,
+    BOSSGOMA_LIMB_MANDIBLES_BODY, BOSSGOMA_LIMB_TAIL1,      BOSSGOMA_LIMB_TAIL2,
+    BOSSGOMA_LIMB_TAIL3,          BOSSGOMA_LIMB_TAIL4,      BOSSGOMA_LIMB_R_THIGH,
+    BOSSGOMA_LIMB_R_KNEE,         BOSSGOMA_LIMB_R_FEET,     BOSSGOMA_LIMB_L_THIGH,
+    BOSSGOMA_LIMB_L_KNEE,         BOSSGOMA_LIMB_L_FEET,     BOSSGOMA_LIMB_L_ANTENNA_BODY,
+    BOSSGOMA_LIMB_R_ANTENNA_BODY,
+};
+static Vec3f sSparkLimbPos[ARRAY_COUNT(sSparkLimbs)];
+
+static void BossGoma_CaptureSparkLimb(s32 limbIndex) {
+    static Vec3f zero = { 0.0f, 0.0f, 0.0f };
+
+    for (s32 i = 0; i < ARRAY_COUNT(sSparkLimbs); i++) {
+        if (sSparkLimbs[i] == limbIndex) {
+            Matrix_MultVec3f(&zero, &sSparkLimbPos[i]);
+            return;
+        }
+    }
+}
+
 void BossGoma_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* rot, void* thisx) {
     static Vec3f tailZero = { 0.0f, 0.0f, 0.0f };
     static Vec3f clawBackLocalPos = { 0.0f, 0.0f, 0.0f };
@@ -2096,6 +2158,7 @@ void BossGoma_PostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s* r
     s32 pad;
     MtxF mtx;
 
+    BossGoma_CaptureSparkLimb(limbIndex);
     if (limbIndex == BOSSGOMA_LIMB_TAIL4) { // tail end/last part
         Matrix_MultVec3f(&tailZero, &this->lastTailLimbWorldPos);
     } else if (limbIndex == BOSSGOMA_LIMB_TAIL1) { // tail start/first part
@@ -2182,6 +2245,7 @@ void BossGoma_Draw(Actor* thisx, PlayState* play) {
     SkelAnime_DrawSkeletonOpa(play, &this->skelanime, BossGoma_OverrideLimbDraw, BossGoma_PostLimbDraw, this);
 
     CLOSE_DISPS(play->state.gfxCtx);
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, sSparkLimbPos, ARRAY_COUNT(sSparkLimbPos), 1.0f);
 }
 
 void BossGoma_SpawnChildGohma(BossGoma* this, PlayState* play, s16 i) {

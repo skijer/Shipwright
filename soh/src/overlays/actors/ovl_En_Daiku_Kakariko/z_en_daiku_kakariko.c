@@ -6,7 +6,6 @@
 
 #include "z_en_daiku_kakariko.h"
 #include "objects/object_daiku/object_daiku.h"
-#include "soh/ResourceManagerHelpers.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_FRIENDLY | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -208,8 +207,6 @@ void EnDaikuKakariko_Destroy(Actor* thisx, PlayState* play) {
     EnDaikuKakariko* this = (EnDaikuKakariko*)thisx;
 
     Collider_DestroyCylinder(play, &this->collider);
-
-    ResourceMgr_UnregisterSkeleton(&this->skelAnime);
 }
 
 s32 EnDaikuKakariko_GetTalkState(EnDaikuKakariko* this, PlayState* play) {
@@ -242,7 +239,7 @@ void EnDaikuKakariko_HandleTalking(EnDaikuKakariko* this, PlayState* play) {
         Actor_GetScreenPos(play, &this->actor, &sp26, &sp24);
 
         if ((sp26 >= 0) && (sp26 <= 320) && (sp24 >= 0) && (sp24 <= 240) && (this->talkState == 0) &&
-            (func_8002F2CC(&this->actor, play, 100.0f) == 1)) {
+            (Actor_OfferTalk(&this->actor, play, 100.0f) == 1)) {
             this->actor.textId = Text_GetFaceReaction(play, maskReactionSets[this->actor.params & 3]);
 
             if (this->actor.textId == 0) {
@@ -354,7 +351,7 @@ void EnDaikuKakariko_StopRunning(EnDaikuKakariko* this, PlayState* play) {
 void EnDaikuKakariko_Run(EnDaikuKakariko* this, PlayState* play) {
     s32 pad;
     Path* path;
-    Vec3f* pathPos; // SOH [Unbound] path points are f32
+    Vec3f* pathPos;
     f32 xDist;
     f32 zDist;
     s16 runAngle;

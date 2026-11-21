@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstdint>
+#include <stdint.h>
 #include <vector>
 #include <ship/resource/Resource.h>
 #include <libultraship/libultra/types.h>
@@ -10,7 +10,7 @@ namespace SOH {
 
 typedef struct {
     /* 0x00 */ u8 count;      // number of points in the path
-    /* 0x04 */ Vec3f* points; // Segment Address to the array of points. // SOH [Unbound] s16 -> f32 (world extent)
+    /* 0x04 */ Vec3f* points; // Segment Address to the array of points.
 } PathData;                   // size = 0x8
 
 class Path : public Ship::Resource<PathData> {

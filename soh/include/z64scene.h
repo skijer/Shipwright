@@ -264,7 +264,7 @@ typedef struct {
 
 typedef struct {
     /* 0x00 */ u8 count; // number of points in the path
-    /* 0x04 */ Vec3f* points; // Segment Address to the array of points. // SOH [Unbound] s16 -> f32 (world extent)
+    /* 0x04 */ Vec3f* points; // Segment Address to the array of points.
 } Path; // size = 0x8
 
 typedef union {
@@ -392,12 +392,6 @@ typedef enum {
     /* 53 */ SDC_MAX
 } SceneDrawConfig;
 
-// SOH [Unbound] Data-driven animated materials (SPEC.md §4.2 `materialAnims`), the Majora's Mask
-// AnimatedMaterial system. A scene document lists entries; every frame each one generates a small
-// display list and binds it to a runtime segment (8-13) on the passes it names, after the scene's
-// draw config has run, so a room display list that calls the segment inherits the result.
-// The param structs mirror MM's (z64scene.h in 2Ship) so z_scene_proc.c is a straight port.
-
 typedef struct {
     /* 0x0 */ u8 r;
     /* 0x1 */ u8 g;
@@ -417,7 +411,7 @@ typedef struct {
     /* 0x0 */ u16 keyFrameLength;
     /* 0x2 */ u16 keyFrameCount;
     /* 0x4 */ F3DPrimColor* primColors;
-    /* 0x8 */ F3DEnvColor* envColors; // NULL leaves the env color alone
+    /* 0x8 */ F3DEnvColor* envColors;
     /* 0xC */ u16* keyFrames;
 } AnimatedMatColorParams;
 
@@ -426,17 +420,15 @@ typedef struct {
     /* 0x1 */ s8 yStep;
     /* 0x2 */ u8 width;
     /* 0x3 */ u8 height;
-    // Not in MM: a fractional part of the step (`xSpeed`/`ySpeed`), so a layer can move slower than one
-    // quarter-texel per frame. The layer's rate is the sum: xStep + xSpeed, yStep + ySpeed.
     /* 0x4 */ f32 xSpeed;
     /* 0x8 */ f32 ySpeed;
-} AnimatedMatTexScrollParams; // size = 0xC; the two-layer form is an array of two
+} AnimatedMatTexScrollParams;
 
 typedef struct {
     /* 0x0 */ u16 keyFrameLength;
-    /* 0x2 */ u16 textureCount;      // entries in textureList (the exporter round-trips the whole list)
-    /* 0x4 */ void** textureList;    // resource paths ("__OTR__<path>"), bound straight into the segment
-    /* 0x8 */ u16* textureIndexList; // one index into textureList per frame (MM's is a byte; a list may be longer)
+    /* 0x2 */ u16 textureCount;
+    /* 0x4 */ void** textureList;
+    /* 0x8 */ u16* textureIndexList;
 } AnimatedMatTexCycleParams;
 
 typedef enum {
@@ -453,12 +445,12 @@ typedef enum {
 #define ANIM_MAT_PASS_XLU (1 << 1)
 #define ANIM_MAT_SEGMENT_MIN 0x08
 #define ANIM_MAT_SEGMENT_MAX 0x0D
-#define ANIM_MAT_MAX_KEY_FRAMES 50 // the non-linear (Lagrange) path works in fixed arrays of this size
+#define ANIM_MAT_MAX_KEY_FRAMES 50
 
 typedef struct {
-    /* 0x0 */ u8 segment; // absolute runtime segment, ANIM_MAT_SEGMENT_MIN..MAX
-    /* 0x1 */ u8 pass;    // ANIM_MAT_PASS_* bits
-    /* 0x2 */ u8 type;    // AnimatedMaterialType
+    /* 0x0 */ u8 segment;
+    /* 0x1 */ u8 pass;
+    /* 0x2 */ u8 type;
     /* 0x4 */ void* params;
 } AnimatedMaterial;
 

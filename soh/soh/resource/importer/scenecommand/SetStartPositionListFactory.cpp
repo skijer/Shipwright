@@ -1,8 +1,8 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetStartPositionListFactory.h"
 #include "soh/resource/type/scenecommand/SetStartPositionList.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
-#include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 
 namespace SOH {
 std::shared_ptr<Ship::IResource>
@@ -50,9 +50,9 @@ SetStartPositionListFactoryXML::ReadResource(std::shared_ptr<Ship::ResourceInitD
         if (childName == "StartPositionEntry") {
             ActorEntry entry;
             entry.id = child->IntAttribute("Id");
-            entry.pos.x = child->IntAttribute("PosX");
-            entry.pos.y = child->IntAttribute("PosY");
-            entry.pos.z = child->IntAttribute("PosZ");
+            entry.pos.x = child->FloatAttribute("PosX");
+            entry.pos.y = child->FloatAttribute("PosY");
+            entry.pos.z = child->FloatAttribute("PosZ");
             entry.rot.x = child->IntAttribute("RotX");
             entry.rot.y = child->IntAttribute("RotY");
             entry.rot.z = child->IntAttribute("RotZ");
@@ -63,7 +63,7 @@ SetStartPositionListFactoryXML::ReadResource(std::shared_ptr<Ship::ResourceInitD
         child = child->NextSiblingElement();
     }
 
-    setStartPositionList->numStartPositions = setStartPositionList->startPositions.size();
+    setStartPositionList->numStartPositions = static_cast<u32>(setStartPositionList->startPositions.size());
 
     return setStartPositionList;
 }

@@ -4,16 +4,16 @@
 #include "soh/cvar_prefixes.h"
 #include "soh/Notification/Notification.h"
 #include <vector>
+#include <libultraship/bridge/consolevariablebridge.h>
+#include <libultraship/libultra/types.h>
+#include <ship/Context.h>
 #include <ship/utils/StringHelper.h>
-#include <libultraship/bridge.h>
-#include <libultraship/classes.h>
-#include <soh/OTRGlobals.h>
+#include <ship/window/Window.h>
 #include <locale>
 #include <filesystem>
 #include <z64.h>
 
-extern "C" PlayState* gPlayState; // SOH [Unbound] defined in z_play.c (C linkage)
-
+extern "C" PlayState* gPlayState;
 #define SEQUENCE_MAP_ENTRY(sequenceId, label, sfxKey, category, canBeReplaced, canBeUsedAsReplacement) \
     {                                                                                                  \
         sequenceId, {                                                                                  \
@@ -116,7 +116,7 @@ AudioCollection::AudioCollection() {
         SEQUENCE_MAP_ENTRY(NA_BGM_KOTAKE_KOUME,                 "Kotake & Koume's Theme",                   "NA_BGM_KOTAKE_KOUME",            SEQ_BGM_EVENT,    true,     true),
         SEQUENCE_MAP_ENTRY(NA_BGM_ESCAPE,                       "Escape from Ganon's Castle",               "NA_BGM_ESCAPE",                  SEQ_BGM_EVENT,    true,     true),
         SEQUENCE_MAP_ENTRY(NA_BGM_TIMED_MINI_GAME,              "Mini-Game",                                "NA_BGM_TIMED_MINI_GAME",         SEQ_BGM_EVENT,    true,     true),
-        
+
         // SEQ_INSTRUMENT
         SEQUENCE_MAP_ENTRY(INSTRUMENT_OFFSET + 1,               "Ocarina",                                  "OCARINA_INSTRUMENT_DEFAULT",     SEQ_INSTRUMENT,   true,     true),
         SEQUENCE_MAP_ENTRY(INSTRUMENT_OFFSET + 2,               "Malon",                                    "OCARINA_INSTRUMENT_MALON",       SEQ_INSTRUMENT,   true,     true),
@@ -395,14 +395,8 @@ uint16_t AudioCollection::GetReplacementSequence(uint16_t seqId) {
         replacementSeq = seqId;
     }
 
-    // SOH [Unbound] A scene document can bind a custom song to its theme (`sound.song`): when the id being
-    // resolved is the current scene's own BGM theme, swap in the bound song. This sits after the alias and
-    // validity logic and fires only when the user has no replacement of their own — an Audio Editor or
-    // shuffle pick outranks the binding, so the editor UI stays truthful — and only for BGM categories,
-    // because this path also carries ocarina-instrument and sfx ids a document must not hijack.
+    // Only BGM categories: this path also carries ocarina-instrument and sfx ids a scene must not hijack.
     if (replacementSeq == seqId && gPlayState != NULL && gPlayState->sequenceCtx.unboundSongSeqId != 0) {
-        // The field theme circulates as two ids; treat them as one so a song bound over either keeps
-        // playing through the morning variant.
         uint16_t resolved = (seqId == NA_BGM_FIELD_MORNING) ? (uint16_t)NA_BGM_FIELD_LOGIC : seqId;
         uint16_t sceneTheme = (gPlayState->sequenceCtx.seqId == NA_BGM_FIELD_MORNING) ? (uint16_t)NA_BGM_FIELD_LOGIC
                                                                                       : gPlayState->sequenceCtx.seqId;
@@ -420,7 +414,7 @@ void AudioCollection::RemoveFromShufflePool(SequenceInfo* seqInfo) {
     excludedSequences.insert(seqInfo);
     includedSequences.erase(seqInfo);
     CVarSetInteger(cvarKey.c_str(), 1);
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 void AudioCollection::AddToShufflePool(SequenceInfo* seqInfo) {
@@ -428,7 +422,7 @@ void AudioCollection::AddToShufflePool(SequenceInfo* seqInfo) {
     includedSequences.insert(seqInfo);
     excludedSequences.erase(seqInfo);
     CVarClear(cvarKey.c_str());
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 void AudioCollection::InitializeShufflePool() {

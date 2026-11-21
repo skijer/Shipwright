@@ -1,9 +1,6 @@
 #pragma once
 
-#include <cstdint>
 #include <vector>
-#include <memory>
-#include <ship/resource/Resource.h>
 #include "SceneCommand.h"
 #include <libultraship/libultra/types.h>
 
@@ -17,7 +14,7 @@ typedef struct {
     /* 0x0F */ u8 fogColor[3];
     /* 0x12 */ s16 fogNear;
     /* 0x14 */ s16 fogFar;
-    // SOH [Unbound] mirror of soh/include/z64environment.h — keep identical
+    // Mirrors soh/include/z64environment.h; keep identical.
     f32 fogStart;
     f32 fogEnd;
     f32 drawDistance;
