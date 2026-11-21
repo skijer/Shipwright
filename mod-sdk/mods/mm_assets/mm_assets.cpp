@@ -342,11 +342,7 @@ std::vector<uint8_t> ReadResource(const char* path) {
     return resource;
 }
 
-// Fleet's seed generator has no window to ask from, so only a game opened on its own writes this archive.
 void CreateSharedAssets() {
-    if (SOH_MOD_API_HAS(sApi, FindService) && sApi->FindService("fleet.hosted") != nullptr) {
-        return;
-    }
     static const std::vector<SharedAssetArchive::SongTint> kQuestSongTints = {
         { "SonataOfAwakening", 150, 255, 100 }, { "GoronLullaby", 255, 80, 40 },  { "NewWaveBossaNova", 100, 150, 255 },
         { "ElegyOfEmptiness", 255, 160, 0 },    { "OathToOrder", 255, 100, 255 }, { "SongOfHealing", 255, 255, 255 },
@@ -369,6 +365,17 @@ void CreateSharedAssets() {
 
 } // namespace
 
+// Waits for the game loop: Fleet's seed generator starts this mod with no window to ask the save permission from,
+// and it never runs a scene.
+static void CreateSharedAssetsOnce(int16_t sceneNum) {
+    static bool isDone = false;
+    if (isDone) {
+        return;
+    }
+    isDone = true;
+    CreateSharedAssets();
+}
+
 extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
@@ -376,7 +383,7 @@ extern "C" SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
 extern "C" SOH_MOD_EXPORT void ModInit(void) {
     MmSfxService_Init(sApi);
     if (HasExtractedAssets()) {
-        CreateSharedAssets();
+        SOH_REGISTER_HOOK(sApi, OnSceneInit, CreateSharedAssetsOnce);
         return;
     }
     if (!SOH_MOD_API_HAS(sApi, ReadArchiveFiles)) {
