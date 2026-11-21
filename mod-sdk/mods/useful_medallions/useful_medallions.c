@@ -55,6 +55,7 @@ const SOHModApi* gSw97Api;
 static s16 sSpellActorIds[SW97_SPELL_COUNT];
 static s16 sArrowActorIds[SW97_ELEM_COUNT];
 static BlindEntry sBlinded[BLIND_TABLE_SIZE];
+static bool sIsShadowTimer;
 
 s16 Sw97_GetSpellActorId(Sw97Spell spell) {
     return spell < SW97_SPELL_COUNT ? sSpellActorIds[spell] : -1;
@@ -134,7 +135,29 @@ static bool IsHiddenFrom(Actor* actor) {
     bool isWatcher =
         actor->category == ACTORCAT_ENEMY || actor->category == ACTORCAT_NPC || (actor->flags & ACTOR_FLAG_HOSTILE);
 
-    return (gSaveContext.nayrusLoveTimer > 0 && isWatcher) || IsBlinded(actor);
+    return (sIsShadowTimer && gSaveContext.nayrusLoveTimer > 0 && isWatcher) || IsBlinded(actor);
+}
+
+static void ClaimShadowTimer(Actor* actor) {
+    sIsShadowTimer = true;
+}
+
+// Player_Init respawns vanilla Nayru's Love while the timer runs; a Shadow timer resumes as the Shadow spell.
+static void ResumeShadowSpell(Actor* actor) {
+    if (gSaveContext.nayrusLoveTimer == 0) {
+        sIsShadowTimer = false;
+        return;
+    }
+    if (!sIsShadowTimer || gPlayState == NULL) {
+        return;
+    }
+    Actor_Kill(actor);
+    Actor_Spawn(&gPlayState->actorCtx, gPlayState, sSpellActorIds[SW97_SPELL_DARK], actor->world.pos.x,
+                actor->world.pos.y, actor->world.pos.z, 0, 0, 0, 0);
+}
+
+static void ForgetShadowTimer(int32_t fileNum) {
+    sIsShadowTimer = false;
 }
 
 static void HidePlayerFromActor(Actor* actor, float* xzDist, float* yDist, int16_t* yawTowards) {
@@ -169,6 +192,9 @@ static bool RegisterActors(void) {
         if (sSpellActorIds[spell] < 0) {
             return false;
         }
+    }
+    if (!Sw97_RegisterIcePlatform()) {
+        return false;
     }
     sArrowActorIds[SW97_ELEM_NONE] = -1;
     for (uint8_t element = SW97_ELEM_FIRE; element < SW97_ELEM_COUNT; element++) {
@@ -206,4 +232,7 @@ SOH_MOD_EXPORT void ModInit(void) {
     SOH_REGISTER_HOOK(gSw97Api, OnPlayerUpdate, TickMod);
     SOH_REGISTER_HOOK(gSw97Api, OnPlayDestroy, ForgetScene);
     SOH_REGISTER_HOOK(gSw97Api, OnActorResolvePlayerRelation, HidePlayerFromActor);
+    SOH_REGISTER_HOOK_FOR_ID(gSw97Api, OnActorInit, sSpellActorIds[SW97_SPELL_DARK], ClaimShadowTimer);
+    SOH_REGISTER_HOOK_FOR_ID(gSw97Api, OnActorInit, ACTOR_MAGIC_DARK, ResumeShadowSpell);
+    SOH_REGISTER_HOOK(gSw97Api, OnLoadFile, ForgetShadowTimer);
 }

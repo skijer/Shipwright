@@ -118,11 +118,11 @@ static const MedallionInfo sMedallions[SW97_SPELL_COUNT] = {
     { "nei.medallion.fire", QUEST_MEDALLION_FIRE, SW97_SPELL_FIRE, sFireIcon, sFireName,
       "%rFire Medallion&%wFire spell, 12 MP. A column of&flame that burns harder the&longer it stands." },
     { "nei.medallion.water", QUEST_MEDALLION_WATER, SW97_SPELL_ICE, sWaterIcon, sWaterName,
-      "%cWater Medallion&%wIce spell, 12 MP. Freezes every&enemy it touches for 6 seconds." },
+      "%cWater Medallion&%wIce spell, 12 MP. Freezes every&enemy it touches for 6 seconds&and turns water into ice floes." },
     { "nei.medallion.spirit", QUEST_MEDALLION_SPIRIT, SW97_SPELL_SOUL, sSpiritIcon, sSpiritName,
       "%ySpirit Medallion&%wSoul spell, 24 MP. Turns you into&a fairy until you cast it again." },
     { "nei.medallion.shadow", QUEST_MEDALLION_SHADOW, SW97_SPELL_DARK, sShadowIcon, sShadowName,
-      "%pShadow Medallion&%wDark spell, 24 MP. A shield that&blocks all damage for a minute.^"
+      "%pShadow Medallion&%wDark spell, 24 MP. Enemies lose&sight of you for a minute.^"
       "Hold %y\xA1%w to trade 3 hearts for&magic." },
     { "nei.medallion.light", QUEST_MEDALLION_LIGHT, SW97_SPELL_LIGHT, sLightIcon, sLightName,
       "%yLight Medallion&%wLight spell, 24 MP. Undead freeze&for 30 seconds and you heal 6&hearts." },

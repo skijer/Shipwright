@@ -31,9 +31,7 @@ void Sw97_MagicDark_DiamondDraw(Actor* thisx, PlayState* play);
 
 void Sw97_MagicDark_DimLighting(PlayState* play, f32 intensity);
 
-static u64 sDiamondTex[] = {
-    0x0000000000000000,
-};
+static const ALIGN_ASSET(2) char sDiamondTex[] = "__OTR__overlays/ovl_Magic_Dark/sDiamondTex";
 
 static Vtx sDiamondVerts[] = {
     VTX(0, 0, 64, 1024, 512, 0x00, 0x00, 0x78, 0xFF),    VTX(55, 0, 32, 1707, 512, 0x67, 0x00, 0x3C, 0xFF),
@@ -118,14 +116,12 @@ void Sw97_MagicDark_DiamondUpdate(Actor* thisx, PlayState* play) {
     }
 
     if (nayrusLoveTimer >= 1200) {
-        player->invincibilityTimer = 0;
         gSaveContext.nayrusLoveTimer = 0;
         Sw97_MagicDark_DimLighting(play, 0);
         Actor_Kill(thisx);
         return;
     }
 
-    player->invincibilityTimer = -100;
     thisx->scale.x = thisx->scale.z = this->scale;
 
     if (this->timer < 20) {

@@ -4,6 +4,85 @@
  */
 
 #include "../../sw97_mod.h"
+#include "overlays/actors/ovl_Bg_Spot08_Iceblock/z_bg_spot08_iceblock.h"
+#include "objects/object_spot08_obj/object_spot08_obj.h"
+
+#define ICE_PLATFORM_PARAMS 0x20
+#define ICE_PLATFORM_SCALE 0.05f
+#define ICE_PLATFORM_LIFE_FRAMES 300
+#define ICE_PLATFORM_GROW_FRAMES 10
+#define ICE_PLATFORM_MELT_FRAMES 25
+#define ICE_PLATFORMS_PER_CAST 3
+
+void BgSpot08Iceblock_InitDynaPoly(BgSpot08Iceblock* this, PlayState* play, CollisionHeader* collision, s32 flags);
+void BgSpot08Iceblock_SetupFloatNonrotating(BgSpot08Iceblock* this);
+void BgSpot08Iceblock_Destroy(Actor* thisx, PlayState* play);
+void BgSpot08Iceblock_Update(Actor* thisx, PlayState* play);
+void BgSpot08Iceblock_Draw(Actor* thisx, PlayState* play);
+
+typedef struct {
+    BgSpot08Iceblock floe;
+    s16 lifeTimer;
+} IcePlatform;
+
+static s16 sIcePlatformId = -1;
+
+static f32 IcePlatform_GetScale(s16 lifeTimer) {
+    f32 grown = (ICE_PLATFORM_LIFE_FRAMES - lifeTimer) / (f32)ICE_PLATFORM_GROW_FRAMES;
+    f32 unmelted = lifeTimer / (f32)ICE_PLATFORM_MELT_FRAMES;
+
+    return ICE_PLATFORM_SCALE * CLAMP(MIN(grown, unmelted), 0.1f, 1.0f);
+}
+
+// Zora's Fountain's own floe. Its native Init kills itself for child Link, so the floating setup is redone here.
+static void IcePlatform_Init(Actor* thisx, PlayState* play) {
+    IcePlatform* this = (IcePlatform*)thisx;
+
+    BgSpot08Iceblock_InitDynaPoly(&this->floe, play, (CollisionHeader*)gZorasFountainIcebergCol, DPM_UNK);
+    this->lifeTimer = ICE_PLATFORM_LIFE_FRAMES;
+    Actor_SetScale(thisx, IcePlatform_GetScale(this->lifeTimer));
+    this->floe.bobPhaseSlow = (s16)Rand_ZeroFloat(0xFFFF);
+    this->floe.bobPhaseFast = (s16)Rand_ZeroFloat(0xFFFF);
+    this->floe.surfaceNormal.y = 1.0f;
+    this->floe.rotationAxis.x = 1.0f;
+    BgSpot08Iceblock_SetupFloatNonrotating(&this->floe);
+}
+
+static void IcePlatform_Update(Actor* thisx, PlayState* play) {
+    IcePlatform* this = (IcePlatform*)thisx;
+
+    if (--this->lifeTimer <= 0) {
+        Actor_Kill(thisx);
+        return;
+    }
+    Actor_SetScale(thisx, IcePlatform_GetScale(this->lifeTimer));
+    BgSpot08Iceblock_Update(thisx, play);
+}
+
+bool Sw97_RegisterIcePlatform(void) {
+    SOHActorDefinition definition = { 0 };
+
+    definition.structSize = sizeof(definition);
+    definition.key = "nei.medallion.ice_platform";
+    definition.description = "Water Medallion ice platform";
+    definition.category = ACTORCAT_BG;
+    definition.actorFlags = ACTOR_FLAG_UPDATE_CULLING_DISABLED;
+    definition.objectId = OBJECT_GAMEPLAY_KEEP;
+    definition.instanceSize = sizeof(IcePlatform);
+    definition.init = (SOHActorFunc)IcePlatform_Init;
+    definition.destroy = (SOHActorFunc)BgSpot08Iceblock_Destroy;
+    definition.update = (SOHActorFunc)IcePlatform_Update;
+    definition.draw = (SOHActorFunc)BgSpot08Iceblock_Draw;
+    sIcePlatformId = gSw97Api->RegisterActor(&definition);
+    return sIcePlatformId >= 0;
+}
+
+Actor* Sw97_SpawnIcePlatform(PlayState* play, f32 x, f32 y, f32 z) {
+    if (sIcePlatformId < 0) {
+        return NULL;
+    }
+    return Actor_Spawn(&play->actorCtx, play, sIcePlatformId, x, y, z, 0, 0, 0, ICE_PLATFORM_PARAMS);
+}
 
 struct MagicIce;
 
@@ -16,6 +95,8 @@ typedef struct MagicIce {
     /*        */ s16 actionTimer;
     /*        */ SkelAnimeCurve skelCurve;
     /*        */ Vec3f colliderScale;
+    /*        */ u8 floeSpawned;
+    /*        */ u8 frozenSamples;
 } MagicIce;
 
 #define FLAGS 0x02000010
@@ -501,9 +582,35 @@ static void Sw97_MagicIce_MeltIceShelters(PlayState* play, Vec3f* center, f32 ra
     }
 }
 
+static void Sw97_MagicIce_FreezeWater(MagicIce* this, PlayState* play) {
+    static const Vec3f sSamples[] = { { 0, 0, 0 }, { 80, 0, 0 }, { -80, 0, 0 }, { 0, 0, 80 }, { 0, 0, -80 } };
+    f32 bottom = this->collider.dim.pos.y + this->collider.dim.yShift;
+
+    for (u8 i = 0; i < ARRAY_COUNT(sSamples) && this->floeSpawned < ICE_PLATFORMS_PER_CAST; i++) {
+        if ((this->frozenSamples & (1 << i)) || SQ(sSamples[i].x) + SQ(sSamples[i].z) > SQ(this->collider.dim.radius)) {
+            continue;
+        }
+        f32 x = this->actor.world.pos.x + sSamples[i].x;
+        f32 z = this->actor.world.pos.z + sSamples[i].z;
+        f32 waterY = this->actor.world.pos.y;
+        WaterBox* waterBox;
+
+        if (!WaterBox_GetSurface1(play, &play->colCtx, x, z, &waterY, &waterBox) || waterY < bottom ||
+            waterY > bottom + this->collider.dim.height) {
+            continue;
+        }
+        if (Sw97_SpawnIcePlatform(play, x, waterY, z) != NULL) {
+            this->frozenSamples |= 1 << i;
+            this->floeSpawned++;
+        }
+    }
+}
+
 void Sw97_MagicIce_Init(Actor* thisx, PlayState* play) {
     MagicIce* this = THIS;
 
+    this->floeSpawned = 0;
+    this->frozenSamples = 0;
     this->action = 0;
     this->actionTimer = 0;
     Collider_InitCylinder(play, &this->collider);
@@ -568,9 +675,13 @@ void Sw97_MagicIce_Update(Actor* thisx, PlayState* play) {
         Actor* hitActor = this->collider.base.at;
         if (hitActor != NULL && hitActor->update != NULL) {
             hitActor->freezeTimer = 120;
-            Actor_SetColorFilter(hitActor, 0x4000, 255, 0x2000, 120);
+            Actor_SetColorFilter(hitActor, 0x0000, 255, 0x2000, 120);
         }
         this->collider.base.atFlags &= ~AT_HIT;
+    }
+
+    if (this->action >= ACTION_GROW_SLOWLY) {
+        Sw97_MagicIce_FreezeWater(this, play);
     }
 
     if (this->action > ACTION_INITIALIZE) {
