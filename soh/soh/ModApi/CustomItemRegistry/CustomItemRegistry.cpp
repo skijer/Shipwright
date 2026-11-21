@@ -1346,6 +1346,16 @@ bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool auto
     return true;
 }
 
+bool CustomItemRegistry_ShowGetItemText(PlayState* play, const char* key) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(key);
+    if (play == nullptr || definition == nullptr || definition->getItemText == nullptr) {
+        return false;
+    }
+    sMessageItem = definition->key;
+    Message_StartTextbox(play, TEXT_MOD_ITEM_GET_ITEM, nullptr);
+    return true;
+}
+
 static bool SkipCustomGetItem(int mode, GetItemCategory category) {
     return mode == SGIA_ALL ||
            (mode == SGIA_JUNK && (category == ITEM_CATEGORY_JUNK || category == ITEM_CATEGORY_SKULLTULA_TOKEN ||

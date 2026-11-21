@@ -857,12 +857,13 @@ u16 Message_DrawItemIcon(PlayState* play, u16 itemId, Gfx** p, u16 i) {
     gDPSetCombineMode(gfx++, G_CC_MODULATEIA_PRIM, G_CC_MODULATEIA_PRIM);
     gDPSetPrimColor(gfx++, 0, 0, 255, 255, 255, msgCtx->textColorAlpha);
 
-    // Invalidate icon texture as it may have changed from the last time a text box had an icon
-    gSPInvalidateTexCache(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE);
-
     const char* iconOwner = FleetForeignItems_FindIconOwner(customIconPath);
     if (iconOwner != NULL) {
+        // The invalidate resolves its path while recording, in this game's archives only.
         gSPComboRMPush(gfx++, iconOwner);
+    } else {
+        // Invalidate icon texture as it may have changed from the last time a text box had an icon
+        gSPInvalidateTexCache(gfx++, (uintptr_t)msgCtx->textboxSegment + MESSAGE_STATIC_TEX_SIZE);
     }
     if (GameInteractor_Should(VB_DRAW_ITEM_ICON, itemId < ITEM_CUSTOM || customIconPath != NULL, &gfx)) {
         if (itemId >= ITEM_MEDALLION_FOREST && itemId != ITEM_CUSTOM) {

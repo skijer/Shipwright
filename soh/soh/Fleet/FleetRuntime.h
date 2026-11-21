@@ -13,6 +13,7 @@ void FleetRuntime_CatchUpParked();
 nlohmann::json FleetRuntime_Status();
 bool FleetRuntime_CollectForSmoke(const std::string& check);
 void FleetRuntime_Save();
+double FleetRuntime_SlowestSaveMilliseconds();
 void FleetRuntime_InstallRoutes();
 int32_t FleetRuntime_Route(int32_t entrance, bool beforeNative);
 bool FleetRuntime_TakeDeparture(FleetDestination& destination, std::string& payload);

@@ -392,6 +392,9 @@ extern "C" char* ResourceMgr_LoadJPEG(char* data, size_t dataSize) {
 
 extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
     auto res = ResourceMgr_GetResourceByNameHandlingMQ(filePath);
+    if (res == nullptr) {
+        return nullptr;
+    }
 
     if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
         return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);
@@ -402,6 +405,9 @@ extern "C" char* ResourceMgr_LoadTexOrDListByName(const char* filePath) {
 
 extern "C" char* ResourceMgr_LoadIfDListByName(const char* filePath) {
     auto res = ResourceMgr_GetResourceByNameHandlingMQ(filePath);
+    if (res == nullptr) {
+        return nullptr;
+    }
 
     if (res->GetInitData()->Type == static_cast<uint32_t>(Fast::ResourceType::DisplayList)) {
         return (char*)&((std::static_pointer_cast<Fast::DisplayList>(res))->Instructions[0]);

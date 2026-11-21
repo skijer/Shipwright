@@ -119,9 +119,11 @@ extern "C" void gSPInvalidateTexCache(Gfx* pkt, uintptr_t texAddr) {
     char* imgData = (char*)texAddr;
 
     if (texAddr != 0 && ResourceMgr_OTRSigCheck(imgData)) {
-        // Temporary solution to the mq/nonmq issue, this will be
-        // handled better with LUS 1.0
-        texAddr = (uintptr_t)ResourceMgr_LoadTexOrDListByName(imgData);
+        // A missing path keeps its own address: recording 0 would flush the whole texture cache.
+        char* resolved = ResourceMgr_LoadTexOrDListByName(imgData);
+        if (resolved != nullptr) {
+            texAddr = (uintptr_t)resolved;
+        }
     }
 
     __gSPInvalidateTexCache(pkt, texAddr);

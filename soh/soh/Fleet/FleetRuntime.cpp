@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <algorithm>
+#include <chrono>
 #include <fstream>
 #include <optional>
 #include <set>
@@ -689,7 +690,22 @@ int FleetRuntime_Slot() {
     return sSession.is_object() ? sSession.at("slot").get<int>() : -1;
 }
 
+static double sSlowestSaveMilliseconds = 0.0;
+
+static void WriteFleetSave();
+
 void FleetRuntime_Save() {
+    const auto start = std::chrono::steady_clock::now();
+    WriteFleetSave();
+    const std::chrono::duration<double, std::milli> elapsed = std::chrono::steady_clock::now() - start;
+    sSlowestSaveMilliseconds = std::max(sSlowestSaveMilliseconds, elapsed.count());
+}
+
+double FleetRuntime_SlowestSaveMilliseconds() {
+    return sSlowestSaveMilliseconds;
+}
+
+static void WriteFleetSave() {
     if (IsPlaying()) {
         gSaveContext.rupees = static_cast<int16_t>(
             std::clamp<int>(gSaveContext.rupees + gSaveContext.rupeeAccumulator, 0, CUR_CAPACITY(UPG_WALLET)));

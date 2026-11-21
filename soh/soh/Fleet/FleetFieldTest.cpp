@@ -1,4 +1,5 @@
 #include "FleetFieldTest.h"
+#include "FleetForeignItems.h"
 #include "FleetPortal.h"
 #include "FleetRuntime.h"
 #include "FleetRuntimeBridge.h"
@@ -13,6 +14,7 @@
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
+#include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 
 extern "C" {
@@ -37,8 +39,24 @@ constexpr int kRainOnLinkEvery = 3;
 constexpr float kRainRadius = 220.0f;
 constexpr float kRainHeight = 160.0f;
 constexpr int kMessageCloseFrames = 600;
+constexpr size_t kShowcaseBatch = 24;
+constexpr int kShowcaseDrawFrames = 45;
+constexpr int kShowcaseTextFrames = 30;
+
+enum class ShowcasePhase { NotStarted, Drawing, Texts, Done };
+
+// Draws every foreign item in a real frame next to Link, then opens each one's get-item text until its icon draws.
+struct Showcase {
+    ShowcasePhase phase = ShowcasePhase::NotStarted;
+    std::vector<std::string> keys;
+    std::set<std::string> shownIcons;
+    size_t next = 0;
+    size_t texts = 0;
+    int frames = 0;
+};
 
 std::optional<Travel> sTravel;
+Showcase sShowcase;
 std::string sTravelResult = "idle";
 std::optional<int> sRainCount;
 std::vector<Actor*> sRainDrops;
@@ -254,6 +272,87 @@ int CountCollected() {
     }));
 }
 
+void DrawNextShowcaseBatch(PlayState* play) {
+    ClearRain(play);
+    if (sShowcase.next == sShowcase.keys.size()) {
+        sShowcase.phase = ShowcasePhase::Texts;
+        sShowcase.next = 0;
+        return;
+    }
+    const Vec3f feet = GET_PLAYER(play)->actor.world.pos;
+    const size_t end = std::min(sShowcase.next + kShowcaseBatch, sShowcase.keys.size());
+    for (size_t index = sShowcase.next; index < end; index++) {
+        const SOHCustomItemDefinition* definition = CustomItemRegistry_Find(sShowcase.keys[index].c_str());
+        const s16 angle = static_cast<s16>((index - sShowcase.next) * 0x10000 / kShowcaseBatch);
+        Vec3f pos = { feet.x + Math_SinS(angle) * kRainRadius, feet.y + kRainHeight,
+                      feet.z + Math_CosS(angle) * kRainRadius };
+        EnItem00* drop = definition != nullptr ? Item_DropCollectible2(play, &pos, ITEM00_SOH_DUMMY) : nullptr;
+        if (drop == nullptr) {
+            continue;
+        }
+        drop->randoInf = RAND_INF_MAX;
+        drop->itemEntry = definition->getItemEntry;
+        drop->actor.draw = reinterpret_cast<ActorFunc>(EnItem00_DrawRandomizedItem);
+        sRainDrops.push_back(&drop->actor);
+    }
+    sShowcase.next = end;
+    sShowcase.frames = kShowcaseDrawFrames;
+}
+
+void ShowNextShowcaseText(PlayState* play) {
+    if (play->msgCtx.msgMode != MSGMODE_NONE) {
+        if (Message_GetState(&play->msgCtx) != TEXT_STATE_CLOSING) {
+            Message_CloseTextbox(play);
+        }
+        return;
+    }
+    while (sShowcase.next < sShowcase.keys.size()) {
+        const std::string& key = sShowcase.keys[sShowcase.next++];
+        const char* icon = CustomItemRegistry_ResolveTexture(key.c_str(), SOH_ITEM_ICON_TEXTBOX);
+        if (icon == nullptr || !sShowcase.shownIcons.insert(icon).second) {
+            continue;
+        }
+        if (CustomItemRegistry_ShowGetItemText(play, key.c_str())) {
+            ++sShowcase.texts;
+            sShowcase.frames = kShowcaseTextFrames;
+            return;
+        }
+    }
+    sShowcase.phase = ShowcasePhase::Done;
+}
+
+void AdvanceShowcase(PlayState* play) {
+    if (sShowcase.frames > 0) {
+        --sShowcase.frames;
+        return;
+    }
+    switch (sShowcase.phase) {
+        case ShowcasePhase::Drawing:
+            DrawNextShowcaseBatch(play);
+            break;
+        case ShowcasePhase::Texts:
+            ShowNextShowcaseText(play);
+            break;
+        default:
+            break;
+    }
+}
+
+const char* ShowcasePhaseName() {
+    switch (sShowcase.phase) {
+        case ShowcasePhase::NotStarted:
+            return "notStarted";
+        case ShowcasePhase::Drawing:
+            return "drawing";
+        case ShowcasePhase::Texts:
+            return "texts";
+        case ShowcasePhase::Done:
+            return "done";
+        default:
+            return "unknown";
+    }
+}
+
 nlohmann::json Status() {
     const bool isPlaying = IsPlaying();
     nlohmann::json status = { { "playing", isPlaying },
@@ -261,7 +360,12 @@ nlohmann::json Status() {
                               { "transitioning", isPlaying && IsTransitioning(gPlayState) },
                               { "travel", sTravel ? "queued" : sTravelResult },
                               { "rained", sRained.size() },
-                              { "collected", CountCollected() } };
+                              { "collected", CountCollected() },
+                              { "showcase",
+                                { { "phase", ShowcasePhaseName() },
+                                  { "keys", sShowcase.keys.size() },
+                                  { "texts", sShowcase.texts } } },
+                              { "slowestSaveMs", FleetRuntime_SlowestSaveMilliseconds() } };
     if (isPlaying) {
         const Player* player = GET_PLAYER(gPlayState);
         const Vec3f& pos = player->actor.world.pos;
@@ -285,6 +389,8 @@ std::optional<std::string> FleetFieldTest_Request(const std::string& request, co
         sRainCount = input.value("count", 24);
     } else if (request == "TestNudge") {
         Nudge(input);
+    } else if (request == "TestForeignShowcase") {
+        sShowcase = { ShowcasePhase::Drawing, FleetForeignItems_ListKeys() };
     } else if (request != "TestStatus") {
         return std::nullopt;
     }
@@ -300,7 +406,14 @@ void FleetFieldTest_FrameEnd() {
     }
     PlayState* play = gPlayState;
     CloseRainMessages(play);
-    if (IsTransitioning(play) || play->msgCtx.msgMode != MSGMODE_NONE || play->pauseCtx.state != 0) {
+    if (IsTransitioning(play) || play->pauseCtx.state != 0) {
+        return;
+    }
+    if (sShowcase.phase == ShowcasePhase::Drawing || sShowcase.phase == ShowcasePhase::Texts) {
+        AdvanceShowcase(play);
+        return;
+    }
+    if (play->msgCtx.msgMode != MSGMODE_NONE) {
         return;
     }
     if (sTravel) {

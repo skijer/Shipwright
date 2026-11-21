@@ -256,6 +256,7 @@ void CustomItemRegistry_UnbindActor(Actor* actor);
 const char* CustomItemRegistry_GetActorItem(Actor* actor);
 bool CustomItemRegistry_Give(PlayState* play, const char* key);
 bool CustomItemRegistry_ShowTextbox(PlayState* play, const char* text, bool autoFormat);
+bool CustomItemRegistry_ShowGetItemText(PlayState* play, const char* key);
 bool CustomItemRegistry_IsCustomGetItem(const GetItemEntry* entry);
 bool CustomItemRegistry_HasMessageItemIcon(void);
 bool CustomItemRegistry_PrepareGetItem(Actor* actor, PlayState* play, GetItemEntry* entry);
