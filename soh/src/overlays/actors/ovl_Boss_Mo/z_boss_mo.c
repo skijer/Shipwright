@@ -14,6 +14,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
@@ -1772,6 +1773,66 @@ void BossMo_DeathCs(BossMo* this, PlayState* play) {
     }
 }
 
+static bool BossMo_IsTentacleCutsceneRunning(void) {
+    return (sMorphaTent1->csCamera != 0) || ((sMorphaTent2 != NULL) && (sMorphaTent2->csCamera != 0));
+}
+
+static void BossMo_Die(BossMo* this, PlayState* play) {
+    Player* player = GET_PLAYER(play);
+
+    Enemy_StartFinishingBlow(play, &this->actor);
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+    Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x100FF);
+    this->csState = MO_DEATH_START;
+    sMorphaTent1->drawActor = false;
+    sMorphaTent1->work[MO_TENT_ACTION_STATE] = MO_TENT_DEATH_START;
+    sMorphaTent1->baseAlpha = 0.0f;
+    if (sMorphaTent2 != NULL) {
+        sMorphaTent2->tent2KillTimer = 1;
+    }
+    if (player->actor.parent != NULL) {
+        player->av2.actionVar2 = 0x65;
+        player->actor.parent = NULL;
+        player->csAction = 0;
+    }
+}
+
+// The core cannot die while a tentacle cutscene owns the camera; it is held at 1 for the next hit.
+static void BossMo_StrikeCore(BossMo* this, PlayState* play, u8 damage) {
+    this->work[MO_TENT_ACTION_STATE] = MO_CORE_STUNNED;
+    this->timers[0] = 25;
+    this->actor.speedXZ = 15.0f;
+    this->actor.world.rot.y = this->actor.yawTowardsPlayer + 0x8000;
+    this->work[MO_CORE_DMG_FLASH_TIMER] = 15;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_MOFER_CORE_DAMAGE);
+    this->actor.colChkInfo.health -= damage;
+    this->hitCount++;
+    if ((s8)this->actor.colChkInfo.health <= 0) {
+        if (BossMo_IsTentacleCutsceneRunning()) {
+            this->actor.colChkInfo.health = 1;
+        } else {
+            BossMo_Die(this, play);
+        }
+    }
+    this->work[MO_TENT_INVINC_TIMER] = 10;
+}
+
+// A super attack reaches the core in any state, underwater or not, with or without a hookshot first.
+static bool BossMo_TakeSuperHit(BossMo* this, PlayState* play) {
+    if ((this->work[MO_TENT_INVINC_TIMER] != 0) || !BossSuperDamage_IsFormActive(play)) {
+        return false;
+    }
+    bool isCoreHit = this->coreCollider.base.acFlags & AC_HIT;
+    if (!isCoreHit && !BossSuperDamage_FormAttackReaches(play, &this->actor.world.pos,
+                                                         BossSuperDamage_FormAttackRange(play) + 40.0f)) {
+        return false;
+    }
+    this->coreCollider.base.acFlags &= ~AC_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    BossMo_StrikeCore(this, play, BossSuperDamage_FormDamage(play));
+    return true;
+}
+
 void BossMo_CoreCollisionCheck(BossMo* this, PlayState* play) {
     s16 i;
     Player* player = GET_PLAYER(play);
@@ -1784,6 +1845,9 @@ void BossMo_CoreCollisionCheck(BossMo* this, PlayState* play) {
             this->work[MO_CORE_WAIT_IN_WATER] = true;
             this->timers[0] = 150;
         }
+    }
+    if (BossMo_TakeSuperHit(this, play)) {
+        return;
     }
     if (this->coreCollider.base.acFlags & AC_HIT) {
         ColliderInfo* hurtbox = this->coreCollider.info.acHitInfo;
@@ -1801,39 +1865,7 @@ void BossMo_CoreCollisionCheck(BossMo* this, PlayState* play) {
             if ((damage != 0) && (this->work[MO_TENT_ACTION_STATE] < MO_CORE_ATTACK)) {
                 // "sword hit !!"
                 osSyncPrintf("Core_Damage_check 剣 当り！！\n");
-                this->work[MO_TENT_ACTION_STATE] = MO_CORE_STUNNED;
-                this->timers[0] = 25;
-
-                this->actor.speedXZ = 15.0f;
-
-                this->actor.world.rot.y = this->actor.yawTowardsPlayer + 0x8000;
-                this->work[MO_CORE_DMG_FLASH_TIMER] = 15;
-                Audio_PlayActorSound2(&this->actor, NA_SE_EN_MOFER_CORE_DAMAGE);
-                this->actor.colChkInfo.health -= damage;
-                this->hitCount++;
-                if ((s8)this->actor.colChkInfo.health <= 0) {
-                    if (((sMorphaTent1->csCamera == 0) && (sMorphaTent2 == NULL)) ||
-                        ((sMorphaTent1->csCamera == 0) && (sMorphaTent2 != NULL) && (sMorphaTent2->csCamera == 0))) {
-                        Enemy_StartFinishingBlow(play, &this->actor);
-                        GameInteractor_ExecuteOnBossDefeat(&this->actor);
-                        Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x100FF);
-                        this->csState = MO_DEATH_START;
-                        sMorphaTent1->drawActor = false;
-                        sMorphaTent1->work[MO_TENT_ACTION_STATE] = MO_TENT_DEATH_START;
-                        sMorphaTent1->baseAlpha = 0.0f;
-                        if (sMorphaTent2 != NULL) {
-                            sMorphaTent2->tent2KillTimer = 1;
-                        }
-                        if (player->actor.parent != NULL) {
-                            player->av2.actionVar2 = 0x65;
-                            player->actor.parent = NULL;
-                            player->csAction = 0;
-                        }
-                    } else {
-                        this->actor.colChkInfo.health = 1;
-                    }
-                }
-                this->work[MO_TENT_INVINC_TIMER] = 10;
+                BossMo_StrikeCore(this, play, damage);
             } else if (!(hurtbox->toucher.dmgFlags & 0x00100000) && (hurtbox->toucher.dmgFlags & 0x80)) {
                 if (this->work[MO_TENT_ACTION_STATE] >= MO_CORE_ATTACK) {
                     Sfx_PlaySfxAtPos(&sMorphaTent1->tentTipPos, NA_SE_EN_MOFER_CUT);
@@ -2755,6 +2787,7 @@ void BossMo_DrawCore(Actor* thisx, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 
     BossMo_DrawEffects(play->specialEffects, play);
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, &this->actor.world.pos, 1, 1.0f);
 }
 
 void BossMo_DrawTent(Actor* thisx, PlayState* play) {

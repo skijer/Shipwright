@@ -16,6 +16,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -1284,10 +1285,44 @@ void BossFd_Effects(BossFd* this, PlayState* play) {
     }
 }
 
+// Unlike vanilla's floor of 2 health, a super attack can kill the serpent in flight. The death itself is handed to
+// Boss_Fd2, which owns the cutscene camera and the defeat triggers.
+static bool BossFd_TakeSuperHit(BossFd* this, PlayState* play) {
+    ColliderJntSphElement* headCollider = &this->collider.elements[0];
+
+    if (!BossSuperDamage_IsFormActive(play)) {
+        return false;
+    }
+    bool isHeadHit = headCollider->info.bumperFlags & BUMP_HIT;
+    if (!isHeadHit &&
+        !BossSuperDamage_FormAttackReaches(play, &this->headPos, BossSuperDamage_FormAttackRange(play) + 60.0f)) {
+        return false;
+    }
+    headCollider->info.bumperFlags &= ~BUMP_HIT;
+    if ((s8)this->actor.colChkInfo.health <= 0) {
+        return true;
+    }
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+    if ((s8)this->actor.colChkInfo.health <= 0) {
+        this->actor.colChkInfo.health = 0;
+        this->actionFunc = BossFd_Wait;
+        this->handoffSignal = FD2_SIGNAL_AIRKILL;
+    }
+    this->work[BFD_DAMAGE_FLASH_TIMER] = 10;
+    this->work[BFD_INVINC_TIMER] = 12;
+    Audio_PlaySfxGeneral(NA_SE_EN_VALVAISA_DAMAGE1, &this->actor.projectedPos, 4, &gSfxDefaultFreqAndVolScale,
+                         &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+    return true;
+}
+
 void BossFd_CollisionCheck(BossFd* this, PlayState* play) {
     ColliderJntSphElement* headCollider = &this->collider.elements[0];
     ColliderInfo* hurtbox;
 
+    if (BossFd_TakeSuperHit(this, play)) {
+        return;
+    }
     if (headCollider->info.bumperFlags & BUMP_HIT) {
         headCollider->info.bumperFlags &= ~BUMP_HIT;
         hurtbox = headCollider->info.acHitInfo;
@@ -1662,6 +1697,7 @@ void BossFd_Draw(Actor* thisx, PlayState* play) {
     osSyncPrintf("FD DRAW END\n");
     BossFd_DrawEffects(this->effects, play);
     osSyncPrintf("FD DRAW END2\n");
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.5f);
 }
 
 s32 BossFd_OverrideRightArmDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3f* pos, Vec3s* rot, void* thisx) {

@@ -9,6 +9,7 @@
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #include "soh/cvar_prefixes.h"
+#include "soh/Enhancements/audio/AudioSettings.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 
 namespace {
@@ -44,7 +45,7 @@ float ReadVolume(const char* cvar) {
 }
 
 void RefreshGains() {
-    const float master = ReadVolume(CVAR_SETTING("Volume.Master"));
+    const float master = AudioSettings_GetMasterVolume();
     const uint32_t count = sCount.load(std::memory_order_acquire);
 
     for (uint32_t index = 0; index < count; ++index) {

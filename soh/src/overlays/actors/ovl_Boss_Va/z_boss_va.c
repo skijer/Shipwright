@@ -16,6 +16,10 @@
 #include "soh/OTRGlobals.h"
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
+
+#define BOSSVA_SUPER_BREAK_FRAMES 2
+#define BOSSVA_SUPER_MELEE_REACH 30.0f
 #include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS                                                                                 \
@@ -387,6 +391,7 @@ static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 static u8 sKillBari = 0;
 static u8 sBodyBari[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
 static s16 sSubCamId = 0;
+static s32 sSuperBreakFrame = -100;
 
 static BossVaEffect sEffects[400];
 static u8 sBodyState;
@@ -600,6 +605,116 @@ void BossVa_KillBari(BossVa* this, PlayState* play) {
 
     sFightPhase++;
     BossVa_SetupBariDeath(this);
+}
+
+// A super attack that reaches any one part breaks every part at once: supports, Bari and body all read this flag for
+// the frames after it is raised.
+static bool BossVa_IsSuperBreakActive(PlayState* play) {
+    s32 framesSince = play->gameplayFrames - sSuperBreakFrame;
+    return framesSince >= 0 && framesSince <= BOSSVA_SUPER_BREAK_FRAMES;
+}
+
+// The parts hang above the reach of a ground swing, so they are tested from the player's height.
+static void BossVa_FlagSuperBreakAt(PlayState* play, Vec3f* pos) {
+    if (!BossSuperDamage_IsFormActive(play)) {
+        return;
+    }
+    Vec3f reachPoint = *pos;
+    reachPoint.y = GET_PLAYER(play)->actor.world.pos.y + 40.0f;
+    f32 reach = MAX(BossSuperDamage_FormAttackRange(play), BOSSVA_SUPER_MELEE_REACH) + 100.0f;
+    if (BossSuperDamage_FormAttackReaches(play, &reachPoint, reach)) {
+        sSuperBreakFrame = play->gameplayFrames;
+    }
+}
+
+// The beam lands as an AC hit the reach test cannot see, so the boomerang-only bumpers take every damage type while
+// the super form is active.
+static void BossVa_FlagSuperBreakOnHit(PlayState* play, ColliderJntSph* collider) {
+    if (BossSuperDamage_IsFormActive(play) && (collider->base.acFlags & AC_HIT)) {
+        sSuperBreakFrame = play->gameplayFrames;
+    }
+}
+
+static bool BossVa_BariTakeSuperHit(BossVa* this, PlayState* play) {
+    BossVa_FlagSuperBreakAt(play, &this->actor.world.pos);
+    BossVa_FlagSuperBreakOnHit(play, &this->colliderSph);
+    if (!BossVa_IsSuperBreakActive(play)) {
+        return false;
+    }
+    this->colliderSph.base.acFlags &= ~AC_HIT;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_BODY_SPARK);
+    BossVa_KillBari(this, play);
+    return true;
+}
+
+static bool BossVa_SupportTakeSuperHit(BossVa* this, PlayState* play) {
+    bool isSuperFormActive = BossSuperDamage_IsFormActive(play);
+
+    this->colliderSph.elements[0].info.bumper.dmgFlags =
+        isSuperFormActive ? 0xFFFFFFFF : sJntSphElementsInitSupport[0].info.bumper.dmgFlags;
+    if (isSuperFormActive) {
+        CollisionCheck_SetAC(play, &play->colChkCtx, &this->colliderSph.base);
+        BossVa_FlagSuperBreakOnHit(play, &this->colliderSph);
+    }
+    BossVa_FlagSuperBreakAt(play, &this->armTip);
+    if (!BossVa_IsSuperBreakActive(play)) {
+        return false;
+    }
+    BossVa_SetupSupportCut(this, play);
+    return true;
+}
+
+static void BossVa_KillBody(BossVa* this, PlayState* play) {
+    BossVa_SetupBodyDeath(this, play);
+    Enemy_StartFinishingBlow(play, &this->actor);
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+}
+
+static void BossVa_HoldBodyOpen(BossVa* this) {
+    this->timer = (s16)Rand_CenteredFloat(40.0f) + 160;
+    this->vaBodySpinRate = 0;
+    this->actor.speedXZ = 0.0f;
+}
+
+// A closed core is forced open and faints; an open one takes the hit and stays open for the next one.
+static bool BossVa_BodyTakeSuperHit(BossVa* this, PlayState* play) {
+    bool isSuperFormActive = BossSuperDamage_IsFormActive(play);
+
+    this->colliderBody.info.bumper.dmgFlags = isSuperFormActive ? 0xFFFFFFFF : sCylinderInit.info.bumper.dmgFlags;
+    if (!isSuperFormActive) {
+        return false;
+    }
+    BossVa_FlagSuperBreakAt(play, &this->actor.world.pos);
+    if (!(this->colliderBody.base.acFlags & AC_HIT) && !BossVa_IsSuperBreakActive(play)) {
+        return false;
+    }
+    this->colliderBody.base.acFlags &= ~AC_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->skelAnime.curFrame = 0.0f;
+    if (this->timer < 0) {
+        BossVa_HoldBodyOpen(this);
+        Actor_SetColorFilter(&this->actor, 0, 125, 0, 255);
+        Audio_PlayActorSound2(&this->actor, NA_SE_EN_BALINADE_FAINT);
+        return true;
+    }
+    if (this->invincibilityTimer != 0) {
+        return true;
+    }
+    this->invincibilityTimer = 8;
+    this->actor.world.rot.y = this->actor.yawTowardsPlayer;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_BALINADE_DAMAGE);
+    Actor_SetColorFilter(&this->actor, 0x4000, 255, 0, 12);
+    sPhase4HP -= BossSuperDamage_FormDamage(play);
+    if (sPhase4HP <= 0) {
+        sFightPhase++;
+        sPhase4HP += 3;
+        if (sFightPhase >= PHASE_DEATH) {
+            BossVa_KillBody(this, play);
+            return true;
+        }
+    }
+    BossVa_HoldBodyOpen(this);
+    return true;
 }
 
 void BossVa_Init(Actor* thisx, PlayState* play2) {
@@ -1405,6 +1520,9 @@ void BossVa_BodyPhase4(BossVa* this, PlayState* play) {
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_BALINADE_BL_SPARK - SFX_FLAG);
     }
 
+    if (BossVa_BodyTakeSuperHit(this, play)) {
+        return;
+    }
     if (this->colliderBody.base.acFlags & AC_HIT) {
         this->colliderBody.base.acFlags &= ~AC_HIT;
         this->skelAnime.curFrame = 0.0f;
@@ -1421,9 +1539,7 @@ void BossVa_BodyPhase4(BossVa* this, PlayState* play) {
                         sFightPhase++;
                         sPhase4HP += 3;
                         if (sFightPhase >= PHASE_DEATH) {
-                            BossVa_SetupBodyDeath(this, play);
-                            Enemy_StartFinishingBlow(play, &this->actor);
-                            GameInteractor_ExecuteOnBossDefeat(&this->actor);
+                            BossVa_KillBody(this, play);
                             return;
                         }
                         this->actor.speedXZ = -10.0f;
@@ -1785,6 +1901,9 @@ void BossVa_SupportAttached(BossVa* this, PlayState* play) {
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_BALINADE_BL_SPARK - SFX_FLAG);
     }
 
+    if (BossVa_SupportTakeSuperHit(this, play)) {
+        return;
+    }
     if (this->colliderSph.base.acFlags & AC_HIT) {
         BossVa_SetupSupportCut(this, play);
     } else {
@@ -2577,6 +2696,9 @@ void BossVa_BariPhase3Attack(BossVa* this, PlayState* play) {
     s16 sp52;
     s32 pad;
 
+    if (BossVa_BariTakeSuperHit(this, play)) {
+        return;
+    }
     this->unk_1A4 += Rand_ZeroOne() * 0.5f;
     sp52 = this->timer2 & 0x1FF;
 
@@ -2667,6 +2789,9 @@ void BossVa_BariPhase2Attack(BossVa* this, PlayState* play) {
     f32 sp4C;
     s32 pad;
 
+    if (BossVa_BariTakeSuperHit(this, play)) {
+        return;
+    }
     this->unk_1A4 += Rand_ZeroOne() * 0.5f;
     sp52 = this->timer2 & 0x1FF;
     if ((play->gameplayFrames % 128) == 0) {
@@ -3206,6 +3331,22 @@ void BossVa_BariPostLimbDraw(PlayState* play, s32 limbIndex, Gfx** dList, Vec3s*
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// The core is one round body, so the glow is a cluster of orbs around its center.
+static void BossVa_DrawSuperHitGlow(BossVa* this, PlayState* play) {
+    static const Vec3f sOffsets[] = {
+        { 0.0f, 0.0f, 0.0f },  { 38.0f, 0.0f, 0.0f }, { -38.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 38.0f },
+        { 0.0f, 0.0f, -38.0f }, { 0.0f, 38.0f, 0.0f }, { 0.0f, -38.0f, 0.0f },
+    };
+    Vec3f anchors[ARRAY_COUNT(sOffsets)];
+
+    for (s32 i = 0; i < ARRAY_COUNT(sOffsets); i++) {
+        anchors[i].x = this->actor.world.pos.x + sOffsets[i].x;
+        anchors[i].y = this->actor.world.pos.y + 30.0f + sOffsets[i].y;
+        anchors[i].z = this->actor.world.pos.z + sOffsets[i].z;
+    }
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, anchors, ARRAY_COUNT(anchors), 1.1f);
+}
+
 void BossVa_Draw(Actor* thisx, PlayState* play) {
     s16* paramsPtr; // This stack slot is almost certainly actually play2, but can't make it match
     BossVa* this = (BossVa*)thisx;
@@ -3321,6 +3462,9 @@ void BossVa_Draw(Actor* thisx, PlayState* play) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+    if (this->actor.params == BOSSVA_BODY) {
+        BossVa_DrawSuperHitGlow(this, play);
+    }
 }
 
 static s32 sUnkValue = 0x009B0000; // Unreferenced? Possibly a color

@@ -10,6 +10,9 @@
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
+
+#define GANON2_TAIL_SPHERE 15
 #include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
@@ -1952,6 +1955,43 @@ void func_80902348(BossGanon2* this, PlayState* play) {
     }
 }
 
+static Vec3f BossGanon2_GetSphereCenter(BossGanon2* this, s32 element) {
+    Vec3f center = { this->unk_424.elements[element].dim.worldSphere.center.x,
+                     this->unk_424.elements[element].dim.worldSphere.center.y,
+                     this->unk_424.elements[element].dim.worldSphere.center.z };
+    return center;
+}
+
+// A super attack mashes the tail to the final blow without the Master Sword. The hit only staggers him: the downed
+// phase disables the bumpers, which would stop the beam from registering.
+static bool BossGanon2_TakeSuperHit(BossGanon2* this, PlayState* play) {
+    if (!BossSuperDamage_IsFormActive(play) || (this->unk_316 != 0) || ((s8)this->actor.colChkInfo.health <= 0)) {
+        return false;
+    }
+    Vec3f tailPos = BossGanon2_GetSphereCenter(this, GANON2_TAIL_SPHERE);
+    bool isBumperHit = (this->unk_424.elements[GANON2_TAIL_SPHERE].info.bumperFlags & 2) ||
+                       (this->unk_424.elements[0].info.bumperFlags & 2);
+    if (!isBumperHit &&
+        !BossSuperDamage_FormAttackReaches(play, &tailPos, BossSuperDamage_FormAttackRange(play) + 80.0f)) {
+        return false;
+    }
+    this->unk_424.elements[GANON2_TAIL_SPHERE].info.bumperFlags &= ~2;
+    this->unk_424.elements[0].info.bumperFlags &= ~2;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->unk_316 = 8;
+    this->unk_342 = 5;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_MGANON_DAMAGE);
+    Audio_StopSfxById(NA_SE_EN_MGANON_UNARI);
+    this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+    if ((s8)this->actor.colChkInfo.health <= 0) {
+        this->actor.colChkInfo.health = 0;
+        func_80901020(this, play);
+    } else {
+        func_80900210(this, play);
+    }
+    return true;
+}
+
 void BossGanon2_CollisionCheck(BossGanon2* this, PlayState* play) {
     s8 temp_v0_4;
     ColliderInfo* acHitInfo;
@@ -1965,6 +2005,9 @@ void BossGanon2_CollisionCheck(BossGanon2* this, PlayState* play) {
         }
     }
 
+    if (BossGanon2_TakeSuperHit(this, play)) {
+        return;
+    }
     osSyncPrintf("this->look_on %d\n", this->unk_313);
     if (this->unk_313) {
         if (this->actionFunc != func_808FFFE0) {
@@ -2146,6 +2189,10 @@ void BossGanon2_Update(Actor* thisx, PlayState* play) {
         if (this->subCamId == 0) {
             CollisionCheck_SetAT(play, &play->colChkCtx, &this->unk_444.base);
         }
+    }
+    // Lock-on goes to the tail, the weak point a super attack has to reach.
+    if (BossSuperDamage_IsFormActive(play) && ((s8)this->actor.colChkInfo.health > 0)) {
+        this->actor.focus.pos = BossGanon2_GetSphereCenter(this, GANON2_TAIL_SPHERE);
     }
     if ((this->unk_332 == 0) && (this->unk_336 != 0)) {
         if (this->unk_336 == 2) {
@@ -2891,6 +2938,10 @@ void BossGanon2_Draw(Actor* thisx, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 
     BossGanon2_DrawEffects(play);
+
+    Vec3f sparkAnchors[2] = { BossGanon2_GetSphereCenter(this, GANON2_TAIL_SPHERE),
+                              BossGanon2_GetSphereCenter(this, 0) };
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, sparkAnchors, ARRAY_COUNT(sparkAnchors), 1.5f);
 }
 
 void BossGanon2_UpdateEffects(BossGanon2* this, PlayState* play) {

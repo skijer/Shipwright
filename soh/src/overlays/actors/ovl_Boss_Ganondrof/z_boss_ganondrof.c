@@ -13,6 +13,9 @@
 #include "overlays/actors/ovl_Door_Warp1/z_door_warp1.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
+
+#define GND_GLOW_ANCHORS 12
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -1188,6 +1191,41 @@ void BossGanondrof_Death(BossGanondrof* this, PlayState* play) {
     }
 }
 
+static void BossGanondrof_Die(BossGanondrof* this, PlayState* play) {
+    this->actor.colChkInfo.health = 0;
+    BossGanondrof_SetupDeath(this, play);
+    Enemy_StartFinishingBlow(play, &this->actor);
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+}
+
+// Gated on the form, not the swing: the sword beam lands after the swing has ended. Only the real boss reacts, since a
+// painting decoy dying would start the death cutscene on it. A hit in a painting ends that phase at once; after it,
+// the first hit stuns and each further hit damages and renews the stun.
+static bool BossGanondrof_TakeSuperHit(BossGanondrof* this, PlayState* play) {
+    EnfHG* horse = (EnfHG*)this->actor.child;
+
+    if ((this->actor.params != GND_REAL_BOSS) || !BossSuperDamage_IsFormActive(play)) {
+        return false;
+    }
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    horse->hitTimer = 20;
+    this->work[GND_INVINC_TIMER] = 10;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_FANTOM_DAMAGE);
+    if (this->flyMode == GND_FLY_PAINTING) {
+        this->flyMode = GND_FLY_NEUTRAL;
+        return true;
+    }
+    if (this->actionFunc == BossGanondrof_Stunned) {
+        this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+        if ((s8)this->actor.colChkInfo.health <= 0) {
+            BossGanondrof_Die(this, play);
+            return true;
+        }
+    }
+    BossGanondrof_SetupStunned(this, play);
+    return true;
+}
+
 void BossGanondrof_CollisionCheck(BossGanondrof* this, PlayState* play) {
     s32 acHit;
     EnfHG* horse = (EnfHG*)this->actor.child;
@@ -1203,6 +1241,9 @@ void BossGanondrof_CollisionCheck(BossGanondrof* this, PlayState* play) {
             if (acHit) {
                 this->colliderBody.base.acFlags &= ~AC_HIT;
                 hurtbox = this->colliderBody.info.acHitInfo;
+                if (BossGanondrof_TakeSuperHit(this, play)) {
+                    return;
+                }
             }
             if (this->flyMode != GND_FLY_PAINTING) {
                 if (acHit && (this->actionFunc != BossGanondrof_Stunned) && (hurtbox->toucher.dmgFlags & 0x0001F8A4)) {
@@ -1224,9 +1265,7 @@ void BossGanondrof_CollisionCheck(BossGanondrof* this, PlayState* play) {
                         }
 
                         if ((s8)this->actor.colChkInfo.health <= 0) {
-                            BossGanondrof_SetupDeath(this, play);
-                            Enemy_StartFinishingBlow(play, &this->actor);
-                            GameInteractor_ExecuteOnBossDefeat(&this->actor);
+                            BossGanondrof_Die(this, play);
                             return;
                         }
                     }
@@ -1295,6 +1334,11 @@ void BossGanondrof_Update(Actor* thisx, PlayState* play) {
     osSyncPrintf("MOVE END\n");
     BossGanondrof_SetColliderPos(&this->targetPos, &this->colliderBody);
     BossGanondrof_SetColliderPos(&this->spearTip, &this->colliderSpear);
+    // Vanilla only arms the body hurtbox while stunned or in the painting window; a super attack needs it always.
+    if ((this->actor.params == GND_REAL_BOSS) && BossSuperDamage_IsFormActive(play) &&
+        (this->actionFunc != BossGanondrof_Block) && (this->actionFunc != BossGanondrof_Charge)) {
+        CollisionCheck_SetAC(play, &play->colChkCtx, &this->colliderBody.base);
+    }
     if ((this->flyMode == GND_FLY_PAINTING) && !horse->bossGndInPainting) {
         CollisionCheck_SetAC(play, &play->colChkCtx, &this->colliderBody.base);
     }
@@ -1449,6 +1493,24 @@ Gfx* BossGanondrof_GetNullDList(GraphicsContext* gfxCtx) {
     return dList;
 }
 
+// The limb positions are only captured outside the painting, so in a painting the glow stacks up the actor instead.
+static void BossGanondrof_DrawSuperHitGlow(BossGanondrof* this, PlayState* play) {
+    Vec3f anchors[GND_GLOW_ANCHORS];
+
+    if (this->actor.params != GND_REAL_BOSS) {
+        return;
+    }
+    for (s32 i = 0; i < GND_GLOW_ANCHORS; i++) {
+        if (this->flyMode != GND_FLY_PAINTING) {
+            anchors[i] = this->bodyPartsPos[(i * 2) + 1];
+            continue;
+        }
+        anchors[i] = this->actor.world.pos;
+        anchors[i].y += 20.0f + (i * 6.0f);
+    }
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, anchors, GND_GLOW_ANCHORS, 1.0f);
+}
+
 void BossGanondrof_Draw(Actor* thisx, PlayState* play) {
     s32 pad;
     BossGanondrof* this = (BossGanondrof*)thisx;
@@ -1492,4 +1554,5 @@ void BossGanondrof_Draw(Actor* thisx, PlayState* play) {
     POLY_OPA_DISP = Play_SetFog(play, POLY_OPA_DISP);
     CLOSE_DISPS(play->state.gfxCtx);
     osSyncPrintf("DRAW END %d\n", this->actor.params);
+    BossGanondrof_DrawSuperHitGlow(this, play);
 }

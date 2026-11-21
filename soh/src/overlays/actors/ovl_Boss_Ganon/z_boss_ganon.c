@@ -13,6 +13,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/OTRGlobals.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include "soh/Enhancements/savestate_serialize.h"
 #include <libultraship/bridge/resourcebridge.h>
 
@@ -2756,11 +2757,68 @@ void BossGanon_Damaged(BossGanon* this, PlayState* play) {
     }
 }
 
+static void BossGanon_Die(BossGanon* this, PlayState* play) {
+    BossGanon_SetupDeathCutscene(this, play);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DEAD);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DD_THUNDER);
+    Sfx_PlaySfxAtPos(&sZeroVec, NA_SE_EN_LAST_DAMAGE);
+    Audio_QueueSeqCmd(0x100100FF);
+    this->screenFlashTimer = 4;
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+}
+
+static bool BossGanon_IsStaggered(BossGanon* this) {
+    return (this->actionFunc == BossGanon_Vulnerable) || (this->actionFunc == BossGanon_Damaged);
+}
+
+// A super hit staggers him from any state; while staggered it damages instead. The short stagger is used rather than
+// SetupVulnerable, whose light-arrow sequence is long and spawns its own shock effects.
+static bool BossGanon_TakeSuperHit(BossGanon* this, PlayState* play) {
+    if (!BossSuperDamage_IsFormActive(play) || ((s8)this->actor.colChkInfo.health <= 0) || (this->unk_2D4 != 0)) {
+        return false;
+    }
+    bool isBodyHit = this->collider.base.acFlags & 2;
+    if (!isBodyHit && !BossSuperDamage_FormAttackReaches(play, &this->actor.world.pos,
+                                                         BossSuperDamage_FormAttackRange(play) + 60.0f)) {
+        return false;
+    }
+    this->collider.base.acFlags &= ~2;
+    this->unk_2D4 = 6;
+    this->unk_1A4 = 0;
+    this->shockGlow = false;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->unk_1A6 = 15;
+    if (!BossGanon_IsStaggered(this)) {
+        BossGanon_SetupDamaged(this, play);
+        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DAMAGE1);
+        return true;
+    }
+    this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+    if ((s8)this->actor.colChkInfo.health <= 0) {
+        BossGanon_Die(this, play);
+        return true;
+    }
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DAMAGE2);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_CUTBODY);
+    if ((this->actionFunc == BossGanon_Vulnerable) && (this->unk_1C2 >= 5)) {
+        // Drag him back from the getup into the dazed loop so the mash can continue.
+        this->unk_1C2 = 4;
+        this->timers[0] = 70;
+        this->fwork[GDF_FWORK_1] = Animation_GetLastFrame(&gGanondorfVulnerableAnim);
+        Animation_MorphToLoop(&this->skelAnime, &gGanondorfVulnerableAnim, 0.0f);
+    }
+    sCape->tearTimer = 1;
+    return true;
+}
+
 void BossGanon_UpdateDamage(BossGanon* this, PlayState* play) {
     s16 i;
     s16 j;
     ColliderInfo* acHitInfo;
 
+    if (BossGanon_TakeSuperHit(this, play)) {
+        return;
+    }
     if (this->collider.base.acFlags & 2) {
         this->unk_2D4 = 2;
         this->collider.base.acFlags &= ~2;
@@ -2808,13 +2866,7 @@ void BossGanon_UpdateDamage(BossGanon* this, PlayState* play) {
                 }
 
                 if ((s8)this->actor.colChkInfo.health <= 0) {
-                    BossGanon_SetupDeathCutscene(this, play);
-                    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DEAD);
-                    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DD_THUNDER);
-                    Sfx_PlaySfxAtPos(&sZeroVec, NA_SE_EN_LAST_DAMAGE);
-                    Audio_QueueSeqCmd(0x100100FF);
-                    this->screenFlashTimer = 4;
-                    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+                    BossGanon_Die(this, play);
                 } else {
                     Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_DAMAGE2);
                     Audio_PlayActorSound2(&this->actor, NA_SE_EN_GANON_CUTBODY);
@@ -3905,6 +3957,10 @@ void BossGanon_Draw(Actor* thisx, PlayState* play) {
     BossGanon_DrawShadowTexture(shadowTex, this, play);
 
     CLOSE_DISPS(play->state.gfxCtx);
+
+    Vec3f sparkAnchors[2] = { this->unk_1FC, this->unk_1FC };
+    sparkAnchors[1].y += 40.0f;
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, sparkAnchors, ARRAY_COUNT(sparkAnchors), 1.4f);
 }
 
 s32 BossGanon_CheckFallingPlatforms(BossGanon* this, PlayState* play, Vec3f* checkPos) {

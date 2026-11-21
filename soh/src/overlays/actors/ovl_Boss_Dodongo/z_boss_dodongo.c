@@ -7,6 +7,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include <libultraship/bridge/resourcebridge.h>
 
 #include <stdlib.h> // malloc
@@ -1261,7 +1262,9 @@ void BossDodongo_Update(Actor* thisx, PlayState* play2) {
 
     for (i = 6; i < 19; i++) {
         if (i != 12) {
-            this->collider.elements[i].dim.scale = (this->actionFunc == BossDodongo_Roll) ? 0.0f : 1.0f;
+            // A super attack keeps the rolling body hittable so it can be stunned mid-roll.
+            u8 isRollShielded = (this->actionFunc == BossDodongo_Roll) && !BossSuperDamage_IsActive(play);
+            this->collider.elements[i].dim.scale = isRollShielded ? 0.0f : 1.0f;
         }
     }
 
@@ -1392,6 +1395,7 @@ void BossDodongo_Draw(Actor* thisx, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 
     BossDodongo_DrawEffects(play);
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.3f);
 }
 
 f32 func_808C4F6C(BossDodongo* this, PlayState* play) {
@@ -1473,6 +1477,36 @@ void BossDodongo_SpawnFire(BossDodongo* this, PlayState* play, s16 params) {
                        this->vec.z, 0, this->actor.shape.rot.y, 0, params);
 }
 
+// A super attack lands on any sphere in any state: the first hit collapses him, later hits damage and keep him down.
+static bool BossDodongo_TakeSuperHit(BossDodongo* this, PlayState* play) {
+    if (!BossSuperDamage_IsActive(play)) {
+        return false;
+    }
+    bool isHit = false;
+    for (s16 i = 0; i < 19; i++) {
+        if (this->collider.elements[i].info.bumperFlags & 2) {
+            this->collider.elements[i].info.bumperFlags &= ~2;
+            isHit = true;
+        }
+    }
+    if (!isHit) {
+        return false;
+    }
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->unk_1C0 = 5;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_K_DAMAGE);
+    if ((this->actionFunc == BossDodongo_Vulnerable) || (this->actionFunc == BossDodongo_LayDown)) {
+        Actor_RequestQuakeAndRumble(&this->actor, play, 4, 10);
+        this->health -= BossSuperDamage_FormDamage(play);
+        this->unk_1DA = 100;
+        return true;
+    }
+    Animation_Change(&this->skelAnime, &object_kingdodongo_Anim_004E0C, 1.0f, 0.0f,
+                     Animation_GetLastFrame(&object_kingdodongo_Anim_004E0C), ANIMMODE_ONCE, -5.0f);
+    this->actionFunc = BossDodongo_LayDown;
+    return true;
+}
+
 void BossDodongo_UpdateDamage(BossDodongo* this, PlayState* play) {
     s32 pad;
     ColliderInfo* item1;
@@ -1488,6 +1522,9 @@ void BossDodongo_UpdateDamage(BossDodongo* this, PlayState* play) {
     }
 
     if (this->unk_1C0 == 0) {
+        if (BossDodongo_TakeSuperHit(this, play)) {
+            return;
+        }
         if (this->actionFunc == BossDodongo_Inhale) {
             for (i = 0; i < 19; i++) {
                 if (this->collider.elements[i].info.bumperFlags & 2) {

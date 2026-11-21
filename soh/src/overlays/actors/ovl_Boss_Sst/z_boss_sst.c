@@ -13,6 +13,7 @@
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include "soh/Enhancements/savestate_serialize.h"
 
 #define FLAGS                                                                                 \
@@ -2537,7 +2538,46 @@ void BossSst_HeadSfx(BossSst* this, u16 sfxId) {
     Sfx_PlaySfxAtPos(&this->center, sfxId);
 }
 
+static void BossSst_StunHeadAndHands(BossSst* head) {
+    BossSst_HeadSetupStunned(head);
+    if (HAND_STATE(sHands[RIGHT]) == HAND_FROZEN) {
+        BossSst_IceShatter(sHands[RIGHT]);
+    } else if (HAND_STATE(sHands[LEFT]) == HAND_FROZEN) {
+        BossSst_IceShatter(sHands[LEFT]);
+    }
+    BossSst_HandSetupStunned(sHands[RIGHT]);
+    BossSst_HandSetupStunned(sHands[LEFT]);
+}
+
+static bool BossSst_IsHeadStunnable(BossSst* head) {
+    return ((s8)head->actor.colChkInfo.health > 0) && (head->actionFunc != BossSst_HeadStunned) &&
+           (head->actionFunc != BossSst_HeadVulnerable) && (head->actionFunc != BossSst_HeadDamage) &&
+           (head->actionFunc != BossSst_HeadLurk) && (head->actionFunc != BossSst_HeadIntro);
+}
+
+// A super hit on either hand stuns the head directly instead of needing both hands down first. The sparks go on the
+// head, the only part that draws them.
+static bool BossSst_HandTakeSuperHit(BossSst* this, PlayState* play) {
+    if (!BossSuperDamage_IsFormActive(play) || (this->colliderJntSph.base.colType == COLTYPE_HARD) ||
+        !BossSst_IsHeadStunnable(sHead)) {
+        return false;
+    }
+    bool isHandHit = this->colliderJntSph.base.acFlags & AC_HIT;
+    if (!isHandHit && !BossSuperDamage_FormAttackReaches(play, &this->actor.world.pos,
+                                                         BossSuperDamage_FormAttackRange(play) + 60.0f)) {
+        return false;
+    }
+    this->colliderJntSph.base.acFlags &= ~AC_HIT;
+    BossSuperDamage_StartElectricSparks(&sHead->actor, 90);
+    BossSst_StunHeadAndHands(sHead);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_SHADEST_DAMAGE_HAND);
+    return true;
+}
+
 void BossSst_HandCollisionCheck(BossSst* this, PlayState* play) {
+    if (BossSst_HandTakeSuperHit(this, play)) {
+        return;
+    }
     if ((this->colliderJntSph.base.acFlags & AC_HIT) && (this->colliderJntSph.base.colType != COLTYPE_HARD)) {
         s32 bothHands = true;
 
@@ -2570,31 +2610,61 @@ void BossSst_HandCollisionCheck(BossSst* this, PlayState* play) {
     }
 }
 
+static void BossSst_HeadReactToDamage(BossSst* head, PlayState* play, bool isDead) {
+    if (isDead) {
+        Enemy_StartFinishingBlow(play, &head->actor);
+        BossSst_HeadSetupDeath(head, play);
+        GameInteractor_ExecuteOnBossDefeat(&head->actor);
+    } else {
+        BossSst_HeadSetupDamage(head);
+    }
+    BossSst_HandSetupDamage(sHands[LEFT]);
+    BossSst_HandSetupDamage(sHands[RIGHT]);
+}
+
+// HeadDamage is left out on purpose: its hit reaction ignores further hits and so paces the mash.
+static bool BossSst_IsHeadFightable(BossSst* head) {
+    return ((s8)head->actor.colChkInfo.health > 0) && (head->actionFunc != BossSst_HeadLurk) &&
+           (head->actionFunc != BossSst_HeadIntro) && (head->actionFunc != BossSst_HeadRecover) &&
+           (head->actionFunc != BossSst_HeadUnfreezeHand) && (head->actionFunc != BossSst_HeadDamage);
+}
+
+// The super attack skips stunning both hands first: a fightable head is stunned at once, and damaged once open.
+static bool BossSst_HeadTakeSuperHit(BossSst* this, PlayState* play) {
+    if (!BossSuperDamage_IsFormActive(play) || !BossSst_IsHeadFightable(this)) {
+        return false;
+    }
+    bool isEyeHit = this->colliderCyl.base.acFlags & AC_HIT;
+    if (!isEyeHit && !BossSuperDamage_FormAttackReaches(play, &this->actor.world.pos,
+                                                        BossSuperDamage_FormAttackRange(play) + 60.0f)) {
+        return false;
+    }
+    this->colliderCyl.base.acFlags &= ~AC_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    if (this->actionFunc != BossSst_HeadVulnerable) {
+        BossSst_StunHeadAndHands(this);
+        return true;
+    }
+    this->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+    bool isDead = (s8)this->actor.colChkInfo.health <= 0;
+    if (isDead) {
+        this->actor.colChkInfo.health = 0;
+    }
+    BossSst_HeadReactToDamage(this, play, isDead);
+    return true;
+}
+
 void BossSst_HeadCollisionCheck(BossSst* this, PlayState* play) {
+    if (BossSst_HeadTakeSuperHit(this, play)) {
+        return;
+    }
     if (this->colliderCyl.base.acFlags & AC_HIT) {
         this->colliderCyl.base.acFlags &= ~AC_HIT;
         if ((this->actor.colChkInfo.damageEffect != 0) || (this->actor.colChkInfo.damage != 0)) {
             if (this->actionFunc == BossSst_HeadVulnerable) {
-                if (Actor_ApplyDamage(&this->actor) == 0) {
-                    Enemy_StartFinishingBlow(play, &this->actor);
-                    BossSst_HeadSetupDeath(this, play);
-                    GameInteractor_ExecuteOnBossDefeat(&this->actor);
-                } else {
-                    BossSst_HeadSetupDamage(this);
-                }
-
-                BossSst_HandSetupDamage(sHands[LEFT]);
-                BossSst_HandSetupDamage(sHands[RIGHT]);
+                BossSst_HeadReactToDamage(this, play, Actor_ApplyDamage(&this->actor) == 0);
             } else {
-                BossSst_HeadSetupStunned(this);
-                if (HAND_STATE(sHands[RIGHT]) == HAND_FROZEN) {
-                    BossSst_IceShatter(sHands[RIGHT]);
-                } else if (HAND_STATE(sHands[LEFT]) == HAND_FROZEN) {
-                    BossSst_IceShatter(sHands[LEFT]);
-                }
-
-                BossSst_HandSetupStunned(sHands[RIGHT]);
-                BossSst_HandSetupStunned(sHands[LEFT]);
+                BossSst_StunHeadAndHands(this);
             }
         }
     }
@@ -2962,6 +3032,7 @@ void BossSst_DrawHead(Actor* thisx, PlayState* play) {
 
     SkinMatrix_Vec3fMtxFMultXYZ(&play->viewProjectionMtxF, &this->actor.focus.pos, &this->center);
     BossSst_DrawEffect(&this->actor, play);
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->colliderJntSph, 11, 1.4f);
 }
 
 void BossSst_SpawnHeadShadow(BossSst* this) {

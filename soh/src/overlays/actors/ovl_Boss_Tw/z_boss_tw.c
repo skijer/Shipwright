@@ -5,6 +5,7 @@
 #include "overlays/actors/ovl_Door_Warp1/z_door_warp1.h"
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 #include "soh/Enhancements/savestate_serialize.h"
 
 #include <string.h>
@@ -2824,6 +2825,66 @@ static s16 D_8094A90C[] = {
     0, 1, 2, 2, 2, 2, 2, 2, 1,
 };
 
+// The witches fly above the reach of a ground swing, so the reach test looks at them from the player's height.
+static Vec3f BossTw_GetReachPoint(BossTw* this, PlayState* play) {
+    Vec3f point = this->actor.world.pos;
+    point.y = GET_PLAYER(play)->actor.world.pos.y + 40.0f;
+    return point;
+}
+
+static bool BossTw_IsSuperHit(BossTw* this, PlayState* play) {
+    Vec3f reachPoint = BossTw_GetReachPoint(this, play);
+    return (this->collider.base.acFlags & AC_HIT) ||
+           BossSuperDamage_FormAttackReaches(play, &reachPoint, BossSuperDamage_FormAttackRange(play) + 100.0f);
+}
+
+// Each super hit counts as one reflected beam. The bumper takes every damage type so the sword beam registers its hit
+// and despawns instead of flying through, and the hurtbox stays armed through the invincibility frames so the hits
+// can be mashed. Once the pair has taken enough, both fly to the merge.
+static void BossTw_WitchTakeSuperHit(BossTw* this, PlayState* play) {
+    this->collider.info.bumper.dmgFlags = 0xFFFFFFFF;
+    Collider_UpdateCylinder(&this->actor, &this->collider);
+    CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
+    if ((this->work[INVINC_TIMER] != 0) || (this->actionFunc == BossTw_MergeCS) || !BossTw_IsSuperHit(this, play)) {
+        return;
+    }
+    this->collider.base.acFlags &= ~AC_HIT;
+    this->actor.colChkInfo.health++;
+    this->work[INVINC_TIMER] = 10;
+    BossSuperDamage_StartElectricSparks(&this->actor, 60);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_TWINROBA_YOUNG_DAMAGE);
+    play->envCtx.unk_D8 = 1.0f;
+    if (this->actionFunc != BossTw_HitByBeam) {
+        BossTw_SetupHitByBeam(this, play);
+    }
+    if ((sKoumePtr->actor.colChkInfo.health + sKotakePtr->actor.colChkInfo.health) >= 4) {
+        BossTw_SetupFlyTo(sKoumePtr, play);
+        BossTw_SetupFlyTo(sKotakePtr, play);
+    }
+}
+
+// TwinrovaDamage already stuns her when she is not stunned and damages her when she is, so one call gives the mash.
+static void BossTw_TwinrovaTakeSuperHit(BossTw* this, PlayState* play) {
+    if (!BossSuperDamage_IsFormActive(play) || (this->work[INVINC_TIMER] != 0) ||
+        ((s8)this->actor.colChkInfo.health <= 0) || (this->actionFunc == BossTw_Wait) ||
+        (this->actionFunc == BossTw_TwinrovaMergeCS) || !BossTw_IsSuperHit(this, play)) {
+        return;
+    }
+    bool wasStunned = this->actionFunc == BossTw_TwinrovaStun;
+    this->collider.base.acFlags &= ~AC_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    BossTw_TwinrovaDamage(this, play, BossSuperDamage_FormDamage(play));
+    if (!wasStunned) {
+        this->work[INVINC_TIMER] = 12;
+    }
+}
+
+static void BossTw_DrawSuperHitGlow(BossTw* this, PlayState* play, f32 headHeight, f32 scale) {
+    Vec3f anchors[2] = { this->actor.world.pos, this->actor.world.pos };
+    anchors[1].y += headHeight;
+    BossSuperDamage_DrawElectricSparks(&this->actor, play, anchors, ARRAY_COUNT(anchors), scale);
+}
+
 void BossTw_Update(Actor* thisx, PlayState* play) {
     BossTw* this = (BossTw*)thisx;
     Player* player = GET_PLAYER(play);
@@ -2880,13 +2941,21 @@ void BossTw_Update(Actor* thisx, PlayState* play) {
         this->collider.dim.height = 120;
         this->collider.dim.yShift = -30;
 
+        bool isSuperFormActive = BossSuperDamage_IsFormActive(play);
+        if (isSuperFormActive) {
+            BossTw_WitchTakeSuperHit(this, play);
+        } else {
+            this->collider.info.bumper.dmgFlags = sCylinderInitKoumeKotake.info.bumper.dmgFlags;
+        }
         if (this->work[INVINC_TIMER] == 0) {
             if (this->collider.base.acFlags & AC_HIT) {
                 this->collider.base.acFlags &= ~AC_HIT;
             }
 
             Collider_UpdateCylinder(&this->actor, &this->collider);
-            CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
+            if (!isSuperFormActive) {
+                CollisionCheck_SetAC(play, &play->colChkCtx, &this->collider.base);
+            }
             CollisionCheck_SetAT(play, &play->colChkCtx, &this->collider.base);
         }
 
@@ -3062,6 +3131,7 @@ void BossTw_TwinrovaUpdate(Actor* thisx, PlayState* play2) {
     this->collider.dim.height = 150;
     this->collider.dim.yShift = -60;
     Collider_UpdateCylinder(&this->actor, &this->collider);
+    BossTw_TwinrovaTakeSuperHit(this, play);
 
     if (this->work[INVINC_TIMER] == 0) {
         if (this->actionFunc != BossTw_TwinrovaStun) {
@@ -3537,6 +3607,7 @@ void BossTw_Draw(Actor* thisx, PlayState* play2) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+    BossTw_DrawSuperHitGlow(this, play, 60.0f, 1.2f);
 }
 
 void* D_8094A9B0[] = {
@@ -3870,6 +3941,7 @@ void BossTw_TwinrovaDraw(Actor* thisx, PlayState* play2) {
     }
 
     CLOSE_DISPS(play->state.gfxCtx);
+    BossTw_DrawSuperHitGlow(this, play, 80.0f, 1.4f);
 }
 
 void BossTw_BlastFire(BossTw* this, PlayState* play) {
