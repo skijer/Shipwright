@@ -29,6 +29,8 @@ extern "C" {
 #include "variables.h"
 extern PlayState* gPlayState;
 void Player_ResetMeleeWeaponColliders(PlayState* play, Player* player);
+s32 Player_TryTakeoverInteraction(PlayState* play, Player* player);
+s32 Player_IsDrivenByGame(PlayState* play, Player* player);
 }
 
 namespace {
@@ -52,6 +54,7 @@ std::unordered_map<std::string, RegisteredForm*> sFormsByKey;
 RegisteredForm* sActiveForm = nullptr;
 std::string sPendingForm;
 std::string sCurrentMod;
+bool sIsTakeoverSuspended = false;
 
 Player* GetPlayer() {
     return gPlayState == nullptr ? nullptr : GET_PLAYER(gPlayState);
@@ -428,13 +431,22 @@ void UpdateForms() {
     }
 }
 
-void DriveTakeoverFrame(GIVanillaBehavior flag, bool* should, va_list args) {
-    if (!IsActiveKind(SOH_FORM_KIND_TAKEOVER)) {
+// While the game drives the player, or once a handler takes an interaction, vanilla's action func runs this frame.
+void DriveTakeoverFrame(GIVanillaBehavior flag, bool* should, va_list originalArgs) {
+    va_list args;
+    va_copy(args, originalArgs);
+    Player* player = va_arg(args, Player*);
+    va_end(args);
+    if (!IsActiveKind(SOH_FORM_KIND_TAKEOVER) || player != GetPlayer()) {
         return;
     }
-    *should = false;
+    sIsTakeoverSuspended =
+        Player_IsDrivenByGame(gPlayState, player) || Player_TryTakeoverInteraction(gPlayState, player);
+    if (!sIsTakeoverSuspended) {
+        *should = false;
+    }
     if (sActiveForm->definition.update != nullptr) {
-        sActiveForm->definition.update(gPlayState, GetPlayer());
+        sActiveForm->definition.update(gPlayState, player);
     }
 }
 
@@ -657,6 +669,10 @@ const char* FormRegistry_GetActiveKey(void) {
 bool FormRegistry_IsActive(const char* key) {
     const char* activeKey = FormRegistry_GetActiveKey();
     return key != nullptr && activeKey != nullptr && std::strcmp(activeKey, key) == 0;
+}
+
+bool FormRegistry_IsSuspended(void) {
+    return IsActiveKind(SOH_FORM_KIND_TAKEOVER) && sIsTakeoverSuspended;
 }
 
 const char* FormRegistry_GetCurrentKey(void) {

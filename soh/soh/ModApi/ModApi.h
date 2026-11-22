@@ -224,6 +224,7 @@ typedef struct {
     bool (*GrantLogic)(const SOHLogicGrant* grant);
     bool (*IsCustomItemFormAllowed)(const char* key);
     uint32_t (*ReadModsFolderFiles)(const char* extensions, SOHArchiveFileFunc visit, void* userData);
+    bool (*IsFormSuspended)(void);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

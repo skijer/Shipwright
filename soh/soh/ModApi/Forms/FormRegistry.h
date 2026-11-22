@@ -90,6 +90,7 @@ bool FormRegistry_Toggle(const char* key);
 bool FormRegistry_ApplyActive(const char* key);
 const char* FormRegistry_GetActiveKey(void);
 bool FormRegistry_IsActive(const char* key);
+bool FormRegistry_IsSuspended(void);
 const char* FormRegistry_GetCurrentKey(void);
 bool FormRegistry_IsCurrentFormIn(const char* const* formKeys, uint32_t formKeyCount);
 bool FormRegistry_IsEquipSlotFixed(int32_t equipType);
