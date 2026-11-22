@@ -1348,6 +1348,7 @@ SOH_MOD_EXPORT void ModSetApi(const SOHModApi* api) {
     sApi = api;
 }
 
+int16_t OTRGetRectDimensionFromLeftEdge(float v);
 Gfx* Gfx_TextureIA8(Gfx* displayListHead, void* texture, s16 textureWidth, s16 textureHeight, s16 rectLeft, s16 rectTop,
                     s16 rectWidth, s16 rectHeight, u16 dsdx, u16 dtdy);
 

@@ -2686,6 +2686,7 @@ void gcquiz_init();
 void code_C9E70_defrag(void);
 
 // --- core2/rand.c ---
+f32 sfx_randf2(f32 min, f32 max);
 s32 sfx_randi2(s32 min, s32 max);
 void rand_reset(void);
 void rand_seed(s32 seed);
