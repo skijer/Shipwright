@@ -44,6 +44,25 @@ def source_hashes(mods_directory):
     return hashes
 
 
+# Third-party libraries a mod carries unchanged ("vendored" in its manifest). The analyzers skip them; the
+# operating-system scan and the binary checks still cover them.
+def vendored_directories(mods_directory):
+    directories = []
+    for mod in find_mod_directories(mods_directory):
+        manifest = json.loads((mod / "manifest.json").read_text(encoding="utf-8"))
+        vendored = manifest.get("vendored", [])
+        if not isinstance(vendored, list):
+            raise ValueError(f"{mod.name}: 'vendored' must be a list of folders")
+        for entry in vendored:
+            if not isinstance(entry, str) or not entry or Path(entry).is_absolute() or ".." in Path(entry).parts:
+                raise ValueError(f"{mod.name}: vendored folder '{entry}' must be a plain path inside the mod")
+            folder = mod / entry
+            if not folder.is_dir():
+                raise ValueError(f"{mod.name}: vendored folder '{entry}' does not exist")
+            directories.append(folder.as_posix())
+    return directories
+
+
 def read_packs(mods_directory):
     path = mods_directory / "packs.json"
     if not path.is_file():
@@ -264,6 +283,9 @@ def main():
     packs = commands.add_parser("packs", help="Validate and print the mods folder's packs.json")
     packs.add_argument("--mods-directory", type=Path, required=True)
 
+    vendored = commands.add_parser("vendored", help="Print the third-party folders the analyzers skip")
+    vendored.add_argument("--mods-directory", type=Path, required=True)
+
     plan_parser = commands.add_parser("plan", help="Decide what to publish from freshly built packages")
     plan_parser.add_argument("--catalog", type=Path)
     plan_parser.add_argument("--packages", type=Path, required=True)
@@ -302,6 +324,8 @@ def main():
         print(json.dumps(source_hashes(args.mods_directory)))
     elif args.command == "packs":
         print(json.dumps(read_packs(args.mods_directory)))
+    elif args.command == "vendored":
+        print("\n".join(vendored_directories(args.mods_directory)))
     elif args.command == "plan":
         held = {permission for permission in args.held_permissions.split(",") if permission}
         result = plan(read_catalog(args.catalog), list(args.packages.glob("*.o2r")),

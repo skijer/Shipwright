@@ -140,14 +140,28 @@ jobs:
       run: |
         python trusted/mod-sdk/tools/scan_mod_sources.py --mods-directory "submitted/$DIRECTORY" \
                --submitted-root submitted --compile-commands build/compile_commands.json
+    - name: List vendored libraries
+      env:
+        DIRECTORY: ${{ needs.request.outputs.directory }}
+      run: python trusted/mod-sdk/tools/build_catalog.py vendored --mods-directory "submitted/$DIRECTORY" > vendored.txt
     - name: Cppcheck
       env:
         DIRECTORY: ${{ needs.request.outputs.directory }}
-      run: cppcheck --error-exitcode=1 --quiet "submitted/$DIRECTORY"
+      run: |
+        skipped=()
+        while IFS= read -r folder; do
+          skipped+=(-i "$folder" "--suppress=*:$folder/*")
+        done < vendored.txt
+        cppcheck --error-exitcode=1 --quiet "${skipped[@]}" "submitted/$DIRECTORY"
     - name: Semgrep
       env:
         DIRECTORY: ${{ needs.request.outputs.directory }}
-      run: semgrep scan --config p/c --severity ERROR --error --metrics off "submitted/$DIRECTORY"
+      run: |
+        skipped=()
+        while IFS= read -r folder; do
+          skipped+=(--exclude "${folder#submitted/$DIRECTORY/}")
+        done < vendored.txt
+        semgrep scan --config p/c --severity ERROR --error --metrics off "${skipped[@]}" "submitted/$DIRECTORY"
 
   build:
     needs: [request, scan]
