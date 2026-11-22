@@ -6,5 +6,8 @@
     "permissions": [
         "files"
     ],
-    "display_name": "Banjo Mask (Beta)"
+    "display_name": "Banjo Mask (Beta)",
+    "vendored": [
+        "libbk"
+    ]
 }

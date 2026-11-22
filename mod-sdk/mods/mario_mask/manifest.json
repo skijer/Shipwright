@@ -6,5 +6,8 @@
     "permissions": [
         "files"
     ],
-    "display_name": "Mario Mask (Beta)"
+    "display_name": "Mario Mask (Beta)",
+    "vendored": [
+        "libsm64"
+    ]
 }
