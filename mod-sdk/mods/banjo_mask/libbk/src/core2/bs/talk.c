@@ -1,0 +1,55 @@
+#include "../../../shim/libbk_build.h"
+#include "../../../shim/ultra64.h"
+#include "../../../include/functions.h"
+#include "../../../include/variables.h"
+#include "../../../include/core2/ba/anim.h"
+#include "../../../include/core2/ba/physics.h"
+#include "../../../include/core2/yaw.h"
+
+/* .bss */
+bool  bsTalkStayInState;
+
+/* .code */
+void bstalk_init(void){
+    AnimCtrl *player_anim_ctrl;
+    f32 yaw;
+    f32 plyr_pos[3];
+    f32 target_pos[3];
+
+    player_anim_ctrl = baanim_getAnimCtrlPtr();
+    anctrl_reset(player_anim_ctrl);
+    func_8029C848(player_anim_ctrl);
+    anctrl_setPlaybackType(player_anim_ctrl,  ANIMCTRL_LOOP);
+    anctrl_start(player_anim_ctrl, "bstalk.c", 0x38);
+    playerPosition_get(plyr_pos);
+    get_talk_target_position(target_pos);
+    func_80257F18(plyr_pos, target_pos, &yaw);
+    yaw_setIdeal(yaw);
+    baanim_setUpdateType(BAANIM_UPDATE_1_NORMAL);
+    yaw_setUpdateState(YAW_STATE_1_DEFAULT);
+    func_8029957C(3);
+    baphysics_set_type(BA_PHYSICS_NORMAL);
+    baphysics_set_target_horizontal_velocity(0.0f);
+    bsTalkStayInState = true;
+}
+
+void bstalk_update(void){
+    enum bs_e next_state = BS_0_NONE;
+
+    if (!bsTalkStayInState)
+        next_state = BS_1_IDLE;
+    bsTalkStayInState = false;
+    bs_setState(next_state);
+}
+
+void bstalk_end(void){}
+
+void bstalk_interrupt(void){
+    if(bs_getInterruptType() == BS_INTR_8){
+        bsTalkStayInState = true;
+        bs_setInterruptResponse(2);
+    }
+    else{
+        func_80296608();
+    }
+}

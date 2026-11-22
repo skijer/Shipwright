@@ -1,0 +1,980 @@
+#include "../../../shim/libbk_build.h"
+// BanjoDecomp: core2/code_14420.c
+#include "../../../shim/ultra64.h"
+#include "../../../include/core1/core1.h"
+#include "../../../include/functions.h"
+#include "../../../include/variables.h"
+#include "../../../include/core2/yaw.h"
+#include "../../../include/core2/statetimer.h"
+#include "../../../include/core2/ba/anim.h"
+#include "../../../include/core2/ba/physics.h"
+
+extern void controller_copyJoystick(s32, f32*);
+extern f32 player_getYaw(void);
+extern ParticleEmitter *func_802F4094(f32 pos[3], f32 arg1);
+extern void particleEmitter_setSphericalParticleVelocityRange(ParticleEmitter *this, f32 pitch_min, f32 yaw_min, f32 radial_min, f32 pitch_max, f32 yaw_max, f32 radial_max);
+ParticleEmitter * func_802EDD8C(f32[3], f32, f32);
+extern void func_80354030(f32[3], f32);
+extern void func_80354380(f32[3], f32);
+extern void func_80356074(f32[3], f32[3], f32, f32);
+extern void func_80292864(f32, f32);
+
+typedef struct {
+    s16 state_id;
+    s16 anim_id;
+    f32 anim_duration;
+} Struct_core2_13FC0;
+
+enum bs_14420_e{
+    BS14420_0_TERMITE,
+    BS14420_1_PUMPKIN,
+    BS14420_2_CROC,
+    BS14420_3_WALRUS,
+    BS14420_4_WATER_SURFACE,
+    BS14420_5_UNDERWATER,
+
+    BS14420_7_FLY = 0x7,
+    BS14420_8_TROT,
+    BS14420_9_LONGLEG,
+    BS14420_A_WALRUS_SLED,
+    BS14420_B_BEE,
+    BS14420_C_CLIMB,
+    BS14420_D_WONDERWING
+};
+
+/* .data */ 
+s32 D_80364620 = 0;
+s16 D_80364624[14] = {
+    BS_35_ANT_IDLE,
+    BS_48_PUMPKIN_IDLE,
+    BS_5E_CROC_IDLE,
+    BS_67_WALRUS_IDLE,
+    BS_2D_SWIM_IDLE,
+    BS_2B_DIVE_IDLE,
+    BS_1_IDLE,
+    BS_24_FLY,
+    BS_15_BTROT_IDLE,
+    BS_26_LONGLEG_IDLE,
+    BS_7D_WALRUS_SLED,
+    BS_85_BEE_IDLE,
+    BS_4F_CLIMB_IDLE,
+    BS_1B_WONDERWING_IDLE
+};
+
+u8 D_80364640[14] = {
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    false,
+    true,
+    true,
+    true,
+    true,
+    false,
+    true
+};
+Struct_core2_13FC0 D_80364650[14] = {
+    {BS_92_ANT_DRONE,             ASSET_5F_ANIM_BSANT_WALK,       0.4f},
+    {BS_93_PUMPKIN_DRONE,         ASSET_A0_ANIM_BSPUMPKIN_WALK,   0.4f},
+    {BS_94_CROC_DRONE,            ASSET_E0_ANIM_BSCROC_WALK,      0.6f},
+    {BS_95_WALRUS_DRONE,          ASSET_120_ANIM_BSWALRUS_WALK,   0.7f},
+    {BS_96_SWIM_DRONE,            ASSET_39_ANIM_BSSWIM_MOVE,      0.8f},
+    {BS_97_DIVE_DRONE,            ASSET_71_ANIM_BSSWIM_DIVE_SLOW, 0.75f},
+    {BS_98_WALK_DRONE,            ASSET_3_ANIM_BSWALK,            0.43f},
+    {BS_99_BFLY_DRONE,            ASSET_38_ANIM_BSBFLY,           0.62f},
+    {BS_9A_BTROT_DRONE,           ASSET_15_ANIM_BSBTROT_WALK,     0.53f},
+    {BS_9B_LONGLEG_DRONE,         ASSET_42_ANIM_BSLONGLEG_WALK,   0.8f},
+    {BS_9C_WALRUS_SLED_DRONE,     ASSET_19E_ANIM_BSWALRUS_SLED,   0.8f},
+    {BS_9D_BEE_DRONE,             ASSET_1DC_ANIM_BEE_FLY,         0.38f},
+    {BS_98_WALK_DRONE,            ASSET_3_ANIM_BSWALK,            0.43f},
+    {BS_A4_WONDERWING_DRONE,      ASSET_11_ANIM_BSWHIRL_WALK,     0.53f}
+};
+
+Struct_core2_13FC0 D_803646C0[14] = {
+    {BS_92_ANT_DRONE,             ASSET_5E_ANIM_BSANT_IDLE,        1.2f},
+    {BS_93_PUMPKIN_DRONE,         ASSET_A0_ANIM_BSPUMPKIN_WALK,    0.8f},
+    {BS_94_CROC_DRONE,            ASSET_E1_ANIM_BSCROC_IDLE,       1.0f},
+    {BS_95_WALRUS_DRONE,          ASSET_11F_ANIM_BSWALRUS_IDLE,    4.0f},
+    {BS_96_SWIM_DRONE,            ASSET_57_ANIM_BSSWIM_IDLE,       1.2f},
+    {BS_97_DIVE_DRONE,            ASSET_70_ANIM_BSSWIM_DIVE_IDLE,  2.0f},
+    {BS_98_WALK_DRONE,            ASSET_19B_ANIM_UNKNOWN,          4.5f},
+    {BS_99_BFLY_DRONE,            ASSET_38_ANIM_BSBFLY,            0.62f},
+    {BS_9A_BTROT_DRONE,           ASSET_26_ANIM_BSBTROT_IDLE,      1.2f},
+    {BS_9B_LONGLEG_DRONE,         ASSET_41_ANIM_BSLONGLEG_IDLE,    1.0f},
+    {BS_9C_WALRUS_SLED_DRONE,     ASSET_19E_ANIM_BSWALRUS_SLED,    0.8f},
+    {BS_9D_BEE_DRONE,             ASSET_1DE_ANIM_BEE_IDLE,         3.0f},
+    {BS_98_WALK_DRONE,            ASSET_B2_ANIM_BSCLIMB_IDLE_2,    2.64f},
+    {BS_A4_WONDERWING_DRONE,      ASSET_23_ANIM_BSWONDERWING_IDLE, 1.0f}
+};
+
+Struct_core2_13FC0 D_80364730[14] = {
+    {BS_92_ANT_DRONE,             ASSET_5E_ANIM_BSANT_IDLE,        1.2f},
+    {BS_93_PUMPKIN_DRONE,         ASSET_A0_ANIM_BSPUMPKIN_WALK,    0.8f},
+    {BS_94_CROC_DRONE,            ASSET_E1_ANIM_BSCROC_IDLE,       1.0f},
+    {BS_95_WALRUS_DRONE,          ASSET_11F_ANIM_BSWALRUS_IDLE,    4.0f},
+    {BS_96_SWIM_DRONE,            ASSET_57_ANIM_BSSWIM_IDLE,       1.2f},
+    {BS_97_DIVE_DRONE,            ASSET_70_ANIM_BSSWIM_DIVE_IDLE,  2.0f},
+    {BS_98_WALK_DRONE,            ASSET_19B_ANIM_UNKNOWN,          4.5f},
+    {BS_99_BFLY_DRONE,            ASSET_38_ANIM_BSBFLY,            0.62f},
+    {BS_9A_BTROT_DRONE,           ASSET_26_ANIM_BSBTROT_IDLE,      1.2f},
+    {BS_9B_LONGLEG_DRONE,         ASSET_41_ANIM_BSLONGLEG_IDLE,    1.0f},
+    {BS_9C_WALRUS_SLED_DRONE,     ASSET_19E_ANIM_BSWALRUS_SLED,    0.8f},
+    {BS_9D_BEE_DRONE,             ASSET_1DE_ANIM_BEE_IDLE,         3.0f},
+    {BS_98_WALK_DRONE,            ASSET_B2_ANIM_BSCLIMB_IDLE_2,    2.64f},
+    {BS_A4_WONDERWING_DRONE,      ASSET_23_ANIM_BSWONDERWING_IDLE, 1.0f}
+};
+
+Struct_core2_13FC0 D_803647A0[14] = {
+    {BS_92_ANT_DRONE,              ASSET_5E_ANIM_BSANT_IDLE,        1.2f},
+    {BS_93_PUMPKIN_DRONE,          ASSET_A0_ANIM_BSPUMPKIN_WALK,    0.8f},
+    {BS_94_CROC_DRONE,             ASSET_E1_ANIM_BSCROC_IDLE,       1.0f},
+    {BS_95_WALRUS_DRONE,           ASSET_11F_ANIM_BSWALRUS_IDLE,    4.0f},
+    {BS_96_SWIM_DRONE,             ASSET_57_ANIM_BSSWIM_IDLE,       1.2f},
+    {BS_97_DIVE_DRONE,             ASSET_70_ANIM_BSSWIM_DIVE_IDLE,  2.0f},
+    {BS_98_WALK_DRONE,             ASSET_6F_ANIM_BSSTAND_IDLE,      5.5f},
+    {BS_99_BFLY_DRONE,             ASSET_38_ANIM_BSBFLY,            0.62f},
+    {BS_9A_BTROT_DRONE,            ASSET_26_ANIM_BSBTROT_IDLE,      1.2f},
+    {BS_9B_LONGLEG_DRONE,          ASSET_41_ANIM_BSLONGLEG_IDLE,    1.0f},
+    {BS_9C_WALRUS_SLED_DRONE,      ASSET_19E_ANIM_BSWALRUS_SLED,    0.8f},
+    {BS_9D_BEE_DRONE,              ASSET_1DE_ANIM_BEE_IDLE,         3.0f},
+    {BS_98_WALK_DRONE,             ASSET_B2_ANIM_BSCLIMB_IDLE_2,    2.64f},
+    {BS_A4_WONDERWING_DRONE,       ASSET_23_ANIM_BSWONDERWING_IDLE, 1.0f}
+};
+
+Struct_core2_13FC0 D_80364810[14] = {
+    {BS_8E_ANT_LOCKED,                          0,  0.0f},
+    {BS_8F_PUMPKIN_LOCKED,                      0,  0.0f},
+    {BS_8D_CROC_LOCKED,                         0,  0.0f},
+    {BS_73_UNKNOWN,  ASSET_11F_ANIM_BSWALRUS_IDLE,  4.0f},
+    {BS_77_SWIM_LOOKAT_DRONE,                   0,  0.0f},
+    {BS_78_DIVE_LOOKAT_DRONE,                   0,  0.0f},
+    {BS_73_UNKNOWN,  ASSET_14A_ANIM_BSREST_LISTEN, 11.4f},
+    {BS_76_BFLY_LOCKED,                         0,  0.0f},
+    {BS_79_BTROT_LOCKED,                        0,  0.0f},
+    {BS_62_LONGLEG_LOCKED,                      0,  0.0f},
+    {BS_81_WALRUS_SLED_LOCKED,                  0,  0.0f},
+    {BS_6B_BEE_LOCKED,                          0,  0.0f},
+    {BS_9E_CLIMB_LOCKED,                        0,  0.0f},
+    {BS_A5_WONDERWING_UNKA5,                    0,  0.0f}
+};
+
+Struct_core2_13FC0 D_80364880[14] = {
+    {BS_8E_ANT_LOCKED,                         0, 0.0f},
+    {BS_8F_PUMPKIN_LOCKED,                     0, 0.0f},
+    {BS_8D_CROC_LOCKED,                        0, 0.0f},
+    {BS_74_UNKNOWN, ASSET_11F_ANIM_BSWALRUS_IDLE, 4.0f},
+    {BS_77_SWIM_LOOKAT_DRONE,                  0, 0.0f},
+    {BS_78_DIVE_LOOKAT_DRONE,                  0, 0.0f},
+    {BS_74_UNKNOWN,   ASSET_6F_ANIM_BSSTAND_IDLE, 5.5f},
+    {BS_76_BFLY_LOCKED,                        0, 0.0f},
+    {BS_79_BTROT_LOCKED,                       0, 0.0f},
+    {BS_62_LONGLEG_LOCKED,                     0, 0.0f},
+    {BS_81_WALRUS_SLED_LOCKED,                 0, 0.0f},
+    {BS_6B_BEE_LOCKED,                         0, 0.0f},
+    {BS_9E_CLIMB_LOCKED,                       0, 0.0f},
+    {BS_A5_WONDERWING_UNKA5,                   0, 0.0f}
+};
+Struct_core2_13FC0 D_803648F0[14] = {
+    {BS_8E_ANT_LOCKED,                         0,  0.0f},
+    {BS_8F_PUMPKIN_LOCKED,                     0,  0.0f},
+    {BS_8D_CROC_LOCKED,                        0,  0.0f},
+    {BS_75_UNKNOWN, ASSET_11F_ANIM_BSWALRUS_IDLE,  4.0f},
+    {BS_77_SWIM_LOOKAT_DRONE,                  0,  0.0f},
+    {BS_78_DIVE_LOOKAT_DRONE,                  0,  0.0f},
+    {BS_75_UNKNOWN, ASSET_14A_ANIM_BSREST_LISTEN, 11.4f},
+    {BS_76_BFLY_LOCKED,                        0,  0.0f},
+    {BS_79_BTROT_LOCKED,                       0,  0.0f},
+    {BS_62_LONGLEG_LOCKED,                     0,  0.0f},
+    {BS_81_WALRUS_SLED_LOCKED,                 0,  0.0f},
+    {BS_6B_BEE_LOCKED,                         0,  0.0f},
+    {BS_9E_CLIMB_LOCKED,                       0,  0.0f},
+    {BS_A5_WONDERWING_UNKA5,                   0,  0.0f}
+};
+
+/* .bss */
+// extern struct {
+//     s32 map_id;
+//     s32 exit_id;
+// }gVoidOutReturnLocation;
+s32 gVoidOutReturnLocation[2];
+u8  D_8037D1E8;
+
+/* .code */
+f32 func_8029B3B0(f32 arg0) {
+    if (player_isOnDangerousGround()) {
+        return arg0 * 0.2;
+    }
+    if (func_8028B120()) {
+        return arg0 * 0.2;
+    }
+    return arg0;
+}
+
+f32 func_8029B41C(void){
+    f32 sp2C[3];
+    f32 sp20[3];
+    f32 sp1C;
+
+    player_getPosition(sp2C);
+    viewport_getPosition_vec3f(sp20);
+    func_80257F18(sp2C, sp20, &sp1C);
+    return sp1C;
+}
+
+enum bs_e func_8029B458(void){
+    enum bs_e sp1C;
+    
+    sp1C = bs_getState();
+    switch(bsStoredState_getTransformation()){
+        case TRANSFORM_2_TERMITE:
+            return BS_38_ANT_FALL;
+
+        case TRANSFORM_3_PUMPKIN:
+            return BS_4B_PUMPKIN_FALL;
+
+        case TRANSFORM_5_CROC:
+            return BS_61_CROC_FALL;
+
+        case TRANSFORM_4_WALRUS:
+            if(bswalrus_inSledSet(sp1C))
+                return BS_82_WALRUS_SLED_LOSE_IN_AIR;
+            return BS_6A_WALRUS_FALL;
+
+        case TRANSFORM_6_BEE:
+            return BS_88_BEE_FALL;
+
+        default:
+            if(bsbtrot_inSet(sp1C))
+                return BS_71_BTROT_FALL;
+            return BS_2F_FALL;
+    }
+}
+
+enum bs_e func_8029B504(void){
+    enum bs_e sp1C;
+
+    if(baflag_isTrue(BA_FLAG_F))
+        return 0;
+
+    baflag_set(BA_FLAG_F);
+    sp1C = func_8029B458();
+    if(bs_getState() != sp1C)
+        return sp1C;
+    return 0;
+
+}
+
+s32 func_8029B564(void){
+    return 1;
+}
+
+f32 func_8029B56C(f32 arg0, f32 arg1, f32 arg2, f32 arg3) {
+    f32 phi_f0;
+    f32 phi_f2;
+
+    phi_f0 = arg2;
+    phi_f2 = 0.0f;
+    while ((phi_f0 > 0.0f) || (arg1 < arg0)) {
+            phi_f2 += 0.0166666675f;
+            arg0 += phi_f0 * 0.0166666675f;
+            phi_f0 += arg3 * 0.0166666675f;
+    }
+    return phi_f2;
+}
+
+void func_8029B5EC(void){
+    func_802DC560(0, 0);
+    game_setMapTransitionWithStyle(1, 0);
+    s32 returnMap = MAP_1F_CS_START_RAREWARE; // [port]
+    CALL_EVENT(OnGameOverReturnMap, &returnMap); // [port]
+//  transitionToMap(MAP_1F_CS_START_RAREWARE, 0, 1);
+    transitionToMap(returnMap, 0, 1);
+}
+
+void func_8029B62C(void){
+    if(!EventSystem_Should(VB_HANDLE_PLAYER_DEATH, true)){ // [port]
+        return;
+    }
+    // [port] Permadeath difficulty empties the reserve and erases the save here.
+    CALL_EVENT(OnPlayerDeath);
+    if(item_empty(ITEM_16_LIFE)){
+//      if(!fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE) || fileProgressFlag_get(FILEPROG_A6_FURNACE_FUN_COMPLETE)){
+        if(!EventSystem_Should(VB_GAME_OVER_MACHINE_ROOM, fileProgressFlag_get(FILEPROG_BD_ENTER_LAIR_CUTSCENE)) || fileProgressFlag_get(FILEPROG_A6_FURNACE_FUN_COMPLETE)){
+            func_8025A430(-1, 0x7D0, 3);
+            func_8025A2B0();
+            func_802DC528(0, 0);
+            func_80324C58();
+            timedFunc_set_0(5.0f, func_8029B5EC);
+        }
+        else{
+            game_setMapTransitionWithStyle(1, 0);
+            transitionToMap(MAP_83_CS_GAME_OVER_MACHINE_ROOM, 0, 1);
+
+        }
+    }
+    else{
+//      game_transitionToMapResettingLevel(gVoidOutReturnLocation[0], gVoidOutReturnLocation[1], 1);
+        if(EventSystem_Should(VB_VOID_OUT_RESPAWN_TRANSITION, true, gVoidOutReturnLocation[0], gVoidOutReturnLocation[1])) game_transitionToMapResettingLevel(gVoidOutReturnLocation[0], gVoidOutReturnLocation[1], 1);
+    }
+}
+
+void func_8029B6F0(void){
+//  if(item_empty(ITEM_16_LIFE)){
+    if(EventSystem_Should(VB_VOID_OUT_GAME_OVER, item_empty(ITEM_16_LIFE))){
+        func_8029B62C();
+    }
+    else{
+        transitionToMap(gVoidOutReturnLocation[0], gVoidOutReturnLocation[1], 1);
+    }
+}
+
+void func_8029B73C(f32 arg0[3], f32 arg1, f32 arg2, f32 arg3, f32 arg4) {
+    f32 sp3C[3];
+    f32 sp30[3];
+    f32 temp_f20;
+
+    func_8028FA74(sp3C);
+    if(sp3C[1] < (arg0[1] + arg2))
+        return;
+
+    if(sp3C[1] > (arg0[1] + arg1))
+        return;
+
+    sp30[0] = sp3C[0] - arg0[0];
+    sp30[1] = 0.0f;
+    sp30[2] = sp3C[2] - arg0[2];
+    temp_f20 = (sp30[0]*sp30[0] + sp30[1]*sp30[1] + sp30[2]*sp30[2]);
+
+    if (!((arg3 * arg3) < temp_f20)) {
+        temp_f20 = gu_sqrtf(temp_f20);
+        // [port] when player is at the exact XZ of the attraction point, sp30 is a zero
+        // vector and ml_vec3f_set_length_copy divides by zero magnitude, producing NaN.
+        if (temp_f20 > 0.001f) {
+            ml_vec3f_set_length_copy(sp30, sp30, ml_min_f(time_getDelta() * arg4, arg3 - temp_f20));
+            ml_vec3f_add(sp3C, sp3C, sp30);
+            func_8028FAB0(sp3C);
+        }
+    }
+
+}
+
+void func_8029B85C(ActorMarker *caller, enum asset_e text_id, s32 arg2){
+    func_8030E6D4(SFX_EB_GRUNTY_LAUGH_2);
+    func_8029B62C();
+}
+
+void func_8029B890(void){
+    if(!fileProgressFlag_get(FILEPROG_A8_HAS_DIED) && !volatileFlag_get(VOLATILE_FLAG_2_FF_IN_MINIGAME)){
+        func_803114D0();
+        if(bs_getState() == 0x54){
+            func_8029B62C();
+            return;
+        }
+        gcdialog_showDialog(0xf81, 7, NULL, NULL, func_8029B85C, NULL);
+        fileProgressFlag_set(FILEPROG_A8_HAS_DIED, true);
+    }
+    else{
+        func_8029B62C();
+    }
+}
+
+void func_8029B930(void){
+    func_803114D0();
+}
+
+ParticleEmitter *func_8029B950(f32 pos[3],f32 arg1){
+    return func_802EDD8C(pos, arg1, floor_getCurrentFloorYPosition());
+}
+
+void func_8029B984(f32 dst[3]){
+    f32 plyr_pos[3];
+    f32 sp18[3];
+
+    playerPosition_get(plyr_pos);
+    viewport_getPosition_vec3f(sp18);
+    ml_vec3f_diff_copy(dst, sp18, plyr_pos);
+}
+
+f32 func_8029B9C0(void){
+    f32 sp1C[3];
+
+    func_8029B984(sp1C);
+    return sp1C[0]*sp1C[0] + sp1C[1]*sp1C[1] + sp1C[2]*sp1C[2];
+}
+
+f32 func_8029B9FC(void){
+    f32 sp1C[3];
+
+    func_8029B984(sp1C);
+    return gu_sqrtf(sp1C[0]*sp1C[0] + sp1C[1]*sp1C[1] + sp1C[2]*sp1C[2]);
+}
+
+f32 func_8029BA44(void){
+    f32 sp1C[3];
+
+    func_8029B984(sp1C);
+    return gu_sqrtf(sp1C[0]*sp1C[0] + sp1C[2]*sp1C[2]);
+}
+
+enum bs_e func_8029BA80(void){
+    switch (bsStoredState_getTransformation())
+    {
+    case TRANSFORM_3_PUMPKIN:
+        return BS_4B_PUMPKIN_FALL;
+
+    case TRANSFORM_2_TERMITE:
+        return BS_38_ANT_FALL;
+
+    case TRANSFORM_5_CROC:
+        return BS_61_CROC_FALL;
+
+    case TRANSFORM_4_WALRUS:
+        return BS_6A_WALRUS_FALL;
+
+    case TRANSFORM_6_BEE:
+        return BS_88_BEE_FALL;
+
+    case TRANSFORM_1_BANJO:
+    default:
+        return BS_2F_FALL;
+    }
+}
+
+enum bs_14420_e func_8029BAF0(void){
+    enum bs_e state_id = bs_getState();
+    switch (bsStoredState_getTransformation())
+    {
+    case TRANSFORM_3_PUMPKIN://L8029BB2C
+        return BS14420_1_PUMPKIN;
+
+    case TRANSFORM_2_TERMITE://L8029BB34
+        return BS14420_0_TERMITE;
+
+    case TRANSFORM_5_CROC://L8029BB3C
+        return BS14420_2_CROC;
+
+    case TRANSFORM_4_WALRUS://L8029BB44
+        if (bswalrus_inSledSet(state_id)) {
+            return BS14420_A_WALRUS_SLED;
+        }
+        return BS14420_3_WALRUS;
+
+    case TRANSFORM_6_BEE://L8029BB64
+        return BS14420_B_BEE;
+
+    case TRANSFORM_1_BANJO://L8029BB6C
+    default:
+        if (bsclimb_inSet(state_id)) {
+            return BS14420_C_CLIMB;
+        }
+        if (bsbfly_inSet(state_id)) {
+            return BS14420_7_FLY;
+        }
+        if (bsbtrot_inSet(state_id)) {
+            return BS14420_8_TROT;
+        }
+        if (stateTimer_get(STATE_TIMER_2_LONGLEG) != 0.0f) {
+            return BS14420_9_LONGLEG;
+        }
+        if (baflag_isTrue(BA_FLAG_18_UNDERWATER)) {
+            return BS14420_5_UNDERWATER;
+        }
+        if (player_movementGroup() == BSGROUP_3_WONDERWING) {
+            return BS14420_D_WONDERWING;
+        }
+        if (player_inWater()) {
+            switch(player_getWaterState()){
+                case BSWATERGROUP_2_UNDERWATER:
+                    return BS14420_5_UNDERWATER;
+                case BSWATERGROUP_1_SURFACE: 
+                default:
+                    return BS14420_4_WATER_SURFACE;
+
+            }
+        }
+        return 6;
+        break;
+    }
+}
+
+void func_8029BC60(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_80364650[indx].anim_id;
+    *anim_duration = D_80364650[indx].anim_duration;
+}
+
+void func_8029BCAC(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_803646C0[indx].anim_id;
+    *anim_duration = D_803646C0[indx].anim_duration;
+}
+
+void func_8029BCF8(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_803647A0[indx].anim_id;
+    *anim_duration = D_803647A0[indx].anim_duration;
+}
+
+void func_8029BD44(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_80364730[indx].anim_id;
+    *anim_duration = D_80364730[indx].anim_duration;
+}
+
+enum bs_e func_8029BD90(void) {
+    return D_80364650[func_8029BAF0()].state_id;
+}
+
+//drone_look_exit_state
+enum bs_e func_8029BDBC(void) {
+    return D_80364624[func_8029BAF0()];
+}
+
+bool func_8029BDE8(void) {
+    return D_80364640[func_8029BAF0()];
+}
+
+void func_8029BE10(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_80364810[indx].anim_id;
+    *anim_duration = D_80364810[indx].anim_duration;
+}
+
+enum bs_e func_8029BE5C(void) {
+    return D_80364810[func_8029BAF0()].state_id;
+}
+
+void func_8029BE88(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_80364880[indx].anim_id;
+    *anim_duration = D_80364880[indx].anim_duration;
+}
+
+enum bs_e func_8029BED4(void) {
+    return D_80364880[func_8029BAF0()].state_id;
+}
+
+void func_8029BF00(enum asset_e *anim_id, f32 *anim_duration) {
+    s32 indx;
+
+    indx = func_8029BAF0();
+    *anim_id = D_803648F0[indx].anim_id;
+    *anim_duration = D_803648F0[indx].anim_duration;
+}
+
+enum bs_e func_8029BF4C(void) {
+    return D_803648F0[func_8029BAF0()].state_id;
+}
+
+enum bs_e bs_getIdleState(void){
+    switch (bsStoredState_getTransformation()) {
+        case TRANSFORM_3_PUMPKIN:
+            return BS_48_PUMPKIN_IDLE;
+
+        case TRANSFORM_2_TERMITE:
+            return BS_35_ANT_IDLE;
+
+        case TRANSFORM_5_CROC:
+            return BS_5E_CROC_IDLE;
+
+        case TRANSFORM_4_WALRUS:
+            return BS_67_WALRUS_IDLE;
+
+        case TRANSFORM_6_BEE:
+            return BS_85_BEE_IDLE;
+
+        case TRANSFORM_1_BANJO:
+        default:
+            if (baflag_isTrue(BA_FLAG_16_FLYING)) {
+                return BS_24_FLY;
+            }
+            if (baflag_isTrue(BA_FLAG_18_UNDERWATER)) {
+                return BS_2B_DIVE_IDLE;
+            }
+            if (stateTimer_get(STATE_TIMER_3_TURBO_TALON) != 0.0f) {
+                return BS_15_BTROT_IDLE;
+            }
+            if (stateTimer_get(STATE_TIMER_2_LONGLEG) != 0.0f) {
+                return BS_26_LONGLEG_IDLE;
+            }
+            if (player_inWater()) {
+                if (playerPosition_getY() > (floor_getCurrentFloorYPosition() - 80.0f)) {
+                    return BS_2D_SWIM_IDLE;
+                }
+                return BS_2B_DIVE_IDLE;
+            }
+            if (bsStoredState_getTrotFlag()) {
+                return BS_15_BTROT_IDLE;
+            }
+            return BS_1_IDLE;
+            break;
+    }
+}
+
+void func_8029C0D0(void) {
+    f32 sp3C[3];
+    ParticleEmitter *p_ctrl;
+    f32 sp34;
+
+    if (floor_isCurrentFloorunk59()) {
+        playerPosition_get(sp3C);
+        sp3C[1] = sp34 = floor_getCurrentFloorYPosition();
+        p_ctrl = func_802F4094(sp3C, 35.0f);
+        fxRipple_802F3554(3, sp3C);
+        particleEmitter_setParticleVelocityRange(p_ctrl, -350.0f, 300.0f, -350.0f, 350.0f, 500.0f, 350.0f);
+        particleEmitter_emitN(p_ctrl, 0xA);
+        particleEmitter_setParticleVelocityRange(p_ctrl, -150.0f, 500.0f, -150.0f, 150.0f, 800.0f, 150.0f);
+        particleEmitter_emitN(p_ctrl, 0xA);
+        
+        func_802F4200(sp3C);
+        sp3C[1] -= 30.0f;
+        p_ctrl = func_802EDD8C(sp3C, 20.0f, sp34);
+        particleEmitter_setParticleVelocityRange(p_ctrl, -60.0f, -250.0f, -60.0f, 60.0f, -150.0f, 60.0f);
+        particleEmitter_emitN(p_ctrl, 8);
+    }
+}
+
+
+void func_8029C22C(void) {
+
+    if(floor_isCurrentFloorunk59() && floor_getCurrentFloorYPosition() > playerPosition_getY())
+        return;
+
+    D_80364620 = D_80364620 ? false : true;
+    if (baphysics_get_horizontal_velocity() > 100.0f) {
+        if (D_80364620) {
+            func_80292864(baphysics_get_target_yaw() - 20.0f, 20.0f);
+        }
+        else{
+            func_80292864(baphysics_get_target_yaw() + 20.0f, 20.0f);
+        }
+    }
+}
+
+void func_8029C304(s32 arg0) {
+    f32 sp1C[3];
+
+    playerPosition_get(sp1C);
+    sp1C[1] = floor_getCurrentFloorYPosition();
+    fxRipple_802F3584(arg0, sp1C, (uintptr_t)func_802946CC());
+}
+
+void func_8029C348(void) {
+    f32 sp1C[3];
+
+    playerPosition_get(sp1C);
+    sp1C[0] += randf2(-30.0f, 30.0f);
+    sp1C[1] += randf2(60.0f, 70.0f);
+    sp1C[2] += randf2(-30.0f, 30.0f);
+    func_803541C0(2);
+    func_803541CC(0x50);
+    func_80354030(sp1C, 0.5);
+}
+
+void func_8029C3E8(f32 arg0, f32 arg1) {
+    f32 sp3C[3];
+    f32 sp30[3];
+    f32 sp2C;
+    f32 sp28;
+
+    playerPosition_get(sp30);
+    sp28 = ml_map_f(baphysics_get_horizontal_velocity(), 0.0f, 1000.0f, arg0, arg1);
+    sp2C = player_getYaw();
+    func_802589E4(sp3C, sp2C, sp28);
+    sp3C[1] = 0.0f;
+    sp30[0] += sp3C[0];\
+    sp30[1] += sp3C[1];\
+    sp30[2] += sp3C[2];
+    sp30[0] += randf2(-10.0f, 10.0f);
+    sp30[1] += 4.0f;
+    sp30[2] += randf2(-10.0f, 10.0f);
+    func_80354380(sp30, 0.45f);
+}
+
+void func_8029C4E4(bool arg0) {
+    f32 sp3C[3];
+    f32 sp38;
+    ParticleEmitter *sp34;
+
+    if (floor_isCurrentFloorunk59()) {
+        if (arg0) {
+            baModel_80292260(sp3C);
+        } else {
+            baModel_8029223C(sp3C);
+        }
+        sp3C[1] = floor_getCurrentFloorYPosition();
+        sp38 = yaw_get();
+        sp34 = func_802F4094(sp3C, 8.0f);
+        particleEmitter_setSphericalParticleVelocityRange(sp34, -140.0f, sp38 - 35.0f, 200.0f, -120.0f, sp38 + 35.0f, 250.0f);
+        particleEmitter_emitN(sp34, 3);
+        particleEmitter_setSphericalParticleVelocityRange(sp34, -100.0f, sp38 - 35.0f, 300.0f, -90.0f, sp38 + 35.0f, 400.0f);
+        particleEmitter_emitN(sp34, 2);
+    }
+}
+
+void func_8029C5E8(void){
+    func_8029AE1C();
+}
+
+void update_void_return_Location(void) {
+    enum level_e level_id;
+    enum map_e map_id;
+    s32 exit_id;
+
+    level_id = level_get();
+    if ((level_id == 0) || (level_id == LEVEL_6_LAIR)) {
+        map_id = gsworld_getMap();
+        exit_id = gsworld_getExit();
+    } else {
+        map_id = level_get_main_map(level_id);
+        exit_id = level_get_main_exit(level_id);
+    }
+    gVoidOutReturnLocation[1] = exit_id;
+    gVoidOutReturnLocation[0] = map_id;
+}
+
+void func_8029C674(void) {
+    f32 sp1C[3];
+
+    D_8037D1E8 = false;
+    if (balookat_getState() == BSGROUP_4_LOOK) {
+        D_8037D1E8 = true;
+        baflag_set(BA_FLAG_17_FIRST_PERSON_VIEW);
+        ncDynamicCamera_enterFirstPerson();
+        func_8028E9C4(5, sp1C);
+        ncba1p_setZoomedOutPosition(sp1C);
+    }
+}
+
+void func_8029C6D0(void) {
+    f32 sp3C[3];
+    f32 sp30[3];
+    f32 sp24[3];
+    f32 sp18[3];
+
+    if (balookat_getState() == 4 && D_8037D1E8) {
+        func_8028E9C4(5, sp18);
+        ncba1p_setZoomedOutPosition(sp18);
+        func_8028E9C4(5, sp30);
+        balookat_try_get_position(sp24);
+        func_802BC434(sp3C, sp24, sp30);
+        ncba1p_setZoomedOutRotation(sp3C);
+    }
+}
+
+void func_8029C748(void) {
+    if (D_8037D1E8) {
+        baflag_clear(BA_FLAG_17_FIRST_PERSON_VIEW);
+        ncDynamicCamera_exitFirstPerson();
+    }
+}
+
+enum bs_e bs_getTypeOfJump(void){
+    if(bakey_held(BUTTON_Z) && can_flap_flip())
+        return BS_12_BFLIP;
+
+    if(baflag_isTrue(BA_FLAG_2_ON_SPRING_PAD))
+        return BS_5_JUMP;
+
+    if(baflag_isTrue(BA_FLAG_1_ON_FLIGHT_PAD))
+        return BS_23_FLY_ENTER;
+
+    return BS_5_JUMP;
+}
+
+void code_14420_setUpdateTypes(enum baanim_update_type_e arg0, enum yaw_state_e yaw_state, s32 arg2, BaPhysicsType arg3){
+    baanim_setUpdateType(arg0);
+    yaw_setUpdateState(yaw_state);
+    func_8029957C(arg2);
+    baphysics_set_type(arg3);
+}
+
+void code_14420_setVoidOutLocation(enum map_e map_id, s32 exit_id){
+    gVoidOutReturnLocation[0] = map_id;
+    gVoidOutReturnLocation[1] = exit_id;
+}
+
+void func_8029C848(AnimCtrl *arg0) {
+    switch(bsStoredState_getTransformation()) {
+        case TRANSFORM_2_TERMITE: //L8029C880
+            anctrl_setIndex(arg0, ASSET_5E_ANIM_BSANT_IDLE);
+            anctrl_setDuration(arg0, 2.0f);
+            break;
+
+        case TRANSFORM_3_PUMPKIN: //L8029C8A0
+            anctrl_setIndex(arg0, ASSET_A0_ANIM_BSPUMPKIN_WALK);
+            anctrl_setDuration(arg0, 0.8f);
+            break;
+
+        case TRANSFORM_5_CROC: //L8029C8C4
+            anctrl_setIndex(arg0, ASSET_E1_ANIM_BSCROC_IDLE);
+            anctrl_setDuration(arg0, 1.0f);
+            break;
+
+        case TRANSFORM_4_WALRUS: //L8029C8E4
+            anctrl_setIndex(arg0, ASSET_11F_ANIM_BSWALRUS_IDLE);
+            anctrl_setDuration(arg0, 1.0f);
+            break;
+
+        case TRANSFORM_6_BEE: //L8029C904
+            anctrl_setIndex(arg0, ASSET_1DC_ANIM_BEE_FLY);
+            anctrl_setDuration(arg0, 0.38f);
+            break;
+
+        case TRANSFORM_1_BANJO:
+        default:
+            if (player_inWater()) {
+                anctrl_setIndex(arg0, ASSET_57_ANIM_BSSWIM_IDLE);
+                anctrl_setDuration(arg0, 1.2f);
+            }
+            else{
+                anctrl_setIndex(arg0, ASSET_6F_ANIM_BSSTAND_IDLE);
+                anctrl_setDuration(arg0, 5.5f);
+            }
+            break;
+    }
+}
+
+void func_8029C984(void){
+    func_8025AB00();
+    func_8025A2FC(0, 4000);
+    comusic_playTrack(COMUSIC_1A_DEATH);
+    midichannel_incOrDecCounter(false);
+}
+
+s32 func_8029C9C0(s32 arg0){
+    if(baflag_isTrue(BA_FLAG_F))
+        return arg0;
+    
+    if(bakey_pressed(BUTTON_A))
+        arg0 = bs_getTypeOfJump();
+
+//  if(bakey_pressed(BUTTON_B) && can_claw())
+    if(EventSystem_Should(VB_CLAW_SWIPE_SLIDE, bakey_pressed(BUTTON_B) && can_claw()))
+        arg0 = BS_6_CLAW;
+
+    if(bakey_held(BUTTON_Z) && bainput_should_beak_barge())
+        arg0 = BS_13_BBARGE;
+
+    if(bainput_should_look_first_person_camera())
+        arg0 = badrone_look();
+
+    if(player_isSliding())
+        arg0  = BS_32_SLIDE;
+
+    return arg0;
+}
+
+s32 func_8029CA94(s32 arg0){
+    if(baflag_isTrue(BA_FLAG_19_SHOULD_TRANSFORM))
+        arg0 = badrone_transform();
+    
+    if(baflag_isTrue(BA_FLAG_1A_OPEN_NOTEDOOR))
+        arg0 = (player_getTransformation() == TRANSFORM_6_BEE) ? 0x46 : BS_34_JIG_NOTEDOOR;
+
+    if(baflag_isTrue(BA_FLAG_E_TOUCHING_WADING_BOOTS))
+        arg0 = BS_25_LONGLEG_ENTER;
+
+    if(baflag_isTrue(BA_FLAG_10_TOUCHING_TURBO_TRAINERS))
+        arg0 = BS_14_BTROT_ENTER;
+
+    if(baflag_isTrue(BA_FLAG_6))
+        arg0 = BS_53_TIMEOUT_BANJO;
+
+    if(baflag_isTrue(BA_FLAG_7_TOUCHING_JIGGY)) {
+        arg0 = BS_44_JIG_JIGGY;
+    }
+
+    if(baflag_isTrue(BA_FLAG_14_LOSE_BOGGY_RACE))
+        arg0 = (player_getTransformation() == TRANSFORM_4_WALRUS) ? BS_80_WALRUS_SLED_LOSE : BS_53_TIMEOUT_BANJO;
+    
+    baflag_clear(BA_FLAG_F);
+
+    return arg0;
+}
+
+void func_8029CB84(void){
+    pitch_setIdeal(0.0f);
+    pitch_applyIdeal();
+
+    roll_setIdeal(0.0f);
+    roll_applyIdeal();
+}
+
+void func_8029CBC4(void){
+    func_8025A55C(-1, 4000, 0xc);
+    midichannel_incOrDecCounter(true);
+}
+
+void func_8029CBF4(void){
+//  if(item_getCount(ITEM_E_JIGGY) == 10){
+    if(EventSystem_Should(VB_LAST_JIGGY_FANFARE, item_getCount(ITEM_E_JIGGY) == 10, NULL)){
+        if( jiggyscore_total() == 100 && fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY)){
+            timedFunc_set_3(4.1f, (GenFunction_3)transitionToMap, MAP_95_CS_END_ALL_100, 0, 1);
+        }//L8029CC58
+//      timedFunc_set_0(4.0f, func_8029CBC4);
+        if(EventSystem_Should(VB_JIGGY_FANFARE_MUSIC_DELAY, true)) timedFunc_set_0(4.0f, func_8029CBC4);
+        coMusicPlayer_playMusic(COMUSIC_42_NOTEDOOR_OPENING_FANFARE, -1);
+    }//L8029CC7C
+    else{
+        if( jiggyscore_total() == 100 && fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY)){
+            transitionToMap(MAP_95_CS_END_ALL_100, 0, 1);
+        }
+        func_8029CBC4();
+    }
+
+}
+
+void func_8029CCC4(void){
+    if(baflag_isFalse(BA_FLAG_7_TOUCHING_JIGGY)) return;
+    if( baflag_isTrue(BA_FLAG_F)
+        && baflag_isFalse(BA_FLAG_6)
+        && baflag_isFalse(BA_FLAG_14_LOSE_BOGGY_RACE)
+    ){
+        baflag_clear(BA_FLAG_F);
+    }
+    baflag_clear(BA_FLAG_7_TOUCHING_JIGGY);
+    func_802B0CD8();
+    item_inc(ITEM_E_JIGGY);
+    if(jiggyscore_total() == 100 && fileProgressFlag_get(FILEPROG_FC_DEFEAT_GRUNTY)){
+        func_8028F918(2);
+    }
+    midichannel_incOrDecCounter(false);
+//  func_8025A55C(0, 4000, 0xC);
+    if(EventSystem_Should(VB_JIGGY_JINGLE_DUCK_MUSIC, true)) func_8025A55C(0, 4000, 0xC);
+    coMusicPlayer_playMusic(COMUSIC_D_JINGLE_JIGGY_COLLECTED, -1);
+    timedFunc_set_0(4.0f, func_8029CBF4);
+}
+
+void func_8029CDA0(void){
+    item_inc(ITEM_E_JIGGY);
+}
+
+void func_8029CDC0(void) {
+    f32 sp2C[3];
+    f32 sp20[3];
+
+    playerPosition_get(sp20);
+    sp20[0] += (randf() * 90.0f) - 45.0f;
+    sp20[2] += (randf() * 90.0f) - 45.0f;
+    sp2C[0]  = (randf() * 20.0f) - 10.0f;
+    sp2C[1]  = (randf() * 50.0f) + 120.0f;
+    sp2C[2]  = (randf() * 20.0f) - 10.0f;
+    func_80356074(sp20, sp2C, 80.0f, 220.0f);
+}

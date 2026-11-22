@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "sw97_mod.h"
+#include "overlays/actors/ovl_En_Partner/z_en_partner.h"
 
 #define SPIRIT_KEY "nei.medallion.spirit"
 #define TOGGLE_DEBOUNCE_FRAMES 10
@@ -25,6 +26,7 @@ static const u16 sItemButtons[ITEM_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDO
                                                      BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
 
 static FairyMode sFairy;
+static s16 sIvanId = -1;
 
 bool Sw97_IsFairyModeActive(void) {
     return sFairy.isActive;
@@ -102,7 +104,7 @@ static void LeaveFairyMode(Player* player, PlayState* play) {
 }
 
 static void SpawnIvan(Player* player, PlayState* play) {
-    sFairy.ivan = Actor_Spawn(&play->actorCtx, play, ACTOR_EN_PARTNER, player->actor.world.pos.x,
+    sFairy.ivan = Actor_Spawn(&play->actorCtx, play, sIvanId, player->actor.world.pos.x,
                               player->actor.world.pos.y + Player_GetHeight(player) + IVAN_HEIGHT_ABOVE_LINK,
                               player->actor.world.pos.z, 0, 0, 0, 0);
     sFairy.linkDraw = player->actor.draw;
@@ -185,7 +187,31 @@ static void EndFairyModeWithScene(void) {
     sFairy.isActive = false;
 }
 
+// ACTOR_EN_PARTNER only joins the actor table when Ivan Co-op is switched on from the menu, so the fairy registers
+// its own copy. Params 0 hands it the first controller.
+static bool RegisterIvan(void) {
+    SOHActorDefinition definition = { 0 };
+
+    definition.structSize = sizeof(definition);
+    definition.key = "sw97.fairy_ivan";
+    definition.description = "Spirit medallion fairy";
+    definition.category = ACTORCAT_ITEMACTION;
+    definition.actorFlags = ACTOR_FLAG_UPDATE_CULLING_DISABLED | ACTOR_FLAG_DRAW_CULLING_DISABLED |
+                            ACTOR_FLAG_HOOKSHOT_PULLS_PLAYER | ACTOR_FLAG_CAN_PRESS_SWITCHES;
+    definition.objectId = OBJECT_GAMEPLAY_KEEP;
+    definition.instanceSize = sizeof(EnPartner);
+    definition.init = (SOHActorFunc)EnPartner_Init;
+    definition.destroy = (SOHActorFunc)EnPartner_Destroy;
+    definition.update = (SOHActorFunc)EnPartner_Update;
+    definition.draw = (SOHActorFunc)EnPartner_Draw;
+    sIvanId = gSw97Api->RegisterActor(&definition);
+    return sIvanId >= 0;
+}
+
 void Sw97_RegisterFairyMode(void) {
+    if (!RegisterIvan()) {
+        return;
+    }
     SOH_REGISTER_HOOK(gSw97Api, OnPlayerUpdate, TickFairyMode);
     SOH_REGISTER_HOOK(gSw97Api, OnPlayDestroy, EndFairyModeWithScene);
 }

@@ -1,14 +1,21 @@
 #include "mario_form.h"
 
+#include "mario_body.h"
+#include "mario_item.h"
+
 void MarioForm_Register(const SOHModApi* api) {
     SOHFormDefinition form = { 0 };
 
     form.structSize = sizeof(form);
     form.key = MARIO_FORM_KEY;
     form.label = "Mario";
-    // Becomes SOH_FORM_KIND_TAKEOVER with the libsm64 body: a takeover form without one freezes the player.
-    form.kind = SOH_FORM_KIND_LINK;
+    form.kind = SOH_FORM_KIND_TAKEOVER;
+    form.item = MARIO_MASK_KEY;
     form.motionScale = 1.0f;
+    form.onEnter = MarioBody_Enter;
+    form.onExit = MarioBody_Exit;
+    form.update = MarioBody_Update;
+    form.draw = MarioBody_Draw;
     api->RegisterForm(&form);
 }
 

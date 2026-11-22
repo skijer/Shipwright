@@ -124,7 +124,6 @@ static void SeparateFromKin(Actor* self, PlayState* play, s16 id, f32 radius, bo
 #define BUG_THUNDER_SPEED 34.0f
 #define BUG_THUNDER_TTL 40
 #define BUG_THUNDER_DAMAGE 6
-#define BUG_THUNDER_SFX_CADENCE 8
 #define BUG_CLOUD_RADIUS 22.0f
 #define BUG_CLOUD_BELOW 10.0f
 #define BUG_CLOUD_ORBIT 0x0300
@@ -266,8 +265,9 @@ static void Bug_FlyAsProjectile(RemainsAllyBug* self, PlayState* play) {
     Actor_MoveXZGravity(&self->actor);
     if (self->mode == BUG_MODE_PROJECTILE) {
         Actor_UpdateBgCheckInfo(play, &self->actor, 20.0f, 12.0f, 0.0f, BGCHECK_WALL_ONLY);
-    } else if ((self->lifeTimer % BUG_THUNDER_SFX_CADENCE) == 0) {
-        Remains_PlayMmSfx(MM_SE_EN_COMMON_THUNDER, &self->actor.projectedPos);
+        Remains_HoldMmSfx(MM_SE_EN_MB_MOTH_FLY, &self->actor.projectedPos);
+    } else {
+        Remains_HoldMmSfx(MM_SE_EN_COMMON_THUNDER, &self->actor.projectedPos);
     }
     Collider_UpdateCylinder(&self->actor, &self->collider);
     CollisionCheck_SetAT(play, &play->colChkCtx, &self->collider.base);
@@ -297,9 +297,7 @@ static void Bug_HopAsBeetle(RemainsAllyBug* self, PlayState* play) {
         HomeTowardPos(play, &self->actor, &anchor, speed);
         return;
     }
-    if (canHop) {
-        Remains_PlayMmSfx(MM_SE_EN_MB_MOTH_FLY, &self->actor.projectedPos);
-    }
+    Remains_HoldMmSfx(MM_SE_EN_MB_MOTH_FLY, &self->actor.projectedPos);
     HomeTowardPos(play, &self->actor, &target->world.pos, BUG_CHASE_SPEED);
     Collider_UpdateCylinder(&self->actor, &self->collider);
     CollisionCheck_SetAT(play, &play->colChkCtx, &self->collider.base);

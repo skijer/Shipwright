@@ -15,9 +15,13 @@
 #include "objects/object_link_boy/object_link_boy.h"
 #include "objects/object_link_child/object_link_child.h"
 
-#define MM_SFX_PLAY_SERVICE "mm.sfx.play"
+#define MM_SFX_PLAY_SCALED_SERVICE "mm.sfx.play_scaled"
 #define MM_SFX_STOP_SERVICE "mm.sfx.stop"
-typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
+#define MM_SFX_FLAG 0x800
+#define REMAINS_SFX_VOLUME 0.55f
+#define REMAINS_SFX_POSITIONS 16
+#define REMAINS_SFX_HELD 4
+typedef bool (*MmSfxPlayScaledFunc)(uint16_t sfxId, Vec3f* pos, f32* freqScale, f32* volume);
 typedef void (*MmSfxStopFunc)(uint16_t sfxId);
 
 #define STORAGE_KEY "nei.mm_collectables"
@@ -152,7 +156,7 @@ typedef struct {
 static bool ReadRemoteVisual(Player* player, RemoteVisualState* visual);
 static void InitRemoteVisuals(void);
 static bool sDrawingRemoteRemains;
-static MmSfxPlayFunc sPlayMmSfx;
+static MmSfxPlayScaledFunc sPlayMmSfx;
 static MmSfxStopFunc sStopMmSfx;
 static s32 sWornRemains = REMAINS_NONE;
 
@@ -331,12 +335,56 @@ static bool SpendMagic(s16 cost) {
     return true;
 }
 
+// MM's engine keeps reading the position while the sound plays, so it gets a copy that outlives a killed actor.
+static Vec3f* KeepSfxPosition(const Vec3f* pos) {
+    static Vec3f sPositions[REMAINS_SFX_POSITIONS];
+    static u32 sNext;
+    Vec3f* kept = &sPositions[sNext];
+
+    sNext = (sNext + 1) % REMAINS_SFX_POSITIONS;
+    *kept = *pos;
+    return kept;
+}
+
 void Remains_PlayMmSfx(u16 sfxId, Vec3f* pos) {
+    static f32 sVolume = REMAINS_SFX_VOLUME;
+    static f32 sFreqScale = 1.0f;
+
     if (sPlayMmSfx == NULL) {
-        sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
+        sPlayMmSfx = (MmSfxPlayScaledFunc)sApi->FindService(MM_SFX_PLAY_SCALED_SERVICE);
     }
     if (sPlayMmSfx != NULL) {
-        sPlayMmSfx(sfxId, pos);
+        sPlayMmSfx(sfxId, KeepSfxPosition(pos), &sFreqScale, &sVolume);
+    }
+}
+
+// Without MM's SFX_FLAG the engine plays a looping sound only while it is requested every frame. It matches the
+// renewal by position pointer, so each held sound keeps one anchor and every emitter of it shares a single voice.
+void Remains_HoldMmSfx(u16 sfxId, Vec3f* pos) {
+    static struct {
+        u16 sfxId;
+        Vec3f pos;
+    } sAnchors[REMAINS_SFX_HELD];
+    static u32 sNextAnchor;
+    static f32 sVolume = REMAINS_SFX_VOLUME;
+    static f32 sFreqScale = 1.0f;
+    u16 heldId = sfxId & ~MM_SFX_FLAG;
+    u32 anchor = 0;
+
+    while (anchor < REMAINS_SFX_HELD && sAnchors[anchor].sfxId != heldId) {
+        anchor++;
+    }
+    if (anchor == REMAINS_SFX_HELD) {
+        anchor = sNextAnchor;
+        sNextAnchor = (sNextAnchor + 1) % REMAINS_SFX_HELD;
+        sAnchors[anchor].sfxId = heldId;
+    }
+    sAnchors[anchor].pos = *pos;
+    if (sPlayMmSfx == NULL) {
+        sPlayMmSfx = (MmSfxPlayScaledFunc)sApi->FindService(MM_SFX_PLAY_SCALED_SERVICE);
+    }
+    if (sPlayMmSfx != NULL) {
+        sPlayMmSfx(heldId, &sAnchors[anchor].pos, &sFreqScale, &sVolume);
     }
 }
 
@@ -388,8 +436,7 @@ static f32 LastRealFrame(LinkAnimationHeader* anim) {
 }
 
 static void StopOdolwaSfx(void) {
-    static const u16 sounds[] = { MM_SE_EN_MIBOSS_GND1_OLD, MM_SE_EN_MB_MOTH_FLY, MM_SE_EN_MIBOSS_VOICE1_OLD,
-                                  MM_SE_EN_MIBOSS_VOICE2_OLD };
+    static const u16 sounds[] = { MM_SE_EN_MIBOSS_GND1_OLD, MM_SE_EN_MIBOSS_VOICE1_OLD, MM_SE_EN_MIBOSS_VOICE2_OLD };
 
     for (u32 i = 0; i < ARRAY_COUNT(sounds); i++) {
         Remains_StopMmSfx(sounds[i]);
@@ -517,6 +564,17 @@ static void DrawOdolwaEquipment(PlayState* play, const char* dl, f32 scale, Vec3
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+// Player_Draw's test for its first-person limb override, which hides Link's head.
+static bool IsViewFromHead(PlayState* play, Player* player) {
+    Vec3f projectedHead;
+
+    if (player->unk_6AD == 0) {
+        return false;
+    }
+    SkinMatrix_Vec3fMtxFMultXYZ(&play->viewProjectionMtxF, &player->actor.focus.pos, &projectedHead);
+    return projectedHead.z < -4.0f;
+}
+
 static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
     if (player != GET_PLAYER(play) && !sDrawingRemoteRemains) {
         RemoteVisualState visual;
@@ -537,6 +595,9 @@ static void DrawOnLimb(PlayState* play, Player* player, int32_t limbIndex) {
     }
     u32 saved = RemainsSavedEnv(play);
     if (limbIndex == PLAYER_LIMB_HEAD) {
+        if (IsViewFromHead(play, player)) {
+            return;
+        }
         DrawWornMask(play);
         RemainsRestoreEnv(play, saved);
         return;
@@ -666,7 +727,6 @@ static void LiftOffOnCloud(PlayState* play, Player* player) {
 static void LandFromCloud(Player* player) {
     sFlightState = 0;
     player->actor.gravity = -2.0f;
-    Remains_StopMmSfx(MM_SE_EN_MB_MOTH_FLY);
 }
 
 static void FlyOnCloud(PlayState* play, Player* player) {
@@ -695,9 +755,7 @@ static void FlyOnCloud(PlayState* play, Player* player) {
     }
     player->linearVelocity = ODOLWA_FLIGHT_SPEED * Math_CosS(sFlightPitch);
     player->actor.velocity.y = ODOLWA_FLIGHT_SPEED * Math_SinS(sFlightPitch);
-    if ((play->gameplayFrames & 7) == 0) {
-        Remains_PlayMmSfx(MM_SE_EN_MB_MOTH_FLY, &player->actor.projectedPos);
-    }
+    Remains_HoldMmSfx(MM_SE_EN_MB_MOTH_FLY, &player->actor.projectedPos);
 }
 
 static void UpdateOdolwaFlight(PlayState* play, Player* player) {
@@ -765,7 +823,6 @@ static void ResolveAction(PlayState* play, Player* player, int32_t action, bool*
     }
     Vec3f pos = player->bodyPartsPos[PLAYER_BODYPART_WAIST];
     RemainsAllyBug_SpawnProjectile(play, &pos, Actor_WorldYawTowardActor(&player->actor, player->focusActor));
-    Remains_PlayMmSfx(MM_SE_EN_MB_MOTH_FLY, &player->actor.projectedPos);
 }
 
 static void FireFromShield(PlayState* play, Player* player, Actor* attacker) {
@@ -893,9 +950,7 @@ static void UpdateGohtThunder(PlayState* play, Player* player) {
     if (IsHeld(play, BTN_B) && !IsHeld(play, BTN_R) && canCast) {
         sGohtThunderCharge = MIN(sGohtThunderCharge + 1, GOHT_THUNDER_CHARGE_MAX);
         sIsGohtThunderCharging = true;
-        if ((play->gameplayFrames & 7) == 0) {
-            Remains_PlayMmSfx(MM_SE_EN_COMMON_THUNDER, &player->actor.projectedPos);
-        }
+        Remains_HoldMmSfx(MM_SE_EN_COMMON_THUNDER, &player->actor.projectedPos);
         return;
     }
     if (sIsGohtThunderCharging && sGohtThunderCharge >= GOHT_THUNDER_CHARGE_MIN &&

@@ -1,0 +1,20 @@
+#ifndef PLATFORM_INFO_H
+#define PLATFORM_INFO_H
+
+#ifdef TARGET_N64
+#define IS_64_BIT 0
+#define IS_BIG_ENDIAN 1
+#else
+#include <stdint.h>
+#define IS_64_BIT (UINTPTR_MAX == 0xFFFFFFFFFFFFFFFFU)
+// MSVC defines neither macro, so their comparison would read 0 == 0 as big endian; it only targets little endian.
+#ifdef _MSC_VER
+#define IS_BIG_ENDIAN 0
+#else
+#define IS_BIG_ENDIAN (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+#endif
+#endif
+
+#define DOUBLE_SIZE_ON_64_BIT(size) ((size)*2)
+
+#endif // PLATFORM_INFO_H

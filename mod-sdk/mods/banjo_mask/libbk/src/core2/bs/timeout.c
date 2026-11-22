@@ -1,0 +1,79 @@
+#include "../../../shim/libbk_build.h"
+#include "../../../shim/ultra64.h"
+#include "../../../include/functions.h"
+#include "../../../include/variables.h"
+#include "../../../include/core2/ba/physics.h"
+#include "../../../include/core2/ba/timer.h"
+#include "../../../include/core2/yaw.h"
+
+
+void baeyes_openSingleEye(s32, f32);
+f32 func_8029B41C(void);
+void ncbadie_func_802BF2C0(f32);
+
+void timeout_banjo_init(void){
+    baanim_playForDuration_onceSmooth(ASSET_77_ANIM_BSTIMEOUT, 3.2f);
+    code_14420_setUpdateTypes(1, YAW_STATE_1_DEFAULT, 3, BA_PHYSICS_NORMAL);
+    baphysics_set_target_horizontal_velocity(0.0f);
+    func_802914CC(0xD);
+    yaw_setIdeal(func_8029B41C() + 35.0f);
+    ncbadie_func_802BF2C0(80.0f);
+    func_8025A58C(0, 4000);
+    comusic_playTrack(COMUSIC_3C_MINIGAME_LOSS);
+    midichannel_incOrDecCounter(false);
+    modelAppendages_setKazooiesUpperHalfVisibility(true);
+    baMarker_collisionOff();
+}
+
+void timeout_banjo_update(void){
+    AnimCtrl *aCtrl = baanim_getAnimCtrlPtr();
+    if(anctrl_isAt(aCtrl, 0.0625f))
+        baeyes_close();
+
+    if(anctrl_isAt(aCtrl, 0.18f))
+        FUNC_8030E624(SFX_3EB_UNKNOWN, 1.0f, 18000);
+
+    if(anctrl_isAt(aCtrl, 0.8421f)){
+        baeyes_openSingleEye(0, 0.3f);
+        baeyes_openSingleEye(1, 0.3f);
+    }
+
+    if(anctrl_isAt(aCtrl, 0.84f))
+        func_8029B6F0();
+}
+
+void timeout_banjo_end(void){
+    baeyes_open();
+    func_80291548();
+    midichannel_incOrDecCounter(true);
+}
+
+void timeout_transformation_init(void){
+    AnimCtrl *aCtrl = baanim_getAnimCtrlPtr();
+    anctrl_reset(aCtrl);
+    func_8029C848(aCtrl);
+    anctrl_setPlaybackType(aCtrl,  ANIMCTRL_LOOP);
+    anctrl_start(aCtrl, "bstimeout.c", 0x7E);
+    code_14420_setUpdateTypes(1, YAW_STATE_1_DEFAULT, 3, BA_PHYSICS_FREEZE);
+    baphysics_set_target_horizontal_velocity(0.0f);
+    func_802914CC(0xD);
+    yaw_setIdeal(func_8029B41C() + 35.0f);
+    ncbadie_func_802BF2C0(80.0f);
+    func_8025A58C(0, 4000);
+    comusic_playTrack(COMUSIC_3C_MINIGAME_LOSS);
+    midichannel_incOrDecCounter(false);
+    baMarker_collisionOff();
+    batimer_set(0, 2.9f);
+}
+
+void timeout_transformation_update(void){
+    if(batimer_decrement(0))
+        func_8029B6F0();
+}
+
+void timeout_transformation_end(void){
+    modelAppendages_setKazooiesUpperHalfVisibility(false);
+    func_80291548();
+    midichannel_incOrDecCounter(true);
+    func_8025A904();
+}

@@ -1,0 +1,44 @@
+#ifndef BANJO_ANIMATION_IDS_H
+#define BANJO_ANIMATION_IDS_H
+
+// Banjo-Kazooie asset ids of the animations the pose table uses, as named by the decomp's enums.h.
+enum BanjoAnimationId {
+    BANJO_ANIM_CROUCH_ENTER = 0x01,
+    BANJO_ANIM_WALK_CREEP = 0x02,
+    BANJO_ANIM_WALK = 0x03,
+    BANJO_ANIM_PUNCH = 0x05,
+    BANJO_ANIM_JUMP = 0x08,
+    BANJO_ANIM_DIE = 0x09,
+    BANJO_ANIM_CLIMB_MOVE = 0x0A,
+    BANJO_ANIM_WALK_RUN = 0x0C,
+    BANJO_ANIM_SWIM_MOVE = 0x39,
+    BANJO_ANIM_REBOUND = 0x0F,
+    BANJO_ANIM_BARGE = 0x1C,
+    BANJO_ANIM_JIG_JIGGY = 0x2E,
+    BANJO_ANIM_SHOCK_CHARGE = 0x48,
+    BANJO_ANIM_OW = 0x4D,
+    BANJO_ANIM_TWIRL = 0x4F,
+    BANJO_ANIM_SWIM_IDLE = 0x57,
+    BANJO_ANIM_SLIDE_BACK = 0x59,
+    BANJO_ANIM_STAND_IDLE = 0x6F,
+    BANJO_ANIM_CARRY_IDLE = 0x72,
+    BANJO_ANIM_CARRY_WALK = 0x73,
+    BANJO_ANIM_TIMEOUT = 0x77,
+    BANJO_ANIM_CONCERT = 0x7E,
+    BANJO_ANIM_STAND_KAZOOIE_PECK = 0x95,
+    BANJO_ANIM_JUMP_FALL = 0xB0,
+    BANJO_ANIM_CLIMB_IDLE = 0xB1,
+    BANJO_ANIM_SPLAT = 0xD2,
+    BANJO_ANIM_STAND_PULL_KAZOOIE = 0xF6,
+    BANJO_ANIM_CROUCH_IDLE = 0x10C,
+    BANJO_ANIM_THROW = 0x11B,
+    BANJO_ANIM_REST_LISTEN = 0x14A,
+};
+
+// Models, also asset ids: the player and the intro's concert Banjo, who holds his banjo.
+enum BanjoModelId {
+    BANJO_MODEL_PLAYER = 0x34E,
+    BANJO_MODEL_CONCERT = 0x355,
+};
+
+#endif

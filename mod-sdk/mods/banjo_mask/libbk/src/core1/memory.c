@@ -1,0 +1,882 @@
+#include "../../shim/libbk_build.h"
+// BanjoDecomp: memory.c
+#include "../../include/core1/core1.h"
+#include "../../include/functions.h"
+#include "../../include/variables.h"
+#include "../../include/version.h"
+#include "../../shim/ultra64.h"
+#include "../../lib/ultralib/include/PR/region.h"
+
+/*
+ *  Every chunk of allocated memory is prefixed with a HeapHeader.
+ *
+ *  Chunks are 0x10 aligned, and cannot have a capacity < 1.
+ *  This means the smallest chunksize with the header is 0x20.
+ *
+ *  If a chunk is empty, it's contains ptrs to the previous and
+ *  next empty chunks. This forms a link list over all the empty
+ *  chunks (EmptyHeapBlock)
+ */
+
+#define chunkSize(s) ((uintptr_t)(s)->next - (uintptr_t)(s) - sizeof(HeapHeader))
+#if VERSION == VERSION_USA_1_0
+#define HEAP_SIZE 0x210520
+#elif VERSION == VERSION_PAL
+#define HEAP_SIZE 0x211120
+#endif
+#define LAST_HEAP_BLOCK HEAP_SIZE/sizeof(EmptyHeapBlock) - 1
+typedef enum {
+    HEAP_BLOCK_EMPTY = 0,
+    HEAP_BLOCK_USED  = 1,
+    HEAP_BLOCK_PERM  = 2
+} heap_block_type_e;
+
+typedef struct heap_header{
+    struct heap_header * prev;
+    struct heap_header * next;
+    u8 pad8[4];
+    u32 unusedBytes_C_31:24; //size?
+    u32 unkC_7:2; //state?
+    u32 padC_5:6;
+}HeapHeader;
+
+typedef struct empty_heap_block{
+    HeapHeader hdr;
+    struct empty_heap_block *prev_free;
+    struct empty_heap_block *next_free;
+    u8 pad18[0x8];
+} EmptyHeapBlock;
+// Lighthouse [port] this was extern. Probably still defined in ASM
+EmptyHeapBlock gHeapBase[LAST_HEAP_BLOCK + 1];
+EmptyHeapBlock D_8023DA00;
+
+/* .data */
+u32 heap_occupiedBytes = 0; //occupied heap size
+u8 D_80276594 = 0;
+u8 D_80276598 = 0;
+void *D_8027659C = NULL;
+void *D_802765A0 = NULL;
+s32 D_802765A4 = 0;
+void *D_802765A8 = NULL;
+s32 D_802765AC = 0;
+struct{
+    bool unk0;
+}D_802765B0 = {0};
+UNK_TYPE(void *) D_802765B4 = NULL;
+
+/* .bss */
+s32 D_80283220;
+void *D_80283224;
+void *D_80283228;
+s32 D_8028322C;
+u32 heap_requested_size;
+HeapHeader * D_80283234;
+struct {
+    void *unk0[0x10];
+    void **unk40;
+}D_80283238;
+
+
+
+EmptyHeapBlock *func_802549BC(s32 size);
+void _heap_sortEmptyBlock(EmptyHeapBlock * arg0);
+void func_80255ACC(void);
+
+/* .code */
+s32 __heap_align(s32 size){
+    s32 misalign = size & 0xf;
+    return(misalign)? (size - misalign + 0x10) : size;
+}
+
+int func_80254490(int arg0){
+    return false;
+}
+
+void _heap_defragEmptyBlock(EmptyHeapBlock * arg0){
+    EmptyHeapBlock * defrag_ptr = NULL;
+    if(arg0->hdr.next->unkC_7 == HEAP_BLOCK_EMPTY){ //absorb next block
+        defrag_ptr = arg0;
+        //remove next from empty block link list
+        ((EmptyHeapBlock *)arg0->hdr.next)->next_free->prev_free = ((EmptyHeapBlock *)arg0->hdr.next)->prev_free;
+        ((EmptyHeapBlock *)arg0->hdr.next)->prev_free->next_free = ((EmptyHeapBlock *)arg0->hdr.next)->next_free;
+        //remove next from block link list
+        arg0->hdr.next->next->prev = (HeapHeader *)arg0;
+        arg0->hdr.next = arg0->hdr.next->next;
+    }
+    if(arg0->hdr.prev->unkC_7 == HEAP_BLOCK_EMPTY){
+        defrag_ptr = (EmptyHeapBlock *)arg0->hdr.prev;
+        //remove self from empty block link list
+        arg0->next_free->prev_free = arg0->prev_free;
+        arg0->prev_free->next_free = arg0->next_free;
+        //remove self from block link list
+        arg0->hdr.prev->next = arg0->hdr.next;
+        arg0->hdr.next->prev = arg0->hdr.prev;
+    }
+    if(defrag_ptr != NULL){
+        _heap_sortEmptyBlock(defrag_ptr);
+    }else{
+        _heap_sortEmptyBlock(arg0);
+    }   
+}
+
+void func_8025456C(EmptyHeapBlock * arg0){
+    arg0->hdr.unkC_7 = HEAP_BLOCK_EMPTY;
+    arg0->hdr.unusedBytes_C_31 = 0;
+    if((u8*)arg0->hdr.next - (u8*)arg0 < 10000){
+        arg0->prev_free = &gHeapBase[0];
+        arg0->next_free = gHeapBase->next_free;
+        gHeapBase->next_free->prev_free = arg0;
+        gHeapBase->next_free = arg0;
+    }else{
+        arg0->prev_free = gHeapBase[LAST_HEAP_BLOCK].prev_free;
+        arg0->next_free = & gHeapBase[LAST_HEAP_BLOCK];
+        
+        gHeapBase[LAST_HEAP_BLOCK].prev_free->next_free = arg0;
+        gHeapBase[LAST_HEAP_BLOCK].prev_free = arg0;
+
+    }
+    _heap_defragEmptyBlock(arg0);
+}
+
+void bk_memcpy(void *dest, void *src, int count) {
+    while (count > 0) {
+        *((u8 *) dest) = *((u8 *) src);
+        count--;
+        dest = (u8 *) dest + 1;
+        src = (u8 *) src + 1;
+    }
+}
+
+void bk_wmemcpy(void *dest, void *src, int count) {
+    while (count > 0) {
+        *((u32 *) dest) = *((u32 *) src);
+        count -= 4;
+        dest = (u32 *) dest + 1;
+        src = (u32 *) src + 1;
+    }
+}
+
+void bk_memmove(void *dest, void *src, int count) {
+    if (dest < src) {
+        // copy forward
+        while (count--) {
+            *((u8 *) dest) = *((u8 *) src);
+            dest = (u8 *) dest + 1;
+            src = (u8 *) src + 1;
+        }
+    } else {
+        // copy backwards
+        dest = (u8 *) dest + count - 1;
+        src = (u8 *) src + count - 1;
+        while (count--) {
+            *((u8 *) dest) = *((u8 *) src);
+            dest = (u8 *) dest - 1;
+            src = (u8 *) src - 1;
+        }
+    }
+}
+
+s32 heap_get_size(void){ return HEAP_SIZE; }
+
+s32 func_802546DC(void){ return 0; }
+
+u32 func_802546E4(void * arg0){
+    HeapHeader *sPtr = (HeapHeader *)arg0 - 1;
+    return chunkSize(sPtr) - sPtr->unusedBytes_C_31;
+}
+
+void func_802546FC(void){
+    D_80283224 = NULL;
+    D_80283228 = NULL;
+}
+
+void heap_init(void){
+    bzero(gHeapBase, sizeof(gHeapBase));
+    func_802546FC();
+    D_80283238.unk40 = &D_80283238.unk0[0];
+    heap_occupiedBytes = 0;
+    D_80276594 = 0;
+    D_802765A0 = 0;
+    D_802765A4 = 0;
+    D_802765A8 = 0;
+    D_802765AC = 0;
+    D_802765B0.unk0 = false;
+    gHeapBase[0].hdr.prev = NULL;
+    gHeapBase[0].hdr.next = (HeapHeader *)&gHeapBase[1];
+    gHeapBase[0].hdr.unkC_7 = 2;
+    gHeapBase[0].hdr.unusedBytes_C_31 = 0;
+    gHeapBase[0].prev_free = NULL;
+    gHeapBase[0].next_free = &gHeapBase[1];
+
+    gHeapBase[1].hdr.prev = (HeapHeader *)&gHeapBase[0];
+    gHeapBase[1].hdr.next = (HeapHeader *)&gHeapBase[LAST_HEAP_BLOCK];
+    gHeapBase[1].hdr.unkC_7 = 0;
+    gHeapBase[1].hdr.unusedBytes_C_31 = 0;
+    gHeapBase[1].prev_free = &gHeapBase[0];
+    gHeapBase[1].next_free = &gHeapBase[LAST_HEAP_BLOCK];
+
+    gHeapBase[LAST_HEAP_BLOCK].hdr.prev = (HeapHeader *)&gHeapBase[1];
+    gHeapBase[LAST_HEAP_BLOCK].hdr.next = (HeapHeader *)&gHeapBase[LAST_HEAP_BLOCK + 1];
+    gHeapBase[LAST_HEAP_BLOCK].hdr.unkC_7 = 2;
+    gHeapBase[LAST_HEAP_BLOCK].hdr.unusedBytes_C_31 = 0;
+    gHeapBase[LAST_HEAP_BLOCK].prev_free = &gHeapBase[1];
+    gHeapBase[LAST_HEAP_BLOCK].next_free = NULL;
+    sns_init_base_payloads();
+}
+
+void *func_8025484C(s32 size){
+    D_802765B4 = bk_malloc(ALIGN((uintptr_t)&gHeapBase[1] + 0x100, 0x100)  - (uintptr_t)&gHeapBase[1] - sizeof(EmptyHeapBlock));
+    return bk_malloc(0x80);
+}
+
+void *func_80254898(s32 arg0){
+    void * sp1C = bk_malloc(ALIGN(((uintptr_t)&gHeapBase[LAST_HEAP_BLOCK] - (uintptr_t)gHeapBase[LAST_HEAP_BLOCK].prev_free) - 0x2FF, 0x100) + - sizeof(EmptyHeapBlock));
+    void * sp18 = bk_malloc(0x80);
+    bk_free(sp1C);
+    bk_free(D_802765B4);
+    D_802765B4 =  NULL;
+    return sp18;
+}
+
+void func_80254908(void){
+    if(D_802765A0){
+        bk_free(D_802765A0);
+        D_802765A0 = NULL;
+    }
+
+    if(D_802765A8){
+        bk_free(D_802765A8);
+        D_802765A8 = NULL;
+    }
+}
+
+static u32 _heap_get_occupied_size(void){
+    return heap_occupiedBytes;
+}
+
+u32 heap_get_occupied_size(void){
+    return _heap_get_occupied_size();
+}
+
+bool func_8025498C(s32 size){
+    return true; // always report enough space
+}
+
+EmptyHeapBlock *func_802549BC(s32 size){
+    return NULL; // no heap blocks to return
+}
+
+EmptyHeapBlock *func_80254A60(bool arg0){
+    return NULL;
+}
+
+EmptyHeapBlock *func_80254B84(s32 arg0){
+    return NULL;
+}
+#if 0
+bool _func_8025498C(s32 size){
+    s32 v0 = func_802549BC(size);
+    return BOOL(v0);
+}
+
+EmptyHeapBlock *_func_802549BC(s32 size){
+    EmptyHeapBlock *a1;
+    s32 aligned_size;
+    u32 block_size;
+
+    a1 = gHeapBase->next_free;
+    aligned_size = __heap_align(size > 0 ? size : 1);
+    while( chunkSize(&a1->hdr) < aligned_size && a1->next_free != &gHeapBase[LAST_HEAP_BLOCK] ){
+        a1 = a1->next_free;
+    }
+   return (chunkSize(&a1->hdr) < aligned_size)? 0 : a1;
+}
+
+EmptyHeapBlock *_func_80254A60(bool arg0){
+        EmptyHeapBlock *v1;
+        EmptyHeapBlock *v0;
+    if(!arg0){
+        //from start
+        v1 = gHeapBase->next_free;
+        while( chunkSize(&v1->hdr) < heap_requested_size && v1->next_free != &gHeapBase[LAST_HEAP_BLOCK] ){
+            v1 = v1->next_free;
+        }
+
+        if(chunkSize(&v1->hdr) < heap_requested_size)
+            return NULL;
+        return v1;
+    }else{
+        //from back
+        v1 = NULL;
+        v0 = gHeapBase->next_free;
+        while(v0 != &gHeapBase[LAST_HEAP_BLOCK]){
+            if(chunkSize(&v0->hdr) >= heap_requested_size && v1 < v0)
+                v1 = v0;
+            v0 = v0->next_free;
+        }
+
+        if(!v1)
+            return NULL;
+
+        if(chunkSize(&v1->hdr) < heap_requested_size)
+            return NULL;
+        return v1;
+    }
+}
+
+EmptyHeapBlock *_func_80254B84(s32 arg0){
+    if(D_80283234){
+        return func_80254A60(1); //closest to back
+    }else{
+        return func_80254A60(0); //closest to from
+    }
+}
+#endif
+
+int func_80254BC4(int arg0){
+    return false;
+}
+
+// so callers skip cache eviction logic
+void *func_80254BD0(s32 *size, u32 arg1) {
+    *size = 0x7FFFFFFF;
+    return NULL;
+#if 0
+    EmptyHeapBlock *var_v1;
+
+    var_v1 = &D_8023DA00;
+    while(arg1 != 0){
+        var_v1 = var_v1->prev_free;
+        if (var_v1 == &gHeapBase[0]) {
+            //less than n blocks
+            return NULL;
+        }
+        arg1--;
+    }
+    *size = ((uintptr_t)(var_v1->hdr.next) - (uintptr_t)var_v1) - sizeof(HeapHeader);
+    return (uintptr_t)var_v1 + 0x10;
+#endif
+}
+
+void func_80254C98(void){
+    D_802765B0.unk0 = true;
+}
+
+void *bk_malloc(size_t size){
+    return calloc(1, size);
+#if 0
+    u32 capacity;
+    EmptyHeapBlock *v1;
+    EmptyHeapBlock *a0;
+
+    D_80283234 = D_802765B0.unk0;
+    D_802765B0.unk0 = false;
+    if(gHeapBase->next_free == &gHeapBase[LAST_HEAP_BLOCK])
+        return NULL;
+
+    heap_requested_size = __heap_align((size > 0 )? size : 1); 
+    if(!(v1 = func_80254B84(0))){ //remove stall cache ptrs
+        D_80283234 = NULL;
+        func_803306C8(2);
+        if(!func_80254B84(0))
+            propModelList_flush(2);
+
+        if(!func_80254B84(0))
+            animCache_flushStale();
+
+        if(!func_80254B84(0))
+            animcommoncache_flushStale(FALSE); //nonpersistent anim
+
+        if(!func_80254B84(0))
+            func_8032AD7C(2);
+
+        if(!(v1 = func_80254B84(0))){
+            func_8033B61C();
+            func_802E49E0();
+            func_803306C8(3); //modelCache
+
+            if(!func_80254B84(0))
+                propModelList_flush(3); //propModelCache
+            
+            if(!func_80254B84(0))
+                func_8032AD7C(2); //actorArray
+
+            if(!(v1 = func_80254B84(0))){
+                if(!func_80254B84(0))
+                    pem_freeEmitters(); //particleEmitters
+                
+                if(!func_80254B84(0))
+                    animcommoncache_flushStale(TRUE); //persistent anim
+
+                if(v1 = func_80254B84(0)){}
+                else
+                    return NULL;
+            }
+        }//L80254E38
+    }//L80254E38
+
+    if( heap_requested_size + sizeof(HeapHeader) < chunkSize(&v1->hdr)){
+        if(D_80283234){
+            //reverse split chunk => //split empty chunk: |prev| a0 |next| => |prev| a0 | v1 |next|
+            a0 = v1;
+            v1 = (EmptyHeapBlock *)((uintptr_t)v1->hdr.next - (heap_requested_size + sizeof(HeapHeader)));
+            v1->hdr.next = a0->hdr.next;
+            a0->hdr.next->prev = v1;
+            a0->hdr.next = v1;
+            v1->hdr.prev = a0;
+            _heap_sortEmptyBlock(a0);
+        }
+        else{//L80254EA4
+            //split chunk: |prev| v1 |next| => |prev| v1 | __a0__ |next|
+            a0 = (HeapHeader *)((uintptr_t)v1 + (heap_requested_size + sizeof(HeapHeader)));
+            a0->next_free = v1->next_free;
+            a0->prev_free = v1->prev_free;
+            a0->next_free->prev_free = a0;
+            a0->prev_free->next_free = a0;
+            a0->hdr.prev = v1;
+            a0->hdr.next = v1->hdr.next;
+            a0->hdr.next->prev = a0;
+            a0->hdr.unkC_7 = 0;
+            a0->hdr.unusedBytes_C_31 = 0;
+            v1->hdr.next = a0;
+            _heap_sortEmptyBlock(a0);
+        }
+    }
+    else{//L80254F08
+        //use full chunk/ remove chunk from empty chunk link list
+        v1->next_free->prev_free = v1->prev_free;
+        v1->prev_free->next_free = v1->next_free;
+    }//L80254F20
+    capacity = (uintptr_t)v1->hdr.next - (uintptr_t)v1 ;
+    v1->hdr.unusedBytes_C_31 = capacity - size - 0x10;
+    v1->hdr.unkC_7 = 1;
+    heap_occupiedBytes += capacity;
+    return (u8*)v1 + sizeof(HeapHeader);
+#endif
+}
+
+void func_80254F90(void){
+    int i;
+    for(i = 0; i < 50; i++){
+        func_80255ACC();
+    }
+}
+
+void _heap_sortEmptyBlock(EmptyHeapBlock * arg0){
+    EmptyHeapBlock *v0 = arg0;
+    EmptyHeapBlock *v1;
+    EmptyHeapBlock *a2 = &gHeapBase[LAST_HEAP_BLOCK];
+
+    //move arg0 back while larger than next
+    while( arg0->next_free < &gHeapBase[LAST_HEAP_BLOCK]
+        && (s32)chunkSize(&v0->next_free->hdr) + 0x10 < (s32)chunkSize(&v0->hdr) + 0x10
+    ){  
+        v1 = arg0->next_free;
+        arg0->next_free = v1->next_free;
+        v1->next_free->prev_free = arg0;
+        v1->next_free = arg0;
+        arg0->prev_free->next_free = v1;
+        v1->prev_free = arg0->prev_free;
+        arg0->prev_free = v1;
+    }
+    
+    //move arg0 foward while smaller prev
+    while( ( (v1 = arg0->prev_free) > &gHeapBase[0])
+        && (s32)chunkSize(&v0->hdr) + 0x10 < (s32)chunkSize(&v0->prev_free->hdr) + 0x10
+    ){
+        a2 = arg0->prev_free;
+
+        arg0->next_free->prev_free = a2;
+        a2->next_free = arg0->next_free;
+        arg0->next_free = a2;
+        arg0->prev_free = a2->prev_free;
+        a2->prev_free->next_free = arg0;
+        a2->prev_free = arg0;
+    }
+}
+
+void bk_free(void * ptr){
+    // Lighthouse [port] Use standard free function
+    return free(ptr);
+#if 0
+    HeapHeader *sPtr; //stack_ptr
+    
+    if(ptr){
+        sPtr = (HeapHeader *) ptr - 1;
+        heap_occupiedBytes =  heap_occupiedBytes - (uintptr_t)((u8*)sPtr->next - (u8*)ptr) - sizeof(HeapHeader);
+        
+        func_8025456C(sPtr);
+        
+        if(ptr == D_802765A0)
+            D_802765A0 = NULL;
+
+        if(ptr == D_802765A8)
+            D_802765A8 = NULL;
+    }
+#endif
+}
+
+void func_80255170(void **arg0){
+    *D_80283238.unk40 = *arg0;
+    D_80283238.unk40++;
+    *arg0 = NULL;
+}
+
+//heap_free_queue_flush
+void func_80255198(void){
+    while(D_80283238.unk40 > &D_80283238.unk0[0]){
+        D_80283238.unk40--;
+        bk_free(*D_80283238.unk40);
+    }
+}
+
+//resizes and fragments a block;
+void func_80255200(HeapHeader *block, s32 size){
+    u32 remaining_bytes;
+    EmptyHeapBlock *a0;
+    u32 tmp, tmp2, tmp3;
+
+    block->unusedBytes_C_31 = chunkSize(block) - size;
+    tmp = ((uintptr_t) (block)->next) - ((uintptr_t) (block));
+    if(size > 0)
+    {
+        // tmp2 = chunkSize(block) - sizeof(HeapHeader);
+        tmp2 = __heap_align(size);
+        remaining_bytes = chunkSize(block) - tmp2;
+    }
+    else{
+        remaining_bytes =  tmp - sizeof(EmptyHeapBlock);
+    }
+    
+    if(remaining_bytes >= sizeof(EmptyHeapBlock)){
+        tmp = (chunkSize(block) + sizeof(HeapHeader)) - remaining_bytes;
+        if(tmp);
+        a0 = (EmptyHeapBlock *)((uintptr_t)block + tmp);
+        heap_occupiedBytes -= remaining_bytes;
+
+        a0->hdr.prev = block;
+        a0->hdr.next = block->next;
+        block->next = &a0->hdr;
+        a0->hdr.next->prev = &a0->hdr;
+        block->unusedBytes_C_31 = chunkSize(block) - size;
+        func_8025456C(a0);
+    }
+}
+
+void func_80255300(HeapHeader *block, s32 size){
+    func_80255200(block, size);
+    if(block->next->unkC_7 == HEAP_BLOCK_EMPTY){
+        _heap_sortEmptyBlock((EmptyHeapBlock *)block->next);
+    }
+}
+
+void *func_80255340(void){
+    return D_80283224;
+}
+
+void *func_8025534C(void){
+    return D_80283228;
+}
+
+void *bk_realloc(void *ptr, size_t new_size){
+    // Lighthouse [port] Use standard realloc function
+    return realloc(ptr, new_size);
+#if 0
+
+    
+    HeapHeader *sPtr;
+    void *newSeg;
+    EmptyHeapBlock *emptySeg;
+    
+    
+    D_80283224 = ptr;
+    D_80283228 = ptr;
+    sPtr = (HeapHeader *)ptr - 1;
+    if(!((uintptr_t)((u8*) sPtr->next - (u8*)ptr) < new_size)){
+        //current pointer has enough free space to accomidate size change
+        func_80255300(sPtr, new_size);
+        return ptr;
+    }
+
+    D_8027659C = ptr;
+    emptySeg = (EmptyHeapBlock*) sPtr->next;
+    if( emptySeg->hdr.unkC_7 == HEAP_BLOCK_EMPTY
+        && !((uintptr_t)((u8*)emptySeg->hdr.next - (u8*)sPtr) - 0x10 < new_size)
+    ){//combine current heap segment with the next one (if next one is free).
+        //remove empty segment from list
+        emptySeg->next_free->prev_free = emptySeg->prev_free;
+        emptySeg->prev_free->next_free = emptySeg->next_free;
+        heap_occupiedBytes += (u8*)emptySeg->hdr.next - (u8*)emptySeg;
+        sPtr->next = emptySeg->hdr.next;
+        emptySeg->hdr.next->prev = sPtr;
+        func_80255300(sPtr, new_size);
+        D_8027659C = 0;
+        return ptr;
+    }//L80255430
+
+    if(!(newSeg = bk_malloc(new_size))){
+        return 0;
+    }
+
+    bkmemcpy64(newSeg, ptr, __heap_align(new_size));
+    bk_free(ptr);
+    ptr = newSeg;
+    D_8027659C = 0;
+    D_80283228 = newSeg;
+
+    if(newSeg);
+    
+    return ptr;
+#endif
+}
+
+u32 heap_get_free_size(void){
+    return HEAP_SIZE - heap_get_occupied_size();
+}
+
+s32 heap_findLargestEmptyBlock(s32 *size_ptr){
+    EmptyHeapBlock *v0;
+    s32 i;
+    s32 size;
+
+    v0 = gHeapBase->next_free;
+    *size_ptr = 0;
+    i = 0;
+    while(v0 != &gHeapBase[LAST_HEAP_BLOCK]){
+        size = (uintptr_t)v0->hdr.next - (uintptr_t)v0;
+        *size_ptr = (size < *size_ptr) ? *size_ptr : size;
+        v0 = v0->next_free;
+        i++;
+    }
+    return i;
+}
+
+void func_80255524(void){
+    D_80283220 = (D_80276598)? -6000000 : 0;
+
+    if(D_802765A0 && D_802765A4 + 1 < D_802765AC){
+        bk_free(D_802765A0);
+        D_802765A0 = NULL;
+
+        if(D_802765A8){
+            bk_free(D_802765A8);
+            D_802765A8 = NULL;
+        }
+    }
+}
+
+void func_802555C4(void){
+    D_8028322C = false;
+}
+
+bool func_802555D0(void){
+    return D_8028322C;
+}
+
+void *defrag(void *this){
+    // Lighthouse [port] No defragmentation implemented, stub but pay 
+    // attention to callers potentially dangerously assuming they can access
+    // moved memory.
+    return this;
+#if 0
+    HeapHeader *new_block;
+    HeapHeader *this_block;
+    EmptyHeapBlock *new_empty;
+    EmptyHeapBlock *prev_empty;
+    EmptyHeapBlock *next_empty;
+    HeapHeader *prev_block;
+    s32 size;
+
+    if(this == NULL || this == D_8027659C){
+        return this;
+    }
+    
+    size = (uintptr_t)((HeapHeader*)this)[-1].next - (uintptr_t)this + 0x10;
+
+    this_block = &((HeapHeader*)this)[-1];
+    if(D_80283220 + size >= 1000000){
+        return this;
+    }
+    new_block = this_block->prev;
+    
+    if(new_block->unkC_7 != HEAP_BLOCK_EMPTY || chunkSize(new_block) < 0x10){
+        return this;
+    }
+
+    //previous block is empty, move contents of this block forward
+    D_8028322C = true;
+    D_80283220 = D_80283220 + size;
+
+    next_empty = ((EmptyHeapBlock *)new_block)->next_free;
+    prev_empty = ((EmptyHeapBlock *)new_block)->prev_free;
+    prev_block = new_block->prev;
+    bkmemcpy64(new_block, this_block, size);
+    //create new empty block at end of new_block;
+    new_empty = (EmptyHeapBlock *)((uintptr_t)new_block + size);
+    new_empty->hdr.prev = new_block;
+    new_empty->hdr.next = new_block->next;
+    new_block->next = &new_empty->hdr;
+    new_block->prev = prev_block;
+    new_empty->hdr.next->prev = &new_empty->hdr;
+    prev_empty->next_free = new_empty;
+    next_empty->prev_free = new_empty;
+    new_empty->next_free = next_empty;
+    new_empty->prev_free = prev_empty;
+    new_empty->hdr.unkC_7 = HEAP_BLOCK_EMPTY;
+    new_empty->hdr.unusedBytes_C_31 = 0;
+
+    if(new_block);
+
+    _heap_defragEmptyBlock(new_empty); //combine new_empty with any surrounding empty blocks
+    return  (void *)((uintptr_t)new_block + sizeof(HeapHeader));
+#endif
+}
+
+void *defrag_asset(void *arg0){
+    // Lighthouse [port] No defragmentation implemented, stub but pay 
+    // attention to callers potentially dangerously assuming they can access
+    // moved memory.
+    return arg0;
+#if 0
+
+    void *sp1C;
+    if(arg0 == NULL || arg0 == D_8027659C)
+        return arg0;
+
+    sp1C = defrag(arg0);
+    assetcache_update_ptr(arg0, sp1C);
+    return sp1C;
+#endif
+}
+
+//recache??? defrag_cache???
+void *func_80255774(void *this){
+    HeapHeader *this_block;
+    HeapHeader *prev_block;
+    s32 size;
+    s32 pad;
+    void *sp24;
+
+    if( this == NULL 
+        || this == D_8027659C
+        || D_802765A0
+        || func_8033BD8C(this)
+    ){
+        return this;
+    }
+
+    size = (uintptr_t)((HeapHeader*)this)[-1].next - (uintptr_t)this + 0x10;
+    this_block = &((HeapHeader*)this)[-1];
+
+    if(D_80283220 + size >= 1000000)
+        return this;
+
+    prev_block = this_block->prev;
+    if(prev_block->unkC_7 != HEAP_BLOCK_EMPTY){
+        return this;
+    }
+
+    sp24 = bk_malloc(size - sizeof(HeapHeader));
+    bkmemcpy64(sp24, this, size - sizeof(HeapHeader));
+    osWritebackDCache(sp24, size - sizeof(HeapHeader));
+    D_80283220 += size  - sizeof(HeapHeader);
+    D_802765A0 = this;
+    D_802765A4 = D_802765AC;
+    return sp24;
+}
+
+//recache asset?? defragment cached obj???
+void *func_80255888(void *arg0){
+    void *sp1C;
+    if(arg0 == NULL || arg0 == D_8027659C){
+        return arg0;
+    }
+
+    sp1C = func_80255774(arg0);
+    assetcache_update_ptr(arg0, sp1C);
+    return sp1C;
+}
+
+void *func_802558D8(void *arg0, void *arg1){
+    void *v1;
+    v1 = func_80255888(arg0);
+    if(v1 == arg0){
+        return arg0;
+    }
+    else{
+        D_802765A8 = arg1;
+        return v1;
+    }
+}
+
+bool func_80255920(void *arg0) {
+    HeapHeader *block;
+
+    if ((arg0 == NULL) || (arg0 == D_8027659C) || (D_802765A0 != NULL)) {
+        return false;
+    }
+
+    block = &((HeapHeader*)arg0)[-1];
+    return (block->prev->unkC_7 != HEAP_BLOCK_EMPTY ) ? false : true;
+}
+
+HeapHeader * func_80255978(void *ptr){
+    return ((HeapHeader* )((uintptr_t)ptr - sizeof(HeapHeader)))->prev;
+}
+
+void func_80255980(void *arg0, int arg1){
+    D_802765A0 = arg0;
+    D_802765A4 = D_802765AC;
+}
+
+bool func_802559A0(void) {
+    return (D_80276598 == 0) ? (D_80283220 >= 0xF4240) || ((D_80276594 == 1) ? 0 : 1) : 0;
+}
+
+void func_80255A04(void){
+    D_80276594 = 1;
+}
+
+void func_80255A14(void){
+    D_80276594 = 0;
+}
+
+void func_80255A20(void){
+    D_80276598 = true;
+}
+
+void func_80255A30(void){
+    D_80276598 = false;
+}
+
+void func_80255A3C(void){
+    func_80255524();
+    if(func_802559A0() && D_80276598 != true)
+        return;
+    
+    if(!func_802559A0())
+        func_802E6820(1);
+
+    if(!func_802559A0())
+        printbuffer_defrag();
+
+    if(!func_802559A0()){
+        ml_defrag();
+        dummy_func_80254464();
+    }
+
+}
+
+void func_80255ACC(void){
+    D_802765AC++;
+}
+
+bool func_80255AE4(void){
+    return (D_802765A0) ? 1 : 0; 
+}
+
+int func_80255B08(int arg0){
+    if(arg0 == 2) 
+        return 0x3;
+    return 0x12;
+}

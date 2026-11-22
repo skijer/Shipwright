@@ -42,6 +42,7 @@ static s16 sStoppedFrames;
 static u32 sToggleFrame;
 static Vec3f sSfxPos;
 static f32 sReleasePitch = ZONAI_RELEASE_PITCH_END;
+static s16 sTickingTimerState = TIMER_STATE_OFF;
 
 // The ice samples carry SFX_FLAG, which parks a one-shot in PLAYING until the same position stops it.
 static void PlayOwnSfx(Player* player, u16 sfxId) {
@@ -108,6 +109,27 @@ static void SpawnStillAir(Player* player, PlayState* play) {
     }
 }
 
+static bool IsTimerTicking(s16 timerState) {
+    return timerState == TIMER_STATE_ENV_HAZARD_TICK || timerState == TIMER_STATE_DOWN_TICK ||
+           timerState == TIMER_STATE_UP_TICK;
+}
+
+// Interface_Update leaves a timer in TIMER_STATE_UP_FREEZE untouched, whichever way it was counting.
+static void FreezeHudTimer(void) {
+    if (!IsTimerTicking(gSaveContext.timerState)) {
+        return;
+    }
+    sTickingTimerState = gSaveContext.timerState;
+    gSaveContext.timerState = TIMER_STATE_UP_FREEZE;
+}
+
+static void ThawHudTimer(void) {
+    if (sTickingTimerState != TIMER_STATE_OFF && gSaveContext.timerState == TIMER_STATE_UP_FREEZE) {
+        gSaveContext.timerState = sTickingTimerState;
+    }
+    sTickingTimerState = TIMER_STATE_OFF;
+}
+
 static bool HasMagic(s16 amount) {
     return gSaveContext.isMagicAcquired && gSaveContext.magic >= amount;
 }
@@ -115,6 +137,7 @@ static bool HasMagic(s16 amount) {
 static void StartTime(Player* player, PlayState* play) {
     sApi->ReleaseTimeControl(ZONAI_KEY);
     sIsTimeStopped = false;
+    ThawHudTimer();
     SpawnRuneBurst(player, play);
     FlashScreen();
     TintScreen(play, 0);
@@ -164,6 +187,7 @@ static s32 FindEquippedButton(void) {
 }
 
 static void KeepTimeStopped(Player* player, PlayState* play) {
+    FreezeHudTimer();
     if (sStoppedFrames < 0x7000) {
         sStoppedFrames++;
     }
@@ -216,6 +240,7 @@ static void UpdateZonai(void) {
 
 static void ForgetStopOnSceneChange(int16_t sceneNum) {
     sIsTimeStopped = false;
+    ThawHudTimer();
 }
 
 static bool CanToggleTime(Player* player, PlayState* play) {

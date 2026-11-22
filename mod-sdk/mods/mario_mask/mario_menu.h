@@ -26,7 +26,8 @@ static inline SOHModMenuWidget MarioMenu_MakeWidget(MarioMenuColumn column, SOHM
     return widget;
 }
 
-// Ship's SOH_MOD_MENU_TEXT aborts the mod's init, so text uses a custom widget; its id must be unique across mods.
+// Text goes through a custom widget: Ship's SOH_MOD_MENU_TEXT aborts the mod's init. The id finds the callback, so it
+// must be unique among every mod's widgets.
 static inline void MarioMenu_AddDrawn(const SOHModApi* api, MarioMenuColumn column, const char* id,
                                       SOHModMenuCallback draw) {
     SOHModMenuWidget widget = MarioMenu_MakeWidget(column, SOH_MOD_MENU_CUSTOM, id);

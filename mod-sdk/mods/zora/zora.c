@@ -54,6 +54,8 @@
 #define SWIM_DEEP_DEPTH (SWIM_ENTER_DEPTH + 12.0f)
 #define SWIM_GRAVITY 0.0f
 #define FAST_SWIM_SPEED 9.0f
+#define SWIM_INVERT_X_CVAR "gMods.Zora.InvertSwimX"
+#define SWIM_INVERT_Y_CVAR "gMods.Zora.InvertSwimY"
 #define FAST_SWIM_KICK_SPEED 12.0f
 #define FAST_SWIM_BURST 16.0f
 #define FAST_SWIM_KICK_FRAME 13.0f
@@ -1516,10 +1518,19 @@ static void UpdateDolphin(PlayState* play, Player* player) {
     KeepDolphinArc(player);
 }
 
+static s32 SwimStickX(Input* input) {
+    return CVarGetInteger(SWIM_INVERT_X_CVAR, 0) ? -input->rel.stick_x : input->rel.stick_x;
+}
+
+static s32 SwimStickY(Input* input) {
+    return CVarGetInteger(SWIM_INVERT_Y_CVAR, 0) ? -input->rel.stick_y : input->rel.stick_y;
+}
+
 static void SteerFastSwim(PlayState* play, Player* player, f32 speedTarget) {
     Input* input = &play->state.input[0];
-    f32 curve = 1.0f - Math_CosS((s16)(input->rel.stick_x * 0x10E));
-    s16 turn = (s16)CLAMP((input->rel.stick_x >= 0 ? 1 : -1) * curve * -1100.0f, -0x1F40, 0x1F40);
+    s32 stickX = SwimStickX(input);
+    f32 curve = 1.0f - Math_CosS((s16)(stickX * 0x10E));
+    s16 turn = (s16)CLAMP((stickX >= 0 ? 1 : -1) * curve * -1100.0f, -0x1F40, 0x1F40);
 
     Math_AsymStepToF(&sSwimSpeed, speedTarget, 1.0f, fabsf(sSwimSpeed) * 0.01f + 0.4f);
     player->yaw += turn;
@@ -1578,7 +1589,7 @@ static void RollIntoDash(PlayState* play, Player* player, bool finished, f32* sp
             sIsDashing = true;
         }
     }
-    Math_SmoothStepToS(&sSwimRoll, (s16)(input->rel.stick_x * 0xC8), 0xA, 0x3E8, 0x64);
+    Math_SmoothStepToS(&sSwimRoll, (s16)(SwimStickX(input) * 0xC8), 0xA, 0x3E8, 0x64);
 }
 
 static void BankFastSwim(Player* player, s16 turn) {
@@ -1596,7 +1607,7 @@ static void BankFastSwim(Player* player, s16 turn) {
 
 static void CruiseFastSwim(PlayState* play, Player* player, f32* speedTarget) {
     Input* input = &play->state.input[0];
-    s16 pitchTarget = (s16)(input->rel.stick_y * 0xC8);
+    s16 pitchTarget = (s16)(SwimStickY(input) * 0xC8);
 
     if (!CHECK_BTN_ALL(input->cur.button, BTN_A)) {
         LeaveDash(play, player);
@@ -1612,7 +1623,7 @@ static void CruiseFastSwim(PlayState* play, Player* player, f32* speedTarget) {
         pitchTarget = MAX(pitchTarget, 0x7D0);
     }
     Math_SmoothStepToS(&sSwimPitch, pitchTarget, 4, 0xFA0, 0x190);
-    s16 rollTarget = (s16)(input->rel.stick_x * 0x64);
+    s16 rollTarget = (s16)(SwimStickX(input) * 0x64);
     if (Math_ScaledStepToS(&sSwimTurn, rollTarget, 0x384) && rollTarget == 0) {
         Math_SmoothStepToS(&sSwimRoll, 0, 4, 0x5DC, 0x64);
     } else {
@@ -2551,12 +2562,27 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+static void RegisterOption(const char* label, const char* cvar, const char* tooltip) {
+    SOHModMenuWidget widget = { 0 };
+
+    widget.structSize = sizeof(widget);
+    widget.section = "Mods";
+    widget.sidebar = "Zora";
+    widget.type = SOH_MOD_MENU_CHECKBOX;
+    widget.label = label;
+    widget.cvar = cvar;
+    widget.tooltip = tooltip;
+    sApi->RegisterMenuWidget(&widget);
+}
+
 SOH_MOD_EXPORT void ModInit(void) {
     if (SOH_MOD_API_HAS(sApi, PublishService))
         sApi->PublishService("nei.zora.human_gyorg_swim", (void*)HumanGyorgSwim);
     LoadAnims();
     RegisterMask();
     RegisterForm();
+    RegisterOption("Invert Swim Left/Right", SWIM_INVERT_X_CVAR, "Turns the fast-swimming Zora the opposite way.");
+    RegisterOption("Invert Swim Up/Down", SWIM_INVERT_Y_CVAR, "Pushing up swims up instead of diving.");
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, ResolveZoraBody);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawZoraLimbExtras);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveFaceTextures, ResolveZoraFace);

@@ -20,6 +20,7 @@ void Remains_ResetFile(void);
 bool Remains_IsOdolwaFlying(void);
 
 void Remains_PlayMmSfx(u16 sfxId, Vec3f* pos);
+void Remains_HoldMmSfx(u16 sfxId, Vec3f* pos);
 void Remains_StopMmSfx(u16 sfxId);
 
 bool RemainsAllies_Register(const SOHModApi* api);

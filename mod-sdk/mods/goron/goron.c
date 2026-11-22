@@ -46,6 +46,7 @@
 #define BALL_MAX_SPEED 18.0f
 #define BALL_BOUNCE_SPEED 12.0f
 #define BALL_STICK_SPEED (8.0f * 2.6f)
+#define ROLL_INVERT_X_CVAR "gMods.Goron.InvertRollX"
 #define BALL_CHARGE_SPIN 0x36B0
 #define BALL_CHARGE_READY 0x36
 #define BALL_CHARGE_CAP 0x100
@@ -876,7 +877,8 @@ static void ReadRollStick(PlayState* play, f32* speedTarget, s16* yawTarget) {
     if (sNoInputTimer > 0 || magnitude <= 10.0f) {
         return;
     }
-    *yawTarget = Math_Atan2S(input->rel.stick_y, -input->rel.stick_x) + Camera_GetInputDirYaw(GET_ACTIVE_CAM(play));
+    f32 stickX = CVarGetInteger(ROLL_INVERT_X_CVAR, 0) ? -input->rel.stick_x : input->rel.stick_x;
+    *yawTarget = Math_Atan2S(input->rel.stick_y, -stickX) + Camera_GetInputDirYaw(GET_ACTIVE_CAM(play));
     *speedTarget = (magnitude / 60.0f) * BALL_STICK_SPEED;
 }
 
@@ -1290,6 +1292,15 @@ static void GoronRollAction(Player* player, PlayState* play) {
     }
 }
 
+// MM's ball DLs call entry 2 of segment 0x0C (Scene_SetRenderModeXlu's table); OoT leaves the 2-entry
+// gCullBackDList there, so the call ran past its end.
+static Gfx sRenderModeNoneDL[] = {
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+    gsSPEndDisplayList(),
+};
+
 static void DrawBall(PlayState* play, Player* player) {
     f32 bulge = sSquash + 1.0f;
     f32 pinch = 1.0f - (sSquash * 0.5f);
@@ -1308,6 +1319,7 @@ static void DrawBall(PlayState* play, Player* player) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Gfx* scroll = Gfx_TwoTexScroll(play->state.gfxCtx, 0, 0, 0, 0x40, 0x40, 1, frames * 2, frames * 2, 0x40, 0x40);
     gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)scroll);
+    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sRenderModeNoneDL);
     gDPSetEnvColor(POLY_OPA_DISP++, (u8)(255.0f - 175.0f * sColorLerp), (u8)(255.0f - 175.0f * sColorLerp),
                    (u8)(255.0f - 55.0f * sColorLerp), 255);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
@@ -1321,6 +1333,7 @@ static void DrawBall(PlayState* play, Player* player) {
         }
         gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sSpikesDL);
     }
+    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)gCullBackDList);
     if (sSpikes < 3 && sChargeLevel >= 5) {
         f32 glow = sSpikes != 0 ? 0.65f : (sChargeLevel - 4) * 0.02f;
         u8 alpha = sSpikes != 0 ? (u8)(0xFF - sSpikes * 0x55) : (u8)MIN(200.0f * glow, 200.0f);
@@ -2050,10 +2063,24 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
+static void RegisterOption(const char* label, const char* cvar, const char* tooltip) {
+    SOHModMenuWidget widget = { 0 };
+
+    widget.structSize = sizeof(widget);
+    widget.section = "Mods";
+    widget.sidebar = "Goron";
+    widget.type = SOH_MOD_MENU_CHECKBOX;
+    widget.label = label;
+    widget.cvar = cvar;
+    widget.tooltip = tooltip;
+    sApi->RegisterMenuWidget(&widget);
+}
+
 SOH_MOD_EXPORT void ModInit(void) {
     LoadAnims();
     RegisterMask();
     RegisterForm();
+    RegisterOption("Invert Roll Left/Right", ROLL_INVERT_X_CVAR, "Steers the rolling Goron the opposite way you push.");
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveLimbDraw, ResolveGoronBody);
     SOH_REGISTER_HOOK(sApi, OnPlayerPostLimbDraw, DrawGoronLimbExtras);
     SOH_REGISTER_HOOK(sApi, OnPlayerResolveFaceTextures, ResolveGoronFace);

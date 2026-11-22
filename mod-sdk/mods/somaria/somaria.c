@@ -144,10 +144,23 @@ static const ALIGN_ASSET(2) char sModeIcons[SOMARIA_MODE_MAX][64] = {
     "__OTR__textures/icon_item_custom/gSomariaIconObjLiftTex",
 };
 
+static const ALIGN_ASSET(2) char sCaneIcon[] = "__OTR__textures/icon_item_custom/gItemIconCaneOfSomariaTex";
+
+// The cane with what it will summon in the corner, as the button shows it.
+static const ALIGN_ASSET(2) char sModeItemIcons[SOMARIA_MODE_MAX][64] = {
+    "__OTR__textures/icon_item_custom/gItemIconSomariaStatueTex",
+    "__OTR__textures/icon_item_custom/gItemIconSomariaCrateTex",
+    "__OTR__textures/icon_item_custom/gItemIconSomariaBirdTex",
+    "__OTR__textures/icon_item_custom/gItemIconSomariaBlockTex",
+    "__OTR__textures/icon_item_custom/gItemIconSomariaPlatformTex",
+};
+
 static const Z64WheelEntry sWheelEntries[SOMARIA_MODE_MAX] = {
-    { sModeIcons[SOMARIA_STATUE], "Statue (1 point)" },      { sModeIcons[SOMARIA_CRATE], "Crate (2 points)" },
-    { sModeIcons[SOMARIA_BIRD], "Bird (1 point)" },          { sModeIcons[SOMARIA_BLOCK], "Block (3 points)" },
-    { sModeIcons[SOMARIA_PLATFORM], "Platform (2 points)" },
+    { sModeIcons[SOMARIA_STATUE], "Statue (1 point)", sModeItemIcons[SOMARIA_STATUE] },
+    { sModeIcons[SOMARIA_CRATE], "Crate (2 points)", sModeItemIcons[SOMARIA_CRATE] },
+    { sModeIcons[SOMARIA_BIRD], "Bird (1 point)", sModeItemIcons[SOMARIA_BIRD] },
+    { sModeIcons[SOMARIA_BLOCK], "Block (3 points)", sModeItemIcons[SOMARIA_BLOCK] },
+    { sModeIcons[SOMARIA_PLATFORM], "Platform (2 points)", sModeItemIcons[SOMARIA_PLATFORM] },
 };
 
 static const u16 sItemButtons[SOMARIA_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
@@ -1050,6 +1063,8 @@ static void UpdateSomaria(void) {
     if (play == NULL || player == NULL) {
         return;
     }
+    // Ownership can change without the cane's onReceive, as the save editor's Give All does.
+    SyncWheelUnlocks();
     UpdatePlatformPrompt(play);
     ForgetDeadSummons();
     if (sBirdCooldown > 0) {
@@ -1179,7 +1194,7 @@ static bool RegisterSummonPickups(void) {
 
         SOHCustomPickupVariant pickup =
             Z64Items_DefinePickup(SOMARIA_KEY, sSummonVariants[mode], sSummonPickupKeys[mode]);
-        pickup.iconPath = sModeIcons[mode];
+        pickup.iconPath = sModeItemIcons[mode];
         pickup.getItemText = sSummonTexts[mode];
         pickup.onReceive = ReceiveSummon;
         pickup.randomizer = &logic;
@@ -1206,7 +1221,7 @@ SOH_MOD_EXPORT void ModInit(void) {
         return;
     }
 
-    SOHCustomItemDefinition cane = Z64Items_Define(SOMARIA_KEY, sModeIcons[SOMARIA_STATUE], sNameTex);
+    SOHCustomItemDefinition cane = Z64Items_Define(SOMARIA_KEY, sCaneIcon, sNameTex);
 
     Z64Items_SetButtons(&cane, SOH_CUSTOM_ITEM_C_BUTTON | SOH_CUSTOM_ITEM_DPAD);
     Z64Items_SetPlacement(&cane, 0, 21, 0);
