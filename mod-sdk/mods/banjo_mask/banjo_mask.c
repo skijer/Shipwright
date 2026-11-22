@@ -72,8 +72,8 @@ static void TellBetaOnce(void) {
     if (CVarGetInteger(BANJO_BETA_CVAR, 0) == BANJO_BETA_VERSION) {
         return;
     }
-    sApi->TellPlayer("Banjo Mask (Beta)", "Banjo Mask is a beta: expect bugs and missing moves. Please report what you "
-                                       "find on the NEI Discord.");
+    sApi->TellPlayer("Banjo Mask (Beta)", "Banjo Mask is a beta: expect bugs and missing moves. Please report "
+                                       "what you find in Skijer's thread on the HM Discord.");
     CVarSetInteger(BANJO_BETA_CVAR, BANJO_BETA_VERSION);
     CVarSave();
 }

@@ -69,8 +69,8 @@ static void TellBetaOnce(void) {
     if (CVarGetInteger(MARIO_BETA_CVAR, 0) == MARIO_BETA_VERSION) {
         return;
     }
-    sApi->TellPlayer("Mario Mask (Beta)", "Mario Mask is a beta: expect bugs and missing moves. Please report what you "
-                                       "find on the NEI Discord.");
+    sApi->TellPlayer("Mario Mask (Beta)", "Mario Mask is a beta: expect bugs and missing moves. Please report "
+                                       "what you find in Skijer's thread on the HM Discord.");
     CVarSetInteger(MARIO_BETA_CVAR, MARIO_BETA_VERSION);
     CVarSave();
 }
