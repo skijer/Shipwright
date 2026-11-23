@@ -1,7 +1,7 @@
 {
     "name": "mario_mask",
     "author": "Skijer",
-    "version": "0.1",
+    "version": "0.1.1",
     "description": "BETA, still in testing. Mario Mask: a transformation mask that turns Link into Mario. Needs your own Super Mario 64 (USA) ROM.",
     "permissions": [
         "files"

@@ -21,6 +21,18 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 static const SOHModApi* sApi;
 
+// Shown once per version on the first played frame: Fleet's seed workers load every mod but never
+// play, and the blocking dialog would stall them.
+static void TellBetaOnce(void) {
+    if (CVarGetInteger(MARIO_BETA_CVAR, 0) == MARIO_BETA_VERSION) {
+        return;
+    }
+    sApi->TellPlayer("Mario Mask (Beta)", "Mario Mask is a beta: expect bugs and missing moves. Please report "
+                                       "what you find in Skijer's thread on the HM Discord.");
+    CVarSetInteger(MARIO_BETA_CVAR, MARIO_BETA_VERSION);
+    CVarSave();
+}
+
 static void FinishSetupOnFirstFrame(void) {
     static bool sIsSetUp = false;
 
@@ -28,6 +40,7 @@ static void FinishSetupOnFirstFrame(void) {
         return;
     }
     sIsSetUp = true;
+    TellBetaOnce();
     MarioRando_RegisterMenuLink(sApi);
     MarioRom_LoadOrAskOnce();
 }
@@ -64,22 +77,10 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
-// Shown once per version: the mask is still in testing.
-static void TellBetaOnce(void) {
-    if (CVarGetInteger(MARIO_BETA_CVAR, 0) == MARIO_BETA_VERSION) {
-        return;
-    }
-    sApi->TellPlayer("Mario Mask (Beta)", "Mario Mask is a beta: expect bugs and missing moves. Please report "
-                                       "what you find in Skijer's thread on the HM Discord.");
-    CVarSetInteger(MARIO_BETA_CVAR, MARIO_BETA_VERSION);
-    CVarSave();
-}
-
 SOH_MOD_EXPORT void ModInit(void) {
     if (!SOH_MOD_API_HAS(sApi, IsFormSuspended)) {
         return;
     }
-    TellBetaOnce();
     sApi->RegisterMenuSidebar(MARIO_MENU_SECTION, MARIO_MENU_SIDEBAR, MARIO_MENU_PAGE_CVAR, MARIO_COLUMN_COUNT);
     MarioControls_RegisterMenu(sApi);
     MarioRando_RegisterOptions(sApi);

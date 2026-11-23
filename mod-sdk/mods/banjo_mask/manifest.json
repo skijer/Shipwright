@@ -1,7 +1,7 @@
 {
     "name": "banjo_mask",
     "author": "Skijer",
-    "version": "0.1",
+    "version": "0.1.1",
     "description": "BETA, still in testing. Banjo Mask: a transformation mask that turns Link into Banjo and Kazooie. Needs your own Banjo-Kazooie (USA 1.0) ROM.",
     "permissions": [
         "files"

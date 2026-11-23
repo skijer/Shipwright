@@ -23,6 +23,18 @@ static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sR
                                                   ARRAY_COUNT(sRequiredHooks) };
 static const SOHModApi* sApi;
 
+// Shown once per version on the first played frame: Fleet's seed workers load every mod but never
+// play, and the blocking dialog would stall them.
+static void TellBetaOnce(void) {
+    if (CVarGetInteger(BANJO_BETA_CVAR, 0) == BANJO_BETA_VERSION) {
+        return;
+    }
+    sApi->TellPlayer("Banjo Mask (Beta)", "Banjo Mask is a beta: expect bugs and missing moves. Please report "
+                                       "what you find in Skijer's thread on the HM Discord.");
+    CVarSetInteger(BANJO_BETA_CVAR, BANJO_BETA_VERSION);
+    CVarSave();
+}
+
 static void FinishSetupOnFirstFrame(void) {
     static bool sIsSetUp = false;
 
@@ -30,6 +42,7 @@ static void FinishSetupOnFirstFrame(void) {
         return;
     }
     sIsSetUp = true;
+    TellBetaOnce();
     BanjoRando_RegisterMenuLink(sApi);
     BanjoRom_LoadOrAskOnce();
 }
@@ -67,22 +80,10 @@ SOH_MOD_EXPORT const SOHModRequirements* ModGetRequirements(void) {
     return &sRequirements;
 }
 
-// Shown once per version: the mask is still in testing.
-static void TellBetaOnce(void) {
-    if (CVarGetInteger(BANJO_BETA_CVAR, 0) == BANJO_BETA_VERSION) {
-        return;
-    }
-    sApi->TellPlayer("Banjo Mask (Beta)", "Banjo Mask is a beta: expect bugs and missing moves. Please report "
-                                       "what you find in Skijer's thread on the HM Discord.");
-    CVarSetInteger(BANJO_BETA_CVAR, BANJO_BETA_VERSION);
-    CVarSave();
-}
-
 SOH_MOD_EXPORT void ModInit(void) {
     if (!SOH_MOD_API_HAS(sApi, IsFormSuspended) || !SOH_MOD_API_HAS(sApi, ReadModsFolderFiles)) {
         return;
     }
-    TellBetaOnce();
     sApi->RegisterMenuSidebar(BANJO_MENU_SECTION, BANJO_MENU_SIDEBAR, BANJO_MENU_PAGE_CVAR, BANJO_COLUMN_COUNT);
     BanjoControls_RegisterMenu(sApi);
     BanjoRando_RegisterOptions(sApi);
