@@ -1,14 +1,61 @@
 #include "ModDialogs.h"
 
+#include <cwchar>
 #include <string>
 
 #include <libultraship/libultraship.h>
 #include <spdlog/spdlog.h>
 #include <SDL2/SDL_messagebox.h>
+#include <SDL2/SDL_video.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#endif
 
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
 
 namespace {
+
+bool sIsHeadless = false;
+
+#if defined(_WIN32)
+struct GameWindows {
+    int total = 0;
+    int visible = 0;
+};
+
+// The game window is SDL's with OpenGL and libultraship's own with DirectX.
+BOOL CALLBACK CountGameWindow(HWND window, LPARAM windows) {
+    DWORD process = 0;
+    GetWindowThreadProcessId(window, &process);
+    wchar_t className[16] = {};
+    if (process != GetCurrentProcessId() || GetClassNameW(window, className, 16) == 0) {
+        return TRUE;
+    }
+    if (std::wcscmp(className, L"SDL_app") == 0 || std::wcscmp(className, L"N64GAME") == 0) {
+        auto* counted = reinterpret_cast<GameWindows*>(windows);
+        counted->total++;
+        counted->visible += IsWindowVisible(window) ? 1 : 0;
+    }
+    return TRUE;
+}
+#endif
+
+// Fleet runs the games headless or hidden to make seeds and to test, where a modal dialog waits for a click nobody
+// can give. Before the game window exists, as during ModInit, dialogs still show.
+bool IsNobodyWatching() {
+    if (sIsHeadless) {
+        return true;
+    }
+#if defined(_WIN32)
+    GameWindows windows;
+    EnumWindows(CountGameWindow, reinterpret_cast<LPARAM>(&windows));
+    return windows.total > 0 && windows.visible == 0;
+#else
+    SDL_Window* window = SDL_GL_GetCurrentWindow();
+    return window != nullptr && (SDL_GetWindowFlags(window) & SDL_WINDOW_HIDDEN) != 0;
+#endif
+}
 
 enum class DialogChoice : int {
     No,
@@ -21,6 +68,10 @@ bool AskFor(const ModIdentity* mod, const char* title, const std::string& messag
         return false;
     }
     const std::string fullTitle = mod->name + ": " + (title != nullptr ? title : "");
+    if (IsNobodyWatching()) {
+        SPDLOG_INFO("[ModApi] {} asked with nobody watching, answered '{}': {}", fullTitle, no, message);
+        return false;
+    }
     const SDL_MessageBoxButtonData buttons[] = {
         { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, static_cast<int>(DialogChoice::No), no },
         { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, static_cast<int>(DialogChoice::Yes), yes },
@@ -38,6 +89,10 @@ void TellFor(const ModIdentity* mod, const char* title, const std::string& messa
         return;
     }
     const std::string fullTitle = mod->name + ": " + (title != nullptr ? title : "");
+    if (IsNobodyWatching()) {
+        SPDLOG_INFO("[ModApi] {}: {}", fullTitle, message);
+        return;
+    }
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION, fullTitle.c_str(), message.c_str(), nullptr);
 }
 
@@ -70,4 +125,8 @@ extern "C" void ModDialogs_Tell(const char* title, const char* message) {
 
 extern "C" bool ModDialogs_RequestRestart(const char* reason) {
     return RequestRestartFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), reason);
+}
+
+extern "C" void ModDialogs_SetHeadless(bool isHeadless) {
+    sIsHeadless = isHeadless;
 }

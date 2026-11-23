@@ -99,6 +99,7 @@
 #include "EmbedderBridge.h"
 #include "ModApi/ModApi.h"
 #include "ModApi/ModStore/ModStore.h"
+#include "ModApi/ModDialogs/ModDialogs.h"
 #include "Enhancements/randomizer/draw.h"
 #include <libultraship/controller/controldeck/ControlDeck.h>
 #include <fast/resource/ResourceType.h>
@@ -453,6 +454,7 @@ void OTRGlobals::InitRandoHeadless() {
     SinkForeignGameArchives();
     OTRExtScanner();
     InitHeadlessItemTables();
+    ModDialogs_SetHeadless(true);
     ModApi_Init();
 }
 
