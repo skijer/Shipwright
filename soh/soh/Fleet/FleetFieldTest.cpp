@@ -382,6 +382,10 @@ nlohmann::json Status() {
 } // namespace
 
 std::optional<std::string> FleetFieldTest_Request(const std::string& request, const nlohmann::json& input) {
+    if (request == "TestOwns") {
+        return nlohmann::json{ { "owned", FleetRuntime_ReadOwnership(input.value("items", nlohmann::json::array())) } }
+            .dump();
+    }
     if (request == "TestTravel") {
         sTravel = Travel{ input.value("mode", ""), input.value("entrance", -1), input.value("passage", "") };
         sTravelResult = "queued";

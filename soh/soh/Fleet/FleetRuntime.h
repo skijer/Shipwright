@@ -11,6 +11,7 @@ void FleetRuntime_Initialize();
 void FleetRuntime_FrameEnd();
 void FleetRuntime_CatchUpParked();
 nlohmann::json FleetRuntime_Status();
+nlohmann::json FleetRuntime_ReadOwnership(const nlohmann::json& items);
 bool FleetRuntime_CollectForSmoke(const std::string& check);
 void FleetRuntime_Save();
 double FleetRuntime_SlowestSaveMilliseconds();

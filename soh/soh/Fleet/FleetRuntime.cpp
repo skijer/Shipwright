@@ -750,6 +750,16 @@ void FleetRuntime_InstallRoutes() {
     sRoutes.Install(FleetRuntime_Seed().value("crossDungeonEntrances", nlohmann::json{}));
 }
 
+nlohmann::json FleetRuntime_ReadOwnership(const nlohmann::json& items) {
+    auto owned = nlohmann::json::object();
+    for (const auto& item : items) {
+        if (item.is_string()) {
+            owned[item.get<std::string>()] = OwnsItemNamed(item.get<std::string>());
+        }
+    }
+    return owned;
+}
+
 nlohmann::json FleetRuntime_Status() {
     auto received = nlohmann::json::array();
     if (sSession.is_object() && IsPlaying()) {

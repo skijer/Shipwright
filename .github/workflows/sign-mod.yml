@@ -222,10 +222,12 @@ jobs:
           python -c "import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extract('soh.lib', sys.argv[2])" release-zip/*-Win64.zip external/soh-lib
           exit 0
         fi
-        RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=20" \
-              --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')
+        # Only a library built from UNBOUND_REF (a commit or a branch) links the mods against the right exports.
+        RUN=$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=unbound-mod-sdk-windows&per_page=100" \
+              --jq '[.artifacts[] | select((.expired | not) and (.workflow_run.head_sha == $ENV.UNBOUND_REF or
+                     .workflow_run.head_branch == $ENV.UNBOUND_REF))][0].workflow_run.id // empty')
         if [ -z "$RUN" ]; then
-          echo "::error::$GITHUB_REPOSITORY has neither a release with soh.lib nor a Windows build artifact"
+          echo "::error::$GITHUB_REPOSITORY has no release or Windows build artifact with the soh.lib of $UNBOUND_REF; run generate-builds on it"
           exit 1
         fi
         echo "No release with soh.lib: using the unbound-mod-sdk-windows artifact of run $RUN"
