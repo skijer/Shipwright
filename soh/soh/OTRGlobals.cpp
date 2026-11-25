@@ -443,13 +443,15 @@ void OTRGlobals::InitRandoHeadless() {
             archives->AddArchive(archive);
         }
     }
-    // The seed generator has no mod menu to mount the mods folder.
+    // The seed generator has no mod menu to mount the mods folder; like it, look in subfolders such as neistore.
     std::error_code error;
-    for (const auto& entry :
-         std::filesystem::directory_iterator(Ship::Context::GetPathRelativeToAppDirectory("mods"), error)) {
-        const std::string extension = entry.path().extension().string();
-        if (entry.is_regular_file() && (extension == ".o2r" || extension == ".otr")) {
-            archives->AddArchive(entry.path().string());
+    auto entry = std::filesystem::recursive_directory_iterator(
+        Ship::Context::GetPathRelativeToAppDirectory("mods"),
+        std::filesystem::directory_options::follow_directory_symlink, error);
+    for (; !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        const std::string extension = entry->path().extension().string();
+        if (entry->is_regular_file() && (extension == ".o2r" || extension == ".otr")) {
+            archives->AddArchive(entry->path().string());
         }
     }
     SinkForeignGameArchives();
