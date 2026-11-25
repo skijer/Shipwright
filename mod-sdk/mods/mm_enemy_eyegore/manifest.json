@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_eyegore",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Eyegore (Majora's Mask)",
+    "description": "Majora's Mask miniboss Eyegore, drawn from your mm.o2r: a stone sentry that guards its post with eye lasers and crushing slams. Shoot its eye while it recovers from a slam, or stun it with a light arrow. Custom enemy mm.eyegore.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_eg/gEyegoreSkel",
+        "objects/object_eg/gEyegoreWalkAnim",
+        "objects/object_eg/gEyegoreLaserDL"
+    ]
+}

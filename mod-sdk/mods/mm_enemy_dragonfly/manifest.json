@@ -1,0 +1,15 @@
+{
+    "name": "mm_enemy_dragonfly",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Dragonfly (Majora's Mask)",
+    "description": "Majora's Mask's Dragonfly, drawn from your mm.o2r: it flits about, hovers above you and stabs down with its crackling tail. Custom enemy mm.dragonfly.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_grasshopper/gDragonflySkel",
+        "objects/object_grasshopper/gDragonflyFlyAnim"
+    ]
+}

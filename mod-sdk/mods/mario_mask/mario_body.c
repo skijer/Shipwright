@@ -17,6 +17,11 @@
 #include "mario_world.h"
 
 #define NO_MARIO (-1)
+// SM64's MARIO_NORMAL_CAP | MARIO_CAP_ON_HEAD: the figure wears its cap.
+#define FIGURE_CAP_ON_HEAD 0x00000011
+// Per game unit: the figure stands about as tall as a get-item model.
+#define FIGURE_SCALE 0.75f
+#define FIGURE_HALF_HEIGHT 20.0f
 #define NO_SCENE (-1)
 #define GAME_VIS_PER_SECOND 60.0f
 #define MAX_TICKS_PER_FRAME 3
@@ -59,6 +64,13 @@ static float sUvs[SM64_GEO_MAX_TRIANGLES * 6];
 static const SOHModApi* sApi;
 static uint8_t* sAtlas;
 static MarioBody sBody = { NO_MARIO, NO_SCENE };
+static int32_t sFigureId = NO_MARIO;
+static uint32_t sFigureFrame;
+static float sFigurePositions[SM64_GEO_MAX_TRIANGLES * 9];
+static float sFigureNormals[SM64_GEO_MAX_TRIANGLES * 9];
+static float sFigureColors[SM64_GEO_MAX_TRIANGLES * 9];
+static float sFigureUvs[SM64_GEO_MAX_TRIANGLES * 6];
+static struct SM64MarioGeometryBuffers sFigureGeometry = { sFigurePositions, sFigureNormals, sFigureColors, sFigureUvs };
 
 static bool IsLibraryReady(void) {
     return sAtlas != NULL;
@@ -368,4 +380,31 @@ void MarioBody_Draw(PlayState* play, Player* player) {
     offset.z = player->actor.world.pos.z - marioPosition.z;
     MarioRender_DrawMesh(play, &sBody.geometry, offset, sBody.state.flags);
     MarioSurfaces_CaptureActorColliders(play);
+}
+
+// A puppet Mario, apart from the player's: posed by `animation` and dressed by `capFlags`, with no physics.
+void MarioBody_DrawFigure(PlayState* play, int32_t animation, uint32_t capFlags) {
+    if (!InitLibraryOnce()) {
+        return;
+    }
+    if (sFigureId == NO_MARIO) {
+        sFigureId = sm64_mario_create_puppet(0.0f, 0.0f, 0.0f);
+    }
+    if (sFigureId == NO_MARIO) {
+        return;
+    }
+    if (sFigureFrame != play->state.frames) {
+        const int16_t frameCount = sm64_get_animation_frame_count(animation);
+
+        sFigureFrame = play->state.frames;
+        sm64_set_mario_animation(sFigureId, animation);
+        sm64_set_mario_anim_frame(sFigureId, frameCount > 0 ? (int16_t)(play->state.frames % frameCount) : 0);
+        sm64_set_mario_state(sFigureId, FIGURE_CAP_ON_HEAD | capFlags);
+        sFigureGeometry.numTrianglesUsed = 0;
+        sm64_mario_tick_puppet(sFigureId, &sFigureGeometry);
+    }
+    Matrix_Push();
+    Matrix_Translate(0.0f, -FIGURE_HALF_HEIGHT * FIGURE_SCALE, 0.0f, MTXMODE_APPLY);
+    MarioRender_DrawMeshHere(play, &sFigureGeometry, capFlags, FIGURE_SCALE);
+    Matrix_Pop();
 }

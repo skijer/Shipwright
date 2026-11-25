@@ -347,8 +347,13 @@ void CreateSharedAssets() {
         { "SonataOfAwakening", 150, 255, 100 }, { "GoronLullaby", 255, 80, 40 },  { "NewWaveBossaNova", 100, 150, 255 },
         { "ElegyOfEmptiness", 255, 160, 0 },    { "OathToOrder", 255, 100, 255 }, { "SongOfHealing", 255, 255, 255 },
         { "SongOfSoaring", 255, 255, 255 },     { "FugueOfHome", 255, 255, 255 }, { "BalladOfHero", 255, 255, 255 },
+        { "CommandMelody", 255, 160, 0 },
     };
-    bool isAssetMissing = !sApi->HasResource("textures/mm_song_notes/gItemIconSongOfHealingTex");
+    bool isAssetMissing = false;
+    for (const SharedAssetArchive::SongTint& tint : kQuestSongTints) {
+        const std::string icon = std::string("textures/mm_song_notes/gItemIcon") + tint.song + "Tex";
+        isAssetMissing = isAssetMissing || !sApi->HasResource(icon.c_str());
+    }
     std::vector<SharedAssetArchive::ArchiveFile> files = SharedAssetArchive::MakeSongNoteIcons(
         ReadResource("icon_item_static_yar/gItemIconSongNoteTex"), "textures/mm_song_notes/gItemIcon", kQuestSongTints);
     for (const SharedAsset& asset : kSharedAssets) {

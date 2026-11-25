@@ -10,7 +10,6 @@
 #define MM_ICON(name) "__OTR__icon_item_static_yar/gItemIcon" name "Tex"
 #define MM_NAME(name) "__OTR__item_name_static/gItemName" name "ENGTex"
 #define MM_MODEL(object, displayList) "__OTR__objects/object_" object "/" displayList
-#define FROG_ICON(colour) "__OTR__textures/nei_combo_oot/" colour "_frog"
 #define FROG_NAME(colour) "__OTR__textures/nei_combo_oot/" colour "_frog_name"
 #define TEXTS(label, hint) \
     label, "%r" label "&%wBelongs to Majora's Mask.", "You got %r" label "%w!&Belongs to Majora's Mask. " hint
@@ -51,13 +50,13 @@ static const ALIGN_ASSET(2) char sMountainDeedIcon[] = MM_ICON("MountainDeed");
 static const ALIGN_ASSET(2) char sMountainDeedName[] = MM_NAME("MountainTitleDeed");
 static const ALIGN_ASSET(2) char sOceanDeedIcon[] = MM_ICON("OceanDeed");
 static const ALIGN_ASSET(2) char sOceanDeedName[] = MM_NAME("OceanTitleDeed");
-static const ALIGN_ASSET(2) char sBlueFrogIcon[] = FROG_ICON("blue");
+static const ALIGN_ASSET(2) char sBlueFrogIcon[] = MM_ICON("DonGeroMask");
 static const ALIGN_ASSET(2) char sBlueFrogName[] = FROG_NAME("blue");
-static const ALIGN_ASSET(2) char sCyanFrogIcon[] = FROG_ICON("cyan");
+static const ALIGN_ASSET(2) char sCyanFrogIcon[] = MM_ICON("DonGeroMask");
 static const ALIGN_ASSET(2) char sCyanFrogName[] = FROG_NAME("cyan");
-static const ALIGN_ASSET(2) char sPinkFrogIcon[] = FROG_ICON("pink");
+static const ALIGN_ASSET(2) char sPinkFrogIcon[] = MM_ICON("DonGeroMask");
 static const ALIGN_ASSET(2) char sPinkFrogName[] = FROG_NAME("pink");
-static const ALIGN_ASSET(2) char sWhiteFrogIcon[] = FROG_ICON("white");
+static const ALIGN_ASSET(2) char sWhiteFrogIcon[] = MM_ICON("DonGeroMask");
 static const ALIGN_ASSET(2) char sWhiteFrogName[] = FROG_NAME("white");
 static const ALIGN_ASSET(2) char sMoonsTearIcon[] = MM_ICON("MoonsTear");
 static const ALIGN_ASSET(2) char sMoonsTearName[] = MM_NAME("MoonsTear");

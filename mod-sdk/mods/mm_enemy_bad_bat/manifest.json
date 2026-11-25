@@ -1,0 +1,15 @@
+{
+    "name": "mm_enemy_bad_bat",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Bad Bat (Majora's Mask)",
+    "description": "Majora's Mask's Bad Bat, drawn from your mm.o2r: it flutters around its roost and dives at you, never more than three at a time. Custom enemy mm.bad_bat.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_bat/gBadBatBodyDL",
+        "objects/object_bat/gBadBatWingsFrame0DL"
+    ]
+}

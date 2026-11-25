@@ -1,0 +1,17 @@
+{
+    "name": "mm_enemy_bio_baba",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Bio Deku Baba (Majora's Mask)",
+    "description": "Majora's Mask's Bio Deku Baba, drawn from your mm.o2r: it floats its own lily pad on the nearest water and hangs beneath it. Cut the stem and the head sinks, sprouts legs and walks the bottom. Custom enemy mm.bio_baba.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_boss05/gBioDekuBabaLilyPadSkel",
+        "objects/object_boss05/gBioDekuBabaHeadSkel",
+        "objects/object_boss05/gBioDekuBabaHeadChompAnim",
+        "overlays/ovl_Boss_05/sBioBabaLilypadCol"
+    ]
+}

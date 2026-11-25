@@ -1,0 +1,17 @@
+{
+    "name": "mm_enemy_death_armos",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Death Armos (Majora's Mask)",
+    "description": "Majora's Mask's Death Armos, drawn from your mm.o2r: a hovering statue that drops on you from above. No blade can hurt it; flip it with a light arrow so its own slam breaks it. Custom enemy mm.death_armos.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_famos/gFamosSkel",
+        "objects/object_famos/gFamosIdleAnim",
+        "objects/object_famos/gFamosShakeAnim",
+        "objects/gameplay_keep/gameplay_keep_DL_06AB30"
+    ]
+}

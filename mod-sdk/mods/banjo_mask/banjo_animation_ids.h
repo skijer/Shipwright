@@ -1,7 +1,8 @@
 #ifndef BANJO_ANIMATION_IDS_H
 #define BANJO_ANIMATION_IDS_H
 
-// Banjo-Kazooie asset ids of the animations the pose table uses, as named by the decomp's enums.h.
+// Banjo-Kazooie asset ids of the animations the pose table and the get-item figures use, as the decomp's enums.h
+// names them.
 enum BanjoAnimationId {
     BANJO_ANIM_CROUCH_ENTER = 0x01,
     BANJO_ANIM_WALK_CREEP = 0x02,
@@ -13,9 +14,18 @@ enum BanjoAnimationId {
     BANJO_ANIM_WALK_RUN = 0x0C,
     BANJO_ANIM_SWIM_MOVE = 0x39,
     BANJO_ANIM_REBOUND = 0x0F,
+    BANJO_ANIM_TROT_WALK = 0x15,
     BANJO_ANIM_BARGE = 0x1C,
+    BANJO_ANIM_BEAK_BUSTER = 0x1D,
+    BANJO_ANIM_WONDERWING_IDLE = 0x23,
+    BANJO_ANIM_EGG_HEAD = 0x2A,
     BANJO_ANIM_JIG_JIGGY = 0x2E,
+    BANJO_ANIM_FLY = 0x38,
+    BANJO_ANIM_LONGLEG_WALK = 0x42,
+    BANJO_ANIM_BEAK_BOMB_START = 0x43,
+    BANJO_ANIM_TROT_TURBO_WALK = 0x44,
     BANJO_ANIM_SHOCK_CHARGE = 0x48,
+    BANJO_ANIM_SHOCK_JUMP = 0x49,
     BANJO_ANIM_OW = 0x4D,
     BANJO_ANIM_TWIRL = 0x4F,
     BANJO_ANIM_SWIM_IDLE = 0x57,
@@ -35,10 +45,21 @@ enum BanjoAnimationId {
     BANJO_ANIM_REST_LISTEN = 0x14A,
 };
 
-// Models, also asset ids: the player and the intro's concert Banjo, who holds his banjo.
+// Models, also asset ids: the player, the intro's concert Banjo who holds his banjo, the pads and the shoes.
 enum BanjoModelId {
     BANJO_MODEL_PLAYER = 0x34E,
     BANJO_MODEL_CONCERT = 0x355,
+    BANJO_MODEL_WADING_BOOTS = 0x366,
+    BANJO_MODEL_TURBO_TRAINERS = 0x367,
+    BANJO_MODEL_SHOCK_SPRING_PAD = 0x489,
+    BANJO_MODEL_FLIGHT_PAD = 0x48A,
+};
+
+// Sprites, also asset ids: the collectibles Kazooie spends on her moves.
+enum BanjoSpriteId {
+    BANJO_SPRITE_BLUE_EGG = 0x36D,
+    BANJO_SPRITE_RED_FEATHER = 0x580,
+    BANJO_SPRITE_GOLD_FEATHER = 0x6D1,
 };
 
 #endif

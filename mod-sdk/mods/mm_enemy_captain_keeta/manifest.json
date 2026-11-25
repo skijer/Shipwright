@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_captain_keeta",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Captain Keeta (Majora's Mask)",
+    "description": "Majora's Mask miniboss Captain Keeta, drawn from your mm.o2r: the giant Stalchild captain fights you on the spot, swinging his sword and leaping onto ledges. Arrows only stun him; cut him down with a blade or explosives. Custom enemy mm.captain_keeta.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_bsb/object_bsb_Skel_00C3E0",
+        "objects/object_bsb/object_bsb_Anim_000FF0",
+        "objects/object_bsb/object_bsb_Anim_000C50"
+    ]
+}

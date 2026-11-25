@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_garo_master",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Garo Master (Majora's Mask)",
+    "description": "Majora's Mask miniboss Garo Master, drawn from your mm.o2r: flaming twin blades, warp strikes from above and a spin counter. Beaten, it blows itself up. Custom enemy mm.garo_master.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_jso/gGaroMasterSkel",
+        "objects/object_jso/gGaroAppearAndDrawSwordsAnim",
+        "objects/object_jso/gGaroMasterEyesDL"
+    ]
+}

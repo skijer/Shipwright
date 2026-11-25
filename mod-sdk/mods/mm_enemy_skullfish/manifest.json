@@ -1,0 +1,15 @@
+{
+    "name": "mm_enemy_skullfish",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Skullfish (Majora's Mask)",
+    "description": "Majora's Mask's Skullfish, drawn from your mm.o2r: bony fish that circle their patch of water and bite whoever swims in. Only placed in water. Custom enemy mm.skullfish.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_pr/object_pr_Skel_004188",
+        "objects/object_pr/object_pr_Anim_004340"
+    ]
+}

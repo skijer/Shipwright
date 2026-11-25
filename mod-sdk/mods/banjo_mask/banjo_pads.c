@@ -1,9 +1,9 @@
 #include "banjo_pads.h"
 
 #include <math.h>
-#include <stdlib.h>
 #include <string.h>
 
+#include "banjo_animation_ids.h"
 #include "banjo_form.h"
 #include "banjo_item.h"
 #include "banjo_page.h"
@@ -17,7 +17,8 @@
 #define PAD_COUNT 2
 #define PAD_STAND_RADIUS 30.0f
 #define PAD_STAND_HEIGHT 12.0f
-#define BONE_SCALE_CHANNEL 3
+// As much as one of Mario's caps.
+#define PAD_MAGIC_COST 12
 
 typedef struct BanjoPad {
     const char* key;
@@ -28,26 +29,29 @@ typedef struct BanjoPad {
     const char* nameTexture;
     const char* textbox;
     const char* pauseText;
+    void (*drawGetItem)(PlayState* play, BANJO_GET_ITEM_ENTRY* entry);
 } BanjoPad;
 
 typedef struct PlacedPad {
     bool isPlaced;
     int16_t sceneId;
     Vec3f position;
-    BkModel model;
-    BkMesh mesh;
+    BanjoProp prop;
 } PlacedPad;
 
+static void DrawFlightPadGetItem(PlayState* play, BANJO_GET_ITEM_ENTRY* entry);
+static void DrawShockSpringPadGetItem(PlayState* play, BANJO_GET_ITEM_ENTRY* entry);
+
 static const BanjoPad kPads[PAD_COUNT] = {
-    { BANJO_FLIGHT_PAD_KEY, LIBBK_PAD_FLIGHT, 0x48A, 1, "__OTR__textures/icon_item_custom/gItemIconBanjoFlightPadTex",
+    { BANJO_FLIGHT_PAD_KEY, LIBBK_PAD_FLIGHT, BANJO_MODEL_FLIGHT_PAD, 1, "__OTR__textures/icon_item_custom/gItemIconBanjoFlightPadTex",
       "__OTR__textures/item_name_custom/gBanjoFlightPadNameTex",
       "You got a %rFlight Pad%w!^Set it down with %y\xA1%w, stand on it&and press %y\x9F%w to take off.",
-      "%rFlight Pad&%wPress %y\xA1%w to set it at Banjo's feet.&Press %y\x9F%w on it to fly." },
-    { BANJO_SHOCK_SPRING_PAD_KEY, LIBBK_PAD_SHOCK_SPRING, 0x489, 2,
+      "%rFlight Pad&%wPress %y\xA1%w to set it down for magic.&Press %y\x9F%w on it to fly.", DrawFlightPadGetItem },
+    { BANJO_SHOCK_SPRING_PAD_KEY, LIBBK_PAD_SHOCK_SPRING, BANJO_MODEL_SHOCK_SPRING_PAD, 2,
       "__OTR__textures/icon_item_custom/gItemIconBanjoShockPadTex",
       "__OTR__textures/item_name_custom/gBanjoShockPadNameTex",
       "You got a %rShock Spring Pad%w!^Set it down with %y\xA1%w, stand on it&and press %y\x9F%w to spring up.",
-      "%rShock Spring Pad&%wPress %y\xA1%w to set it at Banjo's feet.&Press %y\x9F%w on it to leap." },
+      "%rShock Spring Pad&%wPress %y\xA1%w to set it down for magic.&Press %y\x9F%w on it to leap.", DrawShockSpringPadGetItem },
 };
 
 static const SOHModApi* sApi;
@@ -62,32 +66,17 @@ static bool CanPlacePad(Player* player, PlayState* play) {
     return sApi->IsFormActive(BANJO_FORM_KEY) && (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND);
 }
 
-// Pads sit still, so one mesh in their rest pose serves for the whole stay.
-static bool BuildPadMesh(PlacedPad* placed, uint16_t modelId) {
-    static BkBoneChannels sRestPose[BK_BONE_MAX];
-    static const int16_t kNoSelectors[BK_SELECTOR_COUNT];
+// A pad's get-item is the pad itself, from the ROM like the placed one.
+static void DrawPadGetItem(PlayState* play, int32_t index) {
+    BanjoRender_DrawPropGetItem(play, &sPlaced[index].prop);
+}
 
-    if (placed->mesh.triangleCount > 0) {
-        return true;
-    }
-    if (placed->model.data == NULL && !BkModel_Load(&placed->model, modelId)) {
-        return false;
-    }
+static void DrawFlightPadGetItem(PlayState* play, BANJO_GET_ITEM_ENTRY* entry) {
+    DrawPadGetItem(play, 0);
+}
 
-    BkMatrix* bones = calloc(placed->model.boneCount + 1, sizeof(BkMatrix));
-
-    if (bones == NULL) {
-        return false;
-    }
-    for (int32_t bone = 0; bone < BK_BONE_MAX; bone++) {
-        for (int32_t axis = 0; axis < 3; axis++) {
-            sRestPose[bone].values[BONE_SCALE_CHANNEL + axis] = 1.0f;
-        }
-    }
-    BkModel_ComputeBoneMatrices(&placed->model, sRestPose, bones);
-    BkMesh_Build(&placed->mesh, &placed->model, bones, kNoSelectors);
-    free(bones);
-    return placed->mesh.triangleCount > 0;
+static void DrawShockSpringPadGetItem(PlayState* play, BANJO_GET_ITEM_ENTRY* entry) {
+    DrawPadGetItem(play, 1);
 }
 
 static void RegisterPad(const BanjoPad* pad, SOHCustomItemRandomizer* logic) {
@@ -105,6 +94,7 @@ static void RegisterPad(const BanjoPad* pad, SOHCustomItemRandomizer* logic) {
     item.flags |= SOH_CUSTOM_ITEM_INSTANT;
     Z64Items_SetTextbox(&item, pad->textbox);
     Z64Items_SetPauseText(&item, pad->pauseText);
+    item.getItemEntry.drawFunc = pad->drawGetItem;
     Z64Items_SetCanUse(&item, CanPlacePad);
     Z64Items_SetLogic(&item, logic);
     Z64Items_Register(sApi, &item);
@@ -114,6 +104,7 @@ static void RegisterPad(const BanjoPad* pad, SOHCustomItemRandomizer* logic) {
 void BanjoPads_Register(const SOHModApi* api) {
     sApi = api;
     for (int32_t index = 0; index < PAD_COUNT; index++) {
+        sPlaced[index].prop.modelId = kPads[index].modelId;
         RegisterPad(&kPads[index], &sPadLogic[index]);
     }
 }
@@ -134,7 +125,8 @@ bool BanjoPads_Place(PlayState* play, Player* player, const char* itemKey) {
         if (strcmp(itemKey, kPads[index].key) != 0) {
             continue;
         }
-        if (!CanPlacePad(player, play) || !BuildPadMesh(&sPlaced[index], kPads[index].modelId)) {
+        if (!CanPlacePad(player, play) || !BanjoRender_BuildProp(&sPlaced[index].prop) ||
+            !BANJO_CONSUME_MAGIC(play, PAD_MAGIC_COST)) {
             return false;
         }
         sPlaced[index].isPlaced = true;
@@ -172,6 +164,6 @@ void BanjoPads_Draw(PlayState* play) {
 
         const BanjoPlacement placement = { placed->position, { 0.0f, 0.0f, 0.0f }, BANJO_GAME_UNITS_PER_BK_UNIT };
 
-        BanjoRender_DrawMesh(play, &placed->mesh, &placed->model, &placement);
+        BanjoRender_DrawMesh(play, &placed->prop.mesh, &placed->prop.model, &placement);
     }
 }

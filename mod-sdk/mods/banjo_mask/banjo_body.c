@@ -22,6 +22,11 @@
 #define BANJO_HEIGHT 49.0f
 #define FOOT_SPREAD 6.0f
 #define RADIANS_PER_BINANG (3.14159265f / 32768.0f)
+#define FIGURE_EYES_OPEN 1
+// Game units per BK unit: the figure stands about as tall as a get-item model.
+#define FIGURE_SCALE 0.25f
+// Half of Banjo's height in BK units, so the figure floats on its middle like other get-items.
+#define FIGURE_HALF_HEIGHT 60.0f
 
 typedef struct CachedClip {
     uint16_t id;
@@ -41,8 +46,12 @@ static const uint16_t kModelIds[MODEL_COUNT] = { BANJO_MODEL_PLAYER, BANJO_MODEL
 
 // Selector ids of the player model's appendages (modelappendages.c).
 static const uint8_t kKazooieUpperHalf[] = { 0x01, 0x09, 0x0C, 0x0F };
-static const uint8_t kTrainersAndBoots[] = { 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19,
-                                             0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29 };
+static const uint8_t kKazooieFeet[] = { 0x02, 0x0A, 0x0D, 0x10 };
+static const uint8_t kTurboTrainers[] = { 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19 };
+static const uint8_t kWadingBoots[] = { 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29 };
+// The shoe selectors' second branch wears them, the first goes barefoot.
+#define SHOES_OFF 1
+#define SHOES_ON 2
 #define EYES_FIRST_SELECTOR 0x1A
 #define EYES_LAST_SELECTOR 0x21
 #define CONCERT_SELECTORS_ON 0x40
@@ -64,6 +73,9 @@ static int32_t sMeshModel = NO_MODEL;
 static float sMeshAngles[3];
 static Vec3f sMeshOffset;
 static int16_t sSceneId = NO_SCENE;
+static BkBoneChannels sFigureChannels[BK_BONE_MAX];
+static BkMatrix* sFigureBones;
+static BkMesh sFigureMesh;
 
 static int32_t FindModel(uint16_t id) {
     for (int32_t index = 0; index < MODEL_COUNT; index++) {
@@ -124,22 +136,53 @@ static bool GetClipRange(uint16_t animation, float* outFirst, float* outLast) {
     return true;
 }
 
-static void SetPoseSelectors(int16_t* selectors, const BanjoPoseFrame* pose) {
-    for (int32_t index = 0; index < BK_SELECTOR_COUNT; index++) {
-        selectors[index] = (pose->model == BANJO_MODEL_CONCERT && index < CONCERT_SELECTORS_ON) ? 1 : 0;
+uint8_t BanjoBody_GetAppendagesOf(uint16_t animation) {
+    switch (animation) {
+        case BANJO_ANIM_TROT_WALK:
+        case BANJO_ANIM_SHOCK_CHARGE:
+        case BANJO_ANIM_SHOCK_JUMP:
+            return BANJO_APPENDAGE_KAZOOIE | BANJO_APPENDAGE_KAZOOIE_FEET;
+        case BANJO_ANIM_TROT_TURBO_WALK:
+            return BANJO_APPENDAGE_KAZOOIE | BANJO_APPENDAGE_KAZOOIE_FEET | BANJO_APPENDAGE_TURBO_TRAINERS;
+        case BANJO_ANIM_LONGLEG_WALK:
+            return BANJO_APPENDAGE_KAZOOIE | BANJO_APPENDAGE_KAZOOIE_FEET | BANJO_APPENDAGE_WADING_BOOTS;
+        default:
+            return 0;
     }
-    if (pose->model != BANJO_MODEL_PLAYER) {
+}
+
+static void SetSelectors(int16_t* selectors, const uint8_t* ids, size_t count, int16_t value) {
+    for (size_t index = 0; index < count; index++) {
+        selectors[ids[index]] = value;
+    }
+}
+
+void BanjoBody_FillSelectors(int16_t* selectors, uint16_t model, uint8_t appendages, int16_t eyes) {
+    for (int32_t index = 0; index < BK_SELECTOR_COUNT; index++) {
+        selectors[index] = (model == BANJO_MODEL_CONCERT && index < CONCERT_SELECTORS_ON) ? 1 : 0;
+    }
+    if (model != BANJO_MODEL_PLAYER) {
         return;
     }
-    for (size_t index = 0; index < sizeof(kKazooieUpperHalf); index++) {
-        selectors[kKazooieUpperHalf[index]] = pose->isKazooieOut ? 1 : 0;
-    }
-    for (size_t index = 0; index < sizeof(kTrainersAndBoots); index++) {
-        selectors[kTrainersAndBoots[index]] = 1;
-    }
+    SetSelectors(selectors, kKazooieUpperHalf, sizeof(kKazooieUpperHalf), (appendages & BANJO_APPENDAGE_KAZOOIE) != 0);
+    SetSelectors(selectors, kKazooieFeet, sizeof(kKazooieFeet), (appendages & BANJO_APPENDAGE_KAZOOIE_FEET) != 0);
+    SetSelectors(selectors, kTurboTrainers, sizeof(kTurboTrainers),
+                 (appendages & BANJO_APPENDAGE_TURBO_TRAINERS) ? SHOES_ON : SHOES_OFF);
+    SetSelectors(selectors, kWadingBoots, sizeof(kWadingBoots),
+                 (appendages & BANJO_APPENDAGE_WADING_BOOTS) ? SHOES_ON : SHOES_OFF);
     for (int32_t index = EYES_FIRST_SELECTOR; index <= EYES_LAST_SELECTOR; index++) {
-        selectors[index] = pose->eyes;
+        selectors[index] = eyes;
     }
+}
+
+static void SetPoseSelectors(int16_t* selectors, const BanjoPoseFrame* pose) {
+    BanjoBody_FillSelectors(selectors, pose->model, pose->appendages, pose->eyes);
+}
+
+const BkModel* BanjoBody_GetModel(uint16_t id) {
+    const int32_t model = BanjoBody_Load() ? FindModel(id) : NO_MODEL;
+
+    return model != NO_MODEL ? &sModels[model] : NULL;
 }
 
 // While the game drives Link, Banjo copies Link's pose through the pose table.
@@ -280,4 +323,35 @@ void BanjoBody_Draw(PlayState* play, Player* player) {
                                        BANJO_GAME_UNITS_PER_BK_UNIT };
 
     BanjoRender_DrawMesh(play, &sMesh, &sModels[sMeshModel], &placement);
+}
+
+// The figure keeps its own bones and mesh: the player's body rebuilds its own every frame.
+void BanjoBody_DrawFigure(PlayState* play, uint16_t animation, bool isKazooieOut) {
+    const int32_t model = BanjoBody_Load() ? FindModel(BANJO_MODEL_PLAYER) : NO_MODEL;
+    const BkAnimation* clip = model != NO_MODEL ? GetClip(animation) : NULL;
+    int16_t selectors[BK_SELECTOR_COUNT];
+
+    if (clip == NULL) {
+        return;
+    }
+    if (sFigureBones == NULL) {
+        sFigureBones = calloc(sModels[model].boneCount + 1, sizeof(BkMatrix));
+    }
+    if (sFigureBones == NULL) {
+        return;
+    }
+
+    const float span = (float)(clip->lastFrame - clip->firstFrame);
+
+    BkAnimation_Sample(clip, clip->firstFrame + (span > 0.0f ? fmodf((float)play->state.frames, span) : 0.0f),
+                       sFigureChannels);
+    BkModel_ComputeBoneMatrices(&sModels[model], sFigureChannels, sFigureBones);
+    BanjoBody_FillSelectors(selectors, BANJO_MODEL_PLAYER,
+                            (isKazooieOut ? BANJO_APPENDAGE_KAZOOIE : 0) | BanjoBody_GetAppendagesOf(animation),
+                            FIGURE_EYES_OPEN);
+    BkMesh_Build(&sFigureMesh, &sModels[model], sFigureBones, selectors);
+    Matrix_Push();
+    Matrix_Translate(0.0f, -FIGURE_HALF_HEIGHT * FIGURE_SCALE, 0.0f, MTXMODE_APPLY);
+    BanjoRender_DrawMeshHere(play, &sFigureMesh, &sModels[model], FIGURE_SCALE);
+    Matrix_Pop();
 }

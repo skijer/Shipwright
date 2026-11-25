@@ -7,6 +7,7 @@
 #include "mario_form.h"
 #include "mario_item.h"
 #include "mario_page.h"
+#include "mario_render.h"
 #include "z64items.h"
 
 #define PUNCH_KEY "mario_mask.punch"
@@ -25,32 +26,54 @@ typedef struct MarioPower {
     const char* nameTexture;
     const char* textbox;
     const char* pauseText;
+    void (*drawGetItem)(PlayState* play, MARIO_GET_ITEM_ENTRY* entry);
 } MarioPower;
+
+// SM64 animation ids of the get-item figures, as the decomp's mario_animation_ids.h names them.
+#define FIGURE_ANIM_WING_CAP_FLY 0x2A
+#define FIGURE_ANIM_FIRST_PUNCH 0x67
+#define FIGURE_ANIM_CROUCHING 0x98
+#define FIGURE_ANIM_IDLE_HEAD_LEFT 0xC3
+
+// Each power's get-item is a small Mario showing it.
+#define POWER_FIGURE(name, animation, capFlag)                             \
+    static void Draw##name(PlayState* play, MARIO_GET_ITEM_ENTRY* entry) { \
+        MarioBody_DrawFigure(play, animation, capFlag);                    \
+    }
+
+// A cap's get-item is SM64's own box of it; a Mario wearing the cap stands in while the ROM is missing.
+#define CAP_BOX(name, animation, capFlag)                                      static void Draw##name(PlayState* play, MARIO_GET_ITEM_ENTRY* entry) {         if (!MarioRender_DrawCapBox(play, capFlag)) {                                  MarioBody_DrawFigure(play, animation, capFlag);                        }                                                                      }
+
+CAP_BOX(WingCap, FIGURE_ANIM_WING_CAP_FLY, SM64_MARIO_WING_CAP)
+CAP_BOX(MetalCap, FIGURE_ANIM_IDLE_HEAD_LEFT, SM64_MARIO_METAL_CAP)
+CAP_BOX(VanishCap, FIGURE_ANIM_IDLE_HEAD_LEFT, SM64_MARIO_VANISH_CAP)
+POWER_FIGURE(Punch, FIGURE_ANIM_FIRST_PUNCH, 0)
+POWER_FIGURE(Crouch, FIGURE_ANIM_CROUCHING, 0)
 
 static const MarioPower kPowers[] = {
     { "mario_mask.wing_cap", "mario_mask.shuffle_items", SM64_MARIO_WING_CAP, 1800, 1,
       ITEM_TEXTURE("icon_item_custom", "gItemIconMarioWingCapTex"),
       ITEM_TEXTURE("item_name_custom", "gMarioWingCapNameTex"),
       "You got the %rWing Cap%w!^As Mario, press it on %y\xA1%w and then&triple jump to soar through the sky.",
-      "%rWing Cap&%wPress %y\xA1%w as Mario to wear it for&some magic. Triple jump to fly." },
+      "%rWing Cap&%wPress %y\xA1%w as Mario to wear it for&some magic. Triple jump to fly.", DrawWingCap },
     { "mario_mask.metal_cap", "mario_mask.shuffle_items", SM64_MARIO_METAL_CAP, 600, 2,
       ITEM_TEXTURE("icon_item_custom", "gItemIconMarioMetalCapTex"),
       ITEM_TEXTURE("item_name_custom", "gMarioMetalCapNameTex"),
       "You got the %rMetal Cap%w!^As Mario, press it on %y\xA1%w to turn&to heavy, unbreakable metal.",
-      "%rMetal Cap&%wPress %y\xA1%w as Mario to turn to&metal for some magic. He sinks." },
+      "%rMetal Cap&%wPress %y\xA1%w as Mario to turn to&metal for some magic. He sinks.", DrawMetalCap },
     { "mario_mask.vanish_cap", "mario_mask.shuffle_items", SM64_MARIO_VANISH_CAP, 600, 3,
       ITEM_TEXTURE("icon_item_custom", "gItemIconMarioVanishCapTex"),
       ITEM_TEXTURE("item_name_custom", "gMarioVanishCapNameTex"),
       "You got the %rVanish Cap%w!^As Mario, press it on %y\xA1%w to fade&and walk through walls.",
-      "%rVanish Cap&%wPress %y\xA1%w as Mario to vanish for&some magic, through walls." },
-    { PUNCH_KEY, "mario_mask.shuffle_punch", 0, 0, 6, ITEM_TEXTURE("icon_item_custom", "gItemIconMarioPunchTex"),
+      "%rVanish Cap&%wPress %y\xA1%w as Mario to vanish for&some magic, through walls.", DrawVanishCap },
+    { PUNCH_KEY, "mario_mask.shuffle_punch", 0, 0, 6, ITEM_TEXTURE("icon_item_custom", "gItemIconMarioMaskTex"),
       ITEM_TEXTURE("item_name_custom", "gMarioPunchNameTex"),
       "You learned to %rPunch%w!^As Mario, press %y\xA0%w to punch, kick&and dive at your foes.",
-      "%rPunch&%wMario punches and kicks with %y\xA0%w." },
-    { CROUCH_KEY, "mario_mask.shuffle_crouch", 0, 0, 7, ITEM_TEXTURE("icon_item_custom", "gItemIconMarioCrouchTex"),
+      "%rPunch&%wMario punches and kicks with %y\xA0%w.", DrawPunch },
+    { CROUCH_KEY, "mario_mask.shuffle_crouch", 0, 0, 7, ITEM_TEXTURE("icon_item_custom", "gItemIconMarioMaskTex"),
       ITEM_TEXTURE("item_name_custom", "gMarioCrouchNameTex"),
       "You learned to %rCrouch%w!^As Mario, hold %y\xA4%w to crouch, long&jump and ground pound.",
-      "%rCrouch&%wHold %y\xA4%w as Mario to crouch, long jump&and ground pound." },
+      "%rCrouch&%wHold %y\xA4%w as Mario to crouch, long jump&and ground pound.", DrawCrouch },
 };
 
 static const SOHModApi* sApi;
@@ -82,6 +105,7 @@ static void RegisterPower(const MarioPower* power, SOHCustomItemRandomizer* logi
     }
     Z64Items_SetTextbox(&item, power->textbox);
     Z64Items_SetPauseText(&item, power->pauseText);
+    item.getItemEntry.drawFunc = power->drawGetItem;
     Z64Items_SetLogic(&item, logic);
     Z64Items_Register(sApi, &item);
     MarioPage_Place(sApi, power->key, power->cell);

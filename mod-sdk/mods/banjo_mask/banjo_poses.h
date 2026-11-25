@@ -12,7 +12,8 @@ typedef struct BanjoPoseFrame {
     float frame;
     // Banjo's eye selector, 1 (open) to 8 (shut).
     uint8_t eyes;
-    bool isKazooieOut;
+    // BanjoAppendage flags.
+    uint8_t appendages;
 } BanjoPoseFrame;
 
 // First and last frame of one of Banjo's clips; false when the clip cannot be loaded.

@@ -1,5 +1,7 @@
 #include "banjo_item.h"
 
+#include "banjo_animation_ids.h"
+#include "banjo_body.h"
 #include "banjo_form.h"
 #include "z64items.h"
 #ifdef S2H_MOD
@@ -18,6 +20,11 @@ static const SOHCustomItemRandomizer sRandomizerItem = {
     sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, BANJO_MASK_KEY, BANJO_MASK_KEY, "", NULL,
     "banjo_mask.shuffle_mask", 1,
 };
+
+// The mask's get-item is Banjo himself, standing idle.
+static void DrawMaskGetItem(PlayState* play, BANJO_GET_ITEM_ENTRY* entry) {
+    BanjoBody_DrawFigure(play, BANJO_ANIM_STAND_IDLE, false);
+}
 
 static bool CanWearMask(Player* player, PlayState* play) {
     return (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) && !(player->stateFlags1 & BANJO_STATE1_SWIMMING);
@@ -38,6 +45,7 @@ void BanjoItem_Register(const SOHModApi* api) {
                                "Wear it with %y\xA1%w to become Banjo,&with Kazooie in his backpack.");
     Z64Items_SetPauseText(&mask, "%rBanjo Mask&%wPress %y\xA1%w to become Banjo and Kazooie.&"
                                  "Press it again to be yourself.");
+    mask.getItemEntry.drawFunc = DrawMaskGetItem;
     Z64Items_SetCanUse(&mask, CanWearMask);
     Z64Items_SetAction(&mask, WearMask, NULL);
     Z64Items_SetLogic(&mask, &sRandomizerItem);

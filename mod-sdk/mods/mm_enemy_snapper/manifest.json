@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_snapper",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Snapper (Majora's Mask)",
+    "description": "Majora's Mask's Snapper, drawn from your mm.o2r: a turtle that hides in its spiked shell and spins into you. Flip it with explosives or a hammer pound, then strike its belly. Custom enemy mm.snapper.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_tl/gSnapperSkel",
+        "objects/object_tl/gSpikedSnapperSkel",
+        "objects/object_tl/gSnapperWiggleLegsAnim"
+    ]
+}

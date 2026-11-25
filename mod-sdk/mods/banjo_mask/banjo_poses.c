@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "banjo_animation_ids.h"
+#include "banjo_body.h"
 #include "banjo_pose_table.h"
 
 #define RESOURCE_PATH_PREFIX "__OTR__"
@@ -174,7 +175,8 @@ void BanjoPoses_Follow(Player* player, BanjoClipRangeFunc getClipRange, BanjoPos
     out->model = pose.model;
     out->animation = pose.banjoAnimation;
     out->eyes = GetEyes(player);
-    out->isKazooieOut = ShowsKazooie(pose.banjoAnimation);
+    out->appendages = (ShowsKazooie(pose.banjoAnimation) ? BANJO_APPENDAGE_KAZOOIE : 0) |
+                      BanjoBody_GetAppendagesOf(pose.banjoAnimation);
     float first = 0.0f;
     float last = 0.0f;
 

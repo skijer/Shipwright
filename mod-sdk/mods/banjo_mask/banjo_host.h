@@ -14,6 +14,9 @@
 #define BANJO_SCENE_ID(play) ((play)->sceneId)
 #define BANJO_ALLOC_GFX(gfxCtx, size) GRAPH_ALLOC(gfxCtx, size)
 #define BANJO_FINALIZE_MATRIX(gfxCtx) Matrix_Finalize(gfxCtx)
+#define BANJO_GET_ITEM_ENTRY S2HGetItemEntry
+#define BANJO_SETUP_OPA(gfxCtx) Gfx_SetupDL25_Opa(gfxCtx)
+#define BANJO_CONSUME_MAGIC(play, amount) Magic_Consume(play, amount, MAGIC_CONSUME_NOW)
 #define BANJO_STATE1_SWIMMING PLAYER_STATE1_8000000
 #define BANJO_PLAYER_SPEED(player) ((player)->speedXZ)
 #define BANJO_PLAYER_HEALTH (gSaveContext.save.saveInfo.playerData.health)
@@ -40,6 +43,9 @@
 #define BANJO_SCENE_ID(play) ((play)->sceneNum)
 #define BANJO_ALLOC_GFX(gfxCtx, size) Graph_Alloc(gfxCtx, size)
 #define BANJO_FINALIZE_MATRIX(gfxCtx) MATRIX_NEWMTX(gfxCtx)
+#define BANJO_GET_ITEM_ENTRY GetItemEntry
+#define BANJO_SETUP_OPA(gfxCtx) Gfx_SetupDL_25Opa(gfxCtx)
+#define BANJO_CONSUME_MAGIC(play, amount) Magic_RequestChange(play, amount, MAGIC_CONSUME_NOW)
 #define BANJO_STATE1_SWIMMING PLAYER_STATE1_IN_WATER
 #define BANJO_PLAYER_SPEED(player) ((player)->linearVelocity)
 #define BANJO_PLAYER_HEALTH (gSaveContext.health)

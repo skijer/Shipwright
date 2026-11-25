@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_hiploop",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Hiploop (Majora's Mask)",
+    "description": "Majora's Mask's Hiploop, drawn from your mm.o2r: a masked bug that charges at you and shrugs off blows until the hookshot, a bomb or the hammer knocks its mask away. Custom enemy mm.hiploop.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_pp/gHiploopSkel",
+        "objects/object_pp/gHiploopIdleAnim",
+        "objects/object_pp/gHiploopMaskDL"
+    ]
+}

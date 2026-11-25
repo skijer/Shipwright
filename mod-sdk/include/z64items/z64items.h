@@ -131,6 +131,13 @@ static inline bool Z64Items_Register(const SOHModApi* api, const SOHCustomItemDe
     return SOH_MOD_API_HAS(api, RegisterCustomItem) && api->RegisterCustomItem(definition);
 }
 
+// For an item several mods define alike (an enemy family's soul): whichever mod loads first registers it.
+static inline bool Z64Items_RegisterShared(const SOHModApi* api, const SOHCustomItemDefinition* definition) {
+    bool isRegistered = SOH_MOD_API_HAS(api, FindCustomItem) && api->FindCustomItem(definition->key) != NULL;
+
+    return isRegistered || Z64Items_Register(api, definition);
+}
+
 // Saves own items, and seeds place them, by key: a renamed item keeps its old key registered and hidden. It stays a
 // randomizer item that never joins a pool, so an older seed can still place it; ownership moves to the new key.
 static inline bool Z64Items_RegisterLegacyKey(const SOHModApi* api, const SOHCustomItemDefinition* current,

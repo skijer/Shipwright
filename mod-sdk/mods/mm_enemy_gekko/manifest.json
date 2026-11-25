@@ -1,0 +1,17 @@
+{
+    "name": "mm_enemy_gekko",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Gekko & Snapper",
+    "description": "Majora's Mask miniboss Gekko and his Snapper mount, drawn from your mm.o2r. Flip the Snapper with explosives or a hammer pound, then shoot Gekko off the walls. Custom enemy mm.gekko.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_bigslime/gGekkoSkel",
+        "objects/object_bigslime/gGekkoJumpForwardAnim",
+        "objects/object_tl/gSnapperSkel",
+        "objects/object_tl/gSpikedSnapperSkel"
+    ]
+}

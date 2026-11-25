@@ -504,11 +504,13 @@ static void DrawGetItem(PlayState* play, GetItemEntry* entry) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPGrayscale(POLY_OPA_DISP++, true);
-    gDPSetGrayscaleColor(POLY_OPA_DISP++, 0, 120, 215, 255);
+    // The tunic lists take their colors from prim and env, which the native color lists would set.
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 230, 190, 70, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, 110, 80, 20, 255);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicCollarDL);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 0, 120, 215, 255);
+    gDPSetEnvColor(POLY_OPA_DISP++, 0, 40, 100, 255);
     gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gGiTunicDL);
-    gSPGrayscale(POLY_OPA_DISP++, false);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 

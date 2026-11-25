@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_real_bombchu",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Real Bombchu (Majora's Mask)",
+    "description": "Majora's Mask's Real Bombchu, drawn from your mm.o2r: a rat with a bomb on its back that scurries along floors, walls and ceilings and blows up on you. Custom enemy mm.real_bombchu.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_rat/gRealBombchuSkel",
+        "objects/object_rat/gRealBombchuRunAnim",
+        "objects/object_rat/gRealBombchuSpotAnim"
+    ]
+}

@@ -10,6 +10,8 @@
 #define gDPFillRectangle(pkt, ulx, uly, lrx, lry) ((void)0)
 #define gSPViewport(pkt, v) ((void)0)
 extern void gSPMatrix(void* pkt, Mtx* m, uint8_t flags);
+// Renamed: the host exports its own gSPDisplayList, and inside the mod the local one would shadow it.
+#define gSPDisplayList libsm64_gSPDisplayList
 extern void gSPDisplayList(void* pkt, struct DisplayListNode* dl);
 
 extern void gfx_adapter_bind_output_buffers(struct SM64MarioGeometryBuffers* outBuffers);

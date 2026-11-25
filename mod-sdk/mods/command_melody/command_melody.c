@@ -18,6 +18,8 @@
 #define MAX_PARTNERS 8
 
 static const ALIGN_ASSET(2) char sSongIcon[] = "__OTR__textures/icon_item_custom/gItemIconCommandMelodyTex";
+// The Majora's Mask note mm_assets tints for each song, as its other songs show in Ocarina of Time.
+static const ALIGN_ASSET(2) char sMmNoteIcon[] = "__OTR__textures/mm_song_notes/gItemIconCommandMelodyTex";
 static const ALIGN_ASSET(2) char sSongName[] = "__OTR__textures/item_name_custom/gCommandMelodyNameTex";
 static const ALIGN_ASSET(2) char sSongNoteDL[] = "__OTR__objects/object_gi_melody/gGiSongNoteDL";
 static const ALIGN_ASSET(2) char sSongColorDL[] = "__OTR__objects/object_gi_melody/gGiRequiemColorDL";
@@ -380,7 +382,8 @@ static void RegisterSong(void) {
     static const SOHCustomItemRandomizer randomizer = {
         sizeof(SOHCustomItemRandomizer), 0, SOH_CUSTOM_ITEM_TYPE_ITEM, 0, 1, COMMAND_SONG, COMMAND_SONG, "",
     };
-    SOHCustomItemDefinition song = Z64Items_Define(COMMAND_SONG, sSongIcon, sSongName);
+    const char* icon = sApi->HasResource(sMmNoteIcon) ? sMmNoteIcon : sSongIcon;
+    SOHCustomItemDefinition song = Z64Items_Define(COMMAND_SONG, icon, sSongName);
     Z64Items_SetPlacement(&song, SOH_ITEM_PAGE_QUEST_VANILLA + 1, MM_SONG_PAGE_CELL, 0);
     song.getItemEntry.drawFunc = DrawSongGetItem;
     Z64Items_SetTextbox(

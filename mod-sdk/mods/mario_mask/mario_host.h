@@ -14,6 +14,11 @@
 #define MARIO_PLAYER_SPEED(player) ((player)->speedXZ)
 #define MARIO_SCENE_ID(play) ((play)->sceneId)
 #define MARIO_IDENTITY_MTX gIdentityMtx
+#define MARIO_GET_ITEM_ENTRY S2HGetItemEntry
+#define MARIO_SETUP_OPA(gfxCtx) Gfx_SetupDL25_Opa(gfxCtx)
+#define MARIO_FINALIZE_MATRIX(gfxCtx) Matrix_Finalize(gfxCtx)
+#define MARIO_ROTATE_X(radians) Matrix_RotateXF(radians, MTXMODE_APPLY)
+#define MARIO_ROTATE_Z(radians) Matrix_RotateZF(radians, MTXMODE_APPLY)
 #define MARIO_ALLOC_GFX(gfxCtx, size) GRAPH_ALLOC(gfxCtx, size)
 #define MARIO_STATE1_GETTING_ITEM PLAYER_STATE1_400
 #define MARIO_STATE1_IN_ITEM_CS PLAYER_STATE1_10000000
@@ -39,6 +44,11 @@
 #define MARIO_PLAYER_SPEED(player) ((player)->linearVelocity)
 #define MARIO_SCENE_ID(play) ((play)->sceneNum)
 #define MARIO_IDENTITY_MTX gMtxClear
+#define MARIO_GET_ITEM_ENTRY GetItemEntry
+#define MARIO_SETUP_OPA(gfxCtx) Gfx_SetupDL_25Opa(gfxCtx)
+#define MARIO_FINALIZE_MATRIX(gfxCtx) MATRIX_NEWMTX(gfxCtx)
+#define MARIO_ROTATE_X(radians) Matrix_RotateX(radians, MTXMODE_APPLY)
+#define MARIO_ROTATE_Z(radians) Matrix_RotateZ(radians, MTXMODE_APPLY)
 #define MARIO_ALLOC_GFX(gfxCtx, size) Graph_Alloc(gfxCtx, size)
 #define MARIO_STATE1_GETTING_ITEM PLAYER_STATE1_GETTING_ITEM
 #define MARIO_STATE1_IN_ITEM_CS PLAYER_STATE1_IN_ITEM_CS

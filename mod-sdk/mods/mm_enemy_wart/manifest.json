@@ -1,0 +1,17 @@
+{
+    "name": "mm_enemy_wart",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Wart (Majora's Mask)",
+    "description": "Majora's Mask miniboss Wart, drawn from your mm.o2r: a giant eye floating behind a shell of bubbles. Pull the bubbles off with the hookshot, pop them, and shoot the eye when it opens. Custom enemy mm.wart.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_boss04/gWartSkel",
+        "objects/object_boss04/gWartIdleAnim",
+        "objects/object_boss04/gWartBubbleModelDL",
+        "objects/object_boss04/gWartShadowModelDL"
+    ]
+}

@@ -1,0 +1,15 @@
+{
+    "name": "mm_enemy_chuchu",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "ChuChu (Majora's Mask)",
+    "description": "Majora's Mask's ChuChus, drawn from your mm.o2r: jelly blobs that wobble about and leap at you. Red by default (params 0 blue, 1 green, 2 yellow, 3 red). Custom enemy mm.chuchu.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_slime/gChuchuBodyDL",
+        "objects/object_slime/gChuchuEyesDL"
+    ]
+}

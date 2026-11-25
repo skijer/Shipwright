@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_dexihand",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Dexihand (Majora's Mask)",
+    "description": "Majora's Mask's Dexihand, drawn from your mm.o2r: a hand that anchors itself under the nearest water, grabs Link by the foot and flings him away. Custom enemy mm.dexihand.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_wdhand/gDexihandSkel",
+        "objects/object_wdhand/gDexihandIdleAnim",
+        "objects/object_wdhand/gDexihandArmSegmentDL"
+    ]
+}

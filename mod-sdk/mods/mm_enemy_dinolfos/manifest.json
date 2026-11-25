@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_dinolfos",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Dinolfos (Majora's Mask)",
+    "description": "Majora's Mask's Dinolfos, drawn from your mm.o2r: it sidesteps your shots, leaps over you to slash and breathes a sweeping fire. Custom enemy mm.dinolfos.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_dinofos/gDinolfosSkel",
+        "objects/object_dinofos/gDinolfosIdleAnim",
+        "objects/object_dinofos/gDinolfosFireLoopAnim"
+    ]
+}

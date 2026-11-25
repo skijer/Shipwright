@@ -1,0 +1,16 @@
+{
+    "name": "mm_enemy_desbreko",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Desbreko (Majora's Mask)",
+    "description": "Majora's Mask's Desbreko, drawn from your mm.o2r: a bony fish leading a school of Skullfish that swarms anyone in its waters. Defeat the leader and the whole school falls apart. Only placed in water. Custom enemy mm.desbreko.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_pr/object_pr_Skel_0038B8",
+        "objects/object_pr/object_pr_Skel_004188",
+        "objects/object_pr/object_pr_Anim_0021E8"
+    ]
+}

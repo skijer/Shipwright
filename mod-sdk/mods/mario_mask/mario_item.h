@@ -6,5 +6,7 @@
 #define MARIO_MASK_KEY "mario_mask.mask"
 
 void MarioItem_Register(const SOHModApi* api);
+// The Mario Mask's model, at the current matrix.
+void MarioItem_DrawMaskModel(PlayState* play);
 
 #endif

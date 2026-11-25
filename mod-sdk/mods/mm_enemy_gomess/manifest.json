@@ -1,0 +1,17 @@
+{
+    "name": "mm_enemy_gomess",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Gomess (Majora's Mask)",
+    "description": "Majora's Mask miniboss Gomess, drawn from your mm.o2r: a floating reaper whose core hides behind a swarm of bats. Scatter the bats with a light arrow or cut them down, then strike the core. Custom enemy mm.gomess.",
+    "game": "oot",
+    "dependencies": [
+        "mm_assets"
+    ],
+    "requires": [
+        "objects/object_death/gGomessSkel",
+        "objects/object_death/gGomessFloatAnim",
+        "objects/object_death/gGomessCoreDL",
+        "objects/object_death/gGomessBatFrame1DL"
+    ]
+}

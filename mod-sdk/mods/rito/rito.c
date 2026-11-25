@@ -1859,6 +1859,8 @@ static void DrawMaskGetItem(PlayState* play, GetItemEntry* entry) {
     }
     Matrix_Push();
     Matrix_Scale(MASK_SCALE, MASK_SCALE, MASK_SCALE, MTXMODE_APPLY);
+    // Ocarina of Time holds get-items the other way up from Majora's Mask, where this pose comes from.
+    Matrix_RotateZ(M_PI, MTXMODE_APPLY);
     Matrix_RotateY(-M_PI / 2.0f, MTXMODE_APPLY);
     Matrix_Translate(-sMaskCentre.x, -sMaskCentre.y, -sMaskCentre.z, MTXMODE_APPLY);
     Matrix_Push();

@@ -2088,8 +2088,12 @@ static void DrawGetItem(PlayState* play, GetItemEntry* getItemEntry) {
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
     Matrix_Scale(WAND_GIVE_SCALE, WAND_GIVE_SCALE, WAND_GIVE_SCALE, MTXMODE_APPLY);
     Matrix_RotateY((s16)(play->gameplayFrames * 2) * 0.01f, MTXMODE_APPLY);
+    const u8 mode = GetItemMode(getItemEntry);
     gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
-    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sRods[GetItemMode(getItemEntry)].opaModel);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)sRods[mode].opaModel);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)sRods[mode].xluModel);
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
