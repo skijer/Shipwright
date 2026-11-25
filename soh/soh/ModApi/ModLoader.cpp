@@ -408,6 +408,10 @@ std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship:
     if (manifest.value("fleet_only", false) && !FleetGame_IsHosted()) {
         return std::nullopt;
     }
+    // Fleet's games share their mounted archives, so the other game's mods are expected here.
+    if (FleetGame_IsHosted() && manifest.value("game", "oot") != "oot") {
+        return std::nullopt;
+    }
 
     auto binaryEntry = manifest["binaries"].find(platform);
     if (binaryEntry == manifest["binaries"].end() || !binaryEntry->is_string()) {
