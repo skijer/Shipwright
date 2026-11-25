@@ -116,10 +116,6 @@ def queue(repository, issue, commit, note, extra=None):
     edit_labels(repository, issue, add=[LABEL_QUEUED], remove=[LABEL_AWAITING])
 
 
-def queued_commits(issue):
-    return {marker.get("commit") for marker in sign_request.read_markers(issue["comments"], "sign")}
-
-
 def apply_triage(repository, issue, action):
     if action == "queue":
         request = sign_request.parse_issue_body(issue["body"])
@@ -246,31 +242,6 @@ def recheck_approval(repository, issue, catalog, trusted):
         comment(repository, issue, MOVED_MESSAGE)
 
 
-def latest_release_commit(repository):
-    tag = gh("api", f"repos/{repository}/releases/latest", "--jq", ".tag_name").strip()
-    return tag, resolve_reference(repository, tag)
-
-
-def follows_releases(source, repository):
-    """Mods kept inside the Unbound repository share its releases, which are the game's, not theirs."""
-    return source["repository"].lower() != repository.lower()
-
-
-def queue_new_releases(repository, issues, catalog, trusted):
-    for issue in issues:
-        source = catalog.get("sources", {}).get(str(issue["number"]))
-        if source is None or LABEL_QUEUED in issue["labels"] or not can_sign(issue, trusted):
-            continue
-        if not follows_releases(source, repository):
-            continue
-        try:
-            tag, commit = latest_release_commit(source["repository"])
-        except subprocess.CalledProcessError:
-            continue
-        if commit != source["commit"] and commit not in queued_commits(issue):
-            queue(repository, issue, commit, f"New release `{tag}` of {source['repository']}: queued for signing.")
-
-
 def queue_resign(repository, issues, catalog, unbound_ref, sdk_run):
     """Rebuilds every listed source against another Unbound, at the commit that was last signed."""
     for issue in issues:
@@ -321,8 +292,6 @@ def next_request(repository):
                 return change
     if event_name == "workflow_dispatch" and os.environ.get("RESIGN_ALL") == "true":
         queue_resign(repository, issues, catalog, os.environ["RESIGN_UNBOUND_REF"], os.environ.get("RESIGN_SDK_RUN", ""))
-    if event_name == "schedule":
-        queue_new_releases(repository, issues, catalog, trusted)
 
     for issue in issues:
         recheck_approval(repository, issue, catalog, trusted)
