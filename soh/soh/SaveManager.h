@@ -89,6 +89,8 @@ class SaveManager {
     void SaveGlobal();
     void LoadFile(int fileNum);
     bool SaveFile_Exist(int fileNum);
+    // Rereads every slot's file select summary, after something outside the game replaced the files.
+    void ReloadSaveFiles();
     void ThreadPoolWait();
 
     // Adds a function that is called when we are intializing a save, including when we are loading a save.

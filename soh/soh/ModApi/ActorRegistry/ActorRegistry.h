@@ -17,6 +17,13 @@ typedef void (*SOHActorFunc)(struct Actor* actor, struct PlayState* play);
 #define SOH_ACTOR_ENEMY (1 << 0)
 #define SOH_ACTOR_ENEMY_NOT_IN_CLEAR_ROOMS (1 << 1)
 #define SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS (1 << 2)
+#define SOH_ACTOR_ENEMY_MINIBOSS (1 << 3)
+#define SOH_ACTOR_ENEMY_NEEDS_WATER (1 << 4)
+#define SOH_ACTOR_ENEMY_NOT_IN_WATER (1 << 5)
+#define SOH_ACTOR_ENEMY_NEEDS_CEILING (1 << 6)
+#define SOH_ACTOR_ENEMY_UNDERWATER (1 << 7)
+
+typedef bool (*SOHLogicKillFunc)(void* userData);
 
 typedef struct {
     uint32_t structSize;
@@ -34,6 +41,9 @@ typedef struct {
     int16_t enemyParams;
     int16_t enemySpawnHeight;
     const char* naviHint;
+    const char* soulKey;              /* NULL = this enemy has no soul */
+    SOHLogicKillFunc logicKill;  /* NULL = always killable in logic */
+    void* logicKillUserData;
 } SOHActorDefinition;
 
 #define SOH_ACTOR_DEFINITION_MIN_SIZE (offsetof(SOHActorDefinition, draw) + sizeof(((SOHActorDefinition*)0)->draw))
@@ -41,6 +51,8 @@ typedef struct {
     (offsetof(SOHActorDefinition, enemySpawnHeight) + sizeof(((SOHActorDefinition*)0)->enemySpawnHeight))
 #define SOH_ACTOR_DEFINITION_HINT_SIZE \
     (offsetof(SOHActorDefinition, naviHint) + sizeof(((SOHActorDefinition*)0)->naviHint))
+#define SOH_ACTOR_DEFINITION_SOUL_SIZE \
+    (offsetof(SOHActorDefinition, logicKillUserData) + sizeof(((SOHActorDefinition*)0)->logicKillUserData))
 
 typedef struct {
     const char* key;
@@ -49,6 +61,9 @@ typedef struct {
     int16_t params;
     uint32_t flags;
     int16_t spawnHeight;
+    const char* soulKey;
+    SOHLogicKillFunc logicKill;
+    void* logicKillUserData;
 } SOHCustomEnemy;
 
 int16_t ActorRegistry_Register(const SOHActorDefinition* definition);
@@ -57,6 +72,7 @@ int16_t ActorRegistry_FindCustomId(const char* key);
 uint32_t ActorRegistry_GetEnemyCount(void);
 const SOHCustomEnemy* ActorRegistry_GetEnemyAt(uint32_t index);
 const SOHCustomEnemy* ActorRegistry_FindEnemyById(int16_t actorId);
+const SOHCustomEnemy* ActorRegistry_FindEnemyByKey(const char* key);
 
 #ifdef __cplusplus
 }

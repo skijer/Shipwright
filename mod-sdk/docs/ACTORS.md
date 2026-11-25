@@ -73,6 +73,13 @@ An actor with `SOH_ACTOR_ENEMY` in `enemyFlags` joins the Enemy Randomizer: it c
 | `SOH_ACTOR_ENEMY_NOT_IN_CLEAR_ROOMS` | It needs more than nuts and a sword or sticks to kill: never put it in a "defeat every enemy" room. |
 | `SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS` | Keep it out of rooms with a timer. |
 | `enemySpawnHeight` | Added to the floor height the randomizer found, for enemies that fly or hang. |
+| `SOH_ACTOR_ENEMY_MINIBOSS` | Follows the seed's "Randomized Minibosses" option instead of mixing with regular enemies. |
+| `SOH_ACTOR_ENEMY_NEEDS_WATER` | Must be in water, never on a dry spawn. Alone: surface spawns (an Octorok); with `_UNDERWATER`: submerged ones. |
+| `SOH_ACTOR_ENEMY_UNDERWATER` | Lives and can be killed fully submerged: the only kind placed on submerged spawns. Without `_NEEDS_WATER` it also goes on dry ones. |
+| `SOH_ACTOR_ENEMY_NOT_IN_WATER` | Never on a submerged or surface spawn (already true of an enemy with neither water flag). |
+| `SOH_ACTOR_ENEMY_NEEDS_CEILING` | Only in dungeons and grottos. |
+| `soulKey` | Enemy key of its soul (`NULL`: no soul). The soul is the rando item `soul.<soulKey>` the mod registers; a native key such as `oot.stalfos` uses the native soul. |
+| `logicKill`, `logicKillUserData` | Rando logic for killing it (`NULL`: always killable). Its soul is required on top. |
 
 Enemy keys follow `<author>.enemy.<name>`. Console: `spawn custom_enemy "<key>" <params>`.
 

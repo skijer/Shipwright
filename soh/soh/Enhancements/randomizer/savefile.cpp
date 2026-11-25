@@ -9,6 +9,7 @@
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizerEnumStrings.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 
 extern "C" {
 #include "variables.h"
@@ -443,6 +444,7 @@ extern "C" void Randomizer_InitSaveFile() {
     auto ctx = Rando::Context::GetInstance();
     ctx->GetLogic()->SetSaveContext(&gSaveContext);
     BossRegistry_InitSaveFile();
+    EnemyPlacement_InitSaveFile();
 
     // Starts pending ice traps out at 0 before potentially incrementing them down the line.
     gSaveContext.ship.pendingIceTrapCount = 0;

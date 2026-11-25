@@ -8,6 +8,7 @@ bool FleetRuntime_HasSession();
 const nlohmann::json& FleetRuntime_Seed();
 int FleetRuntime_Slot();
 void FleetRuntime_Initialize();
+void FleetRuntime_EndSession();
 void FleetRuntime_FrameEnd();
 void FleetRuntime_CatchUpParked();
 nlohmann::json FleetRuntime_Status();

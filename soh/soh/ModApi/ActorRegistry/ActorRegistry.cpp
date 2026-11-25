@@ -39,6 +39,11 @@ void AddEnemy(const SOHActorDefinition* definition, int16_t actorId) {
     enemy.params = definition->enemyParams;
     enemy.flags = definition->enemyFlags;
     enemy.spawnHeight = definition->enemySpawnHeight;
+    if (definition->structSize >= SOH_ACTOR_DEFINITION_SOUL_SIZE) {
+        enemy.soulKey = definition->soulKey != nullptr ? StoreName(definition->soulKey) : nullptr;
+        enemy.logicKill = definition->logicKill;
+        enemy.logicKillUserData = definition->logicKillUserData;
+    }
 
     auto position = std::lower_bound(
         sEnemies.begin(), sEnemies.end(), enemy,
@@ -148,4 +153,17 @@ const SOHCustomEnemy* ActorRegistry_FindEnemyById(int16_t actorId) {
         }
     }
     return nullptr;
+}
+
+const SOHCustomEnemy* ActorRegistry_FindEnemyByKey(const char* key) {
+    if (key == nullptr) {
+        return nullptr;
+    }
+    auto position = std::lower_bound(sEnemies.begin(), sEnemies.end(), key, [](const SOHCustomEnemy& enemy, const char* wanted) {
+        return strcmp(enemy.key, wanted) < 0;
+    });
+    if (position == sEnemies.end() || strcmp(position->key, key) != 0) {
+        return nullptr;
+    }
+    return &*position;
 }

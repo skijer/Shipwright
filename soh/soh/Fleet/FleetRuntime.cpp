@@ -53,6 +53,16 @@ bool sLoading = false;
 int32_t sCheckpoint = -1;
 bool sSaveCommitted = false;
 
+// What this game last exchanged with the host, so an unchanged state is not sent or applied again.
+struct ExchangedState {
+    std::string reportedBottles;
+    std::string appliedBottles;
+    std::string reportedLive;
+    std::string appliedLive;
+    std::string markedTiers;
+};
+ExchangedState sExchanged;
+
 bool IsKnownCheckpoint(int32_t entrance) {
     if (sRoutes.IsRecoveryEntrance(entrance)) {
         return true;
@@ -325,8 +335,6 @@ nlohmann::json ReadSharedTiers() {
 bool SynchronizeBottles() {
     using ReadBottles = const char* (*)(void);
     using WriteBottles = void (*)(const char*);
-    static std::string sReported;
-    static std::string sApplied;
     const auto get = Host<const char* (*)(const char*)>("GetBottles");
     const auto report = Host<bool (*)(const char*, const char*)>("ReportBottles");
     const auto read = reinterpret_cast<ReadBottles>(ModApi_Get()->FindService("nei.bottles.read"));
@@ -336,16 +344,16 @@ bool SynchronizeBottles() {
     }
     bool isRewritten = false;
     const char* remote = get(kGame);
-    if (remote != nullptr && remote[0] != '\0' && sApplied != remote) {
+    if (remote != nullptr && remote[0] != '\0' && sExchanged.appliedBottles != remote) {
         if (std::string(remote) != read()) {
             write(remote);
             isRewritten = true;
         }
-        sApplied = remote;
+        sExchanged.appliedBottles = remote;
     }
     const std::string local = read();
-    if (local != sReported && report(kGame, local.c_str())) {
-        sReported = local;
+    if (local != sExchanged.reportedBottles && report(kGame, local.c_str())) {
+        sExchanged.reportedBottles = local;
     }
     return isRewritten;
 }
@@ -500,24 +508,22 @@ void ApplyLiveState(const nlohmann::json& state) {
 }
 
 void SynchronizeLiveState() {
-    static std::string sReported;
-    static std::string sApplied;
     const auto get = Host<const char* (*)(const char*)>("GetLiveState");
     const auto report = Host<bool (*)(const char*, const char*)>("ReportLiveState");
     if (get == nullptr || report == nullptr) {
         return;
     }
     const char* remote = get(kGame);
-    if (remote != nullptr && remote[0] != '\0' && sApplied != remote) {
+    if (remote != nullptr && remote[0] != '\0' && sExchanged.appliedLive != remote) {
         const auto state = nlohmann::json::parse(remote, nullptr, false);
         if (state.is_object()) {
             ApplyLiveState(state);
         }
-        sApplied = remote;
+        sExchanged.appliedLive = remote;
     }
     const std::string local = ReadLiveState().dump();
-    if (local != sReported && report(kGame, local.c_str())) {
-        sReported = local;
+    if (local != sExchanged.reportedLive && report(kGame, local.c_str())) {
+        sExchanged.reportedLive = local;
     }
 }
 
@@ -550,7 +556,6 @@ void MarkHeldLevels(const nlohmann::json& tiers) {
 }
 
 void SynchronizeSharedTiers() {
-    static std::string sMarked;
     const auto report = Host<bool (*)(const char*, const char*)>("ReportSharedTiers");
     const auto get = Host<const char* (*)(const char*)>("GetSharedTiers");
     const char* listed = report != nullptr && get != nullptr ? get(kGame) : nullptr;
@@ -562,9 +567,9 @@ void SynchronizeSharedTiers() {
     if (!report(kGame, native.c_str())) {
         return;
     }
-    if (native != sMarked) {
+    if (native != sExchanged.markedTiers) {
         MarkHeldLevels(held);
-        sMarked = native;
+        sExchanged.markedTiers = native;
     }
     const char* raw = get(kGame);
     if (raw == nullptr) {
@@ -649,18 +654,13 @@ void ReportChecks() {
     }
 }
 
-} // namespace
-
-void FleetRuntime_Initialize() {
-    if (!sSession.is_null()) {
+// A later session in the same process reuses these: the registry keeps an item and the hooks stay installed.
+void RegisterSessionHooksOnce() {
+    static bool isRegistered = false;
+    if (isRegistered) {
         return;
     }
-    const auto get = Host<const char* (*)()>("GetSession");
-    const char* raw = get != nullptr ? get() : nullptr;
-    if (raw == nullptr) {
-        return;
-    }
-    sSession = nlohmann::json::parse(raw);
+    isRegistered = true;
     SOHCustomItemRandomizer randomizer = {};
     randomizer.structSize = sizeof(randomizer);
     SOHCustomItemDefinition definition = {};
@@ -675,8 +675,6 @@ void FleetRuntime_Initialize() {
     if (!CustomItemRegistry_Register(&definition)) {
         throw std::runtime_error("could not register Fleet foreign item");
     }
-    FleetForeignItems_Register(FleetRuntime_Seed());
-    FleetRuntime_InstallRoutes();
     SaveManager::Instance->AddSaveFunction(
         "fleet", 1, [](const SaveContext&, int, bool) { SaveManager::Instance->SaveData("checkpoint", sCheckpoint); },
         true, -1);
@@ -693,6 +691,36 @@ void FleetRuntime_Initialize() {
             FleetGame_CommitSave();
         }
     });
+}
+
+} // namespace
+
+void FleetRuntime_Initialize() {
+    if (!sSession.is_null()) {
+        return;
+    }
+    const auto get = Host<const char* (*)()>("GetSession");
+    const char* raw = get != nullptr ? get() : nullptr;
+    if (raw == nullptr) {
+        return;
+    }
+    sSession = nlohmann::json::parse(raw);
+    RegisterSessionHooksOnce();
+    FleetForeignItems_Register(FleetRuntime_Seed());
+    FleetRuntime_InstallRoutes();
+}
+
+// Pending writes land before the host restores the committed save; nothing new is written.
+void FleetRuntime_EndSession() {
+    SaveManager::Instance->ThreadPoolWait();
+    sSession = nullptr;
+    sReported.clear();
+    sRoutes = RuntimeState(0);
+    sDeparture.reset();
+    sTransitionComplete = false;
+    sCheckpoint = -1;
+    sSaveCommitted = false;
+    sExchanged = {};
 }
 
 bool FleetRuntime_HasSession() {

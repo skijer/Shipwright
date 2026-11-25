@@ -470,10 +470,12 @@ void FileChoose_UpdateMainMenu(GameState* thisx) {
 
     if (CHECK_BTN_ALL(input->press.button, BTN_START) || CHECK_BTN_ALL(input->press.button, BTN_A)) {
         if (this->buttonIndex <= FS_BTN_MAIN_FILE_3) {
-            if (FleetGame_SelectFile(this->buttonIndex)) {
+            const bool hasNativeSave = Save_GetSaveMetaInfo(this->buttonIndex)->valid;
+            // A Fleet slot with no OoT save yet has no file info to show: Fleet opens it right away.
+            if (!hasNativeSave && FleetGame_SelectFile(this->buttonIndex)) {
                 return;
             }
-            if (!Save_GetSaveMetaInfo(this->buttonIndex)->valid) {
+            if (!hasNativeSave) {
                 Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                      &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
                 this->prevConfigMode = this->configMode;
@@ -2613,6 +2615,10 @@ void FileChoose_ConfirmFile(GameState* thisx) {
             Rumble_Request(300.0f, 180, 20, 100);
             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
                                  &gSfxDefaultFreqAndVolScale, &gSfxDefaultReverb);
+            // Fleet opens its own session for this slot instead of loading the native save.
+            if (FleetGame_SelectFile(this->buttonIndex)) {
+                return;
+            }
             this->selectMode = SM_FADE_OUT;
             func_800F6964(0xF);
         } else {

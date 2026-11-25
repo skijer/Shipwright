@@ -191,6 +191,14 @@ extern "C" void FleetPortal_RequestDeparture(const char* portal) {
     sDeparture = portal;
 }
 
+// Leaving Play at once also stops a parked game from catching up a save the host is about to restore.
+extern "C" void FleetPortal_EndSession(void) {
+    FleetRuntime_EndSession();
+    sDeparture.reset();
+    sArrival.reset();
+    Soh_ResetToTitle();
+}
+
 extern "C" bool FleetPortal_LoadPending(void) {
     if (!sArrival) {
         return false;
@@ -200,8 +208,18 @@ extern "C" bool FleetPortal_LoadPending(void) {
     return true;
 }
 
+// A game entered without a destination boots the session's save, as on its first start, unless it is playing it.
+static void ResumeSessionIfIdle() {
+    if (gGameState == nullptr || (IsPlaying() && gGameState->running) || !FleetRuntime_HasSession()) {
+        return;
+    }
+    sArrival = Arrival{ -1, FleetRuntime_Slot() };
+    EnterArrival();
+}
+
 extern "C" void FleetPortal_Arrive(const FleetDestination* arrival) {
     if (arrival == nullptr || arrival->payloadJson == nullptr) {
+        ResumeSessionIfIdle();
         return;
     }
     const nlohmann::json payload = nlohmann::json::parse(arrival->payloadJson, nullptr, false);

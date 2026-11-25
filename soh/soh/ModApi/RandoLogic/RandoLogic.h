@@ -135,6 +135,7 @@ extern bool gRandoLogicHasEnemyGrants;
 bool RandoLogic_IsCapabilityGranted(RandoLogicCapability capability);
 bool RandoLogic_IsItemGranted(int32_t randoGet);
 bool RandoLogic_IsEnemyKillGranted(int32_t enemy);
+int32_t RandoLogic_GetEvaluationScene(void);
 
 #ifdef __cplusplus
 }
@@ -146,7 +147,8 @@ void RandoLogic_IndexWorld();
 bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate);
 bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std::string& condition,
                                  const std::function<bool()>& evaluate);
-bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, const std::function<bool()>& evaluate);
+bool RandoLogic_EvaluateEvent(int32_t logicEvent, int32_t scene, const std::string& condition,
+                              const std::function<bool()>& evaluate);
 
 namespace Rando {
 class Logic;

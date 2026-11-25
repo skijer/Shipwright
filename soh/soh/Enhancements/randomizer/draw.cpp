@@ -1,7 +1,11 @@
 #include "draw.h"
 #include "soh/OTRGlobals.h"
+#include <algorithm>
+#include <map>
+#include <spdlog/spdlog.h>
 #include "soh/Enhancements/cosmetics/cosmeticsTypes.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
+#include "soh/ResourceManagerHelpers.h"
 #include "dungeon.h"
 #include "logic.h"
 
@@ -31,6 +35,43 @@ extern "C" {
 #include "objects/object_tw/object_tw.h"
 #include "objects/object_ganon2/object_ganon2.h"
 #include "objects/object_mo/object_mo.h"
+#include "objects/object_anubice/object_anubice.h"
+#include "objects/object_am/object_am.h"
+#include "objects/object_vali/object_vali.h"
+#include "objects/object_vm/object_vm.h"
+#include "objects/object_bigokuta/object_bigokuta.h"
+#include "objects/object_Bb/object_Bb.h"
+#include "objects/object_dh/object_dh.h"
+#include "objects/object_dekubaba/object_dekubaba.h"
+#include "objects/object_dodongo/object_dodongo.h"
+#include "objects/object_fw/object_fw.h"
+#include "objects/object_geldb/object_geldb.h"
+#include "objects/object_gol/object_gol.h"
+#include "objects/object_crow/object_crow.h"
+#include "objects/object_ik/object_ik.h"
+#include "objects/object_firefly/object_firefly.h"
+#include "objects/object_reeba/object_reeba.h"
+#include "objects/object_zf/object_zf.h"
+#include "objects/object_dekunuts/object_dekunuts.h"
+#include "objects/object_okuta/object_okuta.h"
+#include "objects/object_peehat/object_peehat.h"
+#include "objects/object_poh/object_poh.h"
+#include "objects/object_rd/object_rd.h"
+#include "objects/object_sb/object_sb.h"
+#include "objects/object_st/object_st.h"
+#include "objects/object_skb/object_skb.h"
+#include "objects/object_sk2/object_sk2.h"
+#include "objects/object_ei/object_ei.h"
+#include "objects/object_tite/object_tite.h"
+#include "objects/object_bw/object_bw.h"
+#include "objects/object_wallmaster/object_wallmaster.h"
+#include "objects/object_wf/object_wf.h"
+#include "objects/object_fz/object_fz.h"
+#include "objects/object_bubble/object_bubble.h"
+#include "objects/object_ny/object_ny.h"
+#include "objects/object_torch2/object_torch2.h"
+#include "objects/object_rr/object_rr.h"
+#include "objects/object_bxa/object_bxa.h"
 #include "overlays/actors/ovl_Boss_Goma/z_boss_goma.h"
 extern PlayState* gPlayState;
 extern SaveContext gSaveContext;
@@ -911,8 +952,301 @@ static void DrawSoulFlame(PlayState* play, s16 red, s16 green, s16 blue) {
     CLOSE_DISPS(play->state.gfxCtx);
 }
 
+constexpr s32 kMostSoulLimbs = 64;
+
+// Segments outlive the frame in the shared interpreter, so they must point at memory no later frame reuses.
+// Four entries: enemy lists branch into an indexed render-mode table (Lizalfos takes entry 2).
+static Gfx sSoulEmptyDL[] = { gsSPEndDisplayList(), gsSPEndDisplayList(), gsSPEndDisplayList(),
+                              gsSPEndDisplayList() };
+// The texture scale the Lizalfos actor's list starts with.
+static Gfx sSoulTextureScaleDL[] = { gsSPTexture(0x0A00, 0x0A00, 0, G_TX_RENDERTILE, G_ON), gsSPEndDisplayList() };
+
+// The segments 0x08 and 0x09 an enemy's actor fills; an empty list stands in for the rest.
+struct EnemySoulModel {
+    RandomizerGet soul;
+    const char* skeleton;
+    const char* animation;
+    bool isFlex;
+    f32 scale;
+    const void* segment08 = nullptr;
+    const void* segment09 = nullptr;
+};
+
+// Enemies without a skeleton, drawn as their actors draw them.
+static void DrawFreezardSoul(PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Scale(0.006f, 0.006f, 0.006f, MTXMODE_APPLY);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, play->state.frames & 0x7F, 32, 32, 1, 0,
+                                             (2 * play->state.frames) & 0x7F, 32, 32, 0, 1, 0, 2));
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gDPSetCombineLERP(POLY_XLU_DISP++, TEXEL1, PRIMITIVE, PRIM_LOD_FRAC, TEXEL0, TEXEL1, TEXEL0, PRIMITIVE, TEXEL0,
+                      PRIMITIVE, ENVIRONMENT, COMBINED, ENVIRONMENT, COMBINED, 0, ENVIRONMENT, 0);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 128, 155, 255, 255, 255);
+    gDPSetEnvColor(POLY_XLU_DISP++, 200, 200, 200, 255);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gFreezardIntactDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void DrawShabomSoul(PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    Matrix_Scale(1.5f, 1.5f, 1.5f, MTXMODE_APPLY);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gBubbleDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static void DrawSpikeSoul(PlayState* play) {
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+    Matrix_RotateY(BINANG_TO_RAD(play->state.frames * 0x300), MTXMODE_APPLY);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
+    gDPSetRenderMode(POLY_OPA_DISP++, G_RM_FOG_SHADE_A, G_RM_AA_ZB_OPA_SURF2);
+    gSPSegment(POLY_OPA_DISP++, 0x07, (uintptr_t)sSoulEmptyDL);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gEnNyRockBodyDL);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)gEnNySpikeDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Dark Link is Link's own skeleton, posed by Link's animations.
+static void DrawDarkLinkSoul(PlayState* play) {
+    constexpr f32 kScale = 0.01f;
+    static SkelAnime skelAnime;
+    static Vec3s jointTable[PLAYER_LIMB_BUF_COUNT];
+    static Vec3s morphTable[PLAYER_LIMB_BUF_COUNT];
+    static bool isPosed = false;
+    static u32 lastUpdate = 0;
+    if (!isPosed) {
+        SkelAnime_InitLink(play, &skelAnime, (FlexSkeletonHeader*)gDarkLinkSkel,
+                           (LinkAnimationHeader*)gPlayerAnim_link_normal_wait, 9, jointTable, morphTable,
+                           PLAYER_LIMB_MAX);
+        isPosed = true;
+    }
+    if (lastUpdate != play->state.frames) {
+        lastUpdate = play->state.frames;
+        LinkAnimation_Update(play, &skelAnime);
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Scale(kScale, kScale, kScale, MTXMODE_APPLY);
+    Matrix_Translate(static_cast<f32>(-jointTable[0].x), static_cast<f32>(-jointTable[0].y),
+                     static_cast<f32>(-jointTable[0].z), MTXMODE_APPLY);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gDPSetEnvColor(POLY_OPA_DISP++, 255, 0, 0, 255);
+    for (u32 segment = 0x07; segment <= 0x0B; segment++) {
+        gSPSegment(POLY_OPA_DISP++, segment, (uintptr_t)sSoulEmptyDL);
+    }
+    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)(D_80116280 + 2));
+    SkelAnime_DrawFlexOpa(play, skelAnime.skeleton, skelAnime.jointTable, skelAnime.dListCount, NULL, NULL, NULL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// The Like Like's body is four rings its actor stacks with matrices in segment 0x0C.
+static void DrawLikeLikeSoul(PlayState* play) {
+    constexpr s32 kRings = 4;
+    constexpr f32 kRingHeight = 1000.0f;
+    Mtx* rings = static_cast<Mtx*>(Graph_Alloc(play->state.gfxCtx, kRings * sizeof(Mtx)));
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Scale(0.006f, 0.006f, 0.006f, MTXMODE_APPLY);
+    Matrix_Translate(0.0f, -kRingHeight * kRings / 2.0f, 0.0f, MTXMODE_APPLY);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPSegment(POLY_XLU_DISP++, 0x0C, (uintptr_t)rings);
+    gSPSegment(POLY_XLU_DISP++, 0x08,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 32, 16, 1, 0,
+                                             (play->state.frames * -6) & 0x7F, 32, 16, 0, 0, 0, -6));
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    for (s32 ring = 0; ring < kRings; ring++) {
+        Matrix_Translate(0.0f, kRingHeight, 0.0f, MTXMODE_APPLY);
+        Matrix_ToMtx(&rings[ring], (char*)__FILE__, __LINE__);
+    }
+    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gLikeLikeDL);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// The tentacle is fourteen links its actor hangs in segment 0x0C, here swaying gently.
+static void DrawTentacleSoul(PlayState* play) {
+    constexpr s32 kLinks = 14;
+    constexpr f32 kLinkLength = 32.0f;
+    Mtx* links = static_cast<Mtx*>(Graph_Alloc(play->state.gfxCtx, kLinks * sizeof(Mtx)));
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)links);
+    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)object_bxa_Tex_0024F0);
+    gSPSegment(POLY_OPA_DISP++, 0x09,
+               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 16, 1, 0,
+                                             (play->state.frames * -10) % 128, 32, 32, 0, 0, 0, -10));
+    Matrix_Scale(0.12f, 0.12f, 0.12f, MTXMODE_APPLY);
+    for (s32 link = 0; link < kLinks; link++) {
+        const f32 sway = Math_SinS(play->state.frames * 0x400 + link * 0x1000) * 6.0f;
+        Matrix_Push();
+        Matrix_Translate(sway, kLinkLength * kLinks / 2.0f - (link + 1) * kLinkLength, 0.0f, MTXMODE_APPLY);
+        Matrix_RotateX(BINANG_TO_RAD(-0x4000), MTXMODE_APPLY);
+        Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+        Matrix_ToMtx(&links[link], (char*)__FILE__, __LINE__);
+        Matrix_Pop();
+    }
+    // The list's own vertices take the actor's matrix, which carries its 0.01 scale.
+    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
+    gSPMatrix(POLY_OPA_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    gSPDisplayList(POLY_OPA_DISP++, (Gfx*)object_bxa_DL_000890);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+struct EnemySoulDraw {
+    RandomizerGet soul;
+    void (*draw)(PlayState* play);
+};
+
+const EnemySoulDraw kEnemySoulDraws[] = {
+    { RG_SOUL_ENEMY_DARK_LINK, DrawDarkLinkSoul },
+    { RG_SOUL_ENEMY_FREEZARD, DrawFreezardSoul },
+    { RG_SOUL_ENEMY_LIKE_LIKE, DrawLikeLikeSoul },
+    { RG_SOUL_ENEMY_PARASITIC_TENTACLE, DrawTentacleSoul },
+    { RG_SOUL_ENEMY_SHABOM, DrawShabomSoul },
+    { RG_SOUL_ENEMY_SPIKE, DrawSpikeSoul },
+};
+
+// Each enemy soul shows its enemy, as Majora's Mask souls do. Enemies without a skeleton keep the skull.
+const EnemySoulModel kEnemySoulModels[] = {
+    { RG_SOUL_ENEMY_ANUBIS, gAnubiceSkel, gAnubiceIdleAnim, false, 0.015f },
+    { RG_SOUL_ENEMY_ARMOS, gArmosSkel, gArmosRicochetAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_BARI, gBariSkel, gBariLurkingAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_BEAMOS, gBeamosSkel, gBeamosAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_BIG_OCTO, object_bigokuta_Skel_006BC0, object_bigokuta_Anim_0014B8, true, 0.01f },
+    { RG_SOUL_ENEMY_BUBBLE, object_Bb_Skel_001A30, object_Bb_Anim_000444, false, 0.01f },
+    { RG_SOUL_ENEMY_DEAD_HAND, object_dh_Skel_007E88, object_dh_Anim_005880, true, 0.007f },
+    { RG_SOUL_ENEMY_DEKU_BABA, gDekuBabaSkel, gDekuBabaFastChompAnim, false, 0.02f },
+    { RG_SOUL_ENEMY_DODONGO, gDodongoSkel, gDodongoWaitAnim, false, 0.0125f },
+    { RG_SOUL_ENEMY_FLARE_DANCER, gFlareDancerSkel, gFlareDancerTwirlAnim, true, 0.01f },
+    { RG_SOUL_ENEMY_GERUDO_FIGHTER, gGerudoRedSkel, gGerudoRedNeutralAnim, true, 0.0125f },
+    { RG_SOUL_ENEMY_GOHMA_LARVA, gObjectGolSkel, gObjectGolStandAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_GUAY, gGuaySkel, gGuayFlyAnim, true, 0.02f },
+    { RG_SOUL_ENEMY_IRON_KNUCKLE, gIronKnuckleSkel, gIronKnuckleRunAnim, true, 0.01f },
+    { RG_SOUL_ENEMY_KEESE, gKeeseSkeleton, gKeeseFlyAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_LEEVER, object_reeba_Skel_001EE8, object_reeba_Anim_0001E4, false, 0.02f },
+    { RG_SOUL_ENEMY_MAD_SCRUB, gDekuNutsSkel, gDekuNutsStandAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_OCTOROK, gOctorokSkel, gOctorokAppearAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_PEAHAT, gPeehatSkel, gPeehatRisingAnim, false, 0.005f },
+    { RG_SOUL_ENEMY_LIZALFOS, gZfLizalfosSkel, gZfCryingAnim, false, 0.012f, sSoulTextureScaleDL,
+      D_80116280 + 2 },
+    { RG_SOUL_ENEMY_POE, gPoeSkel, gPoeFloatAnim, false, 0.01f, D_80116280 + 2 },
+    { RG_SOUL_ENEMY_REDEAD, gRedeadSkel, gGibdoRedeadIdleAnim, true, 0.01f },
+    { RG_SOUL_ENEMY_SHELLBLADE, object_sb_Skel_002BF0, object_sb_Anim_000194, true, 0.006f },
+    { RG_SOUL_ENEMY_SKULLTULA, object_st_Skel_005298, object_st_Anim_000304, false, 0.015f },
+    { RG_SOUL_ENEMY_STALCHILD, gStalchildSkel, gStalchildUncurlingAnim, false, 0.015f },
+    { RG_SOUL_ENEMY_STALFOS, gStalfosSkel, gStalfosMiddleGuardAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_STINGER, gStingerSkel, gStingerIdleAnim, false, 0.01f },
+    { RG_SOUL_ENEMY_TEKTITE, object_tite_Skel_003A20, object_tite_Anim_0012E4, false, 0.01f },
+    { RG_SOUL_ENEMY_TORCH_SLUG, gTorchSlugSkel, gTorchSlugEyestalkWaveAnim, false, 0.013f },
+    { RG_SOUL_ENEMY_WALLMASTER, gWallmasterSkel, gWallmasterWaitAnim, true, 0.01f },
+    { RG_SOUL_ENEMY_WOLFOS, gWolfosNormalSkel, gWolfosWaitingAnim, true, 0.0075f, gWolfosNormalEyeOpenTex },
+};
+
+struct EnemySoulPose {
+    bool isReady = false;
+    SkelAnime skelAnime = {};
+    Vec3s jointTable[kMostSoulLimbs] = {};
+    Vec3s morphTable[kMostSoulLimbs] = {};
+    u32 lastUpdate = 0;
+};
+
+static const EnemySoulModel* FindEnemySoulModel(RandomizerGet soul) {
+    for (const EnemySoulModel& model : kEnemySoulModels) {
+        if (model.soul == soul) {
+            return &model;
+        }
+    }
+    return nullptr;
+}
+
+// The tables are static, like the boss soul skeletons: an arena allocation would not outlive the scene.
+static bool PrepareEnemySoulPose(PlayState* play, const EnemySoulModel& model, EnemySoulPose& pose) {
+    if (pose.isReady) {
+        return true;
+    }
+    const auto* header = static_cast<SkeletonHeader*>(
+        ResourceMgr_LoadSkeletonByName(model.skeleton, &pose.skelAnime));
+    if (header == nullptr || header->limbCount + 1 > kMostSoulLimbs) {
+        SPDLOG_WARN("[Randomizer] enemy soul skeleton {} did not load ({} limbs)", model.skeleton,
+                    header != nullptr ? header->limbCount + 1 : 0);
+        return false;
+    }
+    const s32 limbCount = header->limbCount + 1;
+    if (model.isFlex) {
+        SkelAnime_InitFlex(play, &pose.skelAnime, (FlexSkeletonHeader*)model.skeleton,
+                           (AnimationHeader*)model.animation, pose.jointTable, pose.morphTable, limbCount);
+    } else {
+        SkelAnime_Init(play, &pose.skelAnime, (SkeletonHeader*)model.skeleton, (AnimationHeader*)model.animation,
+                       pose.jointTable, pose.morphTable, limbCount);
+    }
+    pose.isReady = true;
+    return true;
+}
+
+static bool DrawEnemySoulModel(PlayState* play, const EnemySoulModel& model) {
+    static std::map<RandomizerGet, EnemySoulPose> poses;
+    EnemySoulPose& pose = poses[model.soul];
+    if (!PrepareEnemySoulPose(play, model, pose)) {
+        return false;
+    }
+    if (pose.lastUpdate != play->state.frames) {
+        pose.lastUpdate = play->state.frames;
+        SkelAnime_Update(&pose.skelAnime);
+    }
+    OPEN_DISPS(play->state.gfxCtx);
+    Matrix_Push();
+    Gfx_SetupDL_25Opa(play->state.gfxCtx);
+    Matrix_Scale(model.scale, model.scale, model.scale, MTXMODE_APPLY);
+    // Animations place the root far from the origin; the soul floats on its root instead.
+    const Vec3s& root = pose.skelAnime.jointTable[0];
+    Matrix_Translate(static_cast<f32>(-root.x), static_cast<f32>(-root.y), static_cast<f32>(-root.z),
+                     MTXMODE_APPLY);
+    gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
+    // 0x07 is the specular highlight an actor sets before drawing; the Lizalfos sword calls it.
+    gSPSegment(POLY_OPA_DISP++, 0x07, (uintptr_t)sSoulEmptyDL);
+    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)(model.segment08 != nullptr ? model.segment08 : sSoulEmptyDL));
+    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)(model.segment09 != nullptr ? model.segment09 : sSoulEmptyDL));
+    for (u32 segment = 0x0A; segment <= 0x0C; segment++) {
+        gSPSegment(POLY_OPA_DISP++, segment, (uintptr_t)sSoulEmptyDL);
+    }
+    if (model.isFlex) {
+        SkelAnime_DrawFlexOpa(play, pose.skelAnime.skeleton, pose.skelAnime.jointTable, pose.skelAnime.dListCount,
+                              NULL, NULL, NULL);
+    } else {
+        SkelAnime_DrawSkeletonOpa(play, &pose.skelAnime, NULL, NULL, NULL);
+    }
+    Matrix_Pop();
+    CLOSE_DISPS(play->state.gfxCtx);
+    return true;
+}
+
+static bool DrawEnemySoulLists(PlayState* play, RandomizerGet soul) {
+    const auto found = std::find_if(std::begin(kEnemySoulDraws), std::end(kEnemySoulDraws),
+                                    [soul](const EnemySoulDraw& entry) { return entry.soul == soul; });
+    if (found == std::end(kEnemySoulDraws)) {
+        return false;
+    }
+    Matrix_Push();
+    found->draw(play);
+    Matrix_Pop();
+    return true;
+}
+
 extern "C" void Randomizer_DrawEnemySoul(PlayState* play, GetItemEntry* getItemEntry) {
     DrawSoulFlame(play, 200, 60, 60);
+    const s16 drawn = getItemEntry->getItemId != RG_ICE_TRAP ? getItemEntry->getItemId : getItemEntry->drawItemId;
+    const EnemySoulModel* model = FindEnemySoulModel(static_cast<RandomizerGet>(drawn));
+    const bool isSimple = CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("SimplerBossSoulModels"), 0) != 0;
+    if (model != nullptr && !isSimple && DrawEnemySoulModel(play, *model)) {
+        return;
+    }
+    if (!isSimple && DrawEnemySoulLists(play, static_cast<RandomizerGet>(drawn))) {
+        return;
+    }
 
     OPEN_DISPS(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),

@@ -615,8 +615,12 @@ void SaveManager::Init() {
         CreateDefaultGlobal();
     }
 
-    // Load files to initialize metadata
+    ReloadSaveFiles();
+}
+
+void SaveManager::ReloadSaveFiles() {
     for (int fileNum = 0; fileNum < MaxFiles; fileNum++) {
+        fileMetaInfo[fileNum] = {};
         if (std::filesystem::exists(GetFileName(fileNum))) {
             StartupCheckAndInitMeta(fileNum);
         } else if (FleetGame_HasSaveSlot(fileNum)) {

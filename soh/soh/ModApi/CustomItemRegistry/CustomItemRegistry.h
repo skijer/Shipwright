@@ -171,6 +171,9 @@ static inline bool CustomItemRegistry_IsVanillaUpgrade(const SOHCustomItemDefini
 }
 
 bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition);
+// For an item a host registers per seed: the next seed rewrites what changes with it, keeping its runtime id.
+bool CustomItemRegistry_UpdateSeedPresentation(const char* key, const char* getItemText, uint32_t randomizerFlags,
+                                               GetItemCategory chestCategory);
 const SOHCustomItemDefinition* CustomItemRegistry_FindReplacement(uint16_t vanillaItem);
 bool CustomItemRegistry_IsAgeAllowed(const char* key);
 bool CustomItemRegistry_IsFormAllowed(const char* key);

@@ -521,6 +521,10 @@ bool RandoLogic_IsEnemyKillGranted(int32_t enemy) {
     return AnyMappedGrantHolds(sEnemyGrants, enemy);
 }
 
+int32_t RandoLogic_GetEvaluationScene(void) {
+    return sEntryStack.empty() ? -1 : sEntryStack.back().scene;
+}
+
 bool RandoLogic_EvaluateLocation(int32_t check, const std::string& condition, const std::function<bool()>& evaluate) {
     if (DungeonRegistry_IsModCheck(check)) {
         return DungeonRegistry_EvaluateCheck(check);
@@ -554,7 +558,8 @@ bool RandoLogic_EvaluateEntrance(int32_t fromRegion, int32_t toRegion, const std
     return ResolveEntrance(fromRegion, toRegion, evaluate());
 }
 
-bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, const std::function<bool()>& evaluate) {
+bool RandoLogic_EvaluateEvent(int32_t logicEvent, int32_t scene, const std::string& condition,
+                              const std::function<bool()>& evaluate) {
     if (DungeonRegistry_IsModEvent(logicEvent)) {
         return DungeonRegistry_EvaluateEvent(logicEvent);
     }
@@ -562,7 +567,7 @@ bool RandoLogic_EvaluateEvent(int32_t logicEvent, const std::string& condition, 
     entry.target = SOH_LOGIC_TARGET_EVENTS;
     entry.id = logicEvent;
     entry.region = -1;
-    entry.scene = -1;
+    entry.scene = scene;
     entry.entranceTo = -1;
     entry.checkType = -1;
     entry.condition = &condition;

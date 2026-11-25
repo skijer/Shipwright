@@ -13,6 +13,8 @@
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/SohGui/ImGuiUtils.h"
@@ -3026,9 +3028,45 @@ static const std::unordered_map<int16_t, RandomizerInf> enemySouls = {
 
 static const Color_RGBA8 soullessGrayscale = { 70, 70, 70, 255 };
 
+static bool IsSoulOutOfPool(const char* soulKey) {
+    return EnemyPlacement_IsSoulExcluded(EnemyPlacement_GetSave(), soulKey);
+}
+
+static bool HasNativeSoul(RandomizerInf flag) {
+    const EnemySoul* soul = EnemyCatalog_FindNativeSoulByFlag(flag);
+    return (soul != nullptr && IsSoulOutOfPool(soul->key)) || Flags_GetRandomizerInf(flag);
+}
+
+static bool HasCustomEnemySoul(int16_t actorId) {
+    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actorId);
+    if (enemy == nullptr || enemy->soulKey == nullptr) {
+        return true;
+    }
+    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(enemy->soulKey);
+    if (nativeSoul != nullptr) {
+        return HasNativeSoul(nativeSoul->flag);
+    }
+    if (IsSoulOutOfPool(enemy->soulKey)) {
+        return true;
+    }
+    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(enemy->soulKey)).c_str());
+    return soulItem == RG_NONE || RandoItems_IsOwned(soulItem, SOH_RANDO_INF_SAVE);
+}
+
 static bool HasEnemySoul(int16_t actorId) {
     auto soul = enemySouls.find(actorId);
-    return soul == enemySouls.end() || Flags_GetRandomizerInf(soul->second);
+    if (soul == enemySouls.end()) {
+        return HasCustomEnemySoul(actorId);
+    }
+    return HasNativeSoul(soul->second);
+}
+
+static void RemoveSoullessEnemy(void* refActor) {
+    Actor* actor = static_cast<Actor*>(refActor);
+
+    if (!HasEnemySoul(actor->id)) {
+        Actor_Kill(actor);
+    }
 }
 
 static void TintSoullessLockOnArrow() {
@@ -3063,6 +3101,10 @@ static void RegisterShuffleEnemySouls() {
     });
 
     COND_HOOK(OnActorResolveGrayscale, shouldRegister, GraySoullessEnemy);
+
+    bool removesSoulless =
+        shouldRegister && RAND_GET_OPTION(RSK_ENEMY_SOUL_BEHAVIOUR).Get() == ENEMY_SOUL_NO_SPAWN;
+    COND_HOOK(OnActorInit, removesSoulless, RemoveSoullessEnemy);
 }
 
 static RegisterShipInitFunc initFunc_ShuffleEnemySouls(RegisterShuffleEnemySouls, { "IS_RANDO" });

@@ -2,6 +2,7 @@
 
 #include "item_pool.hpp"
 #include "../dungeon.h"
+#include "../EnemyPlacement.h"
 #include "soh/Enhancements/randomizer/location_access.h"
 #include "../static_data.h"
 #include "../SeedContext.h"
@@ -646,7 +647,12 @@ void GenerateItemPool() {
 
     if (ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS)) {
         for (int soul = RG_SOUL_ENEMY_ANUBIS; soul <= RG_SOUL_ENEMY_WOLFOS; soul++) {
-            AddItemToPool(static_cast<RandomizerGet>(soul), 1, 1, 1, 1, false);
+            if (!EnemyPlacement_IsSeedSoulItemExcluded(static_cast<RandomizerGet>(soul))) {
+                AddItemToPool(static_cast<RandomizerGet>(soul), 1, 1, 1, 1, false);
+            }
+        }
+        for (RandomizerGet soul : EnemyPlacement_GetSeedCustomSoulItems()) {
+            AddItemToPool(soul, 1, 1, 1, 1, false);
         }
     }
 

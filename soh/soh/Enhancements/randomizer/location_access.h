@@ -32,15 +32,15 @@ class EventAccess {
         : event(event_), event_str(event_str_), condition_function(condition_function_), condition_str(condition_str_) {
     }
 
-    bool ConditionsMet() const {
+    bool ConditionsMet(SceneID scene) const {
         auto ctx = Rando::Context::GetInstance();
         if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
-            return RandoLogic_EvaluateEvent(event, condition_str, condition_function);
+            return RandoLogic_EvaluateEvent(event, scene, condition_str, condition_function);
         }
         return true;
     }
 
-    bool CheckConditionAtAgeTime(bool& age, bool& time);
+    bool CheckConditionAtAgeTime(bool& age, bool& time, SceneID scene);
 
     void EventOccurred() {
         logic->Set(event, true);

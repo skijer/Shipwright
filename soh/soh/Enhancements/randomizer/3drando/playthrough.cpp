@@ -12,6 +12,7 @@
 #include "../option.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 
 namespace Playthrough {
 
@@ -66,6 +67,7 @@ int Playthrough_Init(uint32_t seed, std::set<RandomizerCheck> excludedLocations,
     Random_Init(finalHash);
     ctx->SetHash(std::to_string(finalHash));
     BossRegistry_AssignForSeed();
+    EnemyPlacement_AssignForSeed(finalHash);
 
     int ret = Fill();
     if (ret < 0) {

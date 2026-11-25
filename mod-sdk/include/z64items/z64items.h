@@ -131,6 +131,13 @@ static inline bool Z64Items_Register(const SOHModApi* api, const SOHCustomItemDe
     return SOH_MOD_API_HAS(api, RegisterCustomItem) && api->RegisterCustomItem(definition);
 }
 
+// For an item several mods define alike (an enemy family's soul): whichever mod loads first registers it.
+static inline bool Z64Items_RegisterShared(const SOHModApi* api, const SOHCustomItemDefinition* definition) {
+    bool isRegistered = SOH_MOD_API_HAS(api, FindCustomItem) && api->FindCustomItem(definition->key) != NULL;
+
+    return isRegistered || Z64Items_Register(api, definition);
+}
+
 static inline bool Z64Items_RegisterLegacyKey(const SOHModApi* api, const SOHCustomItemDefinition* current,
                                               const char* legacyKey) {
     SOHCustomItemDefinition legacy = *current;

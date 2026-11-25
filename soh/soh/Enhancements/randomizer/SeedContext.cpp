@@ -20,6 +20,7 @@
 #include "soh/Enhancements/randomizer/trial.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "EnemyPlacement.h"
 
 #include <algorithm>
 #include <vector>
@@ -434,6 +435,7 @@ void Context::ParseSpoiler(const char* spoilerFileName) {
         mDungeons->ParseJson(spoilerFileJson);
         mTrials->ParseJson(spoilerFileJson);
         BossRegistry_ParseSpoiler(spoilerFileJson);
+        EnemyPlacement_ParseSpoiler(spoilerFileJson);
         mSpoilerLoaded = true;
         mSeedGenerated = false;
     } catch (...) { SPDLOG_ERROR("Failed to load Spoiler File: {}", spoilerFileName); }

@@ -20,6 +20,7 @@
 #include "SeedContext.h"
 #include "randomizer.h"
 #include "location_access.h"
+#include "EnemyPlacement.h"
 
 extern "C" {
 #include "macros.h"
@@ -888,11 +889,57 @@ bool Logic::HasEnemySoul(RandomizerEnemy enemy) {
         return true;
     }
     RandomizerGet soul = GetEnemySoul(enemy);
-    return soul == RG_NONE || HasItem(soul);
+    return soul == RG_NONE || EnemyPlacement_IsSeedSoulItemExcluded(soul) || HasItem(soul);
+}
+
+bool Logic::HasSoulOf(const EnemyKind& replacement) {
+    if (!ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS) || replacement.soulKey == nullptr) {
+        return true;
+    }
+    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(replacement.soulKey);
+    if (nativeSoul != nullptr) {
+        return EnemyPlacement_IsSoulExcluded(EnemyPlacement_GetSeed(), nativeSoul->key) || HasItem(nativeSoul->item);
+    }
+    if (EnemyPlacement_IsSoulExcluded(EnemyPlacement_GetSeed(), replacement.soulKey)) {
+        return true;
+    }
+    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(replacement.soulKey)).c_str());
+    return soulItem == RG_NONE || HasItem(static_cast<RandomizerGet>(soulItem));
+}
+
+bool Logic::CanKillReplacement(const PlannedReplacement& replacement, EnemyDistance distance, bool wallOrFloor,
+                               uint8_t quantity, bool timer, bool inWater) {
+    const EnemyKind& kind = replacement.kind;
+    if (kind.logicEnemy != kNoLogicEnemy) {
+        return CanKillNativeEnemy(static_cast<RandomizerEnemy>(kind.logicEnemy), distance, wallOrFloor, quantity,
+                                  timer, inWater || replacement.onlySubmerged);
+    }
+    if (!HasSoulOf(kind)) {
+        return false;
+    }
+    if (kind.logicKill != nullptr) {
+        return kind.logicKill(kind.logicKillUserData);
+    }
+    return kind.custom || CanAttack();
 }
 
 bool Logic::CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wallOrFloor, uint8_t quantity, bool timer,
                          bool inWater) {
+    const EnemyLogicPlan* plan = EnemyPlacement_FindLogicPlan(RandoLogic_GetEvaluationScene(), enemy);
+    if (plan == nullptr) {
+        return CanKillNativeEnemy(enemy, distance, wallOrFloor, quantity, timer, inWater);
+    }
+    if (plan->keepsOriginal && !CanKillNativeEnemy(enemy, distance, wallOrFloor, quantity, timer, inWater)) {
+        return false;
+    }
+    return std::all_of(plan->replacements.begin(), plan->replacements.end(),
+                       [&](const PlannedReplacement& replacement) {
+                           return CanKillReplacement(replacement, distance, wallOrFloor, quantity, timer, inWater);
+                       });
+}
+
+bool Logic::CanKillNativeEnemy(RandomizerEnemy enemy, EnemyDistance distance, bool wallOrFloor, uint8_t quantity,
+                               bool timer, bool inWater) {
     LOGIC_MOD_ENEMY_GRANTS(enemy);
     if (!HasEnemySoul(enemy)) {
         return false;

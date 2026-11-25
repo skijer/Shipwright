@@ -11,6 +11,7 @@ void FleetPortal_Arrive(const FleetDestination* arrival);
 void FleetPortal_FrameEnd(void);
 bool FleetPortal_LoadPending(void);
 void FleetPortal_RequestDeparture(const char* portal);
+void FleetPortal_EndSession(void);
 
 #ifdef __cplusplus
 }

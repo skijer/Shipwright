@@ -411,6 +411,34 @@ void RegisterReplacementHooks() {
 
 } // namespace
 
+static void SetIconCardCorner(Vtx& vertex, s16 x, s16 y, s16 s, s16 t) {
+    vertex.v = { { x, y, 0 }, 0, { s, t }, { 255, 255, 255, 255 } };
+}
+
+// A 32x32 RGBA32 icon on a camera-facing card, for a get-item that has no model of its own.
+static void DrawIconCard(PlayState* play, const char* iconPath) {
+    constexpr s16 kHalfSide = 24;
+    constexpr s16 kTextureEnd = 32 << 5;
+    OPEN_DISPS(play->state.gfxCtx);
+    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
+    gSPClearGeometryMode(POLY_XLU_DISP++, G_LIGHTING | G_CULL_BACK);
+    gDPSetRenderMode(POLY_XLU_DISP++, G_RM_FOG_SHADE_A, G_RM_AA_ZB_XLU_SURF2);
+    gDPSetCombineMode(POLY_XLU_DISP++, G_CC_MODULATEIA_PRIM, G_CC_PASS2);
+    gDPSetPrimColor(POLY_XLU_DISP++, 0, 0, 255, 255, 255, 255);
+    Matrix_ReplaceRotation(&play->billboardMtxF);
+    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_NOPUSH | G_MTX_LOAD | G_MTX_MODELVIEW);
+    Vtx* vertices = static_cast<Vtx*>(Graph_Alloc(play->state.gfxCtx, 4 * sizeof(Vtx)));
+    SetIconCardCorner(vertices[0], -kHalfSide, -kHalfSide, 0, kTextureEnd);
+    SetIconCardCorner(vertices[1], kHalfSide, -kHalfSide, kTextureEnd, kTextureEnd);
+    SetIconCardCorner(vertices[2], kHalfSide, kHalfSide, kTextureEnd, 0);
+    SetIconCardCorner(vertices[3], -kHalfSide, kHalfSide, 0, 0);
+    gDPLoadTextureBlock(POLY_XLU_DISP++, iconPath, G_IM_FMT_RGBA, G_IM_SIZ_32b, 32, 32, 0, G_TX_CLAMP, G_TX_CLAMP,
+                        G_TX_NOMASK, G_TX_NOMASK, G_TX_NOLOD, G_TX_NOLOD);
+    gSPVertex(POLY_XLU_DISP++, (uintptr_t)vertices, 4, 0);
+    gSP2Triangles(POLY_XLU_DISP++, 0, 1, 2, 0, 0, 2, 3, 0);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
 static void DrawModelPath(PlayState* play, const char* path, bool setupOpa) {
     OPEN_DISPS(play->state.gfxCtx);
     if (setupOpa) {
@@ -515,7 +543,14 @@ void PutAwayOnItemActionChange(int8_t itemAction, PlayerItemActionInitFunc* init
     }
 }
 
+// Without a model the item still shows something in Link's hands: its inventory icon.
 void DrawNoGetItemModel(PlayState* play, GetItemEntry* entry) {
+    const SOHCustomItemDefinition* definition = CustomItemRegistry_FindByRuntimeId(entry->tableId);
+    const char* icon =
+        definition != nullptr ? CustomItemRegistry_ResolveTexture(definition->key, SOH_ITEM_ICON_INVENTORY) : nullptr;
+    if (icon != nullptr) {
+        DrawIconCard(play, icon);
+    }
 }
 
 } // namespace
@@ -778,6 +813,20 @@ bool CustomItemRegistry_Register(const SOHCustomItemDefinition* definition) {
     }
     SPDLOG_INFO("[CustomItemRegistry] Mod '{}' registered custom item '{}' as {}", registered->owner, registered->key,
                 registered->runtimeId);
+    return true;
+}
+
+bool CustomItemRegistry_UpdateSeedPresentation(const char* key, const char* getItemText, uint32_t randomizerFlags,
+                                               GetItemCategory chestCategory) {
+    const auto found = key != nullptr ? sCustomItems.find(key) : sCustomItems.end();
+    if (found == sCustomItems.end() || found->second->definition.randomizer == nullptr) {
+        return false;
+    }
+    RegisteredCustomItem& item = *found->second;
+    SetString(item.definition.getItemText, item.getItemText, getItemText);
+    item.randomizer.flags = randomizerFlags;
+    item.definition.getItemEntry.getItemCategory = chestCategory;
+    RandoItems_RebuildRow(item.key.c_str());
     return true;
 }
 

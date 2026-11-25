@@ -110,6 +110,13 @@ int32_t RandoItems_RegisterHostItem(const char* key) {
     return RegisterItem(key, true);
 }
 
+void RandoItems_RebuildRow(const char* key) {
+    const auto found = key != nullptr ? sKeysToIndex.find(key) : sKeysToIndex.end();
+    if (found != sKeysToIndex.end() && IsItemTableBuilt()) {
+        BuildRow(sItems[found->second]);
+    }
+}
+
 int32_t RandoItems_GetRandoGet(const char* key) {
     if (key == nullptr) {
         return 0;

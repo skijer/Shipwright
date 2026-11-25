@@ -8,6 +8,7 @@
 #include "overlays/actors/ovl_En_Bom_Bowl_Man/z_en_bom_bowl_man.h"
 #include "objects/object_bowl/object_bowl.h"
 #include "vt.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 #define FLAGS ACTOR_FLAG_UPDATE_CULLING_DISABLED
 
@@ -67,8 +68,10 @@ void func_8086E638(BgBomGuard* this, PlayState* play) {
 
     while (it != 0) {
         if (it->id == ACTOR_EN_BOM_BOWL_MAN) {
-            if ((((EnBomBowlMan*)it)->minigamePlayStatus != 0) && (fabsf(play->view.eye.x) > -20.0f) &&
-                (fabsf(play->view.eye.y) > 110.0f)) {
+            if (GameInteractor_Should(VB_RAISE_BOMBCHU_BOWLING_GUARD,
+                                      (((EnBomBowlMan*)it)->minigamePlayStatus != 0) &&
+                                          (fabsf(play->view.eye.x) > -20.0f) && (fabsf(play->view.eye.y) > 110.0f),
+                                      this)) {
                 this->unk_168 = 1;
             }
             break;

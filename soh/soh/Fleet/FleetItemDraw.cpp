@@ -12,6 +12,7 @@
 #include <soh_assets.h>
 
 #include "soh/Enhancements/randomizer/Plandomizer.h"
+#include "soh/SohGui/ImGuiUtils.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/ProgressiveItems/ProgressiveItems.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
@@ -24,6 +25,9 @@ extern "C" {
 #include "variables.h"
 extern PlayState* gPlayState;
 }
+
+// Plandomizer.cpp owns the launcher's item-to-texture map; its header does not declare it.
+extern std::unordered_map<RandomizerGet, std::string> itemImageMap;
 
 namespace {
 
@@ -200,6 +204,31 @@ ImTextureID FindFallbackTexture(RandomizerGet item, const GetItemEntry& entry) {
     return name != nullptr ? Gui()->GetTextureByName(name) : 0;
 }
 
+// The launcher draws most items through the plandomizer's named ImGui textures; this finds the resource behind one.
+std::string FindLauncherIconPath(const Rando::Item& item) {
+    std::string name;
+    const auto type = item.GetItemType();
+    const auto chosen = itemImageMap.find(item.GetRandomizerGet());
+    if (type == ITEMTYPE_SMALLKEY || type == ITEMTYPE_FORTRESS_SMALLKEY) {
+        name = "ITEM_KEY_SMALL";
+    } else if (type == ITEMTYPE_BOSSKEY) {
+        name = "ITEM_KEY_BOSS";
+    } else if (chosen != itemImageMap.end()) {
+        name = chosen->second;
+    }
+    for (const auto& [id, entry] : itemMapping) {
+        if (entry.name == name) {
+            return entry.texturePath;
+        }
+    }
+    for (const auto& [id, entry] : questMapping) {
+        if (entry.name == name) {
+            return entry.texturePath;
+        }
+    }
+    return "";
+}
+
 const char* FindIconPath(RandomizerGet item, const GetItemEntry& entry) {
     if (const char* path = FindHostIconPath(item, entry)) {
         return path;
@@ -224,6 +253,23 @@ const char* FleetItemDraw_TextboxIconPath(const char* item) {
     }
     const auto texture = LoadTexture(path);
     return texture != nullptr && FitsTextbox(*texture) ? path : nullptr;
+}
+
+nlohmann::json FleetItemDraw_DescribeIcon(const char* item) {
+    const auto found = Rando::StaticData::itemNameToEnum.find(item);
+    if (found == Rando::StaticData::itemNameToEnum.end()) {
+        return nullptr;
+    }
+    const Rando::Item& randoItem = Rando::StaticData::RetrieveItem(found->second);
+    const char* hostPath = FindIconPath(found->second, randoItem.GetGIEntry_Copy());
+    const std::string path = hostPath != nullptr ? std::string(hostPath) : FindLauncherIconPath(randoItem);
+    const PlandomizerItemImage image = Plandomizer_GetItemImage(randoItem);
+    const char* textboxPath = FleetItemDraw_TextboxIconPath(item);
+    return { { "iconPath", path },
+             { "iconSource", hostPath != nullptr ? "host" : (path.empty() ? "none" : "launcher") },
+             { "launcherImage", image.texture != 0 },
+             { "tint", { image.tint.x, image.tint.y, image.tint.z, image.tint.w } },
+             { "textboxIconPath", textboxPath != nullptr ? textboxPath : "" } };
 }
 
 bool FleetItemDraw_Icon(const char* item, FleetItemIcon* icon) {

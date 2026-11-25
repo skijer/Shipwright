@@ -1,6 +1,7 @@
 #include "FleetFieldTest.h"
 #include "FleetForeignItems.h"
 #include "FleetPortal.h"
+#include "FleetItemDraw.h"
 #include "FleetRuntime.h"
 #include "FleetRuntimeBridge.h"
 
@@ -14,6 +15,7 @@
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
 #include "soh/Enhancements/randomizer/randomizer_grotto.h"
+#include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 
@@ -353,6 +355,243 @@ const char* ShowcasePhaseName() {
     }
 }
 
+constexpr float kPhotoDistance = 60.0f;
+constexpr float kPhotoScale = 0.25f;
+constexpr int kPhotoSettleFrames = 2;
+
+// One item at a time in front of the camera, drawn by Fleet's own item drawing, for fleet-test to photograph.
+struct Photo {
+    std::string owner;
+    std::string item;
+    bool isQueued = false;
+    int frames = 0;
+    u32 serial = 0;
+};
+
+Photo sPhoto;
+bool sIsPhotoHooked = false;
+
+Vec3f FindPhotoSpot(PlayState* play) {
+    const Vec3f& eye = play->view.eye;
+    const Vec3f& at = play->view.lookAt;
+    const Vec3f toward = { at.x - eye.x, at.y - eye.y, at.z - eye.z };
+    const float length = std::max(1.0f, sqrtf(toward.x * toward.x + toward.y * toward.y + toward.z * toward.z));
+    return { eye.x + toward.x / length * kPhotoDistance, eye.y + toward.y / length * kPhotoDistance,
+             eye.z + toward.z / length * kPhotoDistance };
+}
+
+// OPEN_DISPS redeclares these inside the function; repeating them here as C keeps the link undecorated.
+extern "C" {
+void FrameInterpolation_RecordOpenChild(const void* a, int b);
+void FrameInterpolation_RecordCloseChild(void);
+}
+
+// The corner square tells fleet-test which request this frame shows: in turbo the framebuffer can lag behind.
+void DrawPhotoMarker(PlayState* play) {
+    const u8 red = static_cast<u8>((sPhoto.serial & 31) << 3);
+    const u8 green = static_cast<u8>(((sPhoto.serial >> 5) & 31) << 3);
+    const u16 colour = GPACK_RGBA5551(red, green, 248, 1);
+    OPEN_DISPS(play->state.gfxCtx);
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetCycleType(OVERLAY_DISP++, G_CYC_FILL);
+    gDPSetRenderMode(OVERLAY_DISP++, G_RM_NOOP, G_RM_NOOP2);
+    gDPSetFillColor(OVERLAY_DISP++, (colour << 16) | colour);
+    gDPFillRectangle(OVERLAY_DISP++, 0, 0, 7, 7);
+    gDPPipeSync(OVERLAY_DISP++);
+    gDPSetCycleType(OVERLAY_DISP++, G_CYC_1CYCLE);
+    CLOSE_DISPS(play->state.gfxCtx);
+}
+
+// Drawn with the world and not as an actor, so nothing can collect it or open a textbox.
+// Lit like an actor at the spot; the lights left by the last drawn actor could be anything.
+void LightPhotoSpot(PlayState* play, Vec3f& spot) {
+    Lights* lights = LightContext_NewLights(&play->lightCtx, play->state.gfxCtx);
+    Lights_BindAll(lights, play->lightCtx.listHead, &spot);
+    Lights_Draw(lights, play->state.gfxCtx);
+}
+
+void DrawPhotoItemInWorld() {
+    if (sPhoto.item.empty() || !IsPlaying()) {
+        return;
+    }
+    PlayState* play = gPlayState;
+    Vec3f spot = FindPhotoSpot(play);
+    LightPhotoSpot(play, spot);
+    Matrix_Push();
+    Matrix_Translate(spot.x, spot.y, spot.z, MTXMODE_NEW);
+    Matrix_Scale(kPhotoScale, kPhotoScale, kPhotoScale, MTXMODE_APPLY);
+    FleetItemDraw_DrawForeign(play, sPhoto.owner.c_str(), sPhoto.item.c_str());
+    Matrix_Pop();
+    DrawPhotoMarker(play);
+}
+
+// The camera looks at Link's head, so he would stand right behind every photographed item.
+void HidePlayerDuringPhoto(PlayState* play) {
+    static ActorFunc hiddenDraw = nullptr;
+    Player* player = GET_PLAYER(play);
+    if (player == nullptr) {
+        return;
+    }
+    const bool isPhotographing = !sPhoto.item.empty();
+    if (isPhotographing && player->actor.draw != nullptr) {
+        hiddenDraw = player->actor.draw;
+        player->actor.draw = nullptr;
+    } else if (!isPhotographing && hiddenDraw != nullptr && player->actor.draw == nullptr) {
+        player->actor.draw = hiddenDraw;
+        hiddenDraw = nullptr;
+    }
+}
+
+// A textbox left open by a delivery would cover every photo, and a hidden game has nobody to close it.
+void AdvancePhoto(PlayState* play) {
+    const bool isTextboxOpen = play->msgCtx.msgMode != MSGMODE_NONE;
+    if (!sPhoto.item.empty() && isTextboxOpen && Message_GetState(&play->msgCtx) != TEXT_STATE_CLOSING) {
+        Message_CloseTextbox(play);
+    }
+    if (!sIsPhotoHooked) {
+        GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayDrawEnd>(DrawPhotoItemInWorld);
+        sIsPhotoHooked = true;
+    }
+    HidePlayerDuringPhoto(play);
+    if (sPhoto.isQueued) {
+        sPhoto.isQueued = false;
+        sPhoto.frames = 0;
+    } else if (!sPhoto.item.empty()) {
+        sPhoto.frames++;
+    }
+}
+
+enum class ShowPhase { Idle, Queued, Started, Showing, Done, Unknown };
+
+// A real get-item for fleet-test's review: Link holds the item up with its own textbox, as from a chest.
+struct GetItemShow {
+    std::string item;
+    std::string owner;
+    ShowPhase phase = ShowPhase::Idle;
+    int quietFrames = 0;
+};
+
+constexpr int kShowQuietFrames = 10;
+constexpr const char* kShowGame = "oot";
+
+GetItemShow sShow;
+// Each item is shown against the save as it stood before, so earlier gifts cannot turn later ones into junk.
+SaveContext sSaveBeforeShow;
+
+bool IsShowingGetItem(PlayState* play) {
+    const Player* player = GET_PLAYER(play);
+    return (player->stateFlags1 & PLAYER_STATE1_GETTING_ITEM) || player->getItemId != GI_NONE ||
+           play->msgCtx.msgMode != MSGMODE_NONE;
+}
+
+// As a check holding the item would hand it over: this game's own, or the other game's through Fleet.
+std::optional<GetItemEntry> FindShowEntry() {
+    if (sShow.owner != kShowGame) {
+        const std::string key = FleetForeignItems_RegisterLoose(sShow.owner, sShow.item);
+        const SOHCustomItemDefinition* foreign = CustomItemRegistry_Find(key.c_str());
+        return foreign != nullptr ? std::optional<GetItemEntry>(foreign->getItemEntry) : std::nullopt;
+    }
+    const auto found = Rando::StaticData::itemNameToEnum.find(sShow.item);
+    if (found == Rando::StaticData::itemNameToEnum.end()) {
+        return std::nullopt;
+    }
+    return Rando::StaticData::RetrieveItem(found->second).GetGIEntry_Copy();
+}
+
+void StartGetItemShow(PlayState* play) {
+    const std::optional<GetItemEntry> entry = FindShowEntry();
+    if (!entry) {
+        sShow.phase = ShowPhase::Unknown;
+        return;
+    }
+    if (IsShowingGetItem(play) || Player_InCsMode(play)) {
+        return;
+    }
+    sSaveBeforeShow = gSaveContext;
+    if (GiveItemEntryWithoutActor(play, *entry)) {
+        sShow.phase = ShowPhase::Started;
+    }
+}
+
+// The clock keeps running: a save restored with an earlier time would rewind the day.
+void RestoreSaveKeepingTime() {
+    const u16 dayTime = gSaveContext.dayTime;
+    const s32 nightFlag = gSaveContext.nightFlag;
+    const s32 totalDays = gSaveContext.totalDays;
+    const s32 bgsDayCount = gSaveContext.bgsDayCount;
+    const u16 skyboxTime = gSaveContext.skyboxTime;
+    gSaveContext = sSaveBeforeShow;
+    gSaveContext.dayTime = dayTime;
+    gSaveContext.nightFlag = nightFlag;
+    gSaveContext.totalDays = totalDays;
+    gSaveContext.bgsDayCount = bgsDayCount;
+    gSaveContext.skyboxTime = skyboxTime;
+}
+
+// Finished once Link has been free of the item and its textbox for a moment.
+void AdvanceGetItemShow(PlayState* play) {
+    switch (sShow.phase) {
+        case ShowPhase::Queued:
+            StartGetItemShow(play);
+            break;
+        case ShowPhase::Started:
+        case ShowPhase::Showing:
+            if (IsShowingGetItem(play)) {
+                sShow.phase = ShowPhase::Showing;
+                sShow.quietFrames = 0;
+            } else if (++sShow.quietFrames >= kShowQuietFrames) {
+                RestoreSaveKeepingTime();
+                sShow.phase = ShowPhase::Done;
+            }
+            break;
+        case ShowPhase::Idle:
+        case ShowPhase::Done:
+        case ShowPhase::Unknown:
+            break;
+        default:
+            sShow.phase = ShowPhase::Unknown;
+            break;
+    }
+}
+
+bool IsShowActive() {
+    return sShow.phase == ShowPhase::Started || sShow.phase == ShowPhase::Showing;
+}
+
+// The review reads each get-item text whole, as Ship's instant text speed shows it.
+void FillTextDuringShows() {
+    static bool isHooked = false;
+    if (isHooked) {
+        return;
+    }
+    REGISTER_VB_SHOULD(VB_TEXT_CRAWL_FASTER, {
+        if (IsShowActive()) {
+            gPlayState->msgCtx.textDrawPos = gPlayState->msgCtx.decodedTextLen + 1;
+            *should = true;
+        }
+    });
+    isHooked = true;
+}
+
+const char* ShowPhaseName() {
+    switch (sShow.phase) {
+        case ShowPhase::Idle:
+            return "idle";
+        case ShowPhase::Queued:
+            return "queued";
+        case ShowPhase::Started:
+            return "started";
+        case ShowPhase::Showing:
+            return "showing";
+        case ShowPhase::Done:
+            return "done";
+        case ShowPhase::Unknown:
+            return "unknown";
+        default:
+            return "invalid";
+    }
+}
+
 nlohmann::json Status() {
     const bool isPlaying = IsPlaying();
     nlohmann::json status = { { "playing", isPlaying },
@@ -365,6 +604,12 @@ nlohmann::json Status() {
                                 { { "phase", ShowcasePhaseName() },
                                   { "keys", sShowcase.keys.size() },
                                   { "texts", sShowcase.texts } } },
+                              { "photo",
+                                { { "item", sPhoto.item },
+                                  { "marked", true },
+                                  { "ready", !sPhoto.isQueued && sPhoto.frames >= kPhotoSettleFrames && IsPlaying() &&
+                                                gPlayState->msgCtx.msgMode == MSGMODE_NONE } } },
+                              { "getItem", { { "item", sShow.item }, { "phase", ShowPhaseName() } } },
                               { "slowestSaveMs", FleetRuntime_SlowestSaveMilliseconds() } };
     if (isPlaying) {
         const Player* player = GET_PLAYER(gPlayState);
@@ -381,7 +626,36 @@ nlohmann::json Status() {
 
 } // namespace
 
+static bool sIsTurbo = false;
+
+bool FleetFieldTest_IsTurbo() {
+    return sIsTurbo;
+}
+
 std::optional<std::string> FleetFieldTest_Request(const std::string& request, const nlohmann::json& input) {
+    if (request == "TestTurbo") {
+        sIsTurbo = input.value("on", false);
+        return nlohmann::json{ { "turbo", sIsTurbo } }.dump();
+    }
+    if (request == "TestItemPhoto") {
+        sPhoto = { input.value("owner", std::string{}), input.value("item", std::string{}), true, 0,
+                   input.value("serial", 0u) };
+        return nlohmann::json{ { "queued", sPhoto.item } }.dump();
+    }
+    if (request == "TestGetItem") {
+        FillTextDuringShows();
+        sShow = { input.value("item", std::string{}), input.value("owner", std::string(kShowGame)), ShowPhase::Queued, 0 };
+        return Status().dump();
+    }
+    if (request == "TestItemAssets") {
+        auto assets = nlohmann::json::object();
+        for (const auto& item : input.value("items", nlohmann::json::array())) {
+            if (item.is_string()) {
+                assets[item.get<std::string>()] = FleetItemDraw_DescribeIcon(item.get<std::string>().c_str());
+            }
+        }
+        return nlohmann::json{ { "assets", assets } }.dump();
+    }
     if (request == "TestOwns") {
         return nlohmann::json{ { "owned", FleetRuntime_ReadOwnership(input.value("items", nlohmann::json::array())) } }
             .dump();
@@ -413,6 +687,8 @@ void FleetFieldTest_FrameEnd() {
     if (IsTransitioning(play) || play->pauseCtx.state != 0) {
         return;
     }
+    AdvancePhoto(play);
+    AdvanceGetItemShow(play);
     if (sShowcase.phase == ShowcasePhase::Drawing || sShowcase.phase == ShowcasePhase::Texts) {
         AdvanceShowcase(play);
         return;

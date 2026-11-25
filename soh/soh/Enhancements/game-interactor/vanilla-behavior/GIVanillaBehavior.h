@@ -4241,5 +4241,13 @@ typedef enum {
     // - `*Player`
     VB_DRAW_PLAYER_GAUNTLETS_AND_BOOTS,
 
+    // #### `result`
+    // ```c
+    // (bowlMan->minigamePlayStatus != 0) && (fabsf(play->view.eye.x) > -20.0f) && (fabsf(play->view.eye.y) > 110.0f)
+    // ```
+    // #### `args`
+    // - `*BgBomGuard`
+    VB_RAISE_BOMBCHU_BOWLING_GUARD,
+
     VB_MOD_BASE = 10000
 } GIVanillaBehavior;

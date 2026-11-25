@@ -1706,6 +1706,8 @@ void Player_DrawGetItemImpl(PlayState* play, Player* this, Vec3f* refPos, s32 dr
     } else if (this->getItemEntry.modIndex == MOD_RANDOMIZER &&
                (this->getItemEntry.getItemId == RG_TRIFORCE_PIECE || this->getItemEntry.getItemId == RG_TRIFORCE)) {
         Randomizer_DrawTriforcePieceGI(play, this->getItemEntry);
+    } else if (GameInteractor_ExecuteOnGetItemDraw(play, &this->getItemEntry)) {
+        // SOH [Enhancement] A hook drew the held item, as GetItemEntry_Draw lets it.
     } else if (this->getItemEntry.drawFunc != NULL) {
         this->getItemEntry.drawFunc(play, &this->getItemEntry);
     } else {

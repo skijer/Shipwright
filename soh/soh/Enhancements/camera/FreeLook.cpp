@@ -27,6 +27,10 @@ void RegisterFreeLookFixes() {
         }
     });
 
+    // The guard rises when the camera climbs above the vanilla throwing view; free look climbs higher, so the
+    // raised wall would sit in the bombchus' path.
+    COND_VB_SHOULD(VB_RAISE_BOMBCHU_BOWLING_GUARD, freeLook, { *should = false; });
+
     // EnHorse_Init sets riderPos as a world position instead of an offset,
     // putting Link out of bounds until horse drawn.
     COND_ID_HOOK(OnActorInit, ACTOR_EN_HORSE, freeLook, [](void* refActor) {

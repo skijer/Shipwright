@@ -5,6 +5,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "SohMenu.h"
 #include "soh/Enhancements/enhancementTypes.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/randomizer/randomizer_check_objects.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/settings.h"
@@ -810,6 +811,13 @@ void SohMenu::AddMenuRandomizer() {
     path.sidebarName = "Tricks/Glitches";
     AddSidebarEntry("Randomizer", path.sidebarName, 1);
     AddWidget(path, "Tricks/Glitches", WIDGET_CUSTOM).CustomFunction(DrawTricksMenu);
+    path.sidebarName = "Enemy Pools";
+    AddSidebarEntry("Randomizer", path.sidebarName, 1);
+    AddWidget(path, "Enemy Pools", WIDGET_CUSTOM).CustomFunction([](WidgetInfo& info) {
+        ImGui::BeginDisabled(IsRandoGenerating() || CVarGetInteger(CVAR_SETTING("DisableChanges"), 0));
+        EnemyPlacement_DrawPoolMenu();
+        ImGui::EndDisabled();
+    });
 
     // Plandomizer
     path.sidebarName = "Plandomizer";

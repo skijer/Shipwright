@@ -24,6 +24,7 @@ void RandoItems_SetOwned(int32_t randoGet, SOHRandoInfBank bank, bool state);
 
 int32_t RandoItems_Register(const char* key);
 int32_t RandoItems_RegisterHostItem(const char* key);
+void RandoItems_RebuildRow(const char* key);
 void RandoItems_BuildItemTable();
 void RandoItems_AddToPool();
 #endif

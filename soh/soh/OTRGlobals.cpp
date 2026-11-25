@@ -5,6 +5,7 @@
 #include "soh/z_message_OTR.h"
 #include "soh/unbound/UnboundFactories.h"
 #include "soh/unbound/UnboundSchema.h"
+#include "soh/Fleet/FleetFieldTest.h"
 #include "soh/Fleet/FleetGame.h"
 #include "OTRAudio.h"
 #include <algorithm>
@@ -2187,7 +2188,8 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     int original_fps = 60 / R_UPDATE_RATE;
     auto wnd = std::dynamic_pointer_cast<Fast::Fast3dWindow>(Ship::Context::GetRawInstance()->GetWindow());
 
-    if (target_fps == 20 || original_fps > target_fps) {
+    const bool isTurboTest = FleetFieldTest_IsTurbo();
+    if (target_fps == 20 || original_fps > target_fps || isTurboTest) {
         fps = original_fps;
     }
 
@@ -2208,7 +2210,9 @@ extern "C" void Graph_ProcessGfxCommands(Gfx* commands) {
     time -= fps;
 
     if (wnd != nullptr) {
-        wnd->SetTargetFps(fps);
+        // A turbo test presents every logic frame without waiting for the frame clock.
+        constexpr int kTurboTestFps = 2000;
+        wnd->SetTargetFps(isTurboTest ? kTurboTestFps : fps);
     }
 
     int step = original_fps;

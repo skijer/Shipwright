@@ -6,6 +6,7 @@
 #include "FleetItemDraw.h"
 #include "FleetCrossDungeon.h"
 #include "FleetHints.h"
+#include "FleetPortal.h"
 #include "FleetRuntime.h"
 #include "soh/ShipInit.hpp"
 #include "FleetGame.h"
@@ -49,6 +50,7 @@ extern std::shared_ptr<SohMenu> mSohMenu;
 #include "soh/Enhancements/randomizer/settings.h"
 #include "soh/Enhancements/randomizer/static_data.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/randomizer/savefile.h"
 
@@ -231,6 +233,7 @@ bool PrepareSeed(EntranceLayout layout) {
         ParseEnabledTricks());
     Random_Init(sSeed);
     BossRegistry_AssignForSeed();
+    EnemyPlacement_AssignForSeed(sSeed);
     if (!FillConfinedItemsWithOwnPieces(layout)) {
         return false;
     }
@@ -813,6 +816,14 @@ char* FleetRando_Request(const char* op, const char* json) {
     }
     if (request == "CatchUpParked") {
         FleetRuntime_CatchUpParked();
+        return CopyString("{}");
+    }
+    if (request == "EndSession") {
+        FleetPortal_EndSession();
+        return CopyString("{}");
+    }
+    if (request == "ReloadSaveFiles") {
+        SaveManager::Instance->ReloadSaveFiles();
         return CopyString("{}");
     }
     if (request == "DumpSettingDefinitions") {

@@ -8,6 +8,7 @@
 #include "pool_functions.hpp"
 #include "soh/Enhancements/randomizer/randomizer_entrance_tracker.h"
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
 
@@ -315,6 +316,7 @@ void SpoilerLog_Write() {
     WriteEnabledTricks();
     WriteMasterQuestDungeons();
     BossRegistry_WriteSpoiler(jsonData);
+    EnemyPlacement_WriteSpoiler(jsonData);
     WriteChosenOptions();
     WritePlaythrough();
 

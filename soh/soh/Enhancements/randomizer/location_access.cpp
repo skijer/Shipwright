@@ -26,7 +26,7 @@ bool HasCheckEnemySoul(RandomizerCheck check) {
     return logic->HasEnemySoul(RE_GOLD_SKULLTULA);
 }
 
-bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time) {
+bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time, SceneID scene) {
     logic->IsChild = false;
     logic->IsAdult = false;
     logic->AtDay = false;
@@ -35,7 +35,7 @@ bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time) {
     time = true;
     age = true;
 
-    return ConditionsMet();
+    return ConditionsMet(scene);
 }
 
 // set the logic to be a specific age and time of day and see if the condition still holds
@@ -467,10 +467,10 @@ bool Region::UpdateEvents() {
             continue;
         }
 
-        if ((childDay && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtDay)) ||
-            (childNight && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtNight)) ||
-            (adultDay && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtDay)) ||
-            (adultNight && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtNight))) {
+        if ((childDay && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtDay, scene)) ||
+            (childNight && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtNight, scene)) ||
+            (adultDay && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtDay, scene)) ||
+            (adultNight && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtNight, scene))) {
             event.EventOccurred();
             eventsUpdated = true;
         }

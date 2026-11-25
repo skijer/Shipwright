@@ -1521,6 +1521,18 @@
                 "name": "Shuffle Enemy Drops",
                 "description": "The first drop from each non-boss enemy is a check."
             },
+            "enemy_randomizer": {
+                "name": "Enemy Randomizer",
+                "description": "Replaces enemies with others from the enemy pool when the seed is generated, including enemies from installed mods. Every enemy of one kind in a scene becomes the same enemy, and logic knows which one."
+            },
+            "enemy_randomizer_minibosses": {
+                "name": "Randomized Minibosses",
+                "description": "Vanilla: minibosses stay where they are and never replace other enemies.\nAmong Themselves: minibosses only replace each other.\nAnywhere: minibosses mix with regular enemies."
+            },
+            "enemy_soul_behaviour": {
+                "name": "Soulless Enemies",
+                "description": "Invulnerable: an enemy without its soul cannot be damaged.\nNo Spawn: an enemy without its soul is removed when it appears. Rooms that wait for their enemies to be defeated still open."
+            },
             "gbk_stone_count": {
                 "name": "GBK Stone Count"
             },

@@ -3,6 +3,9 @@
 #include "SeedContext.h"
 #include <stdint.h>
 
+struct EnemyKind;
+struct PlannedReplacement;
+
 namespace Rando {
 
 enum class HasProjectileAge {
@@ -52,8 +55,13 @@ class Logic {
     bool CanDoGlitch(GlitchType glitch);
     bool CanEquipSwap(RandomizerGet itemName);
     bool HasEnemySoul(RandomizerEnemy enemy);
+    bool HasSoulOf(const EnemyKind& replacement);
     bool CanKillEnemy(RandomizerEnemy enemy, EnemyDistance distance = ED_CLOSE, bool wallOrFloor = true,
                       uint8_t quantity = 1, bool timer = false, bool inWater = false);
+    bool CanKillNativeEnemy(RandomizerEnemy enemy, EnemyDistance distance = ED_CLOSE, bool wallOrFloor = true,
+                            uint8_t quantity = 1, bool timer = false, bool inWater = false);
+    bool CanKillReplacement(const PlannedReplacement& replacement, EnemyDistance distance, bool wallOrFloor,
+                            uint8_t quantity, bool timer, bool inWater);
     bool CanPassEnemy(RandomizerEnemy enemy, EnemyDistance distance = ED_CLOSE, bool wallOrFloor = true);
     bool CanAvoidEnemy(RandomizerEnemy enemy, EnemyDistance distance = ED_CLOSE, bool grounded = false,
                        uint8_t quantity = 1);

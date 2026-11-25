@@ -1062,7 +1062,24 @@ void Settings::CreateOptions() {
     OPT_BOOL(RSK_SHUFFLE_BEAN_SOULS, CVAR_RANDOMIZER_SETTING("ShuffleBeanSouls"), IMFLAG_SEPARATOR_BOTTOM, WIDGET_CVAR_CHECKBOX, RO_GENERIC_OFF);
     OPT_U8(RSK_SHUFFLE_BOSS_SOULS, {"Off", "On"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("ShuffleBossSouls"), WIDGET_CVAR_COMBOBOX);
     OPT_BOOL(RSK_SHUFFLE_ENEMY_SOULS, CVAR_RANDOMIZER_SETTING("ShuffleEnemySouls"));
+    OPT_CALLBACK(RSK_SHUFFLE_ENEMY_SOULS, {
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("ShuffleEnemySouls"), RO_GENERIC_OFF)) {
+            mOptions[RSK_ENEMY_SOUL_BEHAVIOUR].Enable();
+        } else {
+            mOptions[RSK_ENEMY_SOUL_BEHAVIOUR].Disable("Only applies when enemy souls are shuffled.");
+        }
+    });
     OPT_BOOL(RSK_SHUFFLE_ENEMY_DROPS, CVAR_RANDOMIZER_SETTING("ShuffleEnemyDrops"));
+    OPT_BOOL(RSK_ENEMY_RANDOMIZER, CVAR_RANDOMIZER_SETTING("EnemyRandomizer"));
+    OPT_CALLBACK(RSK_ENEMY_RANDOMIZER, {
+        if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("EnemyRandomizer"), RO_GENERIC_OFF)) {
+            mOptions[RSK_ENEMY_RANDOMIZER_MINIBOSSES].Enable();
+        } else {
+            mOptions[RSK_ENEMY_RANDOMIZER_MINIBOSSES].Disable("Only applies when the Enemy Randomizer is on.");
+        }
+    });
+    OPT_U8(RSK_ENEMY_RANDOMIZER_MINIBOSSES, {"Vanilla", "Among Themselves", "Anywhere"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("EnemyRandomizerMinibosses"), WIDGET_CVAR_COMBOBOX);
+    OPT_U8(RSK_ENEMY_SOUL_BEHAVIOUR, {"Invulnerable", "No Spawn"}, OptionCategory::Setting, CVAR_RANDOMIZER_SETTING("EnemySoulBehaviour"), WIDGET_CVAR_COMBOBOX);
     OPT_BOOL(RSK_SHUFFLE_DEKU_STICK_BAG, CVAR_RANDOMIZER_SETTING("ShuffleDekuStickBag"), IMFLAG_SEPARATOR_BOTTOM, WIDGET_CVAR_CHECKBOX, RO_GENERIC_OFF);
     OPT_CALLBACK(RSK_SHUFFLE_DEKU_STICK_BAG, {
         if (CVarGetInteger(CVAR_RANDOMIZER_SETTING("ShuffleDekuStickBag"), 0)) {
@@ -2119,6 +2136,8 @@ void Settings::CreateOptions() {
                                   &mOptions[RSK_SHUFFLE_CLIMB],        &mOptions[RSK_SHUFFLE_CRAWL],
                                   &mOptions[RSK_SHUFFLE_SPEAK],        &mOptions[RSK_SHUFFLE_OPEN_CHEST],
                                   &mOptions[RSK_SHUFFLE_BEAN_SOULS],   &mOptions[RSK_SHUFFLE_ENEMY_SOULS],
+                                  &mOptions[RSK_ENEMY_SOUL_BEHAVIOUR], &mOptions[RSK_ENEMY_RANDOMIZER],
+                                  &mOptions[RSK_ENEMY_RANDOMIZER_MINIBOSSES],
                                   &mOptions[RSK_ROCS_FEATHER],         &mOptions[RSK_BOMBCHU_BAG],
                                   &mOptions[RSK_ENABLE_BOMBCHU_DROPS], &mOptions[RSK_PROGRESSIVE_GORON_SWORD],
                                   &mOptions[RSK_INFINITE_UPGRADES],    &mOptions[RSK_SKELETON_KEY],
@@ -2316,6 +2335,9 @@ void Settings::CreateOptions() {
                                             &mOptions[RSK_SHUFFLE_BOSS_SOULS],
                                             &mOptions[RSK_SHUFFLE_ENEMY_SOULS],
                                             &mOptions[RSK_SHUFFLE_ENEMY_DROPS],
+                                            &mOptions[RSK_ENEMY_RANDOMIZER],
+                                            &mOptions[RSK_ENEMY_RANDOMIZER_MINIBOSSES],
+                                            &mOptions[RSK_ENEMY_SOUL_BEHAVIOUR],
                                             &mOptions[RSK_SHUFFLE_DEKU_STICK_BAG],
                                             &mOptions[RSK_SHUFFLE_DEKU_NUT_BAG],
                                             &mOptions[RSK_SHUFFLE_FREESTANDING],
