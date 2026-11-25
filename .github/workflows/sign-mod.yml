@@ -50,6 +50,7 @@ jobs:
       author: ${{ steps.next.outputs.author }}
       unbound_ref: ${{ steps.next.outputs.unbound_ref }}
       sdk_run: ${{ steps.next.outputs.sdk_run }}
+      rebuild: ${{ steps.next.outputs.rebuild }}
       trusted: ${{ steps.next.outputs.trusted }}
       approved: ${{ steps.next.outputs.approved }}
       held_permissions: ${{ steps.next.outputs.held_permissions }}
@@ -339,10 +340,12 @@ jobs:
         TRUSTED: ${{ needs.request.outputs.trusted }}
         APPROVED: ${{ needs.request.outputs.approved }}
         HELD: ${{ needs.request.outputs.held_permissions }}
+        REBUILD: ${{ needs.request.outputs.rebuild }}
       run: |
         FLAGS=""
         [ "$TRUSTED" = true ] && FLAGS="$FLAGS --trusted"
         [ "$APPROVED" = true ] && FLAGS="$FLAGS --approved"
+        [ "$REBUILD" = true ] && FLAGS="$FLAGS --rebuild"
         python trusted/mod-sdk/tools/build_catalog.py plan --catalog current/payload.json --packages unsigned \
                --source-hashes store-inputs/hashes.json --issue "$ISSUE" \
                --held-permissions "$HELD" --output plan.json $FLAGS

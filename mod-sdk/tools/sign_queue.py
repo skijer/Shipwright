@@ -248,7 +248,9 @@ def queue_resign(repository, issues, catalog, unbound_ref, sdk_run):
         source = catalog.get("sources", {}).get(str(issue["number"]))
         if source is None:
             continue
-        extra = {"unbound_ref": unbound_ref, "sdk_run": sdk_run} if sdk_run else {"unbound_ref": unbound_ref}
+        extra = {"unbound_ref": unbound_ref, "rebuild": "true"}
+        if sdk_run:
+            extra["sdk_run"] = sdk_run
         queue(repository, issue, source["commit"], f"Rebuilding for Unbound `{unbound_ref[:12]}`.", extra)
 
 
@@ -269,7 +271,8 @@ def build_request(repository, issue, trusted):
         raise ValueError(f"'{unbound_ref}' is not a usable Unbound reference")
     held = sign_request.read_markers(issue["comments"], "held")
     return {"mode": "build", "issue": issue["number"], "author": issue["author"], "unbound_ref": unbound_ref,
-            "sdk_run": marker.get("sdk_run", ""), "trusted": str(issue["author"].lower() in trusted).lower(),
+            "sdk_run": marker.get("sdk_run", ""), "rebuild": marker.get("rebuild", "false"),
+            "trusted": str(issue["author"].lower() in trusted).lower(),
             "approved": str(LABEL_APPROVED in issue["labels"]).lower(),
             "held_permissions": held[-1].get("permissions", "") if held else "", **request}
 

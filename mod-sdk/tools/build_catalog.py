@@ -171,8 +171,10 @@ def file_hash(path):
     return hashlib.blake2b(path.read_bytes(), digest_size=64).hexdigest()
 
 
-def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions):
-    """Which built mods to sign and publish, which are already published, and which wait or are refused."""
+def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions, rebuild=False):
+    """Which built mods to sign and publish, which are already published, and which wait or are refused.
+
+    A rebuild for another Unbound publishes unchanged sources too: their binaries follow the game's layout."""
     source = catalog["sources"].get(str(issue))
     published = any(mod["issue"] == issue for mod in catalog["mods"].values())
     allowed = set(source["permissions"]) if source and published else None
@@ -192,7 +194,7 @@ def plan(catalog, packages, hashes, issue, trusted, approved, held_permissions):
             result["rejected"][mod_id] = "the folder name must be lowercase letters, digits, '_' or '-'"
         elif existing and existing["issue"] != issue:
             result["rejected"][mod_id] = f"the name '{mod_id}' already belongs to #{existing['issue']}"
-        elif existing and build.get("source_hash") == hashes.get(mod_id) and existing.get("listed", True):
+        elif not rebuild and existing and build.get("source_hash") == hashes.get(mod_id) and existing.get("listed", True):
             result["unchanged"].append(mod_id)
         elif new_permissions and not trusted and not (approved and set(new_permissions) <= held_permissions):
             result["held"][mod_id] = new_permissions
@@ -293,6 +295,7 @@ def main():
     plan_parser.add_argument("--issue", type=int, required=True)
     plan_parser.add_argument("--trusted", action="store_true")
     plan_parser.add_argument("--approved", action="store_true")
+    plan_parser.add_argument("--rebuild", action="store_true")
     plan_parser.add_argument("--held-permissions", default="")
     plan_parser.add_argument("--output", type=Path, required=True)
 
@@ -329,7 +332,7 @@ def main():
     elif args.command == "plan":
         held = {permission for permission in args.held_permissions.split(",") if permission}
         result = plan(read_catalog(args.catalog), list(args.packages.glob("*.o2r")),
-                      read_json(args.source_hashes, {}), args.issue, args.trusted, args.approved, held)
+                      read_json(args.source_hashes, {}), args.issue, args.trusted, args.approved, held, args.rebuild)
         write_json(args.output, result)
         print(json.dumps(result, indent=2))
     elif args.command == "apply":
