@@ -1,0 +1,8 @@
+{
+    "name": "container_colors",
+    "author": "Skijer",
+    "version": "1.0",
+    "description": "Container Style Matches Contents for the checks that have no style of their own: a cow shows a nose ring, and beehives and gold Skulltulas take the color of the item they hold. The colors can be changed in the menu.",
+    "display_name": "Container Colors",
+    "game": "oot"
+}
