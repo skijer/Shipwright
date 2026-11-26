@@ -57,6 +57,11 @@ static CheckIdentity IdentifyCow(s32 sceneNum, s32 posX, s32 posZ) {
     return cowIdentity;
 }
 
+CheckIdentity ShuffleCows_IdentifyCow(const Actor* cow) {
+    return IdentifyCow(gPlayState->sceneNum, static_cast<int32_t>(cow->world.pos.x),
+                       static_cast<int32_t>(cow->world.pos.z));
+}
+
 void RegisterShuffleCows() {
     bool shouldRegister = IS_RANDO && RAND_GET_OPTION(RSK_SHUFFLE_COWS);
 

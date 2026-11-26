@@ -771,6 +771,8 @@ void CheckTrackerLoadGame(int32_t fileNum) {
     }
     LoadSettings();
     TrySetAreas();
+    // Fleet reloads the save on every return from MM without an OnExitGame in between.
+    ClearAreaChecksAndTotals();
     for (auto& entry : Rando::StaticData::GetLocationTable()) {
         RandomizerCheck rc = entry.GetRandomizerCheck();
         if (rc == RC_UNKNOWN_CHECK || rc == RC_MAX || rc == RC_LINKS_POCKET ||

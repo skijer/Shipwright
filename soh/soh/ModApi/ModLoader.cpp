@@ -530,9 +530,11 @@ void MountFleetMods() {
         return;
     }
     auto archives = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
-    for (const auto& entry : std::filesystem::directory_iterator(folder, error)) {
-        if (entry.path().extension() == ".o2r") {
-            archives->AddArchive(entry.path().string());
+    auto entry = std::filesystem::recursive_directory_iterator(
+        folder, std::filesystem::directory_options::follow_directory_symlink, error);
+    for (; !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        if (entry->is_regular_file() && entry->path().extension() == ".o2r") {
+            archives->AddArchive(entry->path().string());
         }
     }
 }

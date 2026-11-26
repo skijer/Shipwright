@@ -470,10 +470,30 @@ void ApplySharedEquips(const nlohmann::json& equips) {
     ReloadSharedButtonIcons();
 }
 
+// A loaded save refills the meter from 0 up to magicFillTarget: until it settles, that target is Link's magic.
+bool IsMagicMeterSettling() {
+    const bool isFilling =
+        gSaveContext.magicState == MAGIC_STATE_STEP_CAPACITY || gSaveContext.magicState == MAGIC_STATE_FILL;
+    return gSaveContext.isMagicAcquired && (gSaveContext.magicLevel == 0 || isFilling);
+}
+
+int GetSharedMagic() {
+    return IsMagicMeterSettling() ? gSaveContext.magicFillTarget : gSaveContext.magic;
+}
+
+void SetSharedMagic(int magic) {
+    if (IsMagicMeterSettling()) {
+        const int fullMeter = (gSaveContext.isDoubleMagicAcquired + 1) * MAGIC_NORMAL_METER;
+        gSaveContext.magicFillTarget = static_cast<s16>(std::clamp(magic, 0, fullMeter));
+        return;
+    }
+    gSaveContext.magic = static_cast<s8>(std::clamp(magic, 0, static_cast<int>(gSaveContext.magicCapacity)));
+}
+
 nlohmann::json ReadLiveState() {
     return { { "rupees", gSaveContext.rupees },
              { "health", gSaveContext.health },
-             { "magic", gSaveContext.magic },
+             { "magic", GetSharedMagic() },
              { "chateau", IsChateauLendingMagic() },
              { "equips", ReadSharedEquips() } };
 }
@@ -496,8 +516,7 @@ void ApplyLiveState(const nlohmann::json& state) {
             static_cast<s16>(std::min(state.at("health").get<int>(), static_cast<int>(gSaveContext.healthCapacity)));
     }
     if (state.contains("magic") && gSaveContext.isMagicAcquired) {
-        gSaveContext.magic =
-            static_cast<s8>(std::clamp(state.at("magic").get<int>(), 0, static_cast<int>(gSaveContext.magicCapacity)));
+        SetSharedMagic(state.at("magic").get<int>());
     }
     if (state.contains("chateau") && state.at("chateau").get<bool>() != IsChateauLendingMagic()) {
         CallChateauService(state.at("chateau").get<bool>() ? "nei.chateau.lend" : "nei.chateau.end");

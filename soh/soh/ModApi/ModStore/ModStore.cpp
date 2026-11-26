@@ -597,16 +597,26 @@ void ModStore_InstallRelease() {
     });
 }
 
+// Collected first: renaming while a recursive iterator walks the folder invalidates it.
+static std::vector<fs::path> ListPendingPackages(const fs::path& storeDirectory) {
+    std::vector<fs::path> pending;
+    std::error_code error;
+    auto entry = fs::recursive_directory_iterator(storeDirectory, fs::directory_options::skip_permission_denied, error);
+    for (; !error && entry != fs::recursive_directory_iterator(); entry.increment(error)) {
+        if (entry->is_regular_file() && entry->path().extension() == PendingSuffix) {
+            pending.push_back(entry->path());
+        }
+    }
+    return pending;
+}
+
 void ModStore_ApplyPending(const fs::path& modsDirectory) {
     const fs::path path = modsDirectory / OperationsFileName;
     const Json operations = LoadJsonFile(path);
     std::error_code error;
-    for (const auto& entry : fs::directory_iterator(StoreDirectory(modsDirectory), error)) {
-        const fs::path pending = entry.path();
-        if (entry.is_regular_file() && pending.extension() == PendingSuffix) {
-            fs::remove(pending.parent_path() / pending.stem(), error);
-            fs::rename(pending, pending.parent_path() / pending.stem(), error);
-        }
+    for (const fs::path& pending : ListPendingPackages(StoreDirectory(modsDirectory))) {
+        fs::remove(pending.parent_path() / pending.stem(), error);
+        fs::rename(pending, pending.parent_path() / pending.stem(), error);
     }
     for (const std::string& id : ReadOperation(operations, MigrateOperation)) {
         fs::remove(PackagePath(modsDirectory, id), error);

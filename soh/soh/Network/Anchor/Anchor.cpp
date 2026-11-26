@@ -241,6 +241,26 @@ AnchorClient* Anchor::FindDummyPlayerClient(const Actor* actor) {
     return client == clients.end() ? nullptr : &client->second;
 }
 
+bool Anchor::GetPlayerColor(const Actor* actor, Color_RGB8* color) {
+    if (!isConnected || actor == nullptr || color == nullptr || gPlayState == nullptr) {
+        return false;
+    }
+    if (actor == &GET_PLAYER(gPlayState)->actor) {
+        *color = CVarGetColor24(CVAR_REMOTE_ANCHOR("Color.Value"), { 100, 255, 100 });
+        return true;
+    }
+    const AnchorClient* client = FindDummyPlayerClient(actor);
+    if (client == nullptr) {
+        return false;
+    }
+    *color = client->color;
+    return true;
+}
+
+extern "C" bool Anchor_GetPlayerColor(const Actor* actor, Color_RGB8* color) {
+    return Anchor::Instance != nullptr && Anchor::Instance->GetPlayerColor(actor, color);
+}
+
 void Anchor::RefreshClientActors() {
     if (!IsSaveLoaded()) {
         return;

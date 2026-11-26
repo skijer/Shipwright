@@ -30,6 +30,7 @@
 #include <nlohmann/json.hpp>
 
 extern "C" PlayState* gPlayState;
+extern "C" bool Anchor_GetPlayerColor(const Actor* actor, Color_RGB8* color);
 
 namespace {
 
@@ -401,6 +402,7 @@ SOHModApi BuildTable() {
     api.GetActiveForm = FormRegistry_GetActiveKey;
     api.IsFormActive = FormRegistry_IsActive;
     api.IsFormSuspended = FormRegistry_IsSuspended;
+    api.GetNetPlayerColor = Anchor_GetPlayerColor;
     api.BlockPlayerInput = PlayerInput_Block;
     api.ReleasePlayerInput = PlayerInput_Release;
     api.ShowTextbox = CustomItemRegistry_ShowTextbox;

@@ -21,6 +21,7 @@ constexpr const char* kGame = "oot";
 struct ForeignItem {
     std::string owner;
     std::string item;
+    std::string label;
 };
 
 std::unordered_map<std::string, ForeignItem> sItems;
@@ -38,6 +39,16 @@ const char* RecordTextboxIcon(const ForeignItem& foreign) {
 std::string PresentedName(const nlohmann::json& foreign) {
     const std::string fake = foreign.value("fakeItemName", "");
     return fake.empty() ? foreign.at("itemName").get<std::string>() : fake;
+}
+
+// Seeds made before friendly names were stored fall back to the raw name.
+std::string PresentedLabel(const nlohmann::json& foreign) {
+    const bool disguised = !foreign.value("fakeItemName", std::string{}).empty();
+    return foreign.value(disguised ? "fakeLabel" : "label", PresentedName(foreign));
+}
+
+ForeignItem PresentedItem(const nlohmann::json& foreign) {
+    return { foreign.at("itemGame").get<std::string>(), PresentedName(foreign), PresentedLabel(foreign) };
 }
 
 GetItemCategory ChestCategory(const std::string& category) {
@@ -79,9 +90,7 @@ void DrawMmBottle(PlayState* play, GetItemEntry* entry, bool* handled) {
 
 std::string FoundText(const ForeignItem& foreign, const nlohmann::json& reward) {
     const bool shared = reward.value("shared", false);
-    const bool disguised = !reward.value("fakeItemName", std::string{}).empty();
-    const std::string shown = disguised ? foreign.item : reward.value("label", foreign.item);
-    return "You found %y" + shown + (shared ? " (Shared)" : " (MM)") + "%w!&" +
+    return "You found %y" + foreign.label + (shared ? " (Shared)" : " (MM)") + "%w!&" +
            (shared ? "Both games share it." : "It belongs to Majora's Mask.");
 }
 
@@ -100,7 +109,7 @@ void Register(const std::string& key, const ForeignItem& foreign, const nlohmann
     definition.randomizer = &randomizer;
     definition.presentationFlags = SOH_ITEM_HIDE_FROM_SAVE_EDITOR | SOH_ITEM_HIDE_FROM_KALEIDO;
     definition.getItemText = text.c_str();
-    definition.displayName = foreign.item.c_str();
+    definition.displayName = foreign.label.c_str();
     definition.iconPath = RecordTextboxIcon(foreign);
     definition.disabledIconSurfaces = ~static_cast<uint32_t>(SOH_ITEM_ICON_TEXTBOX);
     definition.getItemEntry.getItemCategory = ChestCategory(reward.value("category", ""));
@@ -141,7 +150,7 @@ void FleetForeignItems_Register(const nlohmann::json& seed) {
         if (!seedKeys.insert(key).second) {
             continue;
         }
-        const ForeignItem item = { foreign.at("itemGame").get<std::string>(), PresentedName(foreign) };
+        const ForeignItem item = PresentedItem(foreign);
         if (sItems.contains(key)) {
             CustomItemRegistry_UpdateSeedPresentation(key.c_str(), FoundText(item, foreign).c_str(),
                                                       RandomizerFlags(foreign),
@@ -154,11 +163,12 @@ void FleetForeignItems_Register(const nlohmann::json& seed) {
 }
 
 // One foreign item outside any seed, for fleet-test's review: named and drawn as a check holding it would show it.
-std::string FleetForeignItems_RegisterLoose(const std::string& owner, const std::string& item) {
-    const nlohmann::json foreign = { { "itemGame", owner }, { "itemName", item }, { "label", item } };
+std::string FleetForeignItems_RegisterLoose(const std::string& owner, const std::string& item,
+                                            const std::string& label) {
+    const nlohmann::json foreign = { { "itemGame", owner }, { "itemName", item }, { "label", label } };
     const std::string key = FleetForeignItems_Key(foreign);
     if (!sItems.contains(key)) {
-        const ForeignItem loose = { owner, item };
+        const ForeignItem loose = PresentedItem(foreign);
         Register(key, loose, foreign);
         sItems.emplace(key, loose);
     }

@@ -225,6 +225,7 @@ typedef struct {
     bool (*IsCustomItemFormAllowed)(const char* key);
     uint32_t (*ReadModsFolderFiles)(const char* extensions, SOHArchiveFileFunc visit, void* userData);
     bool (*IsFormSuspended)(void);
+    bool (*GetNetPlayerColor)(const Actor* actor, Color_RGB8* color);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \

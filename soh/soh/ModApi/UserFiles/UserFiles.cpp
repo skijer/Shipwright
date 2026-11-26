@@ -246,13 +246,23 @@ extern "C" bool UserFiles_MountArchive(const char* title) {
     return MountFor(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()), title);
 }
 
+// Collected first: renaming while a recursive iterator walks the folder invalidates it.
+static std::vector<std::filesystem::path> ListPendingFiles(const std::filesystem::path& modsDirectory) {
+    std::vector<std::filesystem::path> pending;
+    std::error_code error;
+    auto entry = std::filesystem::recursive_directory_iterator(
+        modsDirectory, std::filesystem::directory_options::skip_permission_denied, error);
+    for (; !error && entry != std::filesystem::recursive_directory_iterator(); entry.increment(error)) {
+        if (entry->is_regular_file() && entry->path().extension() == kPendingSuffix) {
+            pending.push_back(entry->path());
+        }
+    }
+    return pending;
+}
+
 void UserFiles_ApplyPending(const std::filesystem::path& modsDirectory) {
     std::error_code error;
-    for (const auto& entry : std::filesystem::directory_iterator(modsDirectory, error)) {
-        const std::filesystem::path pending = entry.path();
-        if (!entry.is_regular_file() || pending.extension() != kPendingSuffix) {
-            continue;
-        }
+    for (const std::filesystem::path& pending : ListPendingFiles(modsDirectory)) {
         const std::filesystem::path target = pending.parent_path() / pending.stem();
         std::filesystem::remove(target, error);
         std::filesystem::rename(pending, target, error);

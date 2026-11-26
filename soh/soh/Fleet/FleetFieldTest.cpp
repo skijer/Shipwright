@@ -467,6 +467,7 @@ enum class ShowPhase { Idle, Queued, Started, Showing, Done, Unknown };
 struct GetItemShow {
     std::string item;
     std::string owner;
+    std::string label;
     ShowPhase phase = ShowPhase::Idle;
     int quietFrames = 0;
 };
@@ -487,7 +488,7 @@ bool IsShowingGetItem(PlayState* play) {
 // As a check holding the item would hand it over: this game's own, or the other game's through Fleet.
 std::optional<GetItemEntry> FindShowEntry() {
     if (sShow.owner != kShowGame) {
-        const std::string key = FleetForeignItems_RegisterLoose(sShow.owner, sShow.item);
+        const std::string key = FleetForeignItems_RegisterLoose(sShow.owner, sShow.item, sShow.label);
         const SOHCustomItemDefinition* foreign = CustomItemRegistry_Find(key.c_str());
         return foreign != nullptr ? std::optional<GetItemEntry>(foreign->getItemEntry) : std::nullopt;
     }
@@ -644,7 +645,8 @@ std::optional<std::string> FleetFieldTest_Request(const std::string& request, co
     }
     if (request == "TestGetItem") {
         FillTextDuringShows();
-        sShow = { input.value("item", std::string{}), input.value("owner", std::string(kShowGame)), ShowPhase::Queued, 0 };
+        const std::string item = input.value("item", std::string{});
+        sShow = { item, input.value("owner", std::string(kShowGame)), input.value("label", item), ShowPhase::Queued, 0 };
         return Status().dump();
     }
     if (request == "TestItemAssets") {

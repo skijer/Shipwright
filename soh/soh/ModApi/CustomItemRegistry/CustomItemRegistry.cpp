@@ -1529,8 +1529,8 @@ bool CustomItemRegistry_ReceiveFastGetItem(Actor* actor, PlayState* play, GetIte
     *entry = definition->getItemEntry;
     CustomItemRegistry_ReceiveGetItem(definition->key);
     GameInteractor_ExecuteOnItemReceiveHooks(*entry);
-    const char* label = definition->displayName;
-    if (label == nullptr || label[0] == '\0') {
+    std::string label = CustomItemRegistry_GetDisplayName(definition->key);
+    if (label.empty()) {
         label = definition->key;
     }
     std::string prefix = gSaveContext.language == LANGUAGE_FRA   ? "Vous obtenez: "

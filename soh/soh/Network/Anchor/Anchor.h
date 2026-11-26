@@ -173,6 +173,7 @@ class Anchor : public Network {
     bool IsSaveLoaded();
     bool CanTeleportTo(uint32_t clientId);
     uint32_t GetDummyPlayerClientId(const Actor* actor);
+    bool GetPlayerColor(const Actor* actor, Color_RGB8* color);
 
     inline static const std::string CUSTOM_PROGRESS_ITEM = "item";
     inline static const std::string CUSTOM_PROGRESS_RECEIVE = "receive";

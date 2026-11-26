@@ -216,28 +216,9 @@ void Anchor::RegisterHooks() {
     });
 
     COND_VB_SHOULD(VB_APPLY_TUNIC_COLOR, isConnected, {
-        Actor* myPlayer = (Actor*)GET_PLAYER(gPlayState);
         Actor* actor = va_arg(args, Actor*);
         Color_RGB8* color = va_arg(args, Color_RGB8*);
-
-        if (actor == myPlayer) {
-            Color_RGBA8 ownColor = CVarGetColor(CVAR_REMOTE_ANCHOR("Color.Value"), { 100, 255, 100 });
-            color->r = ownColor.r;
-            color->g = ownColor.g;
-            color->b = ownColor.b;
-            return;
-        }
-
-        uint32_t clientId = Anchor::Instance->GetDummyPlayerClientId(actor);
-
-        if (!Anchor::Instance->clients.contains(clientId)) {
-            return;
-        }
-
-        AnchorClient& client = Anchor::Instance->clients[clientId];
-        color->r = client.color.r;
-        color->g = client.color.g;
-        color->b = client.color.b;
+        Anchor::Instance->GetPlayerColor(actor, color);
     });
 
     // #endregion
