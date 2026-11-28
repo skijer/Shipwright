@@ -2,7 +2,10 @@
 #define SOH_MOD_API_BOSS_REGISTRY_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
+
+#include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 
 typedef enum {
     SOH_BOSS_SLOT_GOHMA,
@@ -38,7 +41,15 @@ typedef struct {
     int32_t preferredSlot;
     const char* logic;
     const char* enabledCvar;
+    /* NULL = only the slot's vanilla soul gates the fight. Else Boss Souls also requires "soul.<soulKey>". */
+    const char* soulKey;
+    SOHSoulModel soulModel;
 } SOHBossDefinition;
+
+#define SOH_BOSS_DEFINITION_MIN_SIZE \
+    (offsetof(SOHBossDefinition, enabledCvar) + sizeof(((SOHBossDefinition*)0)->enabledCvar))
+#define SOH_BOSS_DEFINITION_SOUL_SIZE \
+    (offsetof(SOHBossDefinition, soulModel) + sizeof(((SOHBossDefinition*)0)->soulModel))
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,6 +60,7 @@ typedef struct Actor Actor;
 bool BossRegistry_Register(const SOHBossDefinition* definition);
 int32_t BossRegistry_GetSlot(const char* key);
 const char* BossRegistry_GetSceneBoss(int16_t sceneNum);
+const char* BossRegistry_GetSceneBossSoul(int16_t sceneNum);
 int16_t BossRegistry_GetSlotScene(int32_t slot);
 void BossRegistry_ReportDefeated(Actor* boss);
 int32_t BossRegistry_ResolveSceneSource(int32_t sceneNum);

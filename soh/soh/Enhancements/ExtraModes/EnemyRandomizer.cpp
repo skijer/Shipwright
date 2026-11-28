@@ -68,7 +68,7 @@ static void UpdateSelectedEnemies() {
             selectedEnemyList.push_back(enemy);
         }
     }
-    for (const EnemyKind& enemy : EnemyCatalog_GetCustoms()) {
+    for (const EnemyKind& enemy : EnemyCatalog_GetPlaceableCustoms()) {
         if (selectAll || CVarGetInteger(GetCustomEnemyCvar(enemy.key).c_str(), 1)) {
             selectedEnemyList.push_back(enemy);
         }
@@ -850,7 +850,7 @@ static void DrawCustomEnemyCheckboxes(WidgetInfo& info) {
 
     options.disabled = CVarGetInteger(CVAR_ENHANCEMENT("RandomizedEnemyList.All"), 0);
     options.disabledTooltip = "These options are disabled because \"Select All Enemies\" is enabled.";
-    for (const EnemyKind& enemy : EnemyCatalog_GetCustoms()) {
+    for (const EnemyKind& enemy : EnemyCatalog_GetPlaceableCustoms()) {
         if (UIWidgets::CVarCheckbox(enemy.name, GetCustomEnemyCvar(enemy.key).c_str(), options)) {
             UpdateSelectedEnemies();
         }

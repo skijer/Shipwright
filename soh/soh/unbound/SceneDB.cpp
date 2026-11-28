@@ -466,7 +466,8 @@ void SceneDB::FindLegacySceneOverrides() {
         return;
     }
     for (auto archive = std::next(base); archive != archives->end(); ++archive) {
-        for (const auto& [hash, path] : *(*archive)->ListFiles("scenes/*")) {
+        auto sceneFiles = (*archive)->ListFiles("scenes/*");
+        for (const auto& [hash, path] : *sceneFiles) {
             std::string folder = LegacySceneFolderOfHeader(path);
             if (folder.empty() || legacySceneOverrides.contains(folder)) {
                 continue;

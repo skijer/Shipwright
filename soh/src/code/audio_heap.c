@@ -58,7 +58,7 @@ static void AudioHeap_DropPermanentCache(void) {
     for (i = 0; i < ARRAY_COUNT(gAudioContext.sampleFontLoadStatus); i++) {
         gAudioContext.sampleFontLoadStatus[i] = 0;
     }
-    for (i = 0; i < sequenceMapSize; i++) {
+    for (i = 0; i < sequenceMapSize + 0xF; i++) {
         gAudioContext.seqLoadStatus[i] = 0;
     }
 }

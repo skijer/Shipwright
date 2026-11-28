@@ -75,6 +75,8 @@ typedef struct {
     uint8_t enemyOrigin;
     uint8_t dropOnKill;
     SOHSoulModel soulModel;
+    /* Non-zero: soulModel's skeleton and idleAnimation point at the mod's own C data, not resource paths */
+    uint8_t isSoulModelInMemory;
 } SOHActorDefinition;
 
 #define SOH_ACTOR_DEFINITION_MIN_SIZE (offsetof(SOHActorDefinition, draw) + sizeof(((SOHActorDefinition*)0)->draw))
@@ -85,6 +87,8 @@ typedef struct {
 #define SOH_ACTOR_DEFINITION_SOUL_SIZE \
     (offsetof(SOHActorDefinition, logicKillUserData) + sizeof(((SOHActorDefinition*)0)->logicKillUserData))
 #define SOH_ACTOR_DEFINITION_GENERIC_SOUL_SIZE     (offsetof(SOHActorDefinition, soulModel) + sizeof(((SOHActorDefinition*)0)->soulModel))
+#define SOH_ACTOR_DEFINITION_SOUL_MEMORY_SIZE \
+    (offsetof(SOHActorDefinition, isSoulModelInMemory) + sizeof(((SOHActorDefinition*)0)->isSoulModelInMemory))
 
 typedef struct {
     const char* key;

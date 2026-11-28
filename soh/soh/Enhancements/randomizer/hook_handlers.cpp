@@ -15,6 +15,7 @@
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 #include "soh/ModApi/ActorRegistry/EnemySouls.h"
+#include "soh/ModApi/ModDungeons/BossRegistry.h"
 #include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -3040,15 +3041,15 @@ static bool HasNativeSoul(RandomizerInf flag) {
     return (soul != nullptr && IsSoulOutOfPool(soul->key)) || Flags_GetRandomizerInf(flag);
 }
 
-static bool HasCustomSoul(const SOHCustomEnemy& enemy) {
-    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(enemy.soulKey);
+static bool HasCustomSoul(const char* soulKey) {
+    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(soulKey);
     if (nativeSoul != nullptr) {
         return HasNativeSoul(nativeSoul->flag);
     }
-    if (IsSoulOutOfPool(enemy.soulKey)) {
+    if (IsSoulOutOfPool(soulKey)) {
         return true;
     }
-    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(enemy.soulKey)).c_str());
+    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(soulKey)).c_str());
     return soulItem == RG_NONE || RandoItems_IsOwned(soulItem, SOH_RANDO_INF_SAVE);
 }
 
@@ -3062,7 +3063,7 @@ static bool HasCustomEnemySoul(int16_t actorId) {
     if (enemy == nullptr || enemy->soulKey == nullptr || IsCustomBoss(enemy)) {
         return true;
     }
-    return HasCustomSoul(*enemy);
+    return HasCustomSoul(enemy->soulKey);
 }
 
 static bool HasEnemySoul(int16_t actorId) {
@@ -3121,11 +3122,27 @@ static void RegisterShuffleEnemySouls() {
 
 static RegisterShipInitFunc initFunc_ShuffleEnemySouls(RegisterShuffleEnemySouls, { "IS_RANDO" });
 
+// A boss holding a vanilla slot fights through that slot's boss actors, as the vanilla soul check sees them.
+static bool HasSlotBossSoul(const Actor* actor) {
+    if (actor->category != ACTORCAT_BOSS || actor->id == ACTOR_EN_IK) {
+        return true;
+    }
+    const char* soulKey = BossRegistry_GetSceneBossSoul(gPlayState->sceneNum);
+    return soulKey == nullptr || HasCustomSoul(soulKey);
+}
+
+static bool HasCustomBossSoul(const Actor* actor) {
+    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actor->id);
+    if (IsCustomBoss(enemy)) {
+        return HasCustomSoul(enemy->soulKey);
+    }
+    return HasSlotBossSoul(actor);
+}
+
 // Like a vanilla boss, a custom one without its soul is killed as it spawns.
 static void RemoveSoullessCustomBoss(void* refActor) {
     Actor* actor = static_cast<Actor*>(refActor);
-    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actor->id);
-    if (IsCustomBoss(enemy) && !HasCustomSoul(*enemy)) {
+    if (!HasCustomBossSoul(actor)) {
         Actor_Kill(actor);
     }
 }

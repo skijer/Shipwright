@@ -89,6 +89,7 @@ struct EnemyLogicPlan {
 
 const std::vector<EnemyKind>& EnemyCatalog_GetNatives();
 std::vector<EnemyKind> EnemyCatalog_GetCustoms();
+std::vector<EnemyKind> EnemyCatalog_GetPlaceableCustoms();
 std::optional<EnemyKind> EnemyCatalog_Find(const std::string& key);
 std::optional<EnemyKind> EnemyCatalog_Classify(int16_t sceneNum, int16_t actorId, int16_t params);
 const std::vector<EnemySoul>& EnemyCatalog_GetNativeSouls();

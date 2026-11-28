@@ -1,10 +1,10 @@
 #include "EnemySouls.h"
 
+#include <algorithm>
 #include <cassert>
 #include <deque>
 #include <map>
 #include <optional>
-#include <set>
 #include <string_view>
 #include <vector>
 
@@ -41,7 +41,6 @@ struct Soul {
 std::deque<Soul> sSouls;
 std::map<std::string, size_t> sSoulsBySoulKey;
 std::map<std::string, std::vector<std::string>> sNativeSoulSharers;
-std::set<int16_t> sBosses;
 
 std::string ToResourceName(const char* path) {
     const std::string_view view = path != nullptr ? path : "";
@@ -50,6 +49,14 @@ std::string ToResourceName(const char* path) {
 
 bool HasGenericFields(const SOHActorDefinition* definition) {
     return definition->structSize >= SOH_ACTOR_DEFINITION_GENERIC_SOUL_SIZE;
+}
+
+const SOHSoulModel* ReadModel(const SOHActorDefinition* definition) {
+    return HasGenericFields(definition) ? &definition->soulModel : nullptr;
+}
+
+bool IsModelInMemory(const SOHActorDefinition* definition) {
+    return definition->structSize >= SOH_ACTOR_DEFINITION_SOUL_MEMORY_SIZE && definition->isSoulModelInMemory != 0;
 }
 
 uint8_t ReadCategory(const SOHActorDefinition* definition) {
@@ -63,8 +70,7 @@ uint8_t ReadCategory(const SOHActorDefinition* definition) {
                                                                : SOH_ENEMY_CATEGORY_REGULAR;
 }
 
-uint8_t ResolveOrigin(const SOHActorDefinition* definition, const std::string& soulKey) {
-    const uint8_t declared = HasGenericFields(definition) ? definition->enemyOrigin : SOH_ENEMY_ORIGIN_AUTO;
+uint8_t ResolveOrigin(uint8_t declared, const std::string& soulKey) {
     if (declared != SOH_ENEMY_ORIGIN_AUTO) {
         return declared;
     }
@@ -81,11 +87,26 @@ Color_RGB8 ReadFlameColor(const SOHSoulModel& model) {
     return { model.flameRed, model.flameGreen, model.flameBlue };
 }
 
-void StoreModel(Soul& soul, const SOHSoulModel& model) {
+void StoreResourceModel(Soul& soul, const SOHSoulModel& model) {
     soul.skeletonResource = ToResourceName(model.skeleton);
     soul.animationResource = ToResourceName(model.idleAnimation);
     soul.model.skeleton = soul.skeletonResource.c_str();
     soul.model.animation = soul.animationResource.c_str();
+}
+
+// The mod's own data needs no archive, so it is drawable as soon as it has an animation.
+void StoreMemoryModel(Soul& soul, const SOHSoulModel& model) {
+    soul.model.skeleton = model.skeleton;
+    soul.model.animation = model.idleAnimation;
+    soul.hasModel = model.idleAnimation != nullptr;
+}
+
+void StoreModel(Soul& soul, const SOHSoulModel& model, bool isInMemory) {
+    if (isInMemory) {
+        StoreMemoryModel(soul, model);
+    } else {
+        StoreResourceModel(soul, model);
+    }
     soul.model.isFlex = model.isFlex != 0;
     soul.model.scale = model.scale > 0.0f ? model.scale : DefaultModelScale;
     soul.model.yOffset = model.yOffset;
@@ -148,32 +169,41 @@ void RegisterSoulItem(Soul& soul) {
     soul.model.soul = static_cast<RandomizerGet>(RandoItems_GetRandoGet(soul.itemKey.c_str()));
 }
 
-size_t AddSoul(const SOHActorDefinition* definition, const SOHCustomEnemy& enemy, uint8_t category) {
+struct SoulSource {
+    const char* soulKey;
+    const char* name;
+    uint8_t category;
+    uint8_t origin;
+    const SOHSoulModel* model;
+    bool isModelInMemory;
+};
+
+size_t AddSoul(const SoulSource& source) {
     Soul& soul = sSouls.emplace_back();
-    soul.itemKey = std::string(SoulItemPrefix) + enemy.soulKey;
-    soul.name = std::string("Soul of ") + enemy.name;
-    soul.category = category;
-    soul.origin = ResolveOrigin(definition, enemy.soulKey);
+    soul.itemKey = std::string(SoulItemPrefix) + source.soulKey;
+    soul.name = std::string("Soul of ") + source.name;
+    soul.category = source.category;
+    soul.origin = ResolveOrigin(source.origin, source.soulKey);
     soul.flameColor = DefaultFlameColor;
-    sSoulsBySoulKey.emplace(enemy.soulKey, sSouls.size() - 1);
+    sSoulsBySoulKey.emplace(source.soulKey, sSouls.size() - 1);
     return sSouls.size() - 1;
 }
 
 // A later definition may bring the model the first one sharing the soul left out.
-void AttachSoulModel(const SOHActorDefinition* definition, size_t index) {
+void AttachSoulModel(const SoulSource& source, size_t index) {
     Soul& soul = sSouls[index];
-    const bool declaresModel = HasGenericFields(definition) && definition->soulModel.skeleton != nullptr;
-    if (!declaresModel || !soul.skeletonResource.empty() || CustomItemRegistry_Find(soul.itemKey.c_str()) != nullptr) {
+    const bool declaresModel = source.model != nullptr && source.model->skeleton != nullptr;
+    if (!declaresModel || soul.model.skeleton != nullptr || CustomItemRegistry_Find(soul.itemKey.c_str()) != nullptr) {
         return;
     }
-    StoreModel(soul, definition->soulModel);
+    StoreModel(soul, *source.model, source.isModelInMemory);
     RegisterSoulItem(soul);
 }
 
-uint8_t RegisterCustomSoul(const SOHActorDefinition* definition, const SOHCustomEnemy& enemy, uint8_t category) {
-    const auto known = sSoulsBySoulKey.find(enemy.soulKey);
-    const size_t index = known != sSoulsBySoulKey.end() ? known->second : AddSoul(definition, enemy, category);
-    AttachSoulModel(definition, index);
+uint8_t RegisterCustomSoul(const SoulSource& source) {
+    const auto known = sSoulsBySoulKey.find(source.soulKey);
+    const size_t index = known != sSoulsBySoulKey.end() ? known->second : AddSoul(source);
+    AttachSoulModel(source, index);
     return sSouls[index].category;
 }
 
@@ -214,14 +244,25 @@ void EnemySouls_OnEnemyRegistered(const SOHActorDefinition* definition, SOHCusto
         sNativeSoulSharers[enemy.soulKey].push_back(enemy.name);
         return;
     }
-    enemy.soulCategory = RegisterCustomSoul(definition, enemy, category);
-    if (enemy.soulCategory == SOH_ENEMY_CATEGORY_BOSS) {
-        sBosses.insert(enemy.actorId);
+    const uint8_t origin = HasGenericFields(definition) ? definition->enemyOrigin : SOH_ENEMY_ORIGIN_AUTO;
+    const SoulSource source = { enemy.soulKey, enemy.name, category, origin, ReadModel(definition),
+                                IsModelInMemory(definition) };
+    enemy.soulCategory = RegisterCustomSoul(source);
+}
+
+void EnemySouls_RegisterBossSoul(const char* soulKey, const char* bossName, const SOHSoulModel& model) {
+    assert(soulKey != nullptr && bossName != nullptr);
+    if (EnemyCatalog_FindNativeSoul(soulKey) != nullptr) {
+        SPDLOG_ERROR("[EnemySouls] boss '{}' cannot take the native soul '{}'", bossName, soulKey);
+        return;
     }
+    const SoulSource source = { soulKey, bossName, SOH_ENEMY_CATEGORY_BOSS, SOH_ENEMY_ORIGIN_AUTO, &model, false };
+    RegisterCustomSoul(source);
 }
 
 bool EnemySouls_HasBosses() {
-    return !sBosses.empty();
+    return std::any_of(sSouls.begin(), sSouls.end(),
+                       [](const Soul& soul) { return soul.category == SOH_ENEMY_CATEGORY_BOSS; });
 }
 
 std::string EnemySouls_DescribeNativeSoul(const char* soulKey, const std::string& name) {

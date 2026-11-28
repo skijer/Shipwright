@@ -47,6 +47,12 @@ void EnAnubiceTag_Init(Actor* thisx, PlayState* play) {
 }
 
 void EnAnubiceTag_Destroy(Actor* thisx, PlayState* play) {
+    EnAnubiceTag* this = (EnAnubiceTag*)thisx;
+
+    // SOH [Bugfix] On unload the tag is freed before Anubis, whose Destroy would then follow a dangling parent.
+    if (this->anubis != NULL) {
+        this->anubis->actor.parent = NULL;
+    }
 }
 
 void EnAnubiceTag_SpawnAnubis(EnAnubiceTag* this, PlayState* play) {

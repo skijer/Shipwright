@@ -13,11 +13,15 @@
 
 #include "soh/SaveManager.h"
 #include "soh/unbound/SceneDB.h"
+#include "soh/ModApi/ActorRegistry/EnemySouls.h"
 #include "soh/ModApi/ModDungeons/LogicExpr.h"
 #include "soh/ModApi/RandoLogic/RandoLogic.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/rng.h"
+#include "soh/Enhancements/randomizer/SeedContext.h"
+#include "soh/Enhancements/randomizer/logic.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 extern "C" {
@@ -69,6 +73,7 @@ struct RegisteredBoss {
     std::string scene;
     std::string logicText;
     std::string enabledCvar;
+    std::string soulKey;
     uint32_t allowedSlots = 0;
     int32_t preferredSlot = -1;
     LogicExpr logic;
@@ -159,8 +164,20 @@ std::string RuleName(int32_t slot) {
     return std::string("modboss:") + kSlots[slot].name;
 }
 
+std::string SoulRuleName(int32_t slot) {
+    return std::string("modbosssoul:") + kSlots[slot].name;
+}
+
 bool EvaluateBossLogic(void* userData) {
     return static_cast<RegisteredBoss*>(userData)->logic.Evaluate();
+}
+
+bool HasBossSoulInLogic(void* userData) {
+    const auto* boss = static_cast<RegisteredBoss*>(userData);
+    EnemyKind soulHolder{};
+    soulHolder.soulKey = boss->soulKey.c_str();
+    soulHolder.soulCategory = SOH_ENEMY_CATEGORY_BOSS;
+    return Rando::Context::GetInstance()->GetLogic()->HasSoulOf(soulHolder);
 }
 
 bool CompileLogic(const std::string& key, RegisteredBoss& boss) {
@@ -205,24 +222,35 @@ SOHLogicSelector SelectorForSlot(int32_t slot, const int32_t* check) {
     return selector;
 }
 
+void RegisterSlotRule(int32_t slot, const std::string& name, SOHLogicEffect effect, SOHLogicCondition condition,
+                      RegisteredBoss& boss) {
+    const int32_t check = kSlots[slot].check;
+    SOHLogicSelector selector = SelectorForSlot(slot, &check);
+    SOHLogicRule rule = { sizeof(SOHLogicRule) };
+    rule.name = name.c_str();
+    rule.effect = effect;
+    rule.condition = condition;
+    rule.userData = &boss;
+    rule.include = &selector;
+    rule.includeCount = 1;
+    RandoLogic_RegisterRule(&rule);
+}
+
+// The soul rule comes after the boss's own logic, which would otherwise replace it.
 void ApplyLogicRules(const Assignment& assignment) {
     for (int32_t slot = 0; slot < SOH_BOSS_SLOT_MAX; slot++) {
         RandoLogic_RemoveOwner(RuleName(slot).c_str());
+        RandoLogic_RemoveOwner(SoulRuleName(slot).c_str());
         auto boss = sBosses.find(assignment[slot]);
-        if (boss == sBosses.end() || !CompileLogic(boss->first, boss->second)) {
+        if (boss == sBosses.end()) {
             continue;
         }
-        const std::string name = RuleName(slot);
-        const int32_t check = kSlots[slot].check;
-        SOHLogicSelector selector = SelectorForSlot(slot, &check);
-        SOHLogicRule rule = { sizeof(SOHLogicRule) };
-        rule.name = name.c_str();
-        rule.effect = SOH_LOGIC_REPLACE;
-        rule.condition = EvaluateBossLogic;
-        rule.userData = &boss->second;
-        rule.include = &selector;
-        rule.includeCount = 1;
-        RandoLogic_RegisterRule(&rule);
+        if (CompileLogic(boss->first, boss->second)) {
+            RegisterSlotRule(slot, RuleName(slot), SOH_LOGIC_REPLACE, EvaluateBossLogic, boss->second);
+        }
+        if (!boss->second.soulKey.empty()) {
+            RegisterSlotRule(slot, SoulRuleName(slot), SOH_LOGIC_REQUIRE, HasBossSoulInLogic, boss->second);
+        }
     }
 }
 
@@ -277,10 +305,15 @@ void SyncAssignmentOnLoad(int32_t) {
     ApplyLogicRules(sSaveAssignment);
 }
 
+bool HasSoulFields(const SOHBossDefinition* definition) {
+    return definition->structSize >= SOH_BOSS_DEFINITION_SOUL_SIZE && definition->soulKey != nullptr &&
+           definition->soulKey[0] != '\0';
+}
+
 } // namespace
 
 bool BossRegistry_Register(const SOHBossDefinition* definition) {
-    if (definition == nullptr || definition->structSize < sizeof(SOHBossDefinition) || definition->key == nullptr ||
+    if (definition == nullptr || definition->structSize < SOH_BOSS_DEFINITION_MIN_SIZE || definition->key == nullptr ||
         definition->key[0] == '\0') {
         SPDLOG_ERROR("[BossRegistry] '{}' registered a boss with no key or an older struct", sCurrentMod);
         return false;
@@ -301,6 +334,10 @@ bool BossRegistry_Register(const SOHBossDefinition* definition) {
     boss.enabledCvar = definition->enabledCvar != nullptr ? definition->enabledCvar : "";
     boss.allowedSlots = definition->allowedSlots;
     boss.preferredSlot = definition->preferredSlot;
+    if (HasSoulFields(definition)) {
+        boss.soulKey = definition->soulKey;
+        EnemySouls_RegisterBossSoul(definition->soulKey, boss.displayName.c_str(), definition->soulModel);
+    }
     sBosses.emplace(definition->key, std::move(boss));
     return true;
 }
@@ -324,6 +361,11 @@ const char* BossRegistry_GetSceneBoss(int16_t sceneNum) {
         return nullptr;
     }
     return CurrentAssignment()[slot].c_str();
+}
+
+const char* BossRegistry_GetSceneBossSoul(int16_t sceneNum) {
+    const RegisteredBoss* boss = SlotOwner(FindSlotByScene(sceneNum));
+    return boss != nullptr && !boss->soulKey.empty() ? boss->soulKey.c_str() : nullptr;
 }
 
 int16_t BossRegistry_GetSlotScene(int32_t slot) {
@@ -382,6 +424,17 @@ void BossRegistry_AssignForSeed() {
     }
     sSeedAssignment = assignment;
     ApplyLogicRules(sSeedAssignment);
+}
+
+std::vector<std::string> BossRegistry_GetSeedSoulKeys() {
+    std::vector<std::string> soulKeys;
+    for (const std::string& key : sSeedAssignment) {
+        auto boss = sBosses.find(key);
+        if (boss != sBosses.end() && !boss->second.soulKey.empty()) {
+            soulKeys.push_back(boss->second.soulKey);
+        }
+    }
+    return soulKeys;
 }
 
 void BossRegistry_InitSaveFile() {

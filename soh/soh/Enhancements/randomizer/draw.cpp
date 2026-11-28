@@ -1153,15 +1153,22 @@ static const EnemySoulModel* FindEnemySoulModel(RandomizerGet soul) {
     return nullptr;
 }
 
+// A mod's soul may hand its own C skeleton in place of a resource name.
+static const SkeletonHeader* LoadSoulSkeleton(const EnemySoulModel& model, SkelAnime* skelAnime) {
+    if (!ResourceMgr_OTRSigCheck(const_cast<char*>(model.skeleton))) {
+        return reinterpret_cast<const SkeletonHeader*>(model.skeleton);
+    }
+    return static_cast<SkeletonHeader*>(ResourceMgr_LoadSkeletonByName(model.skeleton, skelAnime));
+}
+
 // The tables are static, like the boss soul skeletons: an arena allocation would not outlive the scene.
 static bool PrepareEnemySoulPose(PlayState* play, const EnemySoulModel& model, EnemySoulPose& pose) {
     if (pose.isReady) {
         return true;
     }
-    const auto* header = static_cast<SkeletonHeader*>(
-        ResourceMgr_LoadSkeletonByName(model.skeleton, &pose.skelAnime));
+    const SkeletonHeader* header = LoadSoulSkeleton(model, &pose.skelAnime);
     if (header == nullptr || header->limbCount + 1 > kMostSoulLimbs) {
-        SPDLOG_WARN("[Randomizer] enemy soul skeleton {} did not load ({} limbs)", model.skeleton,
+        SPDLOG_WARN("[Randomizer] enemy soul {} skeleton did not load ({} limbs)", static_cast<int>(model.soul),
                     header != nullptr ? header->limbCount + 1 : 0);
         return false;
     }

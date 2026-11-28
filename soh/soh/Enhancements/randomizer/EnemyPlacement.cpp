@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <cstring>
+#include <set>
 #include <sstream>
 
 #include <spdlog/spdlog.h>
@@ -19,6 +20,7 @@
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/dungeon.h"
 #include "soh/ModApi/ActorRegistry/EnemySouls.h"
+#include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/UIWidgets.hpp"
@@ -639,7 +641,7 @@ std::vector<EnemyKind> GatherPoolCandidates() {
             candidates.push_back(kind);
         }
     }
-    for (const EnemyKind& kind : EnemyCatalog_GetCustoms()) {
+    for (const EnemyKind& kind : EnemyCatalog_GetPlaceableCustoms()) {
         if (!excluded.contains(kind.key)) {
             candidates.push_back(kind);
         }
@@ -866,7 +868,7 @@ std::vector<PoolEntry> ListEnemyPool(bool minibosses) {
             entries.push_back({ kind.key, kind.name });
         }
     }
-    for (const EnemyKind& kind : EnemyCatalog_GetCustoms()) {
+    for (const EnemyKind& kind : EnemyCatalog_GetPlaceableCustoms()) {
         if (IsMiniboss(kind) == minibosses) {
             entries.push_back({ kind.key, kind.name });
         }
@@ -913,6 +915,13 @@ std::vector<EnemyKind> EnemyCatalog_GetCustoms() {
     for (uint32_t index = 0; index < ActorRegistry_GetEnemyCount(); index++) {
         customs.push_back(FromCustom(*ActorRegistry_GetEnemyAt(index)));
     }
+    return customs;
+}
+
+// A custom boss fights in its own arena, never in an enemy's place.
+std::vector<EnemyKind> EnemyCatalog_GetPlaceableCustoms() {
+    std::vector<EnemyKind> customs = EnemyCatalog_GetCustoms();
+    std::erase_if(customs, [](const EnemyKind& kind) { return kind.soulCategory == SOH_ENEMY_CATEGORY_BOSS; });
     return customs;
 }
 
@@ -1296,11 +1305,11 @@ bool EnemyPlacement_IsSeedSoulItemExcluded(RandomizerGet soul) {
     return false;
 }
 
-std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls) {
+static std::vector<RandomizerGet> GetSoulItems(const std::vector<std::string>& soulKeys) {
     std::vector<RandomizerGet> items;
-    for (const auto& [soulKey, name, category] : CustomSoulEntries()) {
-        const bool isBossSoul = category == SOH_ENEMY_CATEGORY_BOSS;
-        if (isBossSoul != bossSouls || EnemyPlacement_IsSoulExcluded(sSeed, soulKey)) {
+    std::set<std::string> addedKeys;
+    for (const std::string& soulKey : soulKeys) {
+        if (!addedKeys.insert(soulKey).second || EnemyPlacement_IsSoulExcluded(sSeed, soulKey)) {
             continue;
         }
         int32_t soulItem = RandoItems_GetRandoGet(("soul." + soulKey).c_str());
@@ -1309,6 +1318,22 @@ std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls)
         }
     }
     return items;
+}
+
+std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls) {
+    std::vector<std::string> soulKeys;
+    for (const auto& [soulKey, name, category] : CustomSoulEntries()) {
+        const bool isBossSoul = category == SOH_ENEMY_CATEGORY_BOSS;
+        if (isBossSoul == bossSouls) {
+            soulKeys.push_back(soulKey);
+        }
+    }
+    if (bossSouls) {
+        for (const std::string& soulKey : BossRegistry_GetSeedSoulKeys()) {
+            soulKeys.push_back(soulKey);
+        }
+    }
+    return GetSoulItems(soulKeys);
 }
 
 const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, RandomizerEnemy original) {

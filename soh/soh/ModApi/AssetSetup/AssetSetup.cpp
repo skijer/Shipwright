@@ -3,6 +3,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 #include <spdlog/spdlog.h>
 
@@ -85,7 +91,11 @@ void AssetSetup_Exit(AssetSetupExit code, const std::string& reason) {
     SPDLOG_INFO("[AssetSetup] Finished with code {}: {}", static_cast<int>(code), reason);
     spdlog::shutdown();
     std::ofstream(kResultFileName) << reason << '\n';
-    // Skips the static destructors: the game threads are still running, and the archives are already on disk.
+    // The archives are on disk and the game threads still run, so no destructor may run. On Windows even _Exit
+    // unloads the DLLs, whose static destructors meet a live std::thread and abort with 0xC0000409.
+#ifdef _WIN32
+    TerminateProcess(GetCurrentProcess(), static_cast<UINT>(code));
+#endif
     std::_Exit(static_cast<int>(code));
 }
 
