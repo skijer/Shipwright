@@ -1,4 +1,3 @@
-// SOH [Unbound] paths/<name>.json -> SOH::Path. See unbound-docs/SPEC.md §4.5.
 #include "UnboundFactories.h"
 #include "UnboundJson.h"
 #include "UnboundSchema.h"
@@ -13,17 +12,16 @@ namespace K = SOH::Unbound::Schema;
 namespace SOH {
 namespace {
 
-// PathData.count is a u8 (the vanilla struct); a longer path is cut, with a log line.
 constexpr size_t kMaxPathPoints = 255;
 
 std::vector<Vec3f> ReadPoints(const Json& path, const std::string& what) {
-    std::vector<Vec3f> points; // SOH [Unbound] f32 waypoints (world extent)
+    std::vector<Vec3f> points;
     auto it = path.find(K::kPoints);
     if (it == path.end() || !it->is_array()) {
         return points;
     }
     for (const auto& p : *it) {
-        points.push_back(Unbound::ReadVec3f(p)); // a short or non-array point reads as [0,0,0] (SPEC.md §2)
+        points.push_back(Unbound::ReadVec3f(p));
     }
     if (points.size() > kMaxPathPoints) {
         SPDLOG_ERROR("[Unbound] {}: {} points, PathData.count holds at most {}; truncating", what, points.size(),
@@ -33,7 +31,6 @@ std::vector<Vec3f> ReadPoints(const Json& path, const std::string& what) {
     return points;
 }
 
-// "$schema" must be unbound/paths/1 when present; missing = 1 (SPEC.md §10).
 bool HasKnownPathSchema(const Json& doc, const std::string& docPath) {
     std::string schema = Unbound::SchemaOf(doc);
     std::string type;

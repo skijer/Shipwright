@@ -7,6 +7,8 @@
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
+#include <libultraship/bridge/resourcebridge.h>
 
 #include <stdlib.h> // malloc
 #include <string.h> // memcpy
@@ -426,7 +428,7 @@ void BossDodongo_IntroCutscene(BossDodongo* this, PlayState* play) {
     Vec3f sp48;
 
     player = GET_PLAYER(play);
-    camera = Play_GetCamera(play, MAIN_CAM);
+    camera = Play_GetCamera(play, CAM_ID_MAIN);
 
     if (this->unk_196 != 0) {
         this->unk_196--;
@@ -732,7 +734,7 @@ void BossDodongo_Explode(BossDodongo* this, PlayState* play) {
         this->actionFunc = BossDodongo_LayDown;
         Audio_PlayActorSound2(&this->actor, NA_SE_IT_BOMB_EXPLOSION);
         Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_K_DAMAGE);
-        func_80033E88(&this->actor, play, 4, 10);
+        Actor_RequestQuakeAndRumble(&this->actor, play, 4, 10);
         this->health -= 2;
 
         // make sure not to die from the bomb explosion
@@ -857,7 +859,7 @@ void BossDodongo_Walk(BossDodongo* this, PlayState* play) {
             }
 
             if (this->cutsceneCamera == 0) {
-                func_80033E88(&this->actor, play, 4, 10);
+                Actor_RequestQuakeAndRumble(&this->actor, play, 4, 10);
             } else {
                 this->unk_1B6 = 10;
                 func_800A9F6C(0.0f, 180, 20, 100);
@@ -933,7 +935,7 @@ void BossDodongo_Roll(BossDodongo* this, PlayState* play) {
         Math_SmoothStepToF(&this->actor.world.pos.z, sp5C->z, 1.0f, this->unk_1E4, 0.0f);
         this->unk_1C4 += 2000;
 
-        if (this->actor.bgCheckFlags & 1) {
+        if (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
             this->unk_228 = 7700.0f;
             Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_K_ROLL - SFX_FLAG);
 
@@ -972,7 +974,7 @@ void BossDodongo_Roll(BossDodongo* this, PlayState* play) {
             sp50.y = this->actor.world.pos.y + 60.0f;
             sp50.z = this->actor.world.pos.z;
             func_80033480(play, &sp50, 250.0f, 40, 800, 10, 0);
-            func_80033E88(&this->actor, play, 6, 15);
+            Actor_RequestQuakeAndRumble(&this->actor, play, 6, 15);
         } else {
             this->actor.velocity.y = 15.0f;
             Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_K_COLI2);
@@ -1260,7 +1262,9 @@ void BossDodongo_Update(Actor* thisx, PlayState* play2) {
 
     for (i = 6; i < 19; i++) {
         if (i != 12) {
-            this->collider.elements[i].dim.scale = (this->actionFunc == BossDodongo_Roll) ? 0.0f : 1.0f;
+            // A super attack keeps the rolling body hittable so it can be stunned mid-roll.
+            u8 isRollShielded = (this->actionFunc == BossDodongo_Roll) && !BossSuperDamage_IsActive(play);
+            this->collider.elements[i].dim.scale = isRollShielded ? 0.0f : 1.0f;
         }
     }
 
@@ -1391,6 +1395,7 @@ void BossDodongo_Draw(Actor* thisx, PlayState* play) {
     CLOSE_DISPS(play->state.gfxCtx);
 
     BossDodongo_DrawEffects(play);
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 19, 1.3f);
 }
 
 f32 func_808C4F6C(BossDodongo* this, PlayState* play) {
@@ -1472,6 +1477,36 @@ void BossDodongo_SpawnFire(BossDodongo* this, PlayState* play, s16 params) {
                        this->vec.z, 0, this->actor.shape.rot.y, 0, params);
 }
 
+// A super attack lands on any sphere in any state: the first hit collapses him, later hits damage and keep him down.
+static bool BossDodongo_TakeSuperHit(BossDodongo* this, PlayState* play) {
+    if (!BossSuperDamage_IsActive(play)) {
+        return false;
+    }
+    bool isHit = false;
+    for (s16 i = 0; i < 19; i++) {
+        if (this->collider.elements[i].info.bumperFlags & 2) {
+            this->collider.elements[i].info.bumperFlags &= ~2;
+            isHit = true;
+        }
+    }
+    if (!isHit) {
+        return false;
+    }
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    this->unk_1C0 = 5;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_K_DAMAGE);
+    if ((this->actionFunc == BossDodongo_Vulnerable) || (this->actionFunc == BossDodongo_LayDown)) {
+        Actor_RequestQuakeAndRumble(&this->actor, play, 4, 10);
+        this->health -= BossSuperDamage_FormDamage(play);
+        this->unk_1DA = 100;
+        return true;
+    }
+    Animation_Change(&this->skelAnime, &object_kingdodongo_Anim_004E0C, 1.0f, 0.0f,
+                     Animation_GetLastFrame(&object_kingdodongo_Anim_004E0C), ANIMMODE_ONCE, -5.0f);
+    this->actionFunc = BossDodongo_LayDown;
+    return true;
+}
+
 void BossDodongo_UpdateDamage(BossDodongo* this, PlayState* play) {
     s32 pad;
     ColliderInfo* item1;
@@ -1487,6 +1522,9 @@ void BossDodongo_UpdateDamage(BossDodongo* this, PlayState* play) {
     }
 
     if (this->unk_1C0 == 0) {
+        if (BossDodongo_TakeSuperHit(this, play)) {
+            return;
+        }
         if (this->actionFunc == BossDodongo_Inhale) {
             for (i = 0; i < 19; i++) {
                 if (this->collider.elements[i].info.bumperFlags & 2) {
@@ -1555,9 +1593,9 @@ void BossDodongo_DeathCutscene(BossDodongo* this, PlayState* play) {
             func_80064520(play, &play->csCtx);
             Player_SetCsActionWithHaltedActors(play, &this->actor, 1);
             this->cutsceneCamera = Play_CreateSubCamera(play);
-            Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_UNK3);
+            Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_UNK3);
             Play_ChangeCameraStatus(play, this->cutsceneCamera, CAM_STAT_ACTIVE);
-            camera = Play_GetCamera(play, MAIN_CAM);
+            camera = Play_GetCamera(play, CAM_ID_MAIN);
             this->cameraEye.x = camera->eye.x;
             this->cameraEye.y = camera->eye.y;
             this->cameraEye.z = camera->eye.z;
@@ -1855,16 +1893,16 @@ void BossDodongo_DeathCutscene(BossDodongo* this, PlayState* play) {
                                 Math_CosS(this->actor.shape.rot.y) * -50.0f + this->actor.world.pos.z, 0, 0, 0, 0);
                 }
             }
-            if (this->unk_1DA == 600) {
-                camera = Play_GetCamera(play, MAIN_CAM);
+            if (GameInteractor_Should(VB_KING_DODONGO_DEATH_SCENE, this->unk_1DA == 600, this)) {
+                camera = Play_GetCamera(play, CAM_ID_MAIN);
                 camera->eye = this->cameraEye;
                 camera->eyeNext = this->cameraEye;
                 camera->at = this->cameraAt;
                 func_800C08AC(play, this->cutsceneCamera, 0);
                 this->unk_1BC = 0;
-                this->cutsceneCamera = MAIN_CAM;
+                this->cutsceneCamera = CAM_ID_MAIN;
                 this->csState = 100;
-                Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_ACTIVE);
+                Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_ACTIVE);
                 func_80064534(play, &play->csCtx);
                 Player_SetCsActionWithHaltedActors(play, &this->actor, 7);
                 if (GameInteractor_Should(VB_SPAWN_BLUE_WARP, true, this)) {
@@ -1887,7 +1925,7 @@ void BossDodongo_DeathCutscene(BossDodongo* this, PlayState* play) {
             }
             break;
     }
-    if (this->cutsceneCamera != MAIN_CAM) {
+    if (this->cutsceneCamera != CAM_ID_MAIN) {
         Play_CameraSetAtEye(play, this->cutsceneCamera, &this->cameraAt, &this->cameraEye);
     }
 }

@@ -6,10 +6,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <libultraship/bridge/gfxdebuggerbridge.h>
+#include <libultraship/bridge/windowbridge.h>
 #include "soh/Enhancements/gameconsole.h"
 #include "soh/OTRGlobals.h"
+#include "soh/Fleet/FleetGame.h"
 #include "soh/EmbedderBridge.h"
-#include "libultraship/bridge.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -32,7 +34,6 @@ FaultClient sGraphFaultClient;
 CfbInfo sGraphCfbInfos[3];
 FaultClient sGraphUcodeFaultClient;
 
-void Skybox_Setup(PlayState* play, SkyboxContext* skyboxCtx, s16 skyboxId);
 void PadMgr_ThreadEntry(PadMgr* padMgr);
 
 // clang-format off
@@ -394,7 +395,7 @@ void Graph_Update(GraphicsContext* gfxCtx, GameState* gameState) {
         gfxCtx->fbIdx++;
     }
 
-    func_800F3054();
+    Audio_Update();
 
     {
         OSTime time = osGetTime();
@@ -442,7 +443,6 @@ extern void ProcessSaveStateRequests(void);
 static void RunFrame() {
     u32 size;
     char faultMsg[0x50];
-    static bool hasSetupSkybox = false;
 
     switch (runFrameContext.state) {
         case 0:
@@ -472,14 +472,6 @@ static void RunFrame() {
             Fault_AddHungupAndCrashImpl("GAME CLASS MALLOC FAILED", faultMsg);
         }
         GameState_Init(gGameState, runFrameContext.ovl->init, &runFrameContext.gfxCtx);
-
-        // Setup the normal skybox once before entering any game states to avoid the 0xabababab crash.
-        // The crash is due to certain skyboxes not loading all the data they need from Skybox_Setup.
-        if (!hasSetupSkybox) {
-            PlayState* play = (PlayState*)gGameState;
-            Skybox_Setup(play, &play->skyboxCtx, SKYBOX_NORMAL_SKY);
-            hasSetupSkybox = true;
-        }
 
         uint64_t freq = GetFrequency();
 
@@ -521,18 +513,12 @@ static void RunFrame() {
 }
 
 #ifdef __EMSCRIPTEN__
-// SOH [WASM] When the next tick is due. Ticks are scheduled against this running deadline
-// rather than "period after this one started", so neither setTimeout's lateness nor the
-// whole-millisecond timer resolution accumulates into a slow or fast game.
 typedef struct {
     double nextTickMs;
     s32 updateRate;
 } TickClock;
 
-// Advances the clock past the tick that started at tickStartMs and returns the delay, in ms
-// from that start, until the next one. A new update rate, or a loop more than three ticks
-// behind (a background tab, a long synchronous load), restarts the deadline from now rather
-// than racing to catch up.
+// Scheduling against a running deadline keeps setTimeout lateness from accumulating into game speed drift.
 static s32 TickClock_Advance(TickClock* clock, double tickStartMs, s32 updateRate) {
     double periodMs = 1000.0 * updateRate / 60.0;
     if (updateRate != clock->updateRate || clock->nextTickMs < tickStartMs - 3.0 * periodMs) {
@@ -544,18 +530,8 @@ static s32 TickClock_Advance(TickClock* clock, double tickStartMs, s32 updateRat
     return delayMs > 0.0 ? (s32)(delayMs + 0.5) : 0;
 }
 
-// SOH [WASM] A browser tab must return to its event loop to draw anything or receive
-// input, so the game cannot own an infinite loop. RunFrame() is already a resumable state
-// machine (see RunFrameContext above), which makes it usable as a callback directly.
-//
-// The tick rate is the game's, not the display's. It is not constant: the game runs at
-// 60/R_UPDATE_RATE Hz and changes R_UPDATE_RATE per game state, so the delay to the next
-// callback is re-derived after every frame (see below). setTimeout-driven rather than
-// requestAnimationFrame, which would run at the display's rate and desynchronise both the
-// game speed and the audio. See wasm-port.md.
 static void Graph_EmscriptenFrame(void) {
     static TickClock sClock;
-    // Emscripten's setTimeout scheduler measures the delay from when this callback started.
     double tickStartMs = emscripten_get_now();
 
     if (!WindowIsRunning()) {
@@ -566,12 +542,7 @@ static void Graph_EmscriptenFrame(void) {
     Soh_RunFrameGuarded(RunFrame);
     Soh_EmbedderAfterFrame();
 
-    // SOH [WASM] R_UPDATE_RATE is the N64's vsync divisor: the game runs at 60/R_UPDATE_RATE
-    // Hz and synthesises R_UPDATE_RATE audio buffers per frame, so the two cancel and audio
-    // always comes out at 32 kHz. Game states change it -- 3 while playing, 2 in the pause
-    // menu (z_kaleido_setup.c), 1 on the title and map-select screens -- and a loop pinned
-    // to one rate breaks that cancellation: at a fixed 20 Hz, pausing produced 2/3 of the
-    // samples per second and the music played slow, map select 1/3.
+    // R_UPDATE_RATE changes per game state and audio per frame scales with it, so the tick rate must follow it.
     if (R_UPDATE_RATE > 0) {
         emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, TickClock_Advance(&sClock, tickStartMs, R_UPDATE_RATE));
     }
@@ -580,14 +551,12 @@ static void Graph_EmscriptenFrame(void) {
 
 void Graph_ThreadEntry(void* arg0) {
 #ifdef __EMSCRIPTEN__
-    // 20 Hz is the R_UPDATE_RATE == 3 case; Graph_EmscriptenFrame re-derives the rate from
-    // R_UPDATE_RATE after each frame, so this is only the starting value.
-    // simulate_infinite_loop = 1: unwinds this stack without running destructors, so
-    // everything Main() set up stays alive for the callbacks. It does not return.
+    // simulate_infinite_loop unwinds this stack without running destructors, so Main()'s state stays alive.
     emscripten_set_main_loop(Graph_EmscriptenFrame, 20, 1);
 #else
     while (WindowIsRunning()) {
         RunFrame();
+        FleetGame_FrameEnd();
     }
 #endif
 }

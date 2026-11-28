@@ -1,8 +1,10 @@
+#include <ship/Context.h>
+#include <ship/resource/ResourceManager.h>
 #include <libultraship/bridge/consolevariablebridge.h>
+
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/ShipInit.hpp"
-#include "functions.h"
-#include "soh/Enhancements/enhancementTypes.h"
+#include "soh/cvar_prefixes.h"
 #include "soh/resource/type/Scene.h"
 #include "soh/resource/type/scenecommand/SceneCommand.h"
 #include "soh/resource/type/scenecommand/SetCollisionHeader.h"
@@ -30,10 +32,9 @@ CollisionHeader* getGraveyardCollisionHeader() {
      * dspot02_sceneCollisionHeader_003C54. We have to scroll through the scene cmds to get the header the same way the
      * game does.
      */
-    // SOH [Unbound] The scene the game loads: with an Unbound base mounted that is scene.json, and a base installed
-    // without oot.o2r (the browser build) has no vanilla scene file at all.
     std::string scenePath = SceneDB::Instance->GetScenePath(SCENE_GRAVEYARD);
-    SOH::Scene* scene = (SOH::Scene*)Ship::Context::GetInstance()->GetResourceManager()->LoadResource(scenePath).get();
+    SOH::Scene* scene =
+        (SOH::Scene*)Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(scenePath).get();
     if (scene == nullptr) {
         SPDLOG_ERROR("Grave Hole Jumps: cannot load {}", scenePath);
         return nullptr;
@@ -60,7 +61,7 @@ CollisionHeader* getGraveyardCollisionHeader() {
      */
     static SurfaceType newSurfaceTypes[33];
     memcpy(newSurfaceTypes, graveyardColHeader->surfaceTypeList, sizeof(SurfaceType) * surfaceTypesCount);
-    newSurfaceTypes[CUSTOM_SURFACE_TYPE] = SurfaceType_Unpack(0x24000004, 0xFC8); // SOH [Unbound] unpacked storage
+    newSurfaceTypes[CUSTOM_SURFACE_TYPE] = SurfaceType_Unpack(0x24000004, 0xFC8);
     graveyardColHeader->surfaceTypeList = newSurfaceTypes;
 
     return graveyardColHeader;

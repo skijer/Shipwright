@@ -4,16 +4,16 @@
 #include "soh/cvar_prefixes.h"
 #include "soh/Notification/Notification.h"
 #include <vector>
+#include <libultraship/bridge/consolevariablebridge.h>
+#include <libultraship/libultra/types.h>
+#include <ship/Context.h>
 #include <ship/utils/StringHelper.h>
-#include <libultraship/bridge.h>
-#include <libultraship/classes.h>
-#include <soh/OTRGlobals.h>
+#include <ship/window/Window.h>
 #include <locale>
 #include <filesystem>
 #include <z64.h>
 
-extern "C" PlayState* gPlayState; // SOH [Unbound] defined in z_play.c (C linkage)
-
+extern "C" PlayState* gPlayState;
 #define SEQUENCE_MAP_ENTRY(sequenceId, label, sfxKey, category, canBeReplaced, canBeUsedAsReplacement) \
     {                                                                                                  \
         sequenceId, {                                                                                  \
@@ -116,7 +116,7 @@ AudioCollection::AudioCollection() {
         SEQUENCE_MAP_ENTRY(NA_BGM_KOTAKE_KOUME,                 "Kotake & Koume's Theme",                   "NA_BGM_KOTAKE_KOUME",            SEQ_BGM_EVENT,    true,     true),
         SEQUENCE_MAP_ENTRY(NA_BGM_ESCAPE,                       "Escape from Ganon's Castle",               "NA_BGM_ESCAPE",                  SEQ_BGM_EVENT,    true,     true),
         SEQUENCE_MAP_ENTRY(NA_BGM_TIMED_MINI_GAME,              "Mini-Game",                                "NA_BGM_TIMED_MINI_GAME",         SEQ_BGM_EVENT,    true,     true),
-        
+
         // SEQ_INSTRUMENT
         SEQUENCE_MAP_ENTRY(INSTRUMENT_OFFSET + 1,               "Ocarina",                                  "OCARINA_INSTRUMENT_DEFAULT",     SEQ_INSTRUMENT,   true,     true),
         SEQUENCE_MAP_ENTRY(INSTRUMENT_OFFSET + 2,               "Malon",                                    "OCARINA_INSTRUMENT_MALON",       SEQ_INSTRUMENT,   true,     true),
@@ -350,6 +350,11 @@ std::string AudioCollection::GetCvarLockKey(std::string sfxKey) {
     return prefix + sfxKey + ".locked";
 }
 
+static std::string MakeSfxKey(const std::string& label) {
+    return StringHelper::Replace(StringHelper::Replace(StringHelper::Replace(label, " ", "_"), "~", "-"), ".", "");
+}
+
+// A custom sequence file is named "<label>_<type>", the type being "bgm" or "fanfare".
 void AudioCollection::AddToCollection(char* otrPath, uint16_t seqNum) {
     std::string fileName = std::filesystem::path(otrPath).filename().string();
     std::vector<std::string> splitFileName = StringHelper::Split(fileName, "_");
@@ -363,14 +368,39 @@ void AudioCollection::AddToCollection(char* otrPath, uint16_t seqNum) {
     if (typeString == "fanfare") {
         type = SEQ_FANFARE;
     }
-    SequenceInfo info = { seqNum,
-                          sequenceName,
-                          StringHelper::Replace(
-                              StringHelper::Replace(StringHelper::Replace(sequenceName, " ", "_"), "~", "-"), ".", ""),
-                          type,
-                          false,
-                          true };
-    sequenceMap.emplace(seqNum, info);
+    sequenceMap.emplace(seqNum, SequenceInfo{ seqNum, sequenceName, MakeSfxKey(sequenceName), type, false, true });
+}
+
+// Another game's sequences are written for that game's player and fonts, MM's Sequence_0 being its SFX program, not
+// music: they stay playable by path but are never handed out as a replacement. Their file names carry no type suffix,
+// so the whole name labels them; splitting it would give all of MM's "Sequence_N" one shared key.
+void AudioCollection::AddForeignToCollection(char* otrPath, uint16_t seqNum) {
+    const std::string label = std::filesystem::path(otrPath).filename().string();
+    sequenceMap.emplace(seqNum, SequenceInfo{ seqNum, label, MakeSfxKey(label), SEQ_BGM_CUSTOM, false, false });
+}
+
+bool AudioCollection::CanReplaceWith(uint16_t seqId, int replacementSeq) const {
+    const auto replacement = sequenceMap.find(replacementSeq);
+    if (replacement == sequenceMap.end()) {
+        return false;
+    }
+    return replacementSeq == seqId || replacement->second.canBeUsedAsReplacement;
+}
+
+std::vector<uint16_t> AudioCollection::ListForbiddenReplacements() {
+    std::vector<uint16_t> forbidden;
+    for (const SequenceInfo* included : includedSequences) {
+        if (!included->canBeUsedAsReplacement) {
+            forbidden.push_back(included->sequenceId);
+        }
+    }
+    for (const auto& [seqId, seqInfo] : sequenceMap) {
+        const int replacementSeq = CVarGetInteger(GetCvarKey(seqInfo.sfxKey).c_str(), seqId);
+        if (sequenceMap.contains(replacementSeq) && !CanReplaceWith(seqId, replacementSeq)) {
+            forbidden.push_back(static_cast<uint16_t>(replacementSeq));
+        }
+    }
+    return forbidden;
 }
 
 uint16_t AudioCollection::GetReplacementSequence(uint16_t seqId) {
@@ -391,18 +421,14 @@ uint16_t AudioCollection::GetReplacementSequence(uint16_t seqId) {
     const auto& sequenceInfo = sequenceMap.at(seqId);
     const std::string cvarKey = GetCvarKey(sequenceInfo.sfxKey);
     int replacementSeq = CVarGetInteger(cvarKey.c_str(), seqId);
-    if (!sequenceMap.contains(replacementSeq)) {
+    // A saved choice can predate a sequence becoming ineligible, such as another game's sequence picked by an
+    // older build's randomizer.
+    if (!CanReplaceWith(seqId, replacementSeq)) {
         replacementSeq = seqId;
     }
 
-    // SOH [Unbound] A scene document can bind a custom song to its theme (`sound.song`): when the id being
-    // resolved is the current scene's own BGM theme, swap in the bound song. This sits after the alias and
-    // validity logic and fires only when the user has no replacement of their own — an Audio Editor or
-    // shuffle pick outranks the binding, so the editor UI stays truthful — and only for BGM categories,
-    // because this path also carries ocarina-instrument and sfx ids a document must not hijack.
+    // Only BGM categories: this path also carries ocarina-instrument and sfx ids a scene must not hijack.
     if (replacementSeq == seqId && gPlayState != NULL && gPlayState->sequenceCtx.unboundSongSeqId != 0) {
-        // The field theme circulates as two ids; treat them as one so a song bound over either keeps
-        // playing through the morning variant.
         uint16_t resolved = (seqId == NA_BGM_FIELD_MORNING) ? (uint16_t)NA_BGM_FIELD_LOGIC : seqId;
         uint16_t sceneTheme = (gPlayState->sequenceCtx.seqId == NA_BGM_FIELD_MORNING) ? (uint16_t)NA_BGM_FIELD_LOGIC
                                                                                       : gPlayState->sequenceCtx.seqId;
@@ -420,7 +446,7 @@ void AudioCollection::RemoveFromShufflePool(SequenceInfo* seqInfo) {
     excludedSequences.insert(seqInfo);
     includedSequences.erase(seqInfo);
     CVarSetInteger(cvarKey.c_str(), 1);
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 void AudioCollection::AddToShufflePool(SequenceInfo* seqInfo) {
@@ -428,7 +454,7 @@ void AudioCollection::AddToShufflePool(SequenceInfo* seqInfo) {
     includedSequences.insert(seqInfo);
     excludedSequences.erase(seqInfo);
     CVarClear(cvarKey.c_str());
-    Ship::Context::GetInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
+    Ship::Context::GetRawInstance()->GetWindow()->GetGui()->SaveConsoleVariablesNextFrame();
 }
 
 void AudioCollection::InitializeShufflePool() {
@@ -451,6 +477,10 @@ void AudioCollection::InitializeShufflePool() {
 
 extern "C" void AudioCollection_AddToCollection(char* otrPath, uint16_t seqNum) {
     AudioCollection::Instance->AddToCollection(otrPath, seqNum);
+}
+
+extern "C" void AudioCollection_AddForeignToCollection(char* otrPath, uint16_t seqNum) {
+    AudioCollection::Instance->AddForeignToCollection(otrPath, seqNum);
 }
 
 bool AudioCollection::HasSequenceNum(uint16_t seqId) {

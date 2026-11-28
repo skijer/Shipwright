@@ -1,5 +1,4 @@
-#ifndef _RANDO_GROTTO_H_
-#define _RANDO_GROTTO_H_
+#pragma once
 
 #include "z64math.h"
 #include "z64actor.h"
@@ -17,7 +16,7 @@ typedef struct {
 
 typedef struct {
     s16 entranceIndex;
-    s16 room; // SOH [Unbound]
+    s16 room;
     s16 angle;
     Vec3f pos;
 } GrottoReturnInfo;
@@ -35,10 +34,8 @@ void Grotto_ForceGrottoReturnOnSpecialEntrance(void);
 void Grotto_ForceGrottoReturn(void);
 void Grotto_ForceRegularVoidOut(void);
 void Grotto_SanitizeEntranceType(void);
-s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s8 scene);
+s16 Grotto_GetRenamedGrottoIndexFromOriginal(s8 content, s16 scene);
 s8 Grotto_CurrentGrotto();
 #ifdef __cplusplus
 };
 #endif
-
-#endif //_RANDO_GROTTO_H_

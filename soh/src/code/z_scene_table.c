@@ -28,10 +28,6 @@
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
-// SOH [Unbound] gSceneTable and gEntranceTable used to be defined here. Both are owned by SceneDB
-// (soh/soh/SceneDB.cpp), seeded from tables/scene_table.h and tables/entrance_table.h and extended by mods
-// at runtime; this file keeps only the per-scene draw configs.
-
 Gfx sDefaultDisplayList[] = {
     gsSPSegment(0x08, gEmptyDL),
     gsSPSegment(0x09, gEmptyDL),
@@ -227,7 +223,7 @@ void func_80099BD8(PlayState* play) {
 
     CLOSE_DISPS(play->state.gfxCtx);
 
-    if (gSaveContext.sceneSetupIndex == 5) {
+    if (gSaveContext.sceneLayer == 5) {
         gCustomLensFlareOn = true;
         gCustomLensFlarePos.x = -20.0f;
         gCustomLensFlarePos.y = 1220.0f;
@@ -1103,11 +1099,11 @@ void func_8009E0B8(PlayState* play) {
     gDPPipeSync(POLY_XLU_DISP++);
     gDPSetEnvColor(POLY_XLU_DISP++, 128, 128, 128, 128);
 
-    if (gSaveContext.sceneSetupIndex == 4) {
+    if (gSaveContext.sceneLayer == 4) {
         spA3 = 255 - (u8)play->roomCtx.unk_74[0];
-    } else if (gSaveContext.sceneSetupIndex == 6) {
+    } else if (gSaveContext.sceneLayer == 6) {
         spA0 = play->roomCtx.unk_74[0] + 500;
-    } else if (((gSaveContext.sceneSetupIndex < 4) || LINK_IS_ADULT) &&
+    } else if (((gSaveContext.sceneLayer < 4) || LINK_IS_ADULT) &&
                (Flags_GetEventChkInf(EVENTCHKINF_OBTAINED_KOKIRI_EMERALD_DEKU_TREE_DEAD))) {
         spA0 = 2150;
     }
@@ -1137,7 +1133,7 @@ void func_8009E54C(PlayState* play) {
 
     OPEN_DISPS(play->state.gfxCtx);
 
-    if ((gSaveContext.sceneSetupIndex > 3) ||
+    if ((gSaveContext.sceneLayer > 3) ||
         (LINK_IS_ADULT && !Flags_GetEventChkInf(EVENTCHKINF_RAISED_LAKE_HYLIA_WATER))) {
         play->roomCtx.unk_74[0] = 87;
     }
@@ -1688,6 +1684,5 @@ void Scene_Draw(PlayState* play) {
     } else {
         sSceneDrawHandlers[play->sceneConfig](play);
     }
-    // SOH [Unbound] a scene document's `materialAnims` bind after the draw config, so they win the segment
     Scene_DrawMaterialAnims(play);
 }

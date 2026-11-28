@@ -1,13 +1,14 @@
+#include <tinyxml2.h>
+#include <libultraship/bridge/consolevariablebridge.h>
+
 #include "soh/resource/importer/PathFactory.h"
 #include "soh/resource/type/Path.h"
 #include "soh/resource/logging/PathLogger.h"
 #include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 #include <cstddef>
 #include "z64scene.h"
 
 namespace SOH {
-// SOH [Unbound] Scene_CommandPathList hands the mirror to the game as a ::Path
 static_assert(sizeof(PathData) == sizeof(::Path) && offsetof(PathData, points) == offsetof(::Path, points),
               "SOH::PathData must mirror ::Path");
 std::shared_ptr<Ship::IResource>
@@ -77,9 +78,9 @@ ResourceFactoryXMLPathV0::ReadResource(std::shared_ptr<Ship::File> file,
 
         while (pointElement != nullptr) {
             Vec3f point;
-            point.x = pointElement->IntAttribute("X");
-            point.y = pointElement->IntAttribute("Y");
-            point.z = pointElement->IntAttribute("Z");
+            point.x = pointElement->FloatAttribute("X");
+            point.y = pointElement->FloatAttribute("Y");
+            point.z = pointElement->FloatAttribute("Z");
 
             points.push_back(point);
 
@@ -88,7 +89,7 @@ ResourceFactoryXMLPathV0::ReadResource(std::shared_ptr<Ship::File> file,
 
         PathData pathDataEntry;
         // pathDataEntry.count = pointCount;
-        pathDataEntry.count = points.size();
+        pathDataEntry.count = static_cast<u8>(points.size());
 
         path->paths.push_back(points);
         pathDataEntry.points = path->paths.back().data();
@@ -98,7 +99,7 @@ ResourceFactoryXMLPathV0::ReadResource(std::shared_ptr<Ship::File> file,
         pathDataElement = pathDataElement->NextSiblingElement();
     }
 
-    path->numPaths = path->paths.size();
+    path->numPaths = static_cast<u32>(path->paths.size());
 
     return path;
 };

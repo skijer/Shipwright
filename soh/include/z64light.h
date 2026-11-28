@@ -4,10 +4,9 @@
 #include <libultraship/libultra.h>
 #include <libultraship/libultra/gbi.h>
 #include "z64math.h"
-#include <libultraship/color.h>
 
 typedef struct {
-    f32 x; // SOH [Unbound] s16 -> f32 (world extent)
+    f32 x;
     f32 y;
     f32 z;
     u8 color[3];
@@ -48,9 +47,7 @@ typedef struct {
     /* 0x4 */ u8 ambientColor[3];
     /* 0x7 */ u8 fogColor[3];
     /* 0xA */ s16 fogNear; // how close until fog starts taking effect. range 0 - 1000
-    /* 0xC */ s16 fogFar; // far plane / room cull distance (vanilla max 12800); clamped to s16 when worldFog is set
-    // SOH [Unbound] world-unit fog + draw distance; see EnvLightSettings. zNear/zFar drive the projection and
-    // room culling in every scene (vanilla: 10 / fogFar).
+    /* 0xC */ s16 fogFar;
     u8 worldFog;
     f32 fogStart;
     f32 fogEnd;

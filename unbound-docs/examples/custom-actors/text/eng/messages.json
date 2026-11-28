@@ -1,0 +1,8 @@
+{
+  "$schema": "unbound/text/1",
+  "messages": {
+    "0xA001": { "box": 0, "ypos": 0, "text": "I'm a custom actor type.\u0001Nobody wrote C code for me.\u0004My head follows you around." },
+    "0xA002": { "box": 0, "ypos": 0, "text": "Malon's pose is one frame of her\u0001singing animation, held still." },
+    "0xA003": { "box": 0, "ypos": 0, "text": "This pot is a display list with\u0001a message, placed by name." }
+  }
+}

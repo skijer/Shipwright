@@ -1,17 +1,20 @@
-// SOH [Unbound] Message tables are owned, growable and hash-indexed; mods can add message ids.
-// Format: unbound-docs/SPEC.md §5 (how/why: unbound-docs/text.md).
 #include "z_message_OTR.h"
 #include <libultraship/libultraship.h>
 #include "soh/resource/type/Scene.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/unbound/UnboundJson.h"
 #include "soh/unbound/UnboundSchema.h"
 #include <ship/utils/StringHelper.h>
 #include "global.h"
 #include "vt.h"
+#include <ship/Context.h>
+#include <ship/resource/ResourceManager.h>
+
 #include "soh/resource/type/Text.h"
+
+extern "C" {
 #include <message_data_static.h>
-#include "Enhancements/custom-message/CustomMessageManager.h"
-#include "Enhancements/custom-message/CustomMessageTypes.h"
+}
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
@@ -39,11 +42,11 @@ enum MessageLanguage { MSG_NES, MSG_GER, MSG_FRA, MSG_JPN, MSG_STAFF, MSG_LANGUA
 
 struct LanguageSpec {
     MessageLanguage language;
-    const char* jsonName;    // text/<jsonName>/messages.json (SPEC.md §5)
-    const char* folder;      // archive folder, also the override/ subfolder
-    const char* baseFile;    // primary base resource
-    const char* altBaseFile; // fallback base resource (NTSC english), may be null
-    uint16_t firstId;        // asserted first id of the base table
+    const char* jsonName;
+    const char* folder;
+    const char* baseFile;
+    const char* altBaseFile;
+    uint16_t firstId;
 };
 
 const LanguageSpec kLanguages[MSG_LANGUAGE_COUNT] = {
@@ -59,14 +62,10 @@ const LanguageSpec kLanguages[MSG_LANGUAGE_COUNT] = {
       nullptr, 0x0500 },
 };
 
-/**
- * One language's message table. Owns the message bytes (deque keeps c_str() stable across growth),
- * keeps the C-visible entry array in base order with additions appended before the terminator, and
- * a hash index for lookup.
- */
+// The deque keeps c_str() pointers stable across growth.
 struct MessageTable {
     std::deque<std::string> storage;
-    std::vector<MessageTableEntry> entries; // published without terminator until Finalize()
+    std::vector<MessageTableEntry> entries;
     std::unordered_map<uint16_t, size_t> index;
     bool loaded = false;
 
@@ -84,7 +83,7 @@ struct MessageTable {
         entry.textId = id;
         entry.typePos = typePos;
         entry.segment = owned.c_str();
-        entry.msgSize = owned.size();
+        entry.msgSize = static_cast<u32>(owned.size());
 
         auto it = index.find(id);
         if (it != index.end()) {
@@ -116,7 +115,8 @@ std::array<MessageTable, MSG_LANGUAGE_COUNT> sTables;
 bool sInitialized = false;
 
 std::shared_ptr<SOH::Text> LoadTextResource(const std::string& path) {
-    return std::static_pointer_cast<SOH::Text>(Ship::Context::GetInstance()->GetResourceManager()->LoadResource(path));
+    return std::static_pointer_cast<SOH::Text>(
+        Ship::Context::GetRawInstance()->GetResourceManager()->LoadResource(path));
 }
 
 bool LoadJsonBase(MessageTable& table, const LanguageSpec& spec);
@@ -142,14 +142,16 @@ bool LoadBase(MessageTable& table, const LanguageSpec& spec) {
     return true;
 }
 
-// override/<folder>/* : Text resources whose entries replace OR add ids (vanilla SoH could only replace)
 void LoadOverrides(MessageTable& table, const LanguageSpec& spec) {
-    auto files = Ship::Context::GetInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(
+    auto files = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager()->ListFiles(
         std::string("override/") + spec.folder + "/*");
     if (files == nullptr) {
         return;
     }
     for (const auto& path : *files) {
+        if (ModQuests_IsPathAsleep(path.c_str())) {
+            continue;
+        }
         auto file = LoadTextResource(path);
         if (file == nullptr) {
             continue;
@@ -160,12 +162,9 @@ void LoadOverrides(MessageTable& table, const LanguageSpec& spec) {
     }
 }
 
-// JSON strings carry message bytes as code points 0-255 (Latin-1 mapping); control codes included (SPEC.md §5).
-// Code points above U+00FF have no byte representation; each becomes '?' and is counted in `replaced`, as does
-// every malformed UTF-8 sequence.
 struct DecodedCodePoint {
     uint32_t value;
-    size_t length; // bytes consumed; 0 = malformed
+    size_t length;
 };
 
 DecodedCodePoint DecodeUtf8(const std::string& utf8, size_t i) {
@@ -207,8 +206,6 @@ std::string JsonTextToBytes(const std::string& utf8, size_t& replaced) {
     return bytes;
 }
 
-// A message key is the id as a decimal or 0x hex string, 0-65534 (SPEC.md §5). Returns false for anything else,
-// including the 0xFFFF terminator. Keys beginning with '$' are reserved and skipped silently.
 bool ParseMessageId(const std::string& key, uint16_t& id) {
     int64_t parsed = 0;
     if (!SOH::Unbound::ParseIntString(key, parsed) || parsed < 0 || parsed >= kTerminatorId) {
@@ -230,7 +227,6 @@ void ApplyJsonMessage(MessageTable& table, const nlohmann::json& entry, uint16_t
     table.Set(id, (uint8_t)((box << 4) | ypos), std::move(bytes));
 }
 
-// "messages": { "<id>": { box, ypos, text } }. Deletions (null) were already applied by the layer merge.
 size_t ApplyJsonMessages(MessageTable& table, const nlohmann::json& messages, const std::string& path) {
     size_t count = 0;
     if (!messages.is_object()) {
@@ -256,8 +252,6 @@ size_t ApplyJsonMessages(MessageTable& table, const nlohmann::json& messages, co
     return count;
 }
 
-// text/<lang>/messages.json, layer-merged across every mounted archive: the converted base table plus each
-// mod's additions, replacements and deletions (SPEC.md §3, §5).
 bool LoadJsonBase(MessageTable& table, const LanguageSpec& spec) {
     std::string path = std::string(K::kMessagesPathPrefix) + spec.jsonName + K::kMessagesPathSuffix;
     nlohmann::json doc = SOH::Unbound::LoadMergedJson(path);
@@ -267,7 +261,7 @@ bool LoadJsonBase(MessageTable& table, const LanguageSpec& spec) {
     try {
         size_t count = ApplyJsonMessages(table, doc.value(K::kMessages, nlohmann::json::object()), path);
         SPDLOG_INFO("[Unbound] {}: {} message(s)", path, count);
-        return true; // an empty (or fully deleted) table is still the base; do not fall through to the binary one
+        return true;
     } catch (const std::exception& e) {
         SPDLOG_ERROR("[Unbound] {}: {}", path, e.what());
         return false;
@@ -289,11 +283,10 @@ void PublishTables() {
 
 extern "C" void OTRMessage_Init(void) {
     if (sInitialized) {
-        return; // the tables are process-lifetime; a second pass would append a second terminator
+        return;
     }
     sInitialized = true;
 
-    // Per language: base (merged JSON, or the legacy Text resource) + legacy override/ resources, then publish.
     for (const auto& spec : kLanguages) {
         MessageTable& table = sTables[spec.language];
         if (LoadBase(table, spec)) {
@@ -306,6 +299,18 @@ extern "C" void OTRMessage_Init(void) {
         }
     }
     PublishTables();
+}
+
+// The previous tables live until the next reload: a message on screen may still point into them.
+extern "C" void OTRMessage_Reload(void) {
+    static std::array<MessageTable, MSG_LANGUAGE_COUNT> sPrevious;
+    if (!sInitialized) {
+        return;
+    }
+    sPrevious = std::move(sTables);
+    sTables = {};
+    sInitialized = false;
+    OTRMessage_Init();
 }
 
 extern "C" MessageTableEntry* OTRMessage_Find(MessageTableEntry* table, u16 textId) {

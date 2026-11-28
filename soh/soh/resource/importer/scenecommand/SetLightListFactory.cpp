@@ -1,13 +1,13 @@
+#include <tinyxml2.h>
+
 #include "soh/resource/importer/scenecommand/SetLightListFactory.h"
 #include "soh/resource/type/scenecommand/SetLightList.h"
 #include "soh/resource/logging/SceneCommandLoggers.h"
 #include "spdlog/spdlog.h"
-#include <tinyxml2.h>
 #include <cstddef>
 #include "z64light.h"
 
 namespace SOH {
-// SOH [Unbound] Scene_CommandLightList casts the mirror to ::LightPoint
 static_assert(sizeof(LightPoint) == sizeof(::LightPoint) &&
                   offsetof(LightPoint, radius) == offsetof(::LightPoint, radius),
               "SOH::LightPoint must mirror ::LightPoint");
@@ -66,7 +66,7 @@ std::shared_ptr<Ship::IResource> SetLightListFactoryXML::ReadResource(std::share
                 light.params.dir.color[1] = child->IntAttribute("ColorG");
                 light.params.dir.color[2] = child->IntAttribute("ColorB");
             } else {
-                light.params.point.x = child->FloatAttribute("X"); // SOH [Unbound] f32 position
+                light.params.point.x = child->FloatAttribute("X");
                 light.params.point.y = child->FloatAttribute("Y");
                 light.params.point.z = child->FloatAttribute("Z");
                 light.params.point.color[0] = child->IntAttribute("ColorR");
@@ -81,7 +81,7 @@ std::shared_ptr<Ship::IResource> SetLightListFactoryXML::ReadResource(std::share
         child = child->NextSiblingElement();
     }
 
-    setLightList->numLights = setLightList->lightList.size();
+    setLightList->numLights = static_cast<u32>(setLightList->lightList.size());
 
     return setLightList;
 }

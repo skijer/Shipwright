@@ -1,8 +1,10 @@
 #ifndef Z_KALEIDO_SCOPE_H
 #define Z_KALEIDO_SCOPE_H
+#include "soh/ModApi/Layout/ModLayout.h"
 
 #include <libultraship/libultra.h>
 #include "global.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 
 extern u8 gAmmoItems[];
 extern s16 D_8082AAEC[];
@@ -20,9 +22,23 @@ extern u8 gAreaGsFlags[];
 #define AGE_REQ_CHILD LINK_AGE_CHILD
 #define AGE_REQ_NONE 9
 
-#define CHECK_AGE_REQ_EQUIP(i, j) (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || (gEquipAgeReqs[i][j] == AGE_REQ_NONE) || (gEquipAgeReqs[i][j] == ((void)0, gSaveContext.linkAge)))
-#define CHECK_AGE_REQ_SLOT(slotIndex) (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || (gSlotAgeReqs[slotIndex] == AGE_REQ_NONE) || gSlotAgeReqs[slotIndex] == ((void)0, gSaveContext.linkAge))
-#define CHECK_AGE_REQ_ITEM(itemIndex) (CVarGetInteger(CVAR_CHEAT("TimelessEquipment"), 0) || (gItemAgeReqs[itemIndex] == AGE_REQ_NONE) || (gItemAgeReqs[itemIndex] == gSaveContext.linkAge))
+#define CHECK_AGE_REQ_EQUIP(i, j)                                           \
+    GameInteractor_Should(VB_PLAYER_MEETS_AGE_REQ,                          \
+                          (gEquipAgeReqs[i][j] == AGE_REQ_NONE) ||          \
+                              (gEquipAgeReqs[i][j] == ((void)0, gSaveContext.linkAge)), \
+                          gEquipAgeReqs[i][j])
+
+#define CHECK_AGE_REQ_SLOT(slotIndex)                                       \
+    GameInteractor_Should(VB_SLOT_MEETS_AGE_REQ,                            \
+                          (gSlotAgeReqs[slotIndex] == AGE_REQ_NONE) ||      \
+                              (gSlotAgeReqs[slotIndex] == ((void)0, gSaveContext.linkAge)), \
+                          slotIndex)
+
+#define CHECK_AGE_REQ_ITEM(itemIndex)                                       \
+    GameInteractor_Should(VB_ITEM_MEETS_AGE_REQ,                            \
+                          (gItemAgeReqs[itemIndex] == AGE_REQ_NONE) ||      \
+                              (gItemAgeReqs[itemIndex] == gSaveContext.linkAge), \
+                          itemIndex)
 
 void KaleidoScope_DrawQuestStatus(PlayState* play, GraphicsContext* gfxCtx);
 s32 KaleidoScope_UpdateQuestStatusPoint(PauseContext* pauseCtx, s32 point);
@@ -32,6 +48,9 @@ void KaleidoScope_DrawEquipment(PlayState* play);
 void KaleidoScope_SetCursorVtx(PauseContext* pauseCtx, u16 index, Vtx* vtx);
 void KaleidoScope_DrawItemSelect(PlayState* play);
 void KaleidoScope_SetupItemEquip(PlayState* play, u16 item, u16 slot, s16 animX, s16 animY);
+void KaleidoScope_DrawAmmoCountAt(PauseContext* pauseCtx, GraphicsContext* gfxCtx, s16 item, Vtx* digitVtx);
+void KaleidoScope_DrawAmmoDigits(GraphicsContext* gfxCtx, s16 ammo, Vtx* digitVtx);
+s8 ItemInSlotUsesAmmo(s16 slot);
 void KaleidoScope_UpdateItemEquip(PlayState* play);
 void KaleidoScope_DrawDungeonMap(PlayState* play, GraphicsContext* gfxCtx);
 void KaleidoScope_DrawWorldMap(PlayState* play, GraphicsContext* gfxCtx);
@@ -50,5 +69,14 @@ void PauseMapMark_Draw(PlayState* play);
 void KaleidoScope_UpdateCursorSize(PauseContext* pauseCtx);
 
 void KaleidoScope_ResetItemCycling();
+
+typedef struct {
+    void* icon;
+    bool ageAllowed;
+} KaleidoCycleIcon;
+
+void KaleidoScope_DrawCycleIcons(PlayState* play, u8 slot, KaleidoCycleIcon left, KaleidoCycleIcon right);
+void KaleidoScope_DrawCycleIconsAt(PlayState* play, u8 slot, KaleidoCycleIcon left, KaleidoCycleIcon right,
+                                  s16 centerX, s16 centerY, bool isCycling, bool hovered);
 
 #endif

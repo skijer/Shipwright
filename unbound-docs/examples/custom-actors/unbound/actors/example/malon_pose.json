@@ -1,0 +1,16 @@
+{
+  "name": "Example: Malon held on one frame",
+  "model": {
+    "skeleton": "objects/object_ma1/gMalonChildSkel",
+    "animation": "objects/object_ma1/gMalonChildSingAnim",
+    "frame": 10,
+    "hideLimbs": [2, 5, 99],
+    "segments": {
+      "8": "objects/object_ma1/gMalonChildEyeOpenTex",
+      "9": "objects/object_ma1/gMalonChildSmilingMouthTex"
+    },
+    "shadow": 20
+  },
+  "collision": { "radius": 20, "height": 50 },
+  "talk": {}
+}

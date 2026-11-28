@@ -20,8 +20,8 @@ uint8_t GameInteractor::State::RandomWindSecondsSinceLastDirectionChange = 0;
 uint8_t GameInteractor::State::RandomBonksActive = 0;
 uint8_t GameInteractor::State::SlipperyFloorActive = 0;
 uint8_t GameInteractor::State::SecondCollisionUpdate = 0;
-uint8_t GameInteractor::State::TriforceHuntPieceGiven = 0;
-uint8_t GameInteractor::State::TriforceHuntCreditsWarpActive = 0;
+bool GameInteractor::State::TriforceHuntPieceGiven = false;
+bool GameInteractor::State::TriforceHuntCreditsWarpActive = false;
 
 void GameInteractor::State::SetPacifistMode(bool active) {
     PacifistModeActive = active;
@@ -110,6 +110,10 @@ uint8_t GameInteractor_GetDisableLedgeGrabsActive() {
     return GameInteractor::State::DisableLedgeGrabsActive;
 }
 
+void GameInteractor_SetDisableLedgeGrabsActive(uint8_t state) {
+    GameInteractor::State::DisableLedgeGrabsActive = state;
+}
+
 // MARK: - GameInteractor::State::GetRandomWindActive
 uint8_t GameInteractor_GetRandomWindActive() {
     return GameInteractor::State::RandomWindActive;
@@ -131,11 +135,11 @@ uint8_t GameInteractor_SecondCollisionUpdate() {
 }
 
 // MARK: - GameInteractor::State::TriforceHuntPieceGiven
-void GameInteractor_SetTriforceHuntPieceGiven(uint8_t state) {
+void GameInteractor_SetTriforceHuntPieceGiven(bool state) {
     GameInteractor::State::TriforceHuntPieceGiven = state;
 }
 
 // MARK: - GameInteractor::State::TriforceHuntCreditsWarpActive
-void GameInteractor_SetTriforceHuntCreditsWarpActive(uint8_t state) {
+void GameInteractor_SetTriforceHuntCreditsWarpActive(bool state) {
     GameInteractor::State::TriforceHuntCreditsWarpActive = state;
 }

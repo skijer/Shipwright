@@ -1,7 +1,7 @@
 #pragma once
 
-#include <libultraship/libultra/gbi.h>
 #include "z64save.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 #define SECTION_PARENT_NONE -1
 typedef struct {
@@ -15,7 +15,7 @@ typedef struct {
     u32 requiresMasterQuest;
     u32 requiresOriginal;
     u8 seedHash[5];
-    u8 randoSave;
+    u8 quest;
     char buildVersion[50];
     s16 buildVersionMajor;
     s16 buildVersionMinor;
@@ -36,6 +36,8 @@ typedef struct {
     u8 maxTriforcePieces;
     bool hasFishingRod;
     bool fishingPoleShuffled;
+    // SOH [Unbound] the key of the mod quest the file belongs to, empty for the game's own quests
+    char modQuest[MOD_QUEST_KEY_SIZE];
 } SaveFileMetaInfo;
 
 typedef enum {
@@ -48,7 +50,6 @@ typedef enum {
 
 #include <map>
 #include <string>
-#include <tuple>
 #include <functional>
 #include <vector>
 #include <filesystem>
@@ -65,10 +66,12 @@ class SaveManager {
 
     static void WriteSaveFile(const std::filesystem::path& savePath, uintptr_t addr, void* dramAddr, size_t size);
     static void ReadSaveFile(std::filesystem::path savePath, uintptr_t addr, void* dramAddr, size_t size);
+    // Write to fileName + ".temp" and only swap once fully on disk
+    static bool WriteFileSafely(const std::filesystem::path& fileName, const std::string& contents);
 
     using InitFunc = void (*)(bool isDebug);
     using LoadFunc = void (*)();
-    using SaveFunc = void (*)(SaveContext* saveContext, int sectionID, bool fullSave);
+    using SaveFunc = void (*)(const SaveContext& saveContext, int sectionID, bool fullSave);
     using PostFunc = void (*)(int version);
 
     typedef struct {
@@ -89,6 +92,8 @@ class SaveManager {
     void SaveGlobal();
     void LoadFile(int fileNum);
     bool SaveFile_Exist(int fileNum);
+    // Rereads every slot's file select summary, after something outside the game replaced the files.
+    void ReloadSaveFiles();
     void ThreadPoolWait();
 
     // Adds a function that is called when we are intializing a save, including when we are loading a save.
@@ -154,15 +159,15 @@ class SaveManager {
     static const int MaxFiles = 3;
     std::array<SaveFileMetaInfo, MaxFiles> fileMetaInfo;
 
-  private:
     std::filesystem::path GetFileName(int fileNum);
-    std::filesystem::path GetFileTempName(int fileNum);
+
+  private:
     nlohmann::json saveBlock;
 
     void ConvertFromUnversioned();
     void CreateDefaultGlobal();
 
-    void SaveFileThreaded(int fileNum, SaveContext* saveContext, int sectionID);
+    void SaveFileThreaded(int fileNum, const SaveContext& saveContext, int sectionID);
 
     void InitMeta(int slotNum);
     void StartupCheckAndInitMeta(int slotNum);
@@ -172,13 +177,13 @@ class SaveManager {
     static void InitFileMaxed();
 
     static void LoadRandomizer();
-    static void SaveRandomizer(SaveContext* saveContext, int sectionID, bool fullSave);
+    static void SaveRandomizer(const SaveContext& saveContext, int sectionID, bool fullSave);
 
     static void LoadBaseVersion1();
     static void LoadBaseVersion2();
     static void LoadBaseVersion3();
     static void LoadBaseVersion4();
-    static void SaveBase(SaveContext* saveContext, int sectionID, bool fullSave);
+    static void SaveBase(const SaveContext& saveContext, int sectionID, bool fullSave);
 
     std::vector<InitFunc> initFuncs;
 
@@ -200,21 +205,12 @@ class SaveManager {
 
 #else
 
-// TODO feature parity to the C++ interface. We need Save_AddInitFunction and Save_AddPostFunction at least
-
-typedef void (*Save_LoadFunc)(void);
-typedef void (*Save_SaveFunc)(const SaveContext* saveContext, int sectionID);
-
 void Save_Init(void);
 void Save_InitFile(int isDebug);
 void Save_SaveFile(void);
 void Save_SaveSection(int sectionID);
 void Save_SaveGlobal(void);
-void Save_LoadGlobal(void);
-void Save_AddLoadFunction(char* name, int version, Save_LoadFunc func);
-void Save_AddSaveFunction(char* name, int version, Save_SaveFunc func, bool saveWithBase, int parentSection);
 SaveFileMetaInfo* Save_GetSaveMetaInfo(int fileNum);
 void Save_CopyFile(int from, int to);
 void Save_DeleteFile(int fileNum);
-bool Save_Exist(int fileNum);
 #endif

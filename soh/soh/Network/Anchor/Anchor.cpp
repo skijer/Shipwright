@@ -1,14 +1,33 @@
-#include "Anchor.h"
 #include <nlohmann/json.hpp>
-#include <libultraship/libultraship.h>
-#include "soh/OTRGlobals.h"
+
+#include "Anchor.h"
 #include "soh/Enhancements/nametag.h"
 #include "soh/ObjectExtension/ObjectExtension.h"
+#include "soh/ModApi/Network/ModNetwork.h"
+#include "soh/Fleet/FleetGame.h"
 
 extern "C" {
+#include "macros.h"
 #include "variables.h"
 #include "functions.h"
 extern PlayState* gPlayState;
+}
+
+static const std::string sMajorasMaskGlobalRoomId = "2ship-global";
+
+bool Anchor::IsGlobalRoom() {
+    const std::string room = CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), "");
+    if (room == GLOBAL_ROOM_ID) {
+        return true;
+    }
+    return FleetGame_IsHosted() && room == sMajorasMaskGlobalRoomId;
+}
+
+std::string Anchor::RoomToJoin() {
+    if (IsGlobalRoom()) {
+        return GLOBAL_ROOM_ID;
+    }
+    return FleetGame_NetworkRoom(CVarGetString(CVAR_REMOTE_ANCHOR("RoomId"), ""));
 }
 
 // MARK: - Overrides
@@ -28,6 +47,7 @@ void Anchor::Disable() {
 }
 
 void Anchor::OnConnected() {
+    connectedAt = std::chrono::steady_clock::now();
     SendPacket_Handshake();
     RegisterHooks();
 
@@ -36,7 +56,13 @@ void Anchor::OnConnected() {
     }
 }
 
+// The server closes the older session when a second one arrives with the same clientId; reconnect as a new client.
 void Anchor::OnDisconnected() {
+    constexpr auto TakeoverWindow = std::chrono::seconds(10);
+    if (std::chrono::steady_clock::now() - connectedAt < TakeoverWindow) {
+        SPDLOG_WARN("[Anchor] Closed right after connecting; another client is using id {}", ownClientId);
+        ownClientId = 0;
+    }
     RegisterHooks();
 }
 
@@ -129,6 +155,8 @@ void Anchor::ProcessIncomingPacketQueue() {
             // packetType here is a string so we can't use a switch statement
             if (packetType == ALL_CLIENT_STATE)
                 HandlePacket_AllClientState(payload);
+            else if (packetType == CUSTOM_PROGRESS)
+                HandlePacket_CustomProgress(payload);
             else if (packetType == DAMAGE_PLAYER)
                 HandlePacket_DamagePlayer(payload);
             else if (packetType == DISABLE_ANCHOR)
@@ -139,6 +167,8 @@ void Anchor::ProcessIncomingPacketQueue() {
                 HandlePacket_GameComplete(payload);
             else if (packetType == GIVE_ITEM)
                 HandlePacket_GiveItem(payload);
+            else if (packetType == MOD_PACKET)
+                HandlePacket_ModPacket(payload);
             else if (packetType == OCARINA_SFX)
                 HandlePacket_OcarinaSfx(payload);
             else if (packetType == PLAYER_UPDATE)
@@ -194,6 +224,41 @@ uint32_t Anchor::GetDummyPlayerClientId(const Actor* actor) {
 
 void Anchor::SetDummyPlayerClientId(const Actor* actor, uint32_t clientId) {
     ObjectExtension::GetInstance().Set<DummyPlayerClientId>(actor, DummyPlayerClientId{ clientId });
+}
+
+void Anchor::HandlePacket_ModPacket(nlohmann::json payload) {
+    ModNetwork_Deliver(payload.at("clientId").get<uint32_t>(), payload.at("channel").get<std::string>(),
+                       payload.value("ver", (uint16_t)0), payload.at("kind").get<std::string>(),
+                       payload.value("data", std::string()));
+}
+
+AnchorClient* Anchor::FindDummyPlayerClient(const Actor* actor) {
+    const uint32_t clientId = GetDummyPlayerClientId(actor);
+    if (clientId == 0) {
+        return nullptr;
+    }
+    auto client = clients.find(clientId);
+    return client == clients.end() ? nullptr : &client->second;
+}
+
+bool Anchor::GetPlayerColor(const Actor* actor, Color_RGB8* color) {
+    if (!isConnected || actor == nullptr || color == nullptr || gPlayState == nullptr) {
+        return false;
+    }
+    if (actor == &GET_PLAYER(gPlayState)->actor) {
+        *color = CVarGetColor24(CVAR_REMOTE_ANCHOR("Color.Value"), { 100, 255, 100 });
+        return true;
+    }
+    const AnchorClient* client = FindDummyPlayerClient(actor);
+    if (client == nullptr) {
+        return false;
+    }
+    *color = client->color;
+    return true;
+}
+
+extern "C" bool Anchor_GetPlayerColor(const Actor* actor, Color_RGB8* color) {
+    return Anchor::Instance != nullptr && Anchor::Instance->GetPlayerColor(actor, color);
 }
 
 void Anchor::RefreshClientActors() {

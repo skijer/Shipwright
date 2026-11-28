@@ -38,6 +38,31 @@ void func_800DDE3C(void) {
     gAudioContext.unk_3520[0] = 0.0f;
 }
 
+// SOH [Unbound] Set on the game thread when a mod quest's world swaps the audio files, read by the audio thread at
+// the next reset: permanent fonts point into the old files, so the permanent pool goes and everything reloads.
+static volatile bool sShouldDropPermanentCache;
+
+void AudioHeap_DropPermanentCacheAtReset(void) {
+    sShouldDropPermanentCache = true;
+}
+
+static void AudioHeap_DropPermanentCache(void) {
+    s32 i;
+
+    sShouldDropPermanentCache = false;
+    gAudioContext.permanentPool.cur = gAudioContext.permanentPool.start;
+    gAudioContext.permanentPool.count = 0;
+    for (i = 0; i < fontMapSize; i++) {
+        gAudioContext.fontLoadStatus[i] = 0;
+    }
+    for (i = 0; i < ARRAY_COUNT(gAudioContext.sampleFontLoadStatus); i++) {
+        gAudioContext.sampleFontLoadStatus[i] = 0;
+    }
+    for (i = 0; i < sequenceMapSize + 0xF; i++) {
+        gAudioContext.seqLoadStatus[i] = 0;
+    }
+}
+
 void AudioHeap_ResetLoadStatus(void) {
     s32 i;
 
@@ -534,6 +559,14 @@ void* AudioHeap_AllocCached(s32 tableType, ptrdiff_t size, s32 cache, s32 id) {
         return ret;
     }
 
+    // SOH [Bugfix] Bound entries[] (see AudioHeap_AllocPermanent); CACHE_EITHER falls back to temporary.
+    if (loadedPool->persistent.numEntries >= ARRAY_COUNT(loadedPool->persistent.entries)) {
+        if (cache == CACHE_EITHER) {
+            return AudioHeap_AllocCached(tableType, size, CACHE_TEMPORARY, id);
+        }
+        return NULL;
+    }
+
     mem = AudioHeap_Alloc(&loadedPool->persistent.pool, size);
     loadedPool->persistent.entries[loadedPool->persistent.numEntries].ptr = mem;
 
@@ -777,6 +810,9 @@ s32 AudioHeap_ResetStep(void) {
             break;
 
         case 1:
+            if (sShouldDropPermanentCache) {
+                AudioHeap_DropPermanentCache();
+            }
             AudioHeap_Init();
             gAudioContext.resetStatus = 0;
             for (i = 0; i < 3; i++) {
@@ -1011,6 +1047,12 @@ void* AudioHeap_AllocPermanent(s32 tableType, s32 id, size_t size) {
 
     index = gAudioContext.permanentPool.count;
 
+    // SOH [Bugfix] Bound permanentCache: large custom-music packs overflowed it and corrupted
+    // gAudioContext (crashed the audio thread). Refuse rather than corrupt memory; callers handle NULL.
+    if (index >= ARRAY_COUNT(gAudioContext.permanentCache)) {
+        return NULL;
+    }
+
     ret = AudioHeap_Alloc(&gAudioContext.permanentPool, size);
     gAudioContext.permanentCache[index].ptr = ret;
     if (ret == NULL) {
@@ -1134,6 +1176,10 @@ SampleCacheEntry* AudioHeap_AllocTemporarySampleCacheEntry(size_t size) {
     }
 
     if (index == -1) {
+        // SOH [Bugfix] Bound entries[] (see AudioHeap_AllocPermanent); callers treat NULL as uncached.
+        if (pool->size >= ARRAY_COUNT(pool->entries)) {
+            return NULL;
+        }
         index = pool->size++;
     }
 
@@ -1210,6 +1256,10 @@ SampleCacheEntry* AudioHeap_AllocPersistentSampleCacheEntry(size_t size) {
     void* mem;
 
     pool = &gAudioContext.persistentSampleCache;
+    // SOH [Bugfix] Bound entries[] (see AudioHeap_AllocPermanent).
+    if (pool->size >= ARRAY_COUNT(pool->entries)) {
+        return NULL;
+    }
     mem = AudioHeap_Alloc(&pool->pool, size);
     if (mem == NULL) {
         return NULL;

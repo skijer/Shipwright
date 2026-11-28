@@ -1,11 +1,17 @@
 #include "location_access.h"
 
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/entrance.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
+#include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
+#include <algorithm>
+#include <cassert>
 #include <fstream>
+#include <set>
+#include <spdlog/spdlog.h>
 #include <soh/OTRGlobals.h>
 
 #include "3drando/shops.hpp"
@@ -16,7 +22,18 @@ extern PlayState* gPlayState;
 // generic grotto event list
 std::vector<EventAccess> grottoEvents;
 
-bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time) {
+// Set by LocationAccess::ConditionsMet: conditions take no arguments, and an enemy drop is judged by where it is seen.
+static RandomizerRegion sEvaluatedRegion = RR_NONE;
+
+bool HasCheckEnemySoul(RandomizerCheck check) {
+    const Rando::Location* location = Rando::StaticData::GetLocation(check);
+    if (location == nullptr || location->GetRCType() != RCTYPE_SKULL_TOKEN) {
+        return true;
+    }
+    return logic->HasEnemySoul(RE_GOLD_SKULLTULA);
+}
+
+bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time, SceneID scene) {
     logic->IsChild = false;
     logic->IsAdult = false;
     logic->AtDay = false;
@@ -25,7 +42,7 @@ bool EventAccess::CheckConditionAtAgeTime(bool& age, bool& time) {
     time = true;
     age = true;
 
-    return ConditionsMet();
+    return ConditionsMet(scene);
 }
 
 // set the logic to be a specific age and time of day and see if the condition still holds
@@ -46,6 +63,7 @@ bool LocationAccess::ConditionsMet(Region* parentRegion, bool calculatingAvailab
     // When refactoring ToD access, either fix the above or do not assume that we
     // have any access at all just because this is being run
     bool conditionsMet = false;
+    sEvaluatedRegion = parentRegion->randomizerRegionKey;
 
     if ((parentRegion->childDay && CheckConditionAtAgeTime(logic->IsChild, logic->AtDay)) ||
         (parentRegion->childNight && CheckConditionAtAgeTime(logic->IsChild, logic->AtNight)) ||
@@ -153,6 +171,7 @@ std::set<RandomizerArea> CalculateAreas(SceneID scene) {
         case SCENE_GERUDO_TRAINING_GROUND:
             return { RA_GERUDO_TRAINING_GROUND };
         case SCENE_THIEVES_HIDEOUT:
+            return { RA_THIEVES_HIDEOUT };
         case SCENE_GERUDOS_FORTRESS:
             return { RA_GERUDO_FORTRESS };
         case SCENE_MARKET_ENTRANCE_DAY:
@@ -456,10 +475,10 @@ bool Region::UpdateEvents() {
             continue;
         }
 
-        if ((childDay && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtDay)) ||
-            (childNight && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtNight)) ||
-            (adultDay && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtDay)) ||
-            (adultNight && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtNight))) {
+        if ((childDay && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtDay, scene)) ||
+            (childNight && event.CheckConditionAtAgeTime(logic->IsChild, logic->AtNight, scene)) ||
+            (adultDay && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtDay, scene)) ||
+            (adultNight && event.CheckConditionAtAgeTime(logic->IsAdult, logic->AtNight, scene))) {
             event.EventOccurred();
             eventsUpdated = true;
         }
@@ -496,17 +515,10 @@ Rando::Entrance* Region::GetExit(RandomizerRegion exitToReturn) {
         }
     }
 
-    LUSLOG_ERROR("ERROR: EXIT \"%s\" DOES NOT EXIST IN \"%s\"", RegionTable(exitToReturn)->regionName.c_str(),
-                 this->regionName.c_str());
+    SPDLOG_ERROR("ERROR: EXIT \"{}\" DOES NOT EXIST IN \"{}\"", RegionTable(exitToReturn)->regionName,
+                 this->regionName);
     assert(false);
     return nullptr;
-}
-
-bool Region::CanPlantBeanCheck(RandomizerGet bean) const {
-    auto ctx = Rando::Context::GetInstance();
-    auto logic = ctx->GetLogic();
-    return logic->HasItem(bean) && logic->GetAmmo(ITEM_BEAN) > 0 &&
-           (ctx->GetOption(RSK_SKIP_PLANTING_BEANS) || BothAgesCheck());
 }
 
 bool Region::AllAccountedFor() const {
@@ -571,7 +583,7 @@ void Region::printAgeTimeAccess() {
                    std::to_string(adultNight);
 }
 
-std::array<Region, RR_MAX> areaTable;
+std::vector<Region> areaTable(RR_MAX);
 
 /*
     * This logic covers checks that exist in the shared areas of Spirit
@@ -622,36 +634,36 @@ std::array<Region, RR_MAX> areaTable;
 
 // clang-format off
 std::map<RandomizerRegion, SpiritLogicData> Region::spiritLogicData = {
-    //Vanilla Child uses ExplosiveKeyLogic here because they need to exist for shared adult checks 
+    //Vanilla Child uses ExplosiveKeyLogic here because they need to exist for shared adult checks
     {RR_SPIRIT_TEMPLE_SUN_ON_FLOOR_1F,       {5, 0, 3, 0,
                                                  []{return true;},
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_SUN_ON_FLOOR_2F,       {5, 0, 3, 0,
                                                  []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT);},
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_2F_MIRROR_ROOM,        {5, 0, 3, 0,
                                                  []{return false;},
                                                  []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT);},
-                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_STATUE_ROOM_CHILD,     {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_INNER_WEST_HAND,       {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->SpiritExplosiveKeyLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_GS_LEDGE,              {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && logic->SpiritWestToSkull() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->SpiritExplosiveKeyLogic() && logic->SpiritWestToSkull() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->SpiritWestToSkull() && ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_HOVER_BOOTS));},
+                                                 []{return logic->SpiritWestToSkull() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));},
                                              }},
     {RR_SPIRIT_TEMPLE_STATUE_ROOM,           {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic();},
@@ -676,57 +688,57 @@ std::map<RandomizerRegion, SpiritLogicData> Region::spiritLogicData = {
     {RR_SPIRIT_TEMPLE_STATUE_ROOM_ADULT,     {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && logic->CanUse(RG_HOOKSHOT) && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_INNER_LEFT_HAND,       {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && logic->CanUse(RG_HOOKSHOT) && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_SHORTCUT_SWITCH,       {5, 0, 3, 0,
                                                  []{return logic->SpiritExplosiveKeyLogic() && logic->CanUse(RG_HOOKSHOT) && logic->SpiritEastToSwitch();},
                                                  []{return logic->SpiritEastToSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->SpiritEastToSwitch() && (logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS));}}},
+                                                 []{return logic->SpiritEastToSwitch() && (logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));}}},
     //MQ
     {RR_SPIRIT_TEMPLE_MQ_UNDER_LIKE_LIKE,    {7, 6, 7, 7,
                                                  []{return logic->StatueRoomMQKeyLogic();},
                                                  []{return logic->SmallKeys(SCENE_SPIRIT_TEMPLE, 6) && logic->CanHitSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
-                                                 []{return logic->StatueRoomMQKeyLogic() && logic->CanHitSwitch() && ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_HOVER_BOOTS));},
+                                                 []{return logic->StatueRoomMQKeyLogic() && logic->CanHitSwitch() && ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_SUN_ON_FLOOR,       {7, 6, 7, 7,
                                                  []{return logic->StatueRoomMQKeyLogic() && logic->CanHitSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->SmallKeys(SCENE_SPIRIT_TEMPLE, 6) && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
-                                                 []{return logic->StatueRoomMQKeyLogic() && ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_HOVER_BOOTS));},
+                                                 []{return logic->StatueRoomMQKeyLogic() && ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM_CHILD,  {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT);},
-                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS);},
+                                                 []{return logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult);},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_POT_LEDGE,          {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && logic->MQSpiritWestToPots() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->MQSpiritWestToPots() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
-                                                 []{return logic->CanUse(RG_HOVER_BOOTS) || ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) && logic->MQSpiritWestToPots());},
+                                                 []{return logic->CanUse(RG_HOVER_BOOTS) || ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult)) && logic->MQSpiritWestToPots());},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_INNER_RIGHT_HAND,   {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && logic->MQSpiritWestToPots() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->MQSpiritWestToPots() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
-                                                 []{return logic->CanUse(RG_HOVER_BOOTS) || ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) && logic->MQSpiritWestToPots());},
+                                                 []{return logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult) || ((logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT)) && (logic->IsAdult || logic->CanJumpslash() || logic->BunnyHood()));},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_STATUE_ROOM,        {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
-                                                 []{return true;}, 
+                                                 []{return true;},
                                                  []{return true;},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_SUN_BLOCK_ROOM,     {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && logic->MQSpiritStatueToSunBlock() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT));},
                                                  []{return logic->MQSpiritStatueToSunBlock() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
-                                                 []{return logic->MQSpiritStatueToSunBlock() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS));},
+                                                 []{return logic->MQSpiritStatueToSunBlock() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_OUTER_RIGHT_HAND,   {7, 7, 4, 4,
                                                  []{return logic->CanHitSwitch() && logic->OuterWestHandMQLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && logic->HasItem(RG_POWER_BRACELET);},
-                                                 []{return logic->OuterWestHandMQLogic();},
-                                                 []{return logic->OuterWestHandMQLogic();},
+                                                 []{return logic->OuterWestHandMQLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT));},
+                                                 []{return logic->OuterWestHandMQLogic() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_HOOKSHOT) || logic->CanUse(RG_HOVER_BOOTS) || (logic->BunnyHood() && logic->CanJumpslash() && logic->IsAdult));},
                                              }},
     {RR_SPIRIT_TEMPLE_MQ_BIG_BLOCKS_DOOR,    {7, 0, 0, 0,
                                                  []{return logic->CanHitSwitch() && (logic->HasItem(RG_CLIMB) || logic->CanUse(RG_LONGSHOT)) && areaTable[RR_SPIRIT_TEMPLE_MQ_BIG_BLOCKS_DOOR].AnyAgeTime([]{return logic->MQSpiritStatueSouthDoor();});},
@@ -767,7 +779,7 @@ bool SpiritCertainAccess(RandomizerRegion region) {
     Spirit Shared can take up to 3 regions, this is because checks can exist in many regions at the same time
     and the logic needs to be able to check the access logic from those regions to check the other universes properly.
 
-    anyAge is equivalent to a self referencing Here, used for events and any check where that is relevent.
+    anyAge is equivalent to a self referencing Here, used for events and any check where that is relevant.
 */
 
 bool SpiritShared(RandomizerRegion region, ConditionFn condition, bool anyAge, RandomizerRegion otherRegion,
@@ -863,98 +875,204 @@ bool AnyAgeTime(ConditionFn condition) {
     return areaTable[logic->CurrentRegionKey].AnyAgeTime(condition);
 }
 
-bool BeanPlanted(const RandomizerGet bean) {
-    auto logic = Rando::Context::GetInstance()->GetLogic();
-    // flag irrelevant if plant won't spawn
-    if (!logic->HasItem(bean)) {
-        return false;
-    } else if (ctx->GetOption(RSK_SKIP_PLANTING_BEANS) && ctx->GetOption(RSK_STARTING_BEANS)) {
-        return true;
-    }
-
-    // swchFlag found using the Actor Viewer to get the Obj_Bean parameters & 0x3F
-    // not tested with multiple OTRs, but can be automated similarly to GetDungeonSmallKeyDoors
-    SceneID sceneID;
-    uint8_t swchFlag;
-    switch (bean) {
-        case RG_ZORAS_RIVER_BEAN_SOUL:
-            sceneID = SceneID::SCENE_ZORAS_RIVER;
-            swchFlag = 3;
-            break;
-        case RG_GRAVEYARD_BEAN_SOUL:
-            sceneID = SceneID::SCENE_GRAVEYARD;
-            swchFlag = 3;
-            break;
-        case RG_KOKIRI_FOREST_BEAN_SOUL:
-            sceneID = SceneID::SCENE_KOKIRI_FOREST;
-            swchFlag = 9;
-            break;
-        case RG_LOST_WOODS_BRIDGE_BEAN_SOUL:
-            sceneID = SceneID::SCENE_LOST_WOODS;
-            swchFlag = 4;
-            break;
-        case RG_LOST_WOODS_BEAN_SOUL:
-            sceneID = SceneID::SCENE_LOST_WOODS;
-            swchFlag = 18;
-            break;
-        case RG_DEATH_MOUNTAIN_TRAIL_BEAN_SOUL:
-            sceneID = SceneID::SCENE_DEATH_MOUNTAIN_TRAIL;
-            swchFlag = 6;
-            break;
-        case RG_LAKE_HYLIA_BEAN_SOUL:
-            sceneID = SceneID::SCENE_LAKE_HYLIA;
-            swchFlag = 1;
-            break;
-        case RG_GERUDO_VALLEY_BEAN_SOUL:
-            sceneID = SceneID::SCENE_GERUDO_VALLEY;
-            swchFlag = 3;
-            break;
-        case RG_DEATH_MOUNTAIN_CRATER_BEAN_SOUL:
-            sceneID = SceneID::SCENE_DEATH_MOUNTAIN_CRATER;
-            swchFlag = 3;
-            break;
-        case RG_DESERT_COLOSSUS_BEAN_SOUL:
-            sceneID = SceneID::SCENE_DESERT_COLOSSUS;
-            swchFlag = 24;
-            break;
-        default:
-            sceneID = SCENE_ID_MAX;
-            swchFlag = 0;
-            assert(false);
-            break;
-    }
-
-    // Get the swch value for the scene
-    uint32_t swch;
-    if (gPlayState != nullptr && gPlayState->sceneNum == sceneID) {
-        swch = gPlayState->actorCtx.flags.swch;
-    } else if (sceneID != SCENE_ID_MAX) {
-        swch = logic->GetSaveContext()->sceneFlags[sceneID].swch;
-    } else {
-        swch = 0;
-    }
-
-    return swch >> swchFlag & 1;
-}
-
-bool CanPlantBean(const RandomizerRegion region, const RandomizerGet bean) {
-    return areaTable[region].CanPlantBeanCheck(bean) || BeanPlanted(bean);
-}
-
-bool BothAges(const RandomizerRegion region) {
-    return areaTable[region].BothAgesCheck();
-}
-
-bool ChildCanAccess(const RandomizerRegion region) {
-    return areaTable[region].Child();
-}
-
-bool AdultCanAccess(const RandomizerRegion region) {
-    return areaTable[region].Adult();
+bool CanPlantBean(const RandomizerGet bean) {
+    auto ctx = Rando::Context::GetInstance();
+    auto logic = ctx->GetLogic();
+    return logic->HasItem(bean) && logic->GetAmmo(ITEM_BEAN) > 0 &&
+           (logic->IsChild || ctx->GetOption(RSK_SKIP_PLANTING_BEANS));
 }
 
 Rando::Context* ctx;
 std::shared_ptr<Rando::Logic> logic;
+
+// Where each drop's enemy spawns in the vanilla world. A replacement placed there by the enemy randomizer awards its
+// own kind's drop instead, and needs the spawn's age/time plus its own kill logic.
+struct EnemyDropSlot {
+    RandomizerRegion region;
+    int32_t original;
+    RandomizerCheck nativeDrop;
+    ConditionFn spawns;
+    ConditionFn killsOriginal;
+};
+
+constexpr int32_t kNeverReplaced = kNoLogicEnemy;
+
+#define DROP_SLOT(region, original, drop, spawns, killsOriginal)                    \
+    {                                                                               \
+        region, original, drop, [] { return spawns; }, [] { return killsOriginal; } \
+    }
+
+// clang-format off
+static const EnemyDropSlot kEnemyDropSlots[] = {
+    DROP_SLOT(RR_SPIRIT_TEMPLE_1F_ANUBIS, RE_ANUBIS, RC_ENEMY_DROP_ANUBIS, true, logic->CanKillNativeEnemy(RE_ANUBIS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, RE_ANUBIS, RC_ENEMY_DROP_ANUBIS, true, logic->CanKillNativeEnemy(RE_ANUBIS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_ARMOS_ROOM, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_BEHIND_MOUTH, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_BEAMOS_PITS, RE_BEAMOS, RC_ENEMY_DROP_BEAMOS, true, logic->CanKillNativeEnemy(RE_BEAMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_BEAMOS_PITS, RE_BEAMOS, RC_ENEMY_DROP_BEAMOS, true, logic->CanKillNativeEnemy(RE_BEAMOS)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_BIGOCTO, RE_BIG_OCTO, RC_ENEMY_DROP_BIG_OCTO, true, logic->CanKillNativeEnemy(RE_BIG_OCTO)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_BIGOCTO, RE_BIG_OCTO, RC_ENEMY_DROP_BIG_OCTO, true, logic->CanKillNativeEnemy(RE_BIG_OCTO)),
+    DROP_SLOT(RR_WATER_TEMPLE_DARK_LINK_ROOM, RE_DARK_LINK, RC_ENEMY_DROP_DARK_LINK, true, logic->CanKillNativeEnemy(RE_DARK_LINK)),
+    DROP_SLOT(RR_WATER_TEMPLE_MQ_DARK_LINK_ROOM, RE_DARK_LINK, RC_ENEMY_DROP_DARK_LINK, true, logic->CanKillNativeEnemy(RE_DARK_LINK)),
+    DROP_SLOT(RR_BOTW_DEAD_HAND_ROOM, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_BOTW_MQ_DEAD_HAND_ROOM, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_SHADOW_TEMPLE_DEAD_HAND, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_DEKU_TREE_LOBBY, RE_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_DEKU_BABA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_1F, RE_WITHERED_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_WITHERED_DEKU_BABA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_SLINGSHOT_ROOM, RE_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_DEKU_BABA)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_DODONGO_ROOM, RE_DODONGO, RC_ENEMY_DROP_DODONGO, true, logic->CanKillNativeEnemy(RE_DODONGO)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_DODONGO_ROOM, RE_DODONGO, RC_ENEMY_DROP_DODONGO, true, logic->CanKillNativeEnemy(RE_DODONGO)),
+    DROP_SLOT(RR_FIRE_TEMPLE_LOOP_FLARE_DANCER, RE_FLARE_DANCER, RC_ENEMY_DROP_FLARE_DANCER, true, logic->CanKillNativeEnemy(RE_FLARE_DANCER)),
+    DROP_SLOT(RR_FIRE_TEMPLE_MQ_LOOP_FLARE_DANCER, RE_FLARE_DANCER, RC_ENEMY_DROP_FLARE_DANCER, true, logic->CanKillNativeEnemy(RE_FLARE_DANCER)),
+    DROP_SLOT(RR_ICE_CAVERN_BEGINNING, RE_FREEZARD, RC_ENEMY_DROP_FREEZARD, true, logic->CanKillNativeEnemy(RE_FREEZARD)),
+    DROP_SLOT(RR_ICE_CAVERN_MQ_HUB, RE_FREEZARD, RC_ENEMY_DROP_FREEZARD, true, logic->CanKillNativeEnemy(RE_FREEZARD)),
+    DROP_SLOT(RR_LAKE_HYLIA, RE_GUAY, RC_ENEMY_DROP_GUAY, true, logic->CanKillNativeEnemy(RE_GUAY)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_ADULT_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_CHILD_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ADULT_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_SHADOW_TEMPLE_SKULL_JAR, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_DESERT_COLOSSUS, RE_LEEVER, RC_ENEMY_DROP_LEEVER, logic->IsAdult, logic->CanKillNativeEnemy(RE_LEEVER)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_LOWER_LIZALFOS, RE_LIZALFOS, RC_ENEMY_DROP_LIZALFOS, true, logic->CanKillNativeEnemy(RE_LIZALFOS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS, RE_LIZALFOS, RC_ENEMY_DROP_LIZALFOS, true, logic->CanKillNativeEnemy(RE_LIZALFOS)),
+    DROP_SLOT(RR_ZORAS_RIVER, RE_OCTOROK, RC_ENEMY_DROP_OCTOROK, true, logic->CanKillNativeEnemy(RE_OCTOROK)),
+    DROP_SLOT(RR_HYRULE_FIELD, RE_PEAHAT, RC_ENEMY_DROP_PEAHAT, logic->IsAdult && logic->AtDay, logic->CanKillNativeEnemy(RE_PEAHAT)),
+    DROP_SLOT(RR_FOREST_TEMPLE_LOBBY, kNeverReplaced, RC_ENEMY_DROP_POE_SISTER, true, logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)),
+    DROP_SLOT(RR_FOREST_TEMPLE_MQ_LOBBY, kNeverReplaced, RC_ENEMY_DROP_POE_SISTER, true, logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)),
+    DROP_SLOT(RR_KAK_REDEAD_GROTTO, RE_REDEAD, RC_ENEMY_DROP_REDEAD, true, logic->CanKillNativeEnemy(RE_REDEAD)),
+    DROP_SLOT(RR_DEKU_TREE_LOBBY_3F, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_BASEMENT_WATER_ROOM_BACK, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_BOTW_PERIMETER, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_BOTW_MQ_PERIMETER, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_WATER_TEMPLE_4_SPIKES_ROOM, RE_SPIKE, RC_ENEMY_DROP_SPIKE, true, logic->CanKillNativeEnemy(RE_SPIKE)),
+    DROP_SLOT(RR_WATER_TEMPLE_MQ_TOWER_TARGET_ROOM, RE_SPIKE, RC_ENEMY_DROP_SPIKE, true, logic->CanKillNativeEnemy(RE_SPIKE)),
+    DROP_SLOT(RR_HYRULE_FIELD, RE_STALCHILD, RC_ENEMY_DROP_STALCHILD, logic->IsChild && logic->AtNight, logic->CanKillNativeEnemy(RE_STALCHILD)),
+    DROP_SLOT(RR_FOREST_TEMPLE_LOWER_STALFOS, RE_STALFOS, RC_ENEMY_DROP_STALFOS, true, logic->CanKillNativeEnemy(RE_STALFOS)),
+    DROP_SLOT(RR_FOREST_TEMPLE_MQ_3_STALFOS_ROOM, RE_STALFOS, RC_ENEMY_DROP_STALFOS, true, logic->CanKillNativeEnemy(RE_STALFOS)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_EAST, RE_STINGER, RC_ENEMY_DROP_STINGER, true, logic->CanKillNativeEnemy(RE_STINGER)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_INVISIBLE_KEESE_ROOM, RE_STINGER, RC_ENEMY_DROP_STINGER, true, logic->CanKillNativeEnemy(RE_STINGER)),
+    DROP_SLOT(RR_DEATH_MOUNTAIN_TRAIL, RE_TEKTITE, RC_ENEMY_DROP_TEKTITE, true, logic->CanKillNativeEnemy(RE_TEKTITE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_NORTH, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_WEST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_FORK_EAST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_FORK_WEST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_FAKE_DOORS_ROOM, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_CHILD_SIDE_HUB, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_FIRE_TEMPLE_LOOP_HEXAGON_ROOM, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_SFM_ENTRYWAY, RE_WOLFOS, RC_ENEMY_DROP_WOLFOS, logic->IsChild, logic->CanKillNativeEnemy(RE_WOLFOS)),
+    DROP_SLOT(RR_SFM_WOLFOS_GROTTO, RE_WOLFOS, RC_ENEMY_DROP_WOLFOS, true, logic->CanKillNativeEnemy(RE_WOLFOS)),
+};
+// clang-format on
+
+static const EnemyLogicPlan* FindSlotPlan(const EnemyDropSlot& slot) {
+    return EnemyPlacement_FindLogicPlan(areaTable[slot.region].scene, slot.original);
+}
+
+static RandomizerCheck GetReplacementDrop(const PlannedReplacement& replacement) {
+    return Rando::StaticData::GetEnemyDropCheck(replacement.kind.actorId, replacement.kind.params);
+}
+
+// The drops the enemies at this slot can award in this seed: the native one while the original stays, plus the drop
+// of every kind the enemy randomizer put in its place.
+static std::vector<RandomizerCheck> ListSlotDrops(const EnemyDropSlot& slot) {
+    const EnemyLogicPlan* plan = FindSlotPlan(slot);
+    if (plan == nullptr) {
+        return { slot.nativeDrop };
+    }
+    std::vector<RandomizerCheck> drops;
+    if (plan->keepsOriginal) {
+        drops.push_back(slot.nativeDrop);
+    }
+    for (const PlannedReplacement& replacement : plan->replacements) {
+        RandomizerCheck drop = GetReplacementDrop(replacement);
+        if (drop != RC_UNKNOWN_CHECK) {
+            drops.push_back(drop);
+        }
+    }
+    return drops;
+}
+
+static bool CanGetDropAtSlot(const EnemyDropSlot& slot, RandomizerCheck drop) {
+    const EnemyLogicPlan* plan = FindSlotPlan(slot);
+    const bool keepsOriginal = plan == nullptr || plan->keepsOriginal;
+    if (keepsOriginal && slot.nativeDrop == drop && slot.spawns() && slot.killsOriginal()) {
+        return true;
+    }
+    if (plan == nullptr || !slot.spawns()) {
+        return false;
+    }
+    return std::any_of(plan->replacements.begin(), plan->replacements.end(),
+                       [drop](const PlannedReplacement& replacement) {
+                           return GetReplacementDrop(replacement) == drop &&
+                                  logic->CanKillReplacement(replacement, ED_CLOSE, true, 1, false, false);
+                       });
+}
+
+// The drop is awarded by the enemy's kind wherever it spawns, so it is judged at the region being evaluated.
+bool RegionTable_CanGetEnemyDropHere(RandomizerCheck drop) {
+    return std::any_of(std::begin(kEnemyDropSlots), std::end(kEnemyDropSlots), [drop](const EnemyDropSlot& slot) {
+        return slot.region == sEvaluatedRegion && CanGetDropAtSlot(slot, drop);
+    });
+}
+
+#define DROP_CONDITION(drop)                           \
+    {                                                  \
+        drop, [] { return RegionTable_CanGetEnemyDropHere(drop); } \
+    }
+
+static const std::pair<RandomizerCheck, ConditionFn> kEnemyDropConditions[] = {
+    DROP_CONDITION(RC_ENEMY_DROP_ANUBIS),       DROP_CONDITION(RC_ENEMY_DROP_ARMOS),
+    DROP_CONDITION(RC_ENEMY_DROP_BEAMOS),       DROP_CONDITION(RC_ENEMY_DROP_BIG_OCTO),
+    DROP_CONDITION(RC_ENEMY_DROP_DARK_LINK),    DROP_CONDITION(RC_ENEMY_DROP_DEAD_HAND),
+    DROP_CONDITION(RC_ENEMY_DROP_DEKU_BABA),    DROP_CONDITION(RC_ENEMY_DROP_DODONGO),
+    DROP_CONDITION(RC_ENEMY_DROP_FLARE_DANCER), DROP_CONDITION(RC_ENEMY_DROP_FREEZARD),
+    DROP_CONDITION(RC_ENEMY_DROP_GUAY),         DROP_CONDITION(RC_ENEMY_DROP_IRON_KNUCKLE),
+    DROP_CONDITION(RC_ENEMY_DROP_KEESE),        DROP_CONDITION(RC_ENEMY_DROP_LEEVER),
+    DROP_CONDITION(RC_ENEMY_DROP_LIZALFOS),     DROP_CONDITION(RC_ENEMY_DROP_OCTOROK),
+    DROP_CONDITION(RC_ENEMY_DROP_PEAHAT),       DROP_CONDITION(RC_ENEMY_DROP_POE_SISTER),
+    DROP_CONDITION(RC_ENEMY_DROP_REDEAD),       DROP_CONDITION(RC_ENEMY_DROP_SKULLTULA),
+    DROP_CONDITION(RC_ENEMY_DROP_SPIKE),        DROP_CONDITION(RC_ENEMY_DROP_STALCHILD),
+    DROP_CONDITION(RC_ENEMY_DROP_STALFOS),      DROP_CONDITION(RC_ENEMY_DROP_STINGER),
+    DROP_CONDITION(RC_ENEMY_DROP_TEKTITE),      DROP_CONDITION(RC_ENEMY_DROP_TENTACLE),
+    DROP_CONDITION(RC_ENEMY_DROP_TORCH_SLUG),   DROP_CONDITION(RC_ENEMY_DROP_WOLFOS),
+};
+
+static LocationAccess MakeEnemyDropAccess(RandomizerCheck drop) {
+    // A custom enemy's drop is a mod check, which the registry judges through RegionTable_CanGetEnemyDropHere.
+    if (DungeonRegistry_IsModCheck(drop)) {
+        return LocationAccess(
+            drop, [] { return true; }, "CanGetEnemyDropHere");
+    }
+    for (const auto& [check, condition] : kEnemyDropConditions) {
+        if (check == drop) {
+            return LocationAccess(drop, condition, "CanGetEnemyDropHere");
+        }
+    }
+    assert(false);
+    return LocationAccess(
+        drop, [] { return false; }, "false");
+}
+
+bool RegionTable_IsEnemyDropPlaced(RandomizerCheck drop) {
+    return std::any_of(std::begin(kEnemyDropSlots), std::end(kEnemyDropSlots), [drop](const EnemyDropSlot& slot) {
+        const std::vector<RandomizerCheck> drops = ListSlotDrops(slot);
+        return std::find(drops.begin(), drops.end(), drop) != drops.end();
+    });
+}
+
+static void RegionTable_AddEnemyDrops() {
+    std::set<std::pair<RandomizerRegion, RandomizerCheck>> added;
+    for (const EnemyDropSlot& slot : kEnemyDropSlots) {
+        for (RandomizerCheck drop : ListSlotDrops(slot)) {
+            if (added.insert({ slot.region, drop }).second) {
+                areaTable[slot.region].locations.push_back(MakeEnemyDropAccess(drop));
+            }
+        }
+    }
+}
 
 void RegionTable_Init() {
     using namespace Rando;
@@ -967,7 +1085,8 @@ void RegionTable_Init() {
     };
     // Clear the array from any previous playthrough attempts. This is important so that
     // locations which appear in both MQ and Vanilla dungeons don't get set in both areas.
-    areaTable.fill(Region("Invalid Region", SCENE_ID_MAX, {}, {}, {}));
+    // Sized once per init: entrances hold pointers into the regions, so the table must not reallocate later.
+    areaTable.assign(RR_MAX + DungeonRegistry_GetRegionCount(), Region("Invalid Region", SCENE_ID_MAX, {}, {}, {}));
 
     RegionTable_Init_Root();
     // Overworld
@@ -1006,9 +1125,11 @@ void RegionTable_Init() {
     RegionTable_Init_IceCavern();
     RegionTable_Init_GerudoTrainingGround();
     RegionTable_Init_GanonsCastle();
+    DungeonRegistry_AddRegions();
+    RegionTable_AddEnemyDrops();
 
     // Set parent regions
-    for (uint32_t i = RR_ROOT; i < RR_MAX; i++) {
+    for (uint32_t i = RR_ROOT; i < areaTable.size(); i++) {
         areaTable[i].randomizerRegionKey = (RandomizerRegion)i;
         for (LocationAccess& locPair : areaTable[i].locations) {
             RandomizerCheck location = locPair.GetLocation();
@@ -1020,6 +1141,8 @@ void RegionTable_Init() {
             exit.GetConnectedRegion()->entrances.push_front(&exit);
         }
     }
+
+    RandoLogic_IndexWorld();
 }
 
 void ReplaceFirstInString(std::string& s, std::string const& toReplace, std::string const& replaceWith) {
@@ -1061,17 +1184,15 @@ std::string CleanConditionString(std::string condition) {
 }
 
 namespace Regions {
-auto GetAllRegions() {
-    static const size_t regionCount = RR_MAX - (RR_NONE + 1);
+const std::vector<RandomizerRegion>& GetAllRegions() {
+    static std::vector<RandomizerRegion> allRegions;
 
-    static std::array<RandomizerRegion, regionCount> allRegions = {};
-
-    static bool initialized = false;
-    if (!initialized) {
+    const size_t regionCount = areaTable.size() - (RR_NONE + 1);
+    if (allRegions.size() != regionCount) {
+        allRegions.resize(regionCount);
         for (size_t i = 0; i < regionCount; i++) {
             allRegions[i] = (RandomizerRegion)((RR_NONE + 1) + i);
         }
-        initialized = true;
     }
 
     return allRegions;
@@ -1188,7 +1309,7 @@ void DumpWorldGraph(std::string str) {
 } // namespace Regions
 
 Region* RegionTable(const RandomizerRegion regionKey) {
-    assert(regionKey < RR_MAX);
+    assert(regionKey < areaTable.size());
     return &areaTable[regionKey];
 }
 

@@ -1,15 +1,11 @@
 #pragma once
-// SOH [Unbound] Key names and "$schema" ids of the JSON scene format, spelled out once for the loader factories
-// and the exporter (both in soh/soh/unbound/). The spec is unbound-docs/SPEC.md; a key that is not listed
-// here is not part of the format. Section numbers below refer to it.
 
 #include <cstddef>
 #include <string_view>
-#include "z64scene.h" // AnimatedMaterialType / ANIM_MAT_PASS_* for the material-animation tables below
+#include "z64scene.h"
 
 namespace SOH::Unbound::Schema {
 
-// "$schema" is "<type>/<version>"; the type half is the LUS resource type name the factory registers under.
 inline constexpr const char* kSceneType = "unbound/scene";
 inline constexpr const char* kRoomType = "unbound/room";
 inline constexpr const char* kCollisionType = "unbound/collision";
@@ -18,21 +14,18 @@ inline constexpr const char* kTextType = "unbound/text";
 inline constexpr const char* kSceneV1 = "unbound/scene/1";
 inline constexpr const char* kRoomV1 = "unbound/room/1";
 inline constexpr const char* kCollisionV3 = "unbound/collision/3";
-inline constexpr int kCollisionVersion = 3; // the only collision.json version this build reads
+inline constexpr int kCollisionVersion = 3;
 inline constexpr const char* kPathsV1 = "unbound/paths/1";
 inline constexpr const char* kTextV1 = "unbound/text/1";
 
-// Reserved keys (merge rules, §3)
 inline constexpr const char* kSchema = "$schema";
 inline constexpr const char* kOrder = "$order";
 inline constexpr const char* kReplace = "$replace";
 
-// Document top level (§4.2, §4.3)
 inline constexpr const char* kSetups = "setups";
 inline constexpr const char* kRooms = "rooms";
 inline constexpr const char* kCollision = "collision";
 
-// Setup keys, one per scene command (§4.2, §4.3)
 inline constexpr const char* kSpecialObjects = "specialObjects";
 inline constexpr const char* kSkybox = "skybox";
 inline constexpr const char* kSound = "sound";
@@ -55,7 +48,6 @@ inline constexpr const char* kActors = "actors";
 inline constexpr const char* kMesh = "mesh";
 inline constexpr const char* kMaterialAnims = "materialAnims";
 
-// Material-animation entry (§4.2). `kType`, `kWidth`, `kHeight` and `kLayers` are shared with other entries.
 inline constexpr const char* kSegment = "segment";
 inline constexpr const char* kPass = "pass";
 inline constexpr const char* kPassOpa = "opa";
@@ -78,8 +70,6 @@ inline constexpr const char* kAnimColorLerp = "colorLerp";
 inline constexpr const char* kAnimColorNonLinear = "colorNonLinear";
 inline constexpr const char* kAnimTexCycle = "texCycle";
 
-// The `type` and `pass` vocabularies as name<->id tables, so the reader and the exporter scan the same list
-// in opposite directions and a new type is added in one place.
 struct NamedId {
     const char* name;
     int id;
@@ -97,7 +87,6 @@ inline constexpr NamedId kAnimPasses[] = {
     { kPassXlu, ANIM_MAT_PASS_XLU },
     { kPassBoth, ANIM_MAT_PASS_OPA | ANIM_MAT_PASS_XLU },
 };
-// -1 when `name` is not in the table.
 template <size_t N> constexpr int IdOf(const NamedId (&table)[N], std::string_view name) {
     for (const NamedId& e : table) {
         if (name == e.name) {
@@ -106,7 +95,6 @@ template <size_t N> constexpr int IdOf(const NamedId (&table)[N], std::string_vi
     }
     return -1;
 }
-// nullptr when `id` is not in the table.
 template <size_t N> constexpr const char* NameOf(const NamedId (&table)[N], int id) {
     for (const NamedId& e : table) {
         if (id == e.id) {
@@ -116,7 +104,6 @@ template <size_t N> constexpr const char* NameOf(const NamedId (&table)[N], int 
     return nullptr;
 }
 
-// Entity fields
 inline constexpr const char* kId = "id";
 inline constexpr const char* kPos = "pos";
 inline constexpr const char* kRot = "rot";
@@ -140,7 +127,6 @@ inline constexpr const char* kUnk = "unk";
 inline constexpr const char* kSeq = "seq";
 inline constexpr const char* kNatureAmbience = "natureAmbience";
 inline constexpr const char* kReverb = "reverb";
-// SOH [Unbound] `sound.song`: the archive path of a custom (`custom/music/*`) sequence bound to the scene.
 inline constexpr const char* kSong = "song";
 inline constexpr const char* kCameraMovement = "cameraMovement";
 inline constexpr const char* kWorldMapArea = "worldMapArea";
@@ -156,7 +142,6 @@ inline constexpr const char* kVertical = "vertical";
 inline constexpr const char* kSouth = "south";
 inline constexpr const char* kSpeed = "speed";
 
-// Lighting entry (§4.2)
 inline constexpr const char* kAmbient = "ambient";
 inline constexpr const char* kLight1Dir = "light1Dir";
 inline constexpr const char* kLight1Color = "light1Color";
@@ -171,7 +156,6 @@ inline constexpr const char* kDrawDistance = "drawDistance";
 inline constexpr const char* kNearPlane = "nearPlane";
 inline constexpr const char* kFogBlendRate = "fogBlendRate";
 
-// Mesh (§4.3)
 inline constexpr const char* kEntries = "entries";
 inline constexpr const char* kOpa = "opa";
 inline constexpr const char* kXlu = "xlu";
@@ -189,7 +173,6 @@ inline constexpr const char* kTlutCount = "tlutCount";
 inline constexpr const char* kUnk00 = "unk00";
 inline constexpr const char* kUnk0C = "unk0C";
 
-// Collision (§4.4)
 inline constexpr const char* kBounds = "bounds";
 inline constexpr const char* kMin = "min";
 inline constexpr const char* kMax = "max";
@@ -226,10 +209,8 @@ inline constexpr const char* kZMin = "zMin";
 inline constexpr const char* kXLength = "xLength";
 inline constexpr const char* kZLength = "zLength";
 
-// Paths (§4.5)
 inline constexpr const char* kPoints = "points";
 
-// Text (§5): text/<lang>/messages.json
 inline constexpr const char* kMessagesPathPrefix = "text/";
 inline constexpr const char* kMessagesPathSuffix = "/messages.json";
 inline constexpr const char* kMessages = "messages";
@@ -237,7 +218,6 @@ inline constexpr const char* kBox = "box";
 inline constexpr const char* kYPos = "ypos";
 inline constexpr const char* kText = "text";
 
-// Scene registry (§7): unbound/scenes.json
 inline constexpr const char* kRegistryPath = "unbound/scenes.json";
 inline constexpr const char* kName = "name";
 inline constexpr const char* kScene = "scene";
@@ -253,7 +233,29 @@ inline constexpr const char* kLayers = "layers";
 inline constexpr const char* kHorse = "horse";
 inline constexpr const char* kAngle = "angle";
 
-// Manifest (§6)
+inline constexpr const char* kActorRegistryDir = "unbound/actors/";
+inline constexpr const char* kModel = "model";
+inline constexpr const char* kTalk = "talk";
+inline constexpr const char* kLook = "look";
+inline constexpr const char* kSkeleton = "skeleton";
+inline constexpr const char* kAnimation = "animation";
+inline constexpr const char* kFrame = "frame";
+inline constexpr const char* kDisplayList = "displayList";
+inline constexpr const char* kTranslucent = "translucent";
+inline constexpr const char* kScale = "scale";
+inline constexpr const char* kYOffset = "yOffset";
+inline constexpr const char* kSegments = "segments";
+inline constexpr const char* kHideLimbs = "hideLimbs";
+inline constexpr const char* kShadow = "shadow";
+inline constexpr const char* kCullRadius = "cullRadius";
+inline constexpr const char* kYShift = "yShift";
+inline constexpr const char* kMessage = "message";
+inline constexpr const char* kRange = "range";
+inline constexpr const char* kLimb = "limb";
+inline constexpr const char* kPivot = "pivot";
+inline constexpr const char* kTurnAxis = "turnAxis";
+inline constexpr const char* kNodAxis = "nodAxis";
+
 inline constexpr const char* kManifestPath = "unbound.json";
 inline constexpr const char* kFormatName = "format";
 inline constexpr const char* kFormatVersion = "formatVersion";
@@ -265,5 +267,7 @@ inline constexpr const char* kConverter = "converter";
 inline constexpr const char* kFeatures = "features";
 inline constexpr const char* kRequires = "requires";
 inline constexpr int kCurrentFormatVersion = 2;
+inline constexpr const char* kBaseVersion = "baseVersion";
+inline constexpr int kCurrentBaseVersion = 1;
 
 } // namespace SOH::Unbound::Schema

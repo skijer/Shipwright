@@ -7,6 +7,15 @@
 
 s32 gZeldaArenaLogSeverity = LOG_SEVERITY_ERROR;
 Arena sZeldaArena;
+static uintptr_t sZeldaArenaStart;
+static uintptr_t sZeldaArenaEnd;
+
+// The bounds let a checker walk the block headers without trusting them.
+void ZeldaArena_GetExtent(Arena** arena, uintptr_t* start, uintptr_t* end) {
+    *arena = &sZeldaArena;
+    *start = sZeldaArenaStart;
+    *end = sZeldaArenaEnd;
+}
 
 void ZeldaArena_CheckPointer(void* ptr, size_t size, const char* name, const char* action) {
     if (ptr == NULL) {
@@ -98,6 +107,8 @@ void ZeldaArena_Check() {
 void ZeldaArena_Init(void* start, size_t size) {
     gZeldaArenaLogSeverity = LOG_SEVERITY_NOLOG;
     __osMallocInit(&sZeldaArena, start, size);
+    sZeldaArenaStart = (uintptr_t)start;
+    sZeldaArenaEnd = (uintptr_t)start + size;
 }
 
 void ZeldaArena_Cleanup() {

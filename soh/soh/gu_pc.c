@@ -2,8 +2,6 @@
 #include <string.h>
 #include "z64.h"
 
-// SOH [Unbound] Mtx is float (GBI_FLOAT_MTX in libultraship fast/types.h): the s16.16 pack/unpack that wrapped
-// translations >= 32768 becomes a copy. See unbound-docs/extent.md.
 void guMtxF2L(float mf[4][4], Mtx* m) {
     memcpy(m->mf, mf, sizeof(m->mf));
 }

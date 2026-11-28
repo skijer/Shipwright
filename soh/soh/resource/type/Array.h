@@ -65,7 +65,6 @@ enum class ArrayResourceType {
     Audio
 };
 
-// Scalar and Vector arrays. A Vertex array loads as a Fast::Vertex instead (ArrayFactory).
 class Array : public Ship::Resource<void> {
   public:
     using Resource::Resource;

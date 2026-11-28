@@ -8,7 +8,7 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/logic.h"
-#include "soh/Enhancements/randomizer/dungeon.h"
+#include "soh/ModApi/RandoLogic/RandoLogic.h"
 
 #define TIME_PASSES true
 #define TIME_DOESNT_PASS false
@@ -32,15 +32,15 @@ class EventAccess {
         : event(event_), event_str(event_str_), condition_function(condition_function_), condition_str(condition_str_) {
     }
 
-    bool ConditionsMet() const {
+    bool ConditionsMet(SceneID scene) const {
         auto ctx = Rando::Context::GetInstance();
-        if (ctx->GetOption(RSK_LOGIC_RULES).Is(RO_LOGIC_GLITCHLESS)) {
-            return condition_function();
+        if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
+            return RandoLogic_EvaluateEvent(event, scene, condition_str, condition_function);
         }
         return true;
     }
 
-    bool CheckConditionAtAgeTime(bool& age, bool& time);
+    bool CheckConditionAtAgeTime(bool& age, bool& time, SceneID scene);
 
     void EventOccurred() {
         logic->Set(event, true);
@@ -48,6 +48,10 @@ class EventAccess {
 
     bool GetEvent() const {
         return logic->Get(event);
+    }
+
+    LogicVal GetEventKey() const {
+        return event;
     }
 
     const std::string& GetEventStr() const {
@@ -67,6 +71,8 @@ class EventAccess {
 
 std::string CleanConditionString(std::string condition);
 
+bool HasCheckEnemySoul(RandomizerCheck check);
+
 #define LOCATION(check, condition) \
     LocationAccess(                \
         check, [] { return condition; }, CleanConditionString(#condition))
@@ -85,8 +91,9 @@ class LocationAccess {
 
     bool GetConditionsMet() const {
         auto ctx = Rando::Context::GetInstance();
-        if (ctx->GetOption(RSK_LOGIC_RULES).Is(RO_LOGIC_GLITCHLESS)) {
-            return condition_function();
+        if (ctx->GetOption(RSK_NO_LOGIC).Is(RO_GENERIC_OFF)) {
+            return HasCheckEnemySoul(location) &&
+                   RandoLogic_EvaluateLocation(location, condition_str, condition_function);
         }
         return true;
     }
@@ -192,10 +199,6 @@ class Region {
         return adultDay || adultNight;
     }
 
-    bool BothAgesCheck() const {
-        return Child() && Adult();
-    }
-
     bool HasAccess() const {
         return Child() || Adult();
     }
@@ -247,7 +250,6 @@ class Region {
         return hereVal;
     }
 
-    bool CanPlantBeanCheck(RandomizerGet bean) const;
     bool AllAccountedFor() const;
 
     void ResetVariables();
@@ -256,7 +258,7 @@ class Region {
     static std::map<RandomizerRegion, SpiritLogicData> spiritLogicData;
 };
 
-extern std::array<Region, RR_MAX> areaTable;
+extern std::vector<Region> areaTable;
 extern std::vector<EventAccess> grottoEvents;
 
 bool AnyAgeTime(ConditionFn condition);
@@ -266,10 +268,7 @@ bool SpiritShared(
     ConditionFn thirdCondition = [] { return false; });
 bool SpiritCertainAccess(RandomizerRegion region);
 bool DMCPadToPots();
-bool CanPlantBean(const RandomizerRegion region, RandomizerGet bean);
-bool BothAges(const RandomizerRegion region);
-bool ChildCanAccess(const RandomizerRegion region);
-bool AdultCanAccess(const RandomizerRegion region);
+bool CanPlantBean(RandomizerGet bean);
 
 namespace Regions {
 extern void AccessReset();
@@ -280,6 +279,9 @@ extern void DumpWorldGraph(std::string str);
 
 void RegionTable_Init();
 Region* RegionTable(const RandomizerRegion regionKey);
+// False when the drop's enemy spawns in no slot the logic knows this seed, so the check can never be reached.
+bool RegionTable_IsEnemyDropPlaced(RandomizerCheck drop);
+bool RegionTable_CanGetEnemyDropHere(RandomizerCheck drop);
 std::vector<Rando::Entrance*> GetShuffleableEntrances(Rando::EntranceType type, bool onlyPrimary = true);
 Rando::Entrance* GetEntrance(RandomizerRegion source, RandomizerRegion destination);
 

@@ -11,6 +11,7 @@
 #include "vt.h"
 #include "soh/frame_interpolation.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/ModApi/BossSuperDamage/BossSuperDamage.h"
 
 #define FLAGS                                                                                 \
     (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED | \
@@ -253,7 +254,7 @@ void BossFd2_Emerge(BossFd2* this, PlayState* play) {
                 bossFd->faceExposed = 0;
                 bossFd->holePosition.x = this->actor.world.pos.x;
                 bossFd->holePosition.z = this->actor.world.pos.z;
-                func_80033E1C(play, 1, 0x32, 0x5000);
+                Actor_RequestQuakeWithSpeed(play, 1, 0x32, 0x5000);
                 this->work[FD2_ACTION_STATE] = 1;
                 this->work[FD2_HOLE_COUNTER]++;
                 this->actor.world.pos.y = -200.0f;
@@ -304,7 +305,7 @@ void BossFd2_Emerge(BossFd2* this, PlayState* play) {
         case 2:
             Math_ApproachS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 3, 0x7D0);
             if ((this->timers[0] == 1) && (this->actor.xzDistToPlayer < 120.0f)) {
-                func_8002F6D4(play, &this->actor, 3.0f, this->actor.yawTowardsPlayer, 2.0f, 0x20);
+                Actor_SetPlayerKnockbackLarge(play, &this->actor, 3.0f, this->actor.yawTowardsPlayer, 2.0f, 0x20);
                 Audio_PlayActorSound2(&player->actor, NA_SE_PL_BODY_HIT);
             }
             if (Animation_OnFrame(&this->skelAnime, this->fwork[FD2_END_FRAME])) {
@@ -651,7 +652,7 @@ void BossFd2_Death(BossFd2* this, PlayState* play) {
     Vec3f sp70;
     Vec3f sp64;
     BossFd* bossFd = (BossFd*)this->actor.parent;
-    Camera* mainCam = Play_GetCamera(play, MAIN_CAM);
+    Camera* mainCam = Play_GetCamera(play, CAM_ID_MAIN);
     f32 pad3;
     f32 pad2;
     f32 pad1;
@@ -665,7 +666,7 @@ void BossFd2_Death(BossFd2* this, PlayState* play) {
             func_80064520(play, &play->csCtx);
             Player_SetCsActionWithHaltedActors(play, &this->actor, 1);
             this->deathCamera = Play_CreateSubCamera(play);
-            Play_ChangeCameraStatus(play, MAIN_CAM, CAM_STAT_WAIT);
+            Play_ChangeCameraStatus(play, CAM_ID_MAIN, CAM_STAT_WAIT);
             Play_ChangeCameraStatus(play, this->deathCamera, CAM_STAT_ACTIVE);
             this->camData.eye = mainCam->eye;
             this->camData.at = mainCam->at;
@@ -728,7 +729,7 @@ void BossFd2_Death(BossFd2* this, PlayState* play) {
             }
             break;
         case DEATH_HANDOFF:
-            if (this->timers[0] == 0) {
+            if (GameInteractor_Should(VB_VOLVAGIA_DEATH_SCENE, this->timers[0] == 0, this)) {
                 this->actor.draw = NULL;
                 this->deathState = DEATH_FD_BODY;
                 bossFd->handoffSignal = FD2_SIGNAL_DEATH;
@@ -804,9 +805,59 @@ void BossFd2_Death(BossFd2* this, PlayState* play) {
     BossFd2_UpdateCamera(this, play);
 }
 
+static void BossFd2_Die(BossFd2* this, PlayState* play) {
+    BossFd* bossFd = (BossFd*)this->actor.parent;
+
+    bossFd->actor.colChkInfo.health = 0;
+    BossFd2_SetupDeath(this, play);
+    this->work[FD2_DAMAGE_FLASH_TIMER] = 10;
+    this->work[FD2_INVINC_TIMER] = 30000;
+    Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x100FF);
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_VALVAISA_DEAD);
+    Enemy_StartFinishingBlow(play, &this->actor);
+    GameInteractor_ExecuteOnBossDefeat(&this->actor);
+}
+
+// One super hit exposes the face and damages at once; each further hit keeps the exposed window open.
+static bool BossFd2_TakeSuperHit(BossFd2* this, PlayState* play) {
+    BossFd* bossFd = (BossFd*)this->actor.parent;
+
+    if (!BossSuperDamage_IsFormActive(play)) {
+        return false;
+    }
+    bool isFaceHit = this->collider.elements[0].info.bumperFlags & BUMP_HIT;
+    if (!isFaceHit && !BossSuperDamage_FormAttackReaches(play, &this->actor.focus.pos,
+                                                         BossSuperDamage_FormAttackRange(play) + 50.0f)) {
+        return false;
+    }
+    this->collider.elements[0].info.bumperFlags &= ~BUMP_HIT;
+    BossSuperDamage_StartElectricSparks(&this->actor, 90);
+    bossFd->faceExposed = true;
+    bossFd->actor.colChkInfo.health -= BossSuperDamage_FormDamage(play);
+    if ((s8)bossFd->actor.colChkInfo.health <= 0) {
+        BossFd2_Die(this, play);
+        return true;
+    }
+    if (this->actionFunc != BossFd2_Vulnerable) {
+        BossFd2_SetupVulnerable(this, play);
+    } else {
+        this->timers[0] = 60;
+    }
+    this->work[FD2_INVINC_TIMER] = 12;
+    this->work[FD2_DAMAGE_FLASH_TIMER] = 5;
+    Audio_PlayActorSound2(&this->actor, NA_SE_EN_VALVAISA_DAMAGE1);
+    return true;
+}
+
 void BossFd2_Wait(BossFd2* this, PlayState* play) {
     BossFd* bossFd = (BossFd*)this->actor.parent;
 
+    // Boss_Fd hands the serpent killed in flight over here, the actor that owns the death cutscene.
+    if (bossFd->handoffSignal == FD2_SIGNAL_AIRKILL) {
+        bossFd->handoffSignal = FD2_SIGNAL_NONE;
+        BossFd2_Die(this, play);
+        return;
+    }
     if (bossFd->handoffSignal == FD2_SIGNAL_GROUND) {
         bossFd->handoffSignal = FD2_SIGNAL_NONE;
         BossFd2_SetupEmerge(this, play);
@@ -838,6 +889,9 @@ void BossFd2_CollisionCheck(BossFd2* this, PlayState* play) {
         this->collider.base.colType = COLTYPE_HIT3;
     }
 
+    if (BossFd2_TakeSuperHit(this, play)) {
+        return;
+    }
     if (this->collider.elements[0].info.bumperFlags & BUMP_HIT) {
         this->collider.elements[0].info.bumperFlags &= ~BUMP_HIT;
 
@@ -891,14 +945,7 @@ void BossFd2_CollisionCheck(BossFd2* this, PlayState* play) {
             osSyncPrintf("hp %d\n", bossFd->actor.colChkInfo.health);
 
             if ((s8)bossFd->actor.colChkInfo.health <= 0) {
-                bossFd->actor.colChkInfo.health = 0;
-                BossFd2_SetupDeath(this, play);
-                this->work[FD2_DAMAGE_FLASH_TIMER] = 10;
-                this->work[FD2_INVINC_TIMER] = 30000;
-                Audio_QueueSeqCmd(0x1 << 28 | SEQ_PLAYER_BGM_MAIN << 24 | 0x100FF);
-                Audio_PlayActorSound2(&this->actor, NA_SE_EN_VALVAISA_DEAD);
-                Enemy_StartFinishingBlow(play, &this->actor);
-                GameInteractor_ExecuteOnBossDefeat(&this->actor);
+                BossFd2_Die(this, play);
             } else if (damage) {
                 BossFd2_SetupDamaged(this, play);
                 this->work[FD2_DAMAGE_FLASH_TIMER] = 10;
@@ -1226,4 +1273,5 @@ void BossFd2_Draw(Actor* thisx, PlayState* play) {
         POLY_OPA_DISP = Play_SetFog(play, POLY_OPA_DISP);
     }
     CLOSE_DISPS(play->state.gfxCtx);
+    BossSuperDamage_DrawGlowFromSpheres(&this->actor, play, &this->collider, 9, 1.2f);
 }

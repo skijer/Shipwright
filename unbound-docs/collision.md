@@ -142,6 +142,12 @@ Memory impact on vanilla scenes: negligible (a few hundred KB moved from the are
   macros and the surface-type accessors; no logic change.
 - `soh/soh/Enhancements/Restorations/GraveHoleJumps.cpp` — builds its synthetic surface type
   through `SurfaceType_Unpack`.
+- `BgCheck_GetBgCamSettingImpl`, `func_80041B24`, `BgCheck_GetBgCamFuncDataImpl` (camera data of a poly's surface type) — also
+  return "none" for a header whose `cameraDataList` is NULL. Their existing test against
+  `PHYSICAL_TO_VIRTUAL(gSegments[0])` was meant to catch that, but on PC the pointer is never
+  translated, so a real NULL got through. Collision built in code with no camera data (an actor's
+  collision a mod builds, such as The Missing Link's tree bridge and lifts) crashed the camera as soon
+  as the player stood on it (crash without, none with, by the same run on macOS).
 
 ## Status
 

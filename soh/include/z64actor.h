@@ -10,7 +10,7 @@
 #include "z64actor_enum.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
-#define ACTOR_NUMBER_MAX 8192 // SOH [Unbound] was 2000
+#define ACTOR_NUMBER_MAX 8192
 #define INVISIBLE_ACTOR_MAX 20
 #define AM_FIELD_SIZE 0x27A0
 #define MASS_IMMOVABLE 0xFF // Cannot be pushed by OC collisions
@@ -209,16 +209,25 @@ typedef struct {
 // Flag controlling the use of `Actor.sfx`. Do not use directly. See Actor_PlaySfx_FlaggedTimer
 #define ACTOR_FLAG_SFX_TIMER (1 << 28)
 
+#define BGCHECKFLAG_GROUND (1 << 0) // Standing on the ground
+#define BGCHECKFLAG_GROUND_TOUCH (1 << 1) // Has touched the ground (only active for 1 frame)
+#define BGCHECKFLAG_GROUND_LEAVE (1 << 2) // Has left the ground (only active for 1 frame)
+#define BGCHECKFLAG_WALL (1 << 3) // Touching a wall
+#define BGCHECKFLAG_CEILING (1 << 4) // Touching a ceiling
+#define BGCHECKFLAG_WATER (1 << 5) // In water
+#define BGCHECKFLAG_WATER_TOUCH (1 << 6) // Has touched water (reset when leaving water)
+#define BGCHECKFLAG_GROUND_STRICT (1 << 7) // Strictly on ground (BGCHECKFLAG_GROUND has some leeway)
+#define BGCHECKFLAG_CRUSHED (1 << 8) // Crushed between a floor and ceiling (triggers a void for player)
+#define BGCHECKFLAG_PLAYER_WALL_INTERACT (1 << 9) // Only set/used by player, related to interacting with walls
+
 typedef struct Actor {
     /* 0x000 */ s16 id; // Actor ID
     /* 0x002 */ u8 category; // Actor category. Refer to the corresponding enum for values
     /*       */ s16 room; // Room number the actor is in. -1 denotes that the actor won't despawn on a room change
-                          // SOH [Unbound] s8 -> s16
     /* 0x004 */ u32 flags; // Flags used for various purposes
     /* 0x008 */ PosRot home; // Initial position/rotation when spawned. Can be used for other purposes
     /* 0x01C */ s16 params; // Configurable variable set by the actor's spawn data; original name: "args_data"
     /*       */ s16 objBankIndex; // Object bank index of the actor's object dependency; original name: "bank"
-                                  // SOH [Unbound] s8 -> s16
     /* 0x01F */ s8 targetMode; // Controls how far the actor can be targeted from and how far it can stay locked on
     /* 0x020 */ u16 sfx; // SFX ID to play. Sound plays when value is set, then is cleared the following update cycle
     /* 0x024 */ PosRot world; // Position/rotation in the world
@@ -231,8 +240,8 @@ typedef struct Actor {
     /* 0x070 */ f32 minVelocityY; // Sets the lower bounds cap on velocity along the Y axis
     /* 0x074 */ CollisionPoly* wallPoly; // Wall polygon the actor is touching
     /* 0x078 */ CollisionPoly* floorPoly; // Floor polygon directly below the actor
-    /*       */ s32 wallBgId; // Bg ID of the wall polygon the actor is touching. SOH [Unbound] u8 -> s32
-    /*       */ s32 floorBgId; // Bg ID of the floor polygon directly below the actor. SOH [Unbound] u8 -> s32
+    /*       */ s32 wallBgId; // Bg ID of the wall polygon the actor is touching.
+    /*       */ s32 floorBgId; // Bg ID of the floor polygon directly below the actor.
     /* 0x07E */ s16 wallYaw; // Y rotation of the wall polygon the actor is touching
     /* 0x080 */ f32 floorHeight; // Y position of the floor polygon directly below the actor
     /* 0x084 */ f32 yDistToWater; // Distance to the surface of active waterbox. Negative value means above water
@@ -268,13 +277,9 @@ typedef struct Actor {
     /* 0x134 */ ActorFunc draw; // Draw Routine. Called by `Actor_Draw`
     /* 0x138 */ ActorResetFunc reset;
     /* 0x13C */ char dbgPad[0x10]; // Padding that only exists in the debug rom
-    // SOH [Unbound] Index into transiActorCtx.list for transition actors (-1 otherwise). Replaces the
-    // 6-bit index packed into params, so a scene may have more than 64 transition actors.
     s16 transitionIndex;
 } Actor; // size = 0x14C
 
-// SOH [Unbound] Transition-actor list index; falls back to the vanilla params packing for actors spawned
-// outside Actor_SpawnTransitionActors (debugger, enhancements).
 #define TRANSITION_ACTOR_INDEX(actor) \
     (((actor)->transitionIndex >= 0) ? (s32)(actor)->transitionIndex : (s32)((u16)(actor)->params >> 0xA))
 
@@ -370,7 +375,8 @@ typedef enum {
     /* 0x1B */ ITEM00_SOH_DUMMY,
     /* 0x1C */ ITEM00_SOH_GIVE_ITEM_ENTRY,
     /* 0x1D */ ITEM00_SOH_GIVE_ITEM_ENTRY_GI,
-    /* 0x1E */ ITEM00_MAX,
+    /* 0x1E */ ITEM00_SOH_CUSTOM,
+    /* 0x1F */ ITEM00_MAX,
     /* 0xFF */ ITEM00_NONE = 0xFF
 } Item00Type;
 
@@ -481,5 +487,42 @@ typedef struct {
     /* 0x18 */ Vec3f trackPos;
     /* 0x24 */ char unk_24[0x4];
 } NpcInteractInfo; // size = 0x28
+
+// Converts a number of bits to a bitmask, helper for params macros
+// e.g. 3 becomes 0b111 (7)
+#define NBITS_TO_MASK(n) \
+    ((1 << (n)) - 1)
+
+// Extracts the `n`-bit value at position `s` in `p`, shifts then masks
+// Unsigned variant, no possibility of sign extension
+#define PARAMS_GET_U(p, s, n) \
+    (((p) >> (s)) & NBITS_TO_MASK(n))
+
+// Extracts the `n`-bit value at position `s` in `p`, masks then shifts
+// Signed variant, possibility of sign extension
+#define PARAMS_GET_S(p, s, n) \
+    (((p) & (NBITS_TO_MASK(n) << (s))) >> (s))
+
+// Extracts all bits past position `s` in `p`
+#define PARAMS_GET_NOMASK(p, s) \
+    ((p) >> (s))
+
+// Extracts the `n`-bit value at position `s` in `p` without shifting it from its current position
+#define PARAMS_GET_NOSHIFT(p, s, n) \
+    ((p) & (NBITS_TO_MASK(n) << (s)))
+
+// Moves the `n`-bit value `p` to bit position `s` for building actor parameters by OR-ing these together
+#define PARAMS_PACK(p, s, n) \
+    (((p) & NBITS_TO_MASK(n)) << (s))
+
+// Moves the value `p` to bit position `s` for building actor parameters by OR-ing these together.
+#define PARAMS_PACK_NOMASK(p, s) \
+    ((p) << (s))
+
+// Generates a bitmask for bit position `s` of length `n`
+#define PARAMS_MAKE_MASK(s, n) PARAMS_GET_NOSHIFT(~0, s, n)
+
+#define TRANSITION_ACTOR_PARAMS_INDEX_SHIFT 10
+#define GET_TRANSITION_ACTOR_INDEX(actor) TRANSITION_ACTOR_INDEX(actor)
 
 #endif

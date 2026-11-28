@@ -10,7 +10,6 @@
 #include "overlays/actors/ovl_Bg_Hidan_Curtain/z_bg_hidan_curtain.h"
 #include "vt.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
-#include "soh/ResourceManagerHelpers.h"
 
 #define FLAGS (ACTOR_FLAG_ATTENTION_ENABLED | ACTOR_FLAG_HOSTILE | ACTOR_FLAG_UPDATE_CULLING_DISABLED)
 
@@ -161,16 +160,12 @@ void EnAnubice_Destroy(Actor* thisx, PlayState* play) {
 
     Collider_DestroyCylinder(play, &this->collider);
 
-    if (this->actor.params != 0) {
-        if (this->actor.parent) {}
-
-        tag = (EnAnubiceTag*)this->actor.parent;
-        if (tag != NULL && tag->actor.update != NULL) {
-            tag->anubis = NULL;
-        }
+    // SOH [Bugfix] The tag spawns Anubis with params 0, so the vanilla params check never cleared the tag's pointer and
+    // the tag kept writing through it once Anubis was freed by anything other than its own death.
+    tag = (EnAnubiceTag*)this->actor.parent;
+    if (tag != NULL && tag->actor.id == ACTOR_EN_ANUBICE_TAG && tag->actor.update != NULL) {
+        tag->anubis = NULL;
     }
-
-    ResourceMgr_UnregisterSkeleton(&this->skelAnime);
 }
 
 void EnAnubice_FindFlameCircles(EnAnubice* this, PlayState* play) {
@@ -350,7 +345,7 @@ void EnAnubice_Die(EnAnubice* this, PlayState* play) {
     Actor_SetColorFilter(&this->actor, 0x4000, 128, 0, 8);
     EffectSsEnFire_SpawnVec3f(play, &this->actor, &fireEffectPos, 100, 0, 0, -1);
 
-    if ((this->animLastFrame <= curFrame) && (this->actor.bgCheckFlags & 1)) {
+    if ((this->animLastFrame <= curFrame) && (this->actor.bgCheckFlags & BGCHECKFLAG_GROUND)) {
         Math_ApproachF(&this->actor.shape.yOffset, -4230.0f, 0.5f, 300.0f);
         if (this->actor.shape.yOffset < -2000.0f) {
             Item_DropCollectibleRandom(play, &this->actor, &this->actor.world.pos, 0xC0);

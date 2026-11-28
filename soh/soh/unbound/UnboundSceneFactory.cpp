@@ -1,14 +1,9 @@
-// SOH [Unbound] scene.json / rooms/<n>.json -> SOH::Scene. Format: unbound-docs/SPEC.md §4.2, §4.3.
-//
-// BuildScene(doc)
-//   -> for each setup: BuildSetupCommands (one SetXxx builder per key, in the vanilla execution order)
-//   -> primary setup gets SetAlternateHeaders whose children are the other setups
-//   -> every setup gets the top-level SetRoomList / SetCollisionHeader injected (alt headers are
-//      executed instead of the primary list, so they must be self-contained)
 #include "UnboundFactories.h"
 #include "UnboundJson.h"
 #include "UnboundSchema.h"
+#include "soh/unbound/ActorRegistry.h"
 #include "soh/unbound/SceneDB.h"
+#include "soh/ActorDB.h"
 
 #include <libultraship/libultraship.h>
 #include <spdlog/spdlog.h>
@@ -65,8 +60,6 @@ namespace K = SOH::Unbound::Schema;
 namespace SOH {
 namespace {
 
-// ---- helpers -----------------------------------------------------------------------------------
-
 struct CommandBuilder {
     std::shared_ptr<Ship::ResourceInitData> sceneInit;
     std::string docPath;
@@ -86,7 +79,18 @@ struct CommandBuilder {
 };
 
 std::shared_ptr<Ship::IResource> LoadSub(const std::string& path) {
-    return Ship::Context::GetInstance()->GetResourceManager()->LoadResourceProcess(path.c_str());
+    return Ship::Context::GetRawInstance()->GetResourceManager()->LoadResourceProcess(path.c_str());
+}
+
+bool IsActorName(const Json& id) {
+    int64_t number = 0;
+    return id.is_string() && !SOH::Unbound::ParseIntString(id.get<std::string>(), number);
+}
+
+// Ids from kCustomActorIdBase up are assigned at load in registry order, so those actors are addressed by name only.
+// A negative number names no actor, and one far enough below zero would wrap into the custom range in the 16-bit id.
+bool IsStableActorId(int64_t id) {
+    return id >= 0 && id < SOH::Unbound::kCustomActorIdBase;
 }
 
 ActorEntry ReadActor(const Json& a) {
@@ -98,15 +102,12 @@ ActorEntry ReadActor(const Json& a) {
     return e;
 }
 
-// Cross-setup references, shared by every setup of one document.
 struct SharedRefs {
-    Json rooms;            // top-level "rooms" (scene docs)
-    std::string collision; // top-level "collision" (scene docs)
+    Json rooms;
+    std::string collision;
 };
 
 using Command = std::shared_ptr<ISceneCommand>;
-
-// ---- scalar settings ---------------------------------------------------------------------------
 
 Command BuildSpecialObjects(CommandBuilder& b, const Json& s) {
     auto cmd = b.Make<SetSpecialObjects>(SceneCommandID::SetSpecialObjects);
@@ -161,8 +162,6 @@ Command BuildSkybox(CommandBuilder& b, const Json& s) {
     return cmd;
 }
 
-// A `sound` id the engine indexes tables with. Invalid values are substituted (not rejected: the setup keeps
-// its other sound settings) and logged, so a bad exporter sentinel cannot reach the audio thread.
 template <typename IsValid>
 int64_t SoundIdOrNone(CommandBuilder& b, const Json& s, const char* key, IsValid isValid, int64_t none,
                       const char* what) {
@@ -176,9 +175,8 @@ int64_t SoundIdOrNone(CommandBuilder& b, const Json& s, const char* key, IsValid
 
 Command BuildSound(CommandBuilder& b, const Json& s) {
     auto cmd = b.Make<SetSoundSettings>(SceneCommandID::SetSoundSettings);
-    // Out-of-range ids are not just wrong, they crash: the engine indexes a 20-entry nature-ambience table
-    // and the sequence table with these bytes unchecked (a 255 "none" sentinel killed the audio thread at the
-    // first sunset). Anything invalid becomes the engine's own "none" with a log line (SPEC §4.2).
+    // The engine indexes a 20-entry nature-ambience table and the sequence table with these bytes unchecked
+    // (a 255 "none" sentinel killed the audio thread), so anything invalid becomes the engine's own "none".
     cmd->settings.seqId = (uint8_t)SoundIdOrNone(
         b, s, K::kSeq, [](int64_t v) { return v >= 0 && (v <= NA_BGM_VARIOUS_SFX || v == NA_BGM_NO_MUSIC); },
         NA_BGM_NO_MUSIC, "a vanilla sequence id");
@@ -186,9 +184,8 @@ Command BuildSound(CommandBuilder& b, const Json& s) {
         b, s, K::kNatureAmbience, [](int64_t v) { return v >= 0 && v <= NATURE_ID_NONE; }, NATURE_ID_NONE,
         "a nature ambience id");
     cmd->settings.reverb = (uint8_t)Field(s, K::kReverb);
-    // The scene keeps its vanilla `seq` as the theme the game QUEUES; a bound song replaces it when the
-    // theme is resolved for playback (AudioCollection::GetReplacementSequence) — so the u8 seqId, the
-    // sSeqFlags table and the sequence-command word never see a custom id.
+    // A bound song replaces the vanilla `seq` only at playback (AudioCollection::GetReplacementSequence), so the u8
+    // seqId, the sSeqFlags table and the sequence-command word never see a custom id.
     const std::string song = PathField(s, K::kSong);
     if (!song.empty()) {
         cmd->unboundSongPath = song;
@@ -197,7 +194,6 @@ Command BuildSound(CommandBuilder& b, const Json& s) {
             SPDLOG_ERROR("[Unbound] {}: song {} is not a loaded sequence (no mounted archive provides it)", b.docPath,
                          song);
         } else if (cmd->settings.seqId == NA_BGM_NO_MUSIC) {
-            // The song plays where the theme would; a no-music scene never queues one, so the song is silent.
             SPDLOG_WARN("[Unbound] {}: song {} is bound but sound.seq is no music ({}); the song will not play",
                         b.docPath, song, (int)NA_BGM_NO_MUSIC);
         }
@@ -221,8 +217,6 @@ Command BuildCutscene(CommandBuilder& b, const Json& s) {
     }
     return cmd;
 }
-
-// ---- sub-resources -----------------------------------------------------------------------------
 
 Command BuildCollision(CommandBuilder& b, const std::string& path) {
     auto cmd = b.Make<SetCollisionHeader>(SceneCommandID::SetCollisionHeader);
@@ -260,13 +254,11 @@ Command BuildPathways(CommandBuilder& b, const Json& files) {
             SPDLOG_ERROR("[Unbound] {}: pathway {} failed to load", b.docPath, p.get<std::string>());
             continue;
         }
-        cmd->AddPathResource(path, p.get<std::string>()); // SPEC.md §4.2: documents concatenate in order
+        cmd->AddPathResource(path, p.get<std::string>());
     }
     cmd->numPaths = (uint32_t)cmd->paths.size();
     return cmd;
 }
-
-// ---- positional lists --------------------------------------------------------------------------
 
 Command BuildEntranceList(CommandBuilder& b, const Json& list) {
     auto cmd = b.Make<SetEntranceList>(SceneCommandID::SetEntranceList);
@@ -289,16 +281,12 @@ Command BuildStartPositions(CommandBuilder& b, const Json& list) {
     return cmd;
 }
 
-// A numeric exit may only name an entrance whose number is fixed for every player: a vanilla index below
-// ENTR_MAX, or one of the dynamic return entrances at the top of the range (grottos, fairy fountains, the
-// shooting gallery, the Bazaar), which z_player.c reads before it ever indexes the table. Everything in
-// between is where the registry hands out custom entrances, and which number a custom entrance gets depends
-// on the player's mod stack — so a document addresses one by name or not at all (SPEC.md §4.2).
+// A numeric exit may only name an entrance whose number is fixed for every player: a vanilla index below ENTR_MAX,
+// or one of the dynamic return entrances at the top of the range, which z_player.c reads before it indexes the table.
 bool IsStableEntranceIndex(int64_t index) {
     return index < ENTR_MAX || (index >= ENTR_RETURN_YOUSEI_IZUMI_YOKO && index <= ENTR_RETURN_GROTTO);
 }
 
-// An exit is an entrance table index, or the name of a vanilla (ENTR_*) or registered custom entrance.
 uint16_t ResolveExit(CommandBuilder& b, const std::string& key, const Json& value) {
     auto reject = [&](const std::string& what) {
         return Unbound::DocumentError(b.docPath + " " + K::kExits + "/" + key + ": " + what);
@@ -322,7 +310,7 @@ uint16_t ResolveExit(CommandBuilder& b, const std::string& key, const Json& valu
             return (uint16_t)index;
         }
         int64_t parsed = 0;
-        if (Unbound::ParseIntString(name, parsed) && parsed >= 0) { // "0x0211" is still an index, not a name
+        if (Unbound::ParseIntString(name, parsed) && parsed >= 0) {
             return fromNumber(parsed);
         }
         throw reject("unknown entrance '" + name + "'");
@@ -339,12 +327,30 @@ Command BuildExitList(CommandBuilder& b, const Json& list) {
     return cmd;
 }
 
+// Any other id reads as -1, which the spawn loop skips; the entry keeps its place because the list is positional.
+s16 ReadTransitionActorId(const CommandBuilder& b, const std::string& key, const Json& t) {
+    auto it = t.find(K::kId);
+    if (it != t.end() && IsActorName(*it)) {
+        SPDLOG_ERROR("[Unbound] {}: transition actor {} is named '{}'; names are accepted in room actors only, so it "
+                     "does not spawn",
+                     b.docPath, key, it->get<std::string>());
+        return -1;
+    }
+    int64_t id = Field(t, K::kId);
+    if (!IsStableActorId(id)) {
+        SPDLOG_ERROR("[Unbound] {}: transition actor {} has id {:#x}, outside 0-{:#x}, so it does not spawn", b.docPath,
+                     key, id, SOH::Unbound::kCustomActorIdBase - 1);
+        return -1;
+    }
+    return (s16)id;
+}
+
 Command BuildTransitionActors(CommandBuilder& b, const Json& list) {
     auto cmd = b.Make<SetTransitionActorList>(SceneCommandID::SetTransitionActorList);
     for (const auto& k : b.Positional(list, K::kTransitionActors)) {
         const Json& t = list[k];
         TransitionActorEntry e{};
-        e.id = (s16)Field(t, K::kId);
+        e.id = ReadTransitionActorId(b, k, t);
         e.pos = ReadVec3f(SubArray(t, K::kPos));
         e.rotY = (s16)Field(t, K::kRotY);
         e.params = (s16)Field(t, K::kParams);
@@ -370,11 +376,11 @@ Command BuildObjectList(CommandBuilder& b, const Json& list) {
 LightInfo ReadLight(const CommandBuilder& b, const Json& l) {
     LightInfo info{};
     int64_t type = Field(l, K::kType);
-    if (type < 0 || type > 2) { // SPEC.md §4.3: the engine binds by type; anything else is rejected
+    if (type < 0 || type > 2) {
         throw Unbound::DocumentError(b.docPath + ": light type " + std::to_string(type) + " is not 0, 1 or 2");
     }
     info.type = (u8)type;
-    if (info.type == 1) { // LIGHT_DIRECTIONAL
+    if (info.type == 1) {
         Vec3s dir = ReadVec3s(SubArray(l, K::kDir));
         info.params.dir.x = (s8)dir.x;
         info.params.dir.y = (s8)dir.y;
@@ -401,7 +407,6 @@ Command BuildLightList(CommandBuilder& b, const Json& list) {
     return cmd;
 }
 
-// A key counts as present only when it holds a number (SPEC.md §2: a wrong type is a missing key).
 bool HasNumber(const Json& obj, const char* key) {
     auto it = obj.find(key);
     if (it == obj.end()) {
@@ -411,8 +416,6 @@ bool HasNumber(const Json& obj, const char* key) {
     return !std::isnan(SOH::Unbound::ToNumber(*it, sentinel));
 }
 
-// SOH [Unbound] world-unit fog / draw distance (SPEC.md §4.2 lighting entry). Any of fogStart / fogEnd /
-// drawDistance switches the entry to world mode; the others take defaults so a mod can set just "drawDistance".
 void ReadWorldFog(const Json& s, EnvLightSettings& e) {
     if (!HasNumber(s, K::kFogStart) && !HasNumber(s, K::kFogEnd) && !HasNumber(s, K::kDrawDistance)) {
         return;
@@ -424,8 +427,7 @@ void ReadWorldFog(const Json& s, EnvLightSettings& e) {
     e.nearPlane = (f32)NumberField(s, K::kNearPlane, 0);
 }
 
-// The vanilla fogNear word: low 10 bits fog near (0-1000), high 6 bits blend rate (z_kankyo.c reads
-// `fogNear & 0x3FF` and `fogNear >> 0xA`). The document stores the two halves separately.
+// z_kankyo.c reads `fogNear & 0x3FF` (near, 0-1000) and `fogNear >> 0xA` (blend rate).
 s16 PackFogNear(int64_t fogNear, int64_t blendRate) {
     return (s16)(((blendRate & 0x3F) << 10) | (fogNear & 0x3FF));
 }
@@ -451,11 +453,6 @@ Command BuildLighting(CommandBuilder& b, const Json& list) {
     }
     return cmd;
 }
-
-// ---- material animations (SPEC.md §4.2 `materialAnims`) --------------------------------------
-//
-// One entry -> one AnimatedMaterial. A malformed entry is logged and dropped (EntryError); the
-// document still loads, so a single bad water material never takes a scene down with it.
 
 struct EntryError : std::runtime_error {
     using std::runtime_error::runtime_error;
@@ -495,14 +492,12 @@ u8 ReadAnimType(const Json& e) {
     return (u8)id;
 }
 
-// The fractional part of a scroll rate. A value f32 cannot hold as a finite number reads as missing: the draw
-// code takes a modulus of it every frame, and a non-finite rate would turn the tile offset into NaN.
+// A non-finite rate would turn the tile offset into NaN: the draw code takes a modulus of it every frame.
 f32 ReadScrollSpeed(const Json& l, const char* key) {
     const f32 speed = (f32)NumberField(l, key);
     return std::isfinite(speed) ? speed : 0.0f;
 }
 
-// Step and tile-size ranges are writer requirements (SPEC.md §2): an out-of-range value wraps in the byte.
 AnimatedMatTexScrollParams ReadScrollLayer(const Json& l) {
     AnimatedMatTexScrollParams p{};
     p.xStep = (s8)Field(l, K::kXStep);
@@ -513,10 +508,6 @@ AnimatedMatTexScrollParams ReadScrollLayer(const Json& l) {
     p.height = (u8)Field(l, K::kHeight);
     return p;
 }
-
-// The lists inside an entry (layers, key frames, colours, textures, frames) are JSON arrays: they
-// replace whole across layers (SPEC.md §3.3) — a key-frame list patched one index at a time would
-// not be a key-frame list. Only the entry list itself is positional.
 
 SetAnimatedMaterialList::ScrollStorage ReadScroll(const Json& e, u8 type) {
     const size_t want = type == ANIM_MAT_TWO_TEX_SCROLL ? 2 : 1;
@@ -535,7 +526,6 @@ SetAnimatedMaterialList::ScrollStorage ReadScroll(const Json& e, u8 type) {
     return s;
 }
 
-// An array of fixed-width byte tuples ([r,g,b,a,lodFrac] / [r,g,b,a]) into `out`.
 template <typename T, size_t N> void ReadByteTuples(const Json& list, const char* key, std::vector<T>& out) {
     static_assert(sizeof(T) == N, "colour tuples are read byte-wise");
     for (size_t k = 0; k < list.size(); k++) {
@@ -553,9 +543,8 @@ template <typename T, size_t N> void ReadByteTuples(const Json& list, const char
     }
 }
 
-// The rejections here are the ones SPEC.md §4.2 states, and each guards the draw path: `length` is a modulus,
-// the key-frame walk needs an ascending list starting at 0 with a colour per key frame, and the non-linear
-// path works in fixed arrays of ANIM_MAT_MAX_KEY_FRAMES.
+// Each rejection guards the draw path: `length` is a modulus, the key-frame walk needs an ascending list starting at
+// 0 with a colour per key frame, and the non-linear path works in fixed arrays of ANIM_MAT_MAX_KEY_FRAMES.
 SetAnimatedMaterialList::ColorStorage ReadColor(const Json& e) {
     SetAnimatedMaterialList::ColorStorage c{};
     c.params.keyFrameLength = (u16)RangedField(e, K::kLength, 1, UINT16_MAX);
@@ -578,7 +567,6 @@ SetAnimatedMaterialList::ColorStorage ReadColor(const Json& e) {
     return c;
 }
 
-// `frames` is the cycle modulus (1..65535 entries) and each index is stored 16-bit; both are SPEC.md §4.2 rules.
 SetAnimatedMaterialList::CycleStorage ReadCycle(const Json& e) {
     SetAnimatedMaterialList::CycleStorage c{};
     for (const Json& t : SubArray(e, K::kTextures)) {
@@ -635,22 +623,64 @@ Command BuildMaterialAnims(CommandBuilder& b, const Json& list) {
     return cmd;
 }
 
-// ---- keyed list --------------------------------------------------------------------------------
+bool ResolveActorName(const CommandBuilder& b, const std::string& key, const std::string& name, ActorEntry& e) {
+    int id = ActorDB::Instance->RetrieveId(name);
+    if (id < 0) {
+        SPDLOG_ERROR("[Unbound] {}: actor '{}' names no known actor '{}'; it is skipped", b.docPath, key, name);
+        return false;
+    }
+    e.id = (s16)id;
+    return true;
+}
+
+bool CheckActorNumber(const CommandBuilder& b, const std::string& key, const Json& a) {
+    int64_t id = Field(a, K::kId);
+    if (!IsStableActorId(id)) {
+        SPDLOG_ERROR("[Unbound] {}: actor '{}' has id {:#x}, outside 0-{:#x} (custom actor types are placed by "
+                     "name); it is skipped",
+                     b.docPath, key, id, SOH::Unbound::kCustomActorIdBase - 1);
+        return false;
+    }
+    return true;
+}
+
+// `params` as an object is reserved for named arguments; skipping the actor keeps it from spawning set up wrong.
+bool CheckParams(const CommandBuilder& b, const std::string& key, const Json& a) {
+    auto it = a.find(K::kParams);
+    if (it != a.end() && it->is_object()) {
+        SPDLOG_ERROR("[Unbound] {}: actor '{}' has object params, which this build does not read; it is skipped",
+                     b.docPath, key);
+        return false;
+    }
+    return true;
+}
+
+bool ResolveRoomActor(const CommandBuilder& b, const std::string& key, const Json& a, ActorEntry& e) {
+    if (!CheckParams(b, key, a)) {
+        return false;
+    }
+    auto it = a.find(K::kId);
+    if (it != a.end() && IsActorName(*it)) {
+        return ResolveActorName(b, key, it->get<std::string>(), e);
+    }
+    return CheckActorNumber(b, key, a);
+}
 
 Command BuildActorList(CommandBuilder& b, const Json& list) {
     auto cmd = b.Make<SetActorList>(SceneCommandID::SetActorList);
-    for (const auto& k : ListKeys(list)) { // keyed: $order then numeric-first key order
-        if (list[k].is_object()) {
-            cmd->actorList.push_back(ReadActor(list[k]));
+    for (const auto& k : ListKeys(list)) {
+        if (!list[k].is_object()) {
+            continue;
+        }
+        ActorEntry e = ReadActor(list[k]);
+        if (ResolveRoomActor(b, k, list[k], e)) {
+            cmd->actorList.push_back(e);
         }
     }
     cmd->numActors = (uint32_t)cmd->actorList.size();
     return cmd;
 }
 
-// ---- mesh --------------------------------------------------------------------------------------
-
-// type 0 / type 2: positional { opa, xlu [, pos, radius] } entries
 void ReadMeshDlists(CommandBuilder& b, SetMesh& cmd, const Json& entries, uint8_t type) {
     auto keys = b.Positional(entries, K::kEntries);
     cmd.opaPaths.reserve(keys.size());
@@ -696,11 +726,10 @@ BgImage ReadBgImage(SetMesh& cmd, const Json& img) {
     return out;
 }
 
-// type 1: a pre-rendered background ("image" for format 1, positional "images" for format 2) plus one dlist
 void ReadMeshBackground(CommandBuilder& b, SetMesh& cmd, const Json& m) {
     auto& p1 = cmd.meshHeader.polygon1;
     int64_t format = Field(m, K::kFormat, 1);
-    if (format != 1 && format != 2) { // SPEC.md §4.3: the draw handler knows only these two
+    if (format != 1 && format != 2) {
         throw Unbound::DocumentError(b.docPath + ": mesh format " + std::to_string(format) + " is not 1 or 2");
     }
     p1.format = (u8)format;
@@ -710,7 +739,7 @@ void ReadMeshBackground(CommandBuilder& b, SetMesh& cmd, const Json& m) {
     } else {
         const Json& images = Sub(m, K::kImages);
         auto keys = b.Positional(images, K::kImages);
-        if (keys.size() > 255) { // SPEC.md §4.3 / §9: the image count is a byte
+        if (keys.size() > 255) {
             throw Unbound::DocumentError(b.docPath + ": mesh has " + std::to_string(keys.size()) +
                                          " images (at most 255)");
         }
@@ -741,15 +770,13 @@ Command BuildMesh(CommandBuilder& b, const Json& m) {
         ReadMeshDlists(b, *cmd, Sub(m, K::kEntries), (uint8_t)type);
     } else if (type == 1) {
         ReadMeshBackground(b, *cmd, m);
-    } else { // SPEC.md §4.3: the draw handler table has three entries
+    } else {
         throw Unbound::DocumentError(b.docPath + ": mesh type " + std::to_string(type) + " is not 0, 1 or 2");
     }
     return cmd;
 }
 
-// ---- one setup -> command list -----------------------------------------------------------------
-
-// Order follows the vanilla headers (and Prelude's emitter): settings that seed envCtx first, lists after.
+// Order follows the vanilla headers: settings that seed envCtx first, lists after.
 void BuildSetupCommands(CommandBuilder& b, const Json& setup, const SharedRefs& shared, std::vector<Command>& out) {
     auto has = [&](const char* key) { return setup.contains(key) && !setup[key].is_null(); };
     auto add = [&](const char* key, auto&& build) {
@@ -800,7 +827,6 @@ std::shared_ptr<Scene> BuildSetupScene(CommandBuilder& b, const Json& setup, con
     return scene;
 }
 
-// Setups "1".."N" become children of a leading SetAlternateHeaders, exactly as the binary command produces.
 Command BuildAlternateHeaders(CommandBuilder& b, const Json& setups, const std::vector<std::string>& keys,
                               int64_t maxSetup, const SharedRefs& shared) {
     auto alt = b.Make<SetAlternateHeaders>(SceneCommandID::SetAlternateHeaders);
@@ -861,7 +887,7 @@ ResourceFactoryJsonSceneV1::ReadResource(std::shared_ptr<Ship::File> file,
     } catch (const Unbound::DocumentError& e) {
         SPDLOG_ERROR("[Unbound] {}", e.what());
         return nullptr;
-    } catch (const std::exception& e) { // a JSON value of an unexpected shape must not take the process down
+    } catch (const std::exception& e) {
         SPDLOG_ERROR("[Unbound] {}: {}", initData->Path, e.what());
         return nullptr;
     }
