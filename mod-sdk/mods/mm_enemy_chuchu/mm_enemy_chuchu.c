@@ -29,6 +29,8 @@
 #define MM_SE_EN_SLIME_BREAK 0x38BB
 #define MM_SE_EN_SLIME_DEAD 0x38BE
 #define MM_SE_EN_SLIME_DEFENCE 0x38BF
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define CHUCHU_NOTICE_RANGE 280.0f
 #define CHUCHU_WANDER_RADIUS 120.0f
@@ -212,7 +214,7 @@ static void Chuchu_Thaw(EnChuchu* this, PlayState* play) {
     this->isFrozen = false;
     this->collider.base.colType = COLTYPE_NONE;
     this->actor.flags |= ACTOR_FLAG_HOOKSHOT_PULLS_ACTOR;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < 5; i++) {
         Vec3f pos = this->actor.world.pos;
 
@@ -597,7 +599,7 @@ static void Chuchu_ReactToHit(EnChuchu* this, PlayState* play, u8 effect) {
     if (effect == CHUCHU_DMGEFF_STUN) {
         this->timer = 40;
         Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_XLU, 40);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
         Chuchu_SetupStun(this);
         return;
     }

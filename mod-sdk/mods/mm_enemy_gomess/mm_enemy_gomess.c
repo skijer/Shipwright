@@ -37,6 +37,8 @@
 #define MM_SE_EN_DEATH_DEAD 0x3AB2
 #define MM_SE_EN_DEATH_ATTACK 0x3AB3
 #define MM_SE_EN_DEATH_HEARTBREAK 0x3AB5
+#define MM_SE_EN_FFLY_ATTACK 0x3840
+#define MM_SE_EN_FFLY_DEAD 0x3842
 
 #define GOMESS_HEALTH 20
 #define GOMESS_SCALE 0.01f
@@ -1907,7 +1909,7 @@ static void Bat_KnockDown(EnGomessBat* this, PlayState* play) {
         Bat_SetCrowding(this, false);
     }
     if (!sHasPlayedBatDeathSfx) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_FFLY_DEAD);
+        PlaySfx(&this->actor, MM_SE_EN_FFLY_DEAD, NA_SE_EN_FFLY_DEAD);
         sHasPlayedBatDeathSfx = true;
     }
 }
@@ -1973,7 +1975,7 @@ static void Bat_SubmitColliders(EnGomessBat* this, PlayState* play) {
     if (this->collider.base.atFlags & AT_HIT) {
         this->collider.base.atFlags &= ~AT_HIT;
         this->attackTimer = 40;
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_FFLY_ATTACK);
+        PlaySfx(&this->actor, MM_SE_EN_FFLY_ATTACK, NA_SE_EN_FFLY_ATTACK);
     }
     if (this->collider.base.atFlags & AT_ON) {
         s32 turn = this->actionFunc == Bat_CrowdParent ? play->gameplayFrames % 4 : 4;

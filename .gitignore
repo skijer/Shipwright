@@ -466,3 +466,12 @@ soh/properties.h
 *.o2r
 
 /soh/tools/mods-api
+
+# Private and local-only mods: never published or signed
+/mod-sdk/mods/*_tester/
+/mod-sdk/mods/hyrule_survivor/
+/mod-sdk/mods/trailer_intro/
+/mod-sdk/mods/hide_and_seek/
+/mod-sdk/mods/open_world/
+/mod-sdk/tools/sync_enemy_pool.py
+/mod-sdk/tests/test_sync_enemy_pool.py

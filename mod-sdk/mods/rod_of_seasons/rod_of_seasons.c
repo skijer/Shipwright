@@ -17,6 +17,8 @@
 #include "objects/object_spot07_object/object_spot07_object.h"
 #include "objects/object_link_boy/object_link_boy.h"
 #include "objects/object_link_child/object_link_child.h"
+#include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
+#include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #include "season_water_dls.inc"
 
@@ -52,6 +54,12 @@
 #define SEASONS_WEATHER_TAG_SANDSTORM 6
 #define SEASONS_ICE_FOOTING 2.0f
 #define SEASONS_BGCHECK_WATER 0x60
+
+typedef enum {
+    TURN_SETTLED,
+    TURN_RELOADING,
+    TURN_LANDING,
+} TurnStage;
 
 typedef enum {
     SEASON_OFF,
@@ -131,6 +139,8 @@ static bool sOwnsPrecipitation;
 static bool sOwnsRain;
 static bool sOwnsSky;
 static u8 sAppliedSeason;
+static u8 sSeasonBeforeTurn;
+static u8 sTurnStage;
 static MtxF sHandMatrix;
 static bool sHasHandMatrix;
 
@@ -558,8 +568,10 @@ static void TurnWorldToSeason(Player* player, PlayState* play, u8 season) {
     SpawnSeasonSparkles(player, play, season);
     PlaySfxAt(sSeasons[season].chime, &player->actor.world.pos);
     Player_PlayVoiceSfx(player, NA_SE_VO_LI_MAGIC_ATTACK);
+    sSeasonBeforeTurn = sAppliedSeason;
     sAppliedSeason = season;
     sIsTurningSeason = true;
+    sTurnStage = TURN_RELOADING;
     ReloadSceneInPlace(player, play);
 }
 
@@ -571,6 +583,7 @@ static void TurnSeason(Player* player, PlayState* play) {
 
 static void SyncSeasonOnSceneInit(int16_t sceneNum) {
     sAppliedSeason = CurrentSeason();
+    sTurnStage = sTurnStage == TURN_RELOADING ? TURN_LANDING : TURN_SETTLED;
 }
 
 static bool IsStandingOnIce(PlayState* play, Player* player) {
@@ -622,10 +635,16 @@ static void SkipRipplesOnIce(Actor* actor, int32_t* flags) {
     }
 }
 
-static void ReloadSceneInPlace(Player* player, PlayState* play) {
+static void ReloadAtTurnSpot(PlayState* play) {
     gSaveContext.respawnFlag = 1;
-    play->nextEntranceIndex = gSaveContext.entranceIndex;
-    gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = play->nextEntranceIndex;
+    play->nextEntranceIndex = gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex;
+    play->transitionTrigger = TRANS_TRIGGER_START;
+    play->transitionType = TRANS_TYPE_INSTANT;
+    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
+}
+
+static void ReloadSceneInPlace(Player* player, PlayState* play) {
+    gSaveContext.respawn[RESPAWN_MODE_DOWN].entranceIndex = gSaveContext.entranceIndex;
     gSaveContext.respawn[RESPAWN_MODE_DOWN].roomIndex = play->roomCtx.curRoom.num;
     gSaveContext.respawn[RESPAWN_MODE_DOWN].pos = player->actor.world.pos;
     gSaveContext.respawn[RESPAWN_MODE_DOWN].yaw = player->actor.shape.rot.y;
@@ -634,9 +653,34 @@ static void ReloadSceneInPlace(Player* player, PlayState* play) {
     } else {
         gSaveContext.respawn[RESPAWN_MODE_DOWN].playerParams = 0x0D00 | GET_ACTIVE_CAM(play)->camDataIdx;
     }
-    play->transitionTrigger = TRANS_TRIGGER_START;
-    play->transitionType = TRANS_TYPE_INSTANT;
-    gSaveContext.nextTransitionType = TRANS_TYPE_FADE_BLACK_FAST;
+    ReloadAtTurnSpot(play);
+}
+
+// Mirrors the randomizer's own no-swim void out, which would otherwise respawn Link in the same water forever.
+static bool IsSinkingWithoutSwim(Player* player) {
+    if (!(player->stateFlags1 & PLAYER_STATE1_IN_WATER) || CUR_EQUIP_VALUE(EQUIP_TYPE_BOOTS) == EQUIP_VALUE_BOOTS_IRON) {
+        return false;
+    }
+    return !GameInteractor_Should(VB_SWIM, !IS_RANDO || Flags_GetRandomizerInf(RAND_INF_CAN_SWIM));
+}
+
+// The turn spot is kept as the respawn, so the old season puts Link back on the ground he turned from.
+static bool UndoDrowningTurn(Player* player, PlayState* play) {
+    if (sTurnStage != TURN_LANDING) {
+        return false;
+    }
+    if (!IsSinkingWithoutSwim(player)) {
+        if (player->actor.bgCheckFlags & BGCHECKFLAG_GROUND) {
+            sTurnStage = TURN_SETTLED;
+        }
+        return false;
+    }
+    sTurnStage = TURN_SETTLED;
+    Z64Wheel_SetSelection(sSeasonBeforeTurn);
+    sAppliedSeason = sSeasonBeforeTurn;
+    sIsTurningSeason = true;
+    ReloadAtTurnSpot(play);
+    return true;
 }
 
 static void WaiveVoidDamage(bool* should, va_list args) {
@@ -1267,6 +1311,9 @@ static void KeepSeasonRunning(void) {
     season = CurrentSeason();
     if (season != sAppliedSeason && !Z64Wheel_IsOpen()) {
         TurnWorldToSeason(GET_PLAYER(gPlayState), play, season);
+        return;
+    }
+    if (UndoDrowningTurn(GET_PLAYER(play), play)) {
         return;
     }
     // Clearing it after the scene checks is what keeps the splash, the swim and the wading sfx off the ice.

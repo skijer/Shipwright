@@ -33,6 +33,7 @@
 #define MM_SE_EN_YMAJIN_HIDE 0x396C
 #define MM_SE_EN_YMAJIN_DEAD_BREAK 0x396F
 #define MM_SE_EN_YMAJIN_MINI_DAMAGE 0x39F9
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define EENO_HEALTH 2
 #define EENO_ATTACK_RANGE 240.0f
@@ -514,7 +515,7 @@ static void Eeno_CheckDamage(EnEeno* this, PlayState* play) {
         Eeno_SetupEmerge(this, play);
     } else if (effect == EENO_DMGEFF_STUN) {
         Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
         Eeno_SetupStun(this);
     } else {
         if (Actor_ApplyDamage(&this->actor) == 0) {

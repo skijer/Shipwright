@@ -11,6 +11,7 @@ from PIL import Image
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
 
+import check_mm_enemy_sfx  # noqa: E402
 import check_mod_binary  # noqa: E402
 import mod_signature  # noqa: E402
 import otex  # noqa: E402
@@ -363,6 +364,157 @@ class SignQueueTests(unittest.TestCase):
     def test_repository_lists_parse(self):
         self.assertIn("skijer", sign_queue.read_trusted_authors())
         self.assertEqual(sign_queue.read_revoked_authors(), set())
+
+
+class CheckMmEnemySfxTests(unittest.TestCase):
+    ADAPTER = ('#define MM_SFX_PLAY_SERVICE "mm.sfx.play"\n'
+               "static void PlaySfx(Actor* actor, u16 mmSfx, u16 ootSfx) {\n"
+               "    Audio_PlayActorSound2(actor, ootSfx);\n"
+               "}\n")
+
+    def setUp(self):
+        self.workspace = tempfile.TemporaryDirectory()
+        self.addCleanup(self.workspace.cleanup)
+        self.mods = Path(self.workspace.name) / "mods"
+        tables = self.mods / check_mm_enemy_sfx.MM_TABLES
+        tables.mkdir(parents=True)
+        (tables / "enemybank_table.h").write_text("/* 0x3878 */ DEFINE_SFX(NA_SE_EN_EXTINCT, 0x30, 1, 0, 0, 0)\n"
+                                                  "/* 0x389E */ DEFINE_SFX(NA_SE_EN_COMMON_FREEZE, 0x37, 1, 0, 0, 0)\n",
+                                                  encoding="utf-8")
+        self.oot_header = Path(self.workspace.name) / "sfx.h"
+        self.oot_header.write_text("#define NA_SE_EN_EXTINCT 0x3878\n#define NA_SE_EN_GOMA_JR_FREEZE 0x3890\n",
+                                   encoding="utf-8")
+        self.enemy = self.mods / "mm_enemy_probe"
+        self.enemy.mkdir()
+
+    def check(self, body, defines="#define MM_SE_EN_EXTINCT 0x3878\n"):
+        (self.enemy / "mm_enemy_probe.c").write_text(defines + self.ADAPTER + body, encoding="utf-8")
+        return check_mm_enemy_sfx.check_all(self.mods, self.oot_header)
+
+    def test_sounds_through_the_adapter_pass(self):
+        self.assertEqual(self.check("void Die(Actor* a) { PlaySfx(a, MM_SE_EN_EXTINCT, NA_SE_EN_EXTINCT); }\n"), [])
+
+    def test_enemy_without_the_adapter_is_refused(self):
+        (self.enemy / "mm_enemy_probe.c").write_text("void Die(Actor* a) {}\n", encoding="utf-8")
+        problems = check_mm_enemy_sfx.check_all(self.mods, self.oot_header)
+        self.assertEqual(problems, ["mm_enemy_probe: never asks for the mm.sfx.play service"])
+
+    def test_direct_oot_sound_bypassing_the_adapter_is_refused(self):
+        problems = self.check("void Die(Actor* a) { Audio_PlayActorSound2(a, NA_SE_EN_EXTINCT); }\n")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("directly instead of through the MM adapter", problems[0])
+
+    def test_mm_id_handed_to_oot_is_refused(self):
+        problems = self.check("void Die(Actor* a) { PlaySfx(a, MM_SE_EN_EXTINCT, MM_SE_EN_EXTINCT); }\n")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("hand MM's MM_SE_EN_EXTINCT to OoT's engine", problems[0])
+
+    def test_oot_id_handed_to_mm_is_refused(self):
+        problems = self.check("void Die(Actor* a) { PlaySfx(a, NA_SE_EN_EXTINCT, NA_SE_EN_EXTINCT); }\n")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("OoT's NA_SE_EN_EXTINCT as the MM sound", problems[0])
+
+    def test_mm_id_that_disagrees_with_mm_tables_is_refused(self):
+        problems = self.check("void Die(Actor* a) { PlaySfx(a, MM_SE_EN_EXTINCT, NA_SE_EN_EXTINCT); }\n",
+                              defines="#define MM_SE_EN_EXTINCT 0x3879\n")
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("MM's NA_SE_EN_EXTINCT is 0x3878", problems[0])
+
+    def test_sounds_unknown_to_either_game_are_refused(self):
+        problems = self.check("void Die(Actor* a) { PlaySfx(a, MM_SE_EN_UNDEFINED, NA_SE_EN_COMMON_FREEZE); }\n")
+        self.assertEqual(len(problems), 2, problems)
+
+    def test_every_mm_enemy_plays_mm_sounds_with_valid_ids(self):
+        self.assertEqual(check_mm_enemy_sfx.check_all(check_mm_enemy_sfx.DEFAULT_MODS,
+                                                      check_mm_enemy_sfx.DEFAULT_OOT_SFX_HEADER), [])
+
+
+class CheckCustomSequencesTests(unittest.TestCase):
+    FONT_ID = 3
+
+    def setUp(self):
+        import check_custom_sequences
+        self.checker = check_custom_sequences
+        self.font_table = {self.FONT_ID: check_custom_sequences.Font((True, True), (True,), (True,))}
+
+    # Channel 0 starts at 4, starts layer 0 after its own script, yields once, and ends.
+    def build(self, channel_body, layer_body=b"\xff"):
+        layer_start = 4 + len(channel_body) + 6
+        return (b"\x90\x00\x04\xff" + channel_body + b"\x88" + layer_start.to_bytes(2, "big") + b"\xfd\x10\xff"
+                + layer_body)
+
+    def kinds(self, data, fonts=(FONT_ID,)):
+        findings = self.checker.SequenceAnalyzer(data, fonts, self.font_table).analyze()
+        return sorted({finding.kind for finding in findings})
+
+    def resource(self, data, fonts=(FONT_ID,)):
+        return (bytes(0x40) + len(data).to_bytes(4, "little") + data + bytes(3)
+                + len(fonts).to_bytes(4, "little") + bytes(fonts))
+
+    def test_large_notes_with_a_known_instrument_pass(self):
+        self.assertEqual(self.kinds(self.build(b"\xc4\xc1\x00", b"\x00\x18\x60\x40\xff")), [])
+
+    def test_font_switch_past_the_listed_fonts_is_unsafe(self):
+        self.assertEqual(self.kinds(self.build(b"\xc6\x01")), ["font_index_out_of_range"])
+
+    def test_instrument_outside_the_font_is_silent(self):
+        self.assertEqual(self.kinds(self.build(b"\xc1\x05")), ["instrument_missing"])
+
+    def test_drum_note_outside_the_font_is_silent(self):
+        self.assertEqual(self.kinds(self.build(b"\xc4\xc1\x7f", b"\x05\x18\x60\x40\xff")), ["drum_missing"])
+
+    def test_loop_end_without_a_loop_is_unsafe(self):
+        self.assertEqual(self.kinds(self.build(b"", b"\xf7\xff")), ["stack_underflow"])
+
+    def test_loops_nested_past_the_stack_depth_are_unsafe(self):
+        self.assertEqual(self.kinds(self.build(b"", b"\xf8\x02" * 5 + b"\xff")), ["stack_overflow"])
+
+    def test_io_write_past_the_ports_is_unsafe(self):
+        self.assertEqual(self.kinds(self.build(b"\x30\x09")), ["io_write_out_of_range"])
+
+    def test_jump_outside_the_sequence_is_unsafe(self):
+        self.assertEqual(self.kinds(self.build(b"\xfb\x7f\xff")), ["pointer_out_of_range"])
+
+    def test_instruction_cut_by_the_end_is_unsafe(self):
+        self.assertEqual(self.kinds(b"\x90\x00\x04\xff\x88\x00"), ["truncated"])
+
+    def test_reenabled_channel_keeps_its_large_notes(self):
+        # Under short notes the layer's velocity byte 0xF7 would read as a loop end with nothing to end.
+        first, second, layer = 9, 13, 19
+        data = (b"\x90\x00" + bytes([first]) + b"\xfd\x10\x90\x00" + bytes([second]) + b"\xff"
+                + b"\xc4\xfd\x10\xff"
+                + b"\x88\x00" + bytes([layer]) + b"\xfd\x10\xff"
+                + b"\x00\x18\xf7\x40\xff")
+        self.assertEqual((data[first], data[second], data[layer]), (0xC4, 0x88, 0x00))
+        self.assertEqual(self.kinds(data), [])
+
+    def test_too_many_listed_fonts_is_unsafe(self):
+        blob = self.resource(b"\xff", fonts=tuple([self.FONT_ID] * 20))
+        kinds = {finding.kind for finding in self.checker.check_sequence(blob, self.font_table)}
+        self.assertEqual(kinds, {"too_many_fonts"})
+
+    def test_pack_entries_with_non_ascii_names_are_read(self):
+        with tempfile.TemporaryDirectory() as workspace:
+            pack = Path(workspace) / "pack.o2r"
+            with zipfile.ZipFile(pack, "w") as archive:
+                archive.writestr("custom/music/Pokémon - Route_bgm", self.resource(self.build(b"\xc1\x00")))
+            results = self.checker.check_packs([pack], self.font_table)
+        self.assertEqual(results, {("pack.o2r", "custom/music/Pokémon - Route_bgm"): []})
+
+    def test_font_resource_lists_its_valid_entries(self):
+        def string(text):
+            return len(text).to_bytes(4, "little") + text
+
+        sound = b"\x01\x01" + string(b"audio/samples/x") + bytes(4)
+        drum = bytes(3) + bytes(4) + b"\x01" + string(b"audio/samples/d") + bytes(4)
+        valid_instrument = b"\x01" + bytes(4) + bytes(4) + sound + b"\x00\x00"
+        empty_instrument = b"\x00" + bytes(4) + bytes(4) + b"\x00\x00\x00"
+        blob = (bytes(0x40) + (7).to_bytes(4, "little") + bytes(8) + (1).to_bytes(4, "little")
+                + (2).to_bytes(4, "little") + (1).to_bytes(4, "little") + drum + valid_instrument + empty_instrument
+                + b"\x01\x01" + string(b"") + bytes(4))
+        font_id, font = self.checker.parse_font_resource(blob)
+        self.assertEqual((font_id, font.instruments, font.drums, font.sound_effects),
+                         (7, (True, False), (True,), (False,)))
 
 
 if __name__ == "__main__":

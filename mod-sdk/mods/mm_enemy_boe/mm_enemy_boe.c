@@ -21,6 +21,8 @@
 
 #define MM_SE_EN_KUROSUKE_MOVE 0x38BC
 #define MM_SE_EN_KUROSUKE_ATTACK 0x38BD
+#define MM_SE_EN_PO_DEAD 0x3876
+#define MM_SE_EN_EXTINCT 0x3878
 
 #define BOE_TYPE_BLACK 0
 #define BOE_TYPE_WHITE 1
@@ -266,7 +268,7 @@ static void Boe_SetupKnockback(EnBoe* this) {
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
     this->collider.base.acFlags &= ~AC_ON;
     this->actor.flags |= ACTOR_FLAG_UPDATE_CULLING_DISABLED;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_DEAD);
+    PlaySfx(&this->actor, MM_SE_EN_PO_DEAD, NA_SE_EN_PO_DEAD);
     this->alpha = 254;
     if (attacker != NULL) {
         this->actor.world.rot.y = Actor_WorldYawTowardActor(attacker, &this->actor);
@@ -295,7 +297,7 @@ static void Boe_Pop(EnBoe* this, PlayState* play) {
 
     EffectSsDeadDb_Spawn(play, &pos, &sZeroVec, &sZeroVec, 70, 4, prim.r, prim.g, prim.b, prim.a, env.r, env.g, env.b,
                          1, 12, false);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_EXTINCT);
+    PlaySfx(&this->actor, MM_SE_EN_EXTINCT, NA_SE_EN_EXTINCT);
     Item_DropCollectibleRandom(play, &this->actor, &this->actor.world.pos, 0x10);
     GameInteractor_ExecuteOnEnemyDefeat(&this->actor);
     Boe_SetupVanish(this);

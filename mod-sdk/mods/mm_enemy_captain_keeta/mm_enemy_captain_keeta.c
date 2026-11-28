@@ -37,6 +37,8 @@
 #define MM_SE_EN_KITA_DAMAGE 0x3AA5
 #define MM_SE_EN_KITA_DEAD 0x3AA6
 #define MM_SE_EN_KITA_ATTACK_W 0x3AAA
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_EV_ICE_BROKEN 0x28CB
 
 #define KEETA_HEALTH 24
 #define KEETA_SCALE 0.04f
@@ -371,7 +373,7 @@ static void Keeta_ShatterIce(EnKeeta* this, PlayState* play) {
     if (this->aura != KEETA_AURA_FROZEN || this->auraTimer == 0) {
         return;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < KEETA_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        1.5f);
@@ -529,7 +531,7 @@ static void Keeta_Slash(EnKeeta* this, PlayState* play) {
 
     this->collider.base.atFlags &= ~(AT_BOUNCED | AT_HIT);
     EffectSsHitMark_SpawnFixedScale(play, EFFECT_HITMARK_METAL, &hitPos);
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     Keeta_SetupBlocked(this);
 }
 

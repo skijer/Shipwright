@@ -13,6 +13,7 @@
 
 #define BAD_BAT_KEY "mm.bad_bat"
 #define BAD_BAT_SOUL_ITEM_KEY "soul.mm.bad_bat"
+#define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 
 #define OBJ_BAT "__OTR__objects/object_bat/"
 
@@ -21,6 +22,11 @@
 #define COLORFILTER_OPA 0x0000
 #define BGCHECK_UPDATE_WALL (1 << 0)
 #define BGCHECK_UPDATE_FLOOR (1 << 2)
+
+#define MM_SE_EN_FFLY_ATTACK 0x3840
+#define MM_SE_EN_FFLY_FLY 0x3841
+#define MM_SE_EN_FFLY_DEAD 0x3842
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define BAD_BAT_FLAP_FRAME 5
 #define BAD_BAT_WING_FRAMES 9
@@ -128,8 +134,25 @@ static CollisionCheckInfoInit sColChkInfoInit = { 1, 15, 30, 10 };
 
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 
+typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
+
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), NULL, 0 };
 static const SOHModApi* sApi;
+static MmSfxPlayFunc sPlayMmSfx;
+static bool sIsMmSfxSearched;
+
+// Falls back to the closest OoT sound when the mm_assets sound service is missing.
+static void PlaySfx(Actor* actor, u16 mmSfx, u16 ootSfx) {
+    if (!sIsMmSfxSearched && SOH_MOD_API_HAS(sApi, FindService)) {
+        sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
+        sIsMmSfxSearched = true;
+    }
+    if (sPlayMmSfx != NULL && sPlayMmSfx(mmSfx, &actor->projectedPos)) {
+        return;
+    }
+    Audio_PlayActorSound2(actor, ootSfx);
+}
+
 static s32 sNumberAttacking;
 
 static void BadBat_FlyIdle(EnBadBat* this, PlayState* play);
@@ -142,7 +165,7 @@ static void BadBat_StepWings(EnBadBat* this, s32 frameStep) {
 
     this->wingFrame = (this->wingFrame + frameStep) % BAD_BAT_WING_FRAMES;
     if (previousFrame < BAD_BAT_FLAP_FRAME && this->wingFrame >= BAD_BAT_FLAP_FRAME) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_FFLY_FLY);
+        PlaySfx(&this->actor, MM_SE_EN_FFLY_FLY, NA_SE_EN_FFLY_FLY);
     }
 }
 
@@ -243,7 +266,7 @@ static void BadBat_DiveAttack(EnBadBat* this, PlayState* play) {
     if (BadBat_ShouldAbortDive(this, play)) {
         if (this->collider.base.atFlags & AT_HIT) {
             this->collider.base.atFlags &= ~AT_HIT;
-            Audio_PlayActorSound2(&this->actor, NA_SE_EN_FFLY_ATTACK);
+            PlaySfx(&this->actor, MM_SE_EN_FFLY_ATTACK, NA_SE_EN_FFLY_ATTACK);
         }
         BadBat_StopDiving(this);
         BadBat_SetupFlyIdle(this);
@@ -265,7 +288,7 @@ static void BadBat_SetupDie(EnBadBat* this, PlayState* play) {
     this->actor.speedXZ *= Math_CosS(this->actor.world.rot.x);
     this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
     this->actor.velocity.y = 0.0f;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_FFLY_DEAD);
+    PlaySfx(&this->actor, MM_SE_EN_FFLY_DEAD, NA_SE_EN_FFLY_DEAD);
     Actor_SetColorFilter(&this->actor, COLORFILTER_RED, 255, COLORFILTER_OPA, 40);
     if (this->actor.flags & ACTOR_FLAG_ATTACHED_TO_ARROW) {
         this->actor.speedXZ = 0.0f;
@@ -304,7 +327,7 @@ static void BadBat_SetupStunned(EnBadBat* this) {
         this->actor.speedXZ = 0.0f;
         this->actor.world.pos.y += 13.0f;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, this->timer);
     this->actionFunc = BadBat_Stunned;
 }

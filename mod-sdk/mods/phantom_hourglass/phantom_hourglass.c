@@ -7,6 +7,7 @@
 #include "z64items.h"
 #include "z64aiming.h"
 #include "hourglass_model.h"
+#include "boss_state.inc.c"
 
 #include "align_asset_macro.h"
 #include "functions.h"
@@ -85,6 +86,8 @@ typedef struct {
     s16 writeIndex;
     s16 cursor;
     s16 idleFrames;
+    u32 serial; // frames ever banked; the newest is serial - 1
+    BossState* bossState;
     bool isUsed;
     bool isScrubbing;
 } RecordedActor;
@@ -95,7 +98,7 @@ static const ALIGN_ASSET(2) char sCastAnim[] = "__OTR__objects/gameplay_keep/gPl
 
 static const u8 sTrackedCategories[] = { ACTORCAT_SWITCH, ACTORCAT_BG,   ACTORCAT_EXPLOSIVE,  ACTORCAT_NPC,
                                          ACTORCAT_ENEMY,  ACTORCAT_PROP, ACTORCAT_ITEMACTION, ACTORCAT_MISC,
-                                         ACTORCAT_DOOR,   ACTORCAT_CHEST };
+                                         ACTORCAT_DOOR,   ACTORCAT_CHEST, ACTORCAT_BOSS };
 
 static const u16 sItemButtons[HOURGLASS_BUTTON_COUNT] = { BTN_B,   BTN_CLEFT, BTN_CDOWN, BTN_CRIGHT,
                                                           BTN_DUP, BTN_DDOWN, BTN_DLEFT, BTN_DRIGHT };
@@ -393,6 +396,9 @@ static RecordedFrame* FrameAt(RecordedActor* slot, s16 stepsBack) {
 }
 
 static void ClearSlot(RecordedActor* slot) {
+    BossState_Destroy(slot->bossState);
+    slot->bossState = NULL;
+    slot->serial = 0;
     slot->actor = NULL;
     slot->skelAnime = NULL;
     slot->count = 0;
@@ -418,20 +424,23 @@ static bool HasPose(RecordedActor* slot) {
 }
 
 static bool IsWorthBanking(RecordedActor* slot, RecordedFrame* newest) {
+    if (slot->bossState != NULL) {
+        return BossState_HasChanged(slot->bossState, slot->actor) || newest == NULL;
+    }
     if (newest == NULL || HasMoved(&newest->pos, &slot->actor->world.pos)) {
         return true;
     }
     return HasPose(slot) && slot->skelAnime->curFrame != newest->animFrame;
 }
 
-static void RecordFrame(RecordedActor* slot) {
+static bool RecordFrame(RecordedActor* slot) {
     Actor* actor = slot->actor;
     RecordedFrame* newest = FrameAt(slot, 0);
     RecordedFrame* frame;
 
     if (!IsWorthBanking(slot, newest)) {
         slot->idleFrames = MIN(slot->idleFrames + 1, HOURGLASS_FRAMES * 2);
-        return;
+        return false;
     }
     slot->idleFrames = 0;
     frame = &slot->frames[slot->writeIndex];
@@ -446,6 +455,26 @@ static void RecordFrame(RecordedActor* slot) {
     }
     slot->writeIndex = (slot->writeIndex + 1) % HOURGLASS_FRAMES;
     slot->count = MIN(slot->count + 1, HOURGLASS_FRAMES);
+    slot->serial++;
+    return true;
+}
+
+static bool FindRestorableSerial(RecordedActor* slot, u32* serial) {
+    if (slot->bossState == NULL || slot->count == 0 || gPlayState == NULL ||
+        !BossState_IsCalm(gPlayState, slot->actor)) {
+        return false;
+    }
+    return BossState_FindAtOrBefore(slot->bossState, slot->serial - slot->count, slot->serial - 1 - slot->cursor,
+                                    serial);
+}
+
+// A boss is drawn from far more than one skeleton, so its whole state is shown at the cursor.
+static void ShowBossAtCursor(RecordedActor* slot) {
+    u32 serial;
+
+    if (FindRestorableSerial(slot, &serial)) {
+        BossState_Restore(slot->bossState, gPlayState, slot->actor, serial);
+    }
 }
 
 static void ApplyFrame(RecordedActor* slot, RecordedFrame* frame) {
@@ -462,6 +491,9 @@ static void ApplyFrame(RecordedActor* slot, RecordedFrame* frame) {
     actor->bgCheckFlags = 0;
     actor->velocity.x = actor->velocity.y = actor->velocity.z = 0.0f;
     actor->speedXZ = 0.0f;
+    if (slot->bossState != NULL) {
+        ShowBossAtCursor(slot);
+    }
 }
 
 static bool IsTrackedCategory(u8 category) {
@@ -477,6 +509,9 @@ static void BindSlot(RecordedActor* slot, Actor* actor) {
     ClearSlot(slot);
     slot->actor = actor;
     slot->skelAnime = FindSkelAnime(actor);
+    if (actor->category == ACTORCAT_BOSS) {
+        slot->bossState = BossState_Create(actor);
+    }
     slot->isUsed = true;
 }
 
@@ -594,8 +629,11 @@ static void RecordEveryone(PlayState* play, Player* player) {
     for (u8 index = 0; index < HOURGLASS_SLOTS; index++) {
         RecordedActor* slot = &sSlots[index];
 
-        if (slot->isUsed && !slot->isScrubbing && slot->actor != NULL && slot->actor->update != NULL) {
-            RecordFrame(slot);
+        if (!slot->isUsed || slot->isScrubbing || slot->actor == NULL || slot->actor->update == NULL) {
+            continue;
+        }
+        if (RecordFrame(slot) && slot->bossState != NULL) {
+            BossState_Capture(slot->bossState, play, slot->actor, slot->serial - 1);
         }
     }
 }
@@ -619,6 +657,13 @@ static void EndScrub(Actor* actor) {
     }
     slot->isScrubbing = false;
     if (actor != NULL && actor->update != NULL) {
+        u32 restoredSerial;
+        bool isRestoringBoss = FindRestorableSerial(slot, &restoredSerial);
+
+        // The body lands on the snapshot's own frame so its pose and its AI agree.
+        if (isRestoringBoss) {
+            slot->cursor = (s16)(slot->serial - 1 - restoredSerial);
+        }
         RecordedFrame* frame = FrameAt(slot, slot->cursor);
 
         if (frame != NULL) {
@@ -629,6 +674,10 @@ static void EndScrub(Actor* actor) {
     if (slot->cursor > 0) {
         slot->writeIndex = (slot->writeIndex - slot->cursor + HOURGLASS_FRAMES * 2) % HOURGLASS_FRAMES;
         slot->count = MAX(slot->count - slot->cursor, 0);
+        slot->serial -= slot->cursor;
+        if (slot->bossState != NULL) {
+            BossState_ForgetFrom(slot->bossState, slot->serial);
+        }
     }
     slot->cursor = 0;
 }

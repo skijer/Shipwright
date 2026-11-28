@@ -33,6 +33,10 @@
 #define MM_SE_EN_HIPLOOP_DAMAGE 0x397D
 #define MM_SE_EN_HIPLOOP_DEAD 0x397E
 #define MM_SE_EN_HIPLOOP_FOOTSTEP 0x397F
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_EV_BOMB_DROP_WATER 0x2817
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define HIPLOOP_SCALE 0.03f
 #define HIPLOOP_ATTACK_RANGE 200.0f
@@ -437,7 +441,7 @@ static void Hiploop_Thaw(EnHiploop* this, PlayState* play) {
     }
     this->isFrozen = false;
     this->frozenTimer = 0;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < HIPLOOP_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.7f);
@@ -753,7 +757,7 @@ static bool Hiploop_SplashIfInWater(EnHiploop* this, PlayState* play, s32 splash
         splashPos.z += Rand_CenteredFloat(40 + (5 * i));
         EffectSsGSplash_Spawn(play, &splashPos, NULL, NULL, 0, (Rand_ZeroOne() * 100.0f) + 400.0f);
     }
-    PlayDeathSfx(&this->actor, NA_SE_EV_BOMB_DROP_WATER, NA_SE_EV_BOMB_DROP_WATER);
+    PlayDeathSfx(&this->actor, MM_SE_EV_BOMB_DROP_WATER, NA_SE_EV_BOMB_DROP_WATER);
     return true;
 }
 
@@ -921,7 +925,7 @@ static void Hiploop_Stun(EnHiploop* this) {
     if (this->isFrozen) {
         return;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
     Hiploop_SetupStunned(this, 40);
 }
@@ -1001,7 +1005,7 @@ static void Hiploop_GlanceOffMask(EnHiploop* this) {
     }
     this->targetRotY = this->actor.yawTowardsPlayer;
     if (Hiploop_IsMasked(this)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+        PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     }
 }
 

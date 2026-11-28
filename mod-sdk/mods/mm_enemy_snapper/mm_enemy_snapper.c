@@ -35,6 +35,8 @@
 #define MM_SE_EN_PAMET_CUTTER_ON 0x392B
 #define MM_SE_EN_PAMET_CUTTER_OFF 0x392D
 #define MM_SE_EN_COMMON_EXTINCT_LEV 0x3A1F
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define SNAPPER_HEALTH 3
 #define SNAPPER_NOTICE_RANGE 240.0f
@@ -254,7 +256,7 @@ static void Snapper_Thaw(EnSnapper* this, PlayState* play) {
     this->isFrozen = false;
     this->collider.base.colType = COLTYPE_HIT6;
     this->actor.flags |= ACTOR_FLAG_HOOKSHOT_PULLS_PLAYER;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < 6; i++) {
         Vec3f pos = this->actor.world.pos;
 
@@ -677,7 +679,7 @@ static void Snapper_ApplyHit(EnSnapper* this, PlayState* play, u8 effect) {
     if (effect == SNAPPER_DMGEFF_STUN) {
         this->stunTimer = 40;
         Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
         Snapper_SetupStunned(this);
         return;
     }

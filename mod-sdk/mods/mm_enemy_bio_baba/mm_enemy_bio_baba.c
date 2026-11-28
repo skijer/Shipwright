@@ -39,6 +39,7 @@
 #define MM_SE_EN_MIZUBABA2_WALK 0x3827
 #define MM_SE_EN_MIZUBABA_DEAD 0x381F
 #define MM_SE_EN_MIZUBABA_TRANSFORM 0x3825
+#define MM_SE_EV_OUT_OF_WATER 0x2808
 
 #define BIO_BABA_HEALTH 2
 #define BIO_BABA_MIN_DEPTH 100.0f
@@ -850,7 +851,7 @@ static bool BioBaba_UpdateHangingAttack(EnBioBaba* this, PlayState* play, f32 pl
 
                 splashPos.y += 40.0f;
                 EffectSsGSplash_Spawn(play, &splashPos, NULL, NULL, 1, 2000);
-                Audio_PlayActorSound2(&this->dyna.actor, NA_SE_EV_OUT_OF_WATER);
+                PlaySfx(&this->dyna.actor, MM_SE_EV_OUT_OF_WATER, NA_SE_EV_OUT_OF_WATER);
             }
             if (this->actionTimer == 0) {
                 this->flipAttackFrames = 0;

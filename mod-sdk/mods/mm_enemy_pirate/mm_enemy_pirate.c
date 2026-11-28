@@ -38,6 +38,8 @@
 #define MM_SE_EN_GERUDOFT_DOWN 0x387A
 #define MM_SE_EN_TEKU_JUMP 0x386C
 #define MM_SE_EN_COMMON_FREEZE 0x389E
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_EV_ICE_BROKEN 0x28CB
 
 #define PIRATE_HEALTH 8
 #define PIRATE_SCALE 0.0125f
@@ -460,7 +462,7 @@ static void Pirate_SetAura(EnPirate* this, PirateAura aura, s16 duration) {
 }
 
 static void Pirate_ShatterIce(EnPirate* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < PIRATE_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.7f);
@@ -1538,7 +1540,7 @@ static void Pirate_ClangOffGuard(EnPirate* this, PlayState* play) {
                      this->bodyCollider.info.bumper.hitPos.z };
 
     this->bodyCollider.base.acFlags &= ~AC_HIT;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     EffectSsHitMark_SpawnFixedScale(play, EFFECT_HITMARK_METAL, &hitPos);
     CollisionCheck_SpawnShieldParticlesMetal(play, &hitPos);
 }

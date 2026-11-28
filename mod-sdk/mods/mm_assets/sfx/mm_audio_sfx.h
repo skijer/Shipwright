@@ -184,6 +184,9 @@ void AudioMmSfx_StopById(u32 sfxId);
 
 u8 AudioMmSfx_IsPlaying(u32 sfxId);
 
+// Keeps every queued or playing sound at pos alive on a lasting copy, for when pos is about to be freed.
+void AudioMmSfx_DetachPos(Vec3f* pos);
+
 void AudioMmSfx_Reset(void);
 
 // =============================================================================

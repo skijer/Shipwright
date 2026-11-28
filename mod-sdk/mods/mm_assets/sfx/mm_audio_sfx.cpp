@@ -939,6 +939,48 @@ u8 AudioMmSfx_IsPlaying(u32 sfxId) {
     return 0;
 }
 
+// A copy is reused only after every other slot has been, long after a one-shot ends or a flagged sound expires.
+static Vec3f sMmDetachedPos[16];
+static u8 sMmDetachedPosNext = 0;
+
+static bool MmSfx_RetargetBankEntries(Vec3f* from, Vec3f* to) {
+    bool hasRetargeted = false;
+    for (u8 bankId = 0; bankId < ARRAY_COUNT(gMmSfxBanks); bankId++) {
+        for (u8 i = 0; i < sMmSfxBankSizes[bankId]; i++) {
+            MmSfxBankEntry* entry = &gMmSfxBanks[bankId][i];
+            if (entry->posX != &from->x) {
+                continue;
+            }
+            entry->posX = &to->x;
+            entry->posY = &to->y;
+            entry->posZ = &to->z;
+            hasRetargeted = true;
+        }
+    }
+    return hasRetargeted;
+}
+
+static bool MmSfx_RetargetRequests(Vec3f* from, Vec3f* to) {
+    bool hasRetargeted = false;
+    for (u8 i = sMmSfxRequestReadIndex; i != sMmSfxRequestWriteIndex; i++) {
+        if (sMmSfxRequests[i].pos == from) {
+            sMmSfxRequests[i].pos = to;
+            hasRetargeted = true;
+        }
+    }
+    return hasRetargeted;
+}
+
+void AudioMmSfx_DetachPos(Vec3f* pos) {
+    Vec3f* detached = &sMmDetachedPos[sMmDetachedPosNext];
+    *detached = *pos;
+    bool hasEntries = MmSfx_RetargetBankEntries(pos, detached);
+    bool hasRequests = MmSfx_RetargetRequests(pos, detached);
+    if (hasEntries || hasRequests) {
+        sMmDetachedPosNext = (sMmDetachedPosNext + 1) % ARRAY_COUNT(sMmDetachedPos);
+    }
+}
+
 // VERBATIM from sfx.c:916-952
 void AudioMmSfx_Reset(void) {
     u8 bankId;

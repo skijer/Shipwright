@@ -26,6 +26,7 @@
 #define MM_SE_EN_BAKUO_VOICE 0x38FB
 #define MM_SE_EN_BAKUO_DEAD 0x39C8
 #define MM_SE_EN_BAKUO_APPEAR 0x39C9
+#define MM_SE_IT_BOMB_EXPLOSION 0x180E
 
 #define NEJIRON_WAKE_RANGE 200.0f
 #define NEJIRON_ROAM_RADIUS 240.0f
@@ -299,7 +300,7 @@ static void Nejiron_Detonate(EnNejiron* this, PlayState* play) {
                             NULL);
     }
     EffectSsBomb2_SpawnLayered(play, &this->actor.world.pos, &sZeroVec, &sZeroVec, 100, 19);
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_BOMB_EXPLOSION);
+    PlaySfx(&this->actor, MM_SE_IT_BOMB_EXPLOSION, NA_SE_IT_BOMB_EXPLOSION);
     PlaySfx(&this->actor, MM_SE_EN_BAKUO_DEAD, NA_SE_EN_DODO_M_DEAD);
     this->timer = 30;
     this->actor.flags |= ACTOR_FLAG_LOCK_ON_DISABLED;

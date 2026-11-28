@@ -27,6 +27,10 @@
 #define MM_SE_EN_THIEFBIRD_VOICE 0x3A97
 #define MM_SE_EN_THIEFBIRD_DAMAGE 0x3A98
 #define MM_SE_EN_THIEFBIRD_DEAD 0x3A99
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_EXTINCT 0x3878
+#define MM_SE_EN_KAICHO_FLUTTER 0x3897
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define TAKKURI_HEALTH 24
 #define TAKKURI_FEATHER_COUNT 40
@@ -533,7 +537,7 @@ static void Takkuri_Swoop(EnTakkuri* this, PlayState* play) {
 
     SkelAnime_Update(&this->skelAnime);
     if (Animation_OnFrame(&this->skelAnime, 1.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_KAICHO_FLUTTER);
+        PlaySfx(&this->actor, MM_SE_EN_KAICHO_FLUTTER, NA_SE_EN_KAICHO_FLUTTER);
     }
     if (this->timer != 0) {
         this->timer--;
@@ -614,7 +618,7 @@ static void Takkuri_Falling(EnTakkuri* this, PlayState* play) {
                              1, 9, false);
     }
     sDeathSfxPos = this->actor.projectedPos;
-    PlaySfxAt(&this->actor, &sDeathSfxPos, NA_SE_EN_EXTINCT, NA_SE_EN_EXTINCT);
+    PlaySfxAt(&this->actor, &sDeathSfxPos, MM_SE_EN_EXTINCT, NA_SE_EN_EXTINCT);
     Takkuri_DropLoot(this, play);
     GameInteractor_ExecuteOnEnemyDefeat(&this->actor);
     Actor_Kill(&this->actor);
@@ -638,7 +642,7 @@ static void Takkuri_SetupFlinch(EnTakkuri* this, PlayState* play) {
     this->actor.speedXZ = this->actor.colChkInfo.damageEffect == TAKKURI_DMGEFF_FREEZE ? 0.0f : 4.0f;
     if (isStun) {
         Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     } else {
         Actor_SetColorFilter(&this->actor, COLORFILTER_RED, 255, COLORFILTER_OPA, 40);
         PlaySfx(&this->actor, MM_SE_EN_THIEFBIRD_DAMAGE, NA_SE_EN_KAICHO_DAMAGE);
@@ -697,7 +701,20 @@ static void Takkuri_Retreat(EnTakkuri* this, PlayState* play) {
     }
 }
 
+// A frozen or culled bird can miss the frame its loot was killed; the freed block may already hold another actor.
+static bool Takkuri_IsLootListed(EnTakkuri* this, PlayState* play) {
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_MISC].head; actor != NULL; actor = actor->next) {
+        if (actor == &this->targetLoot->actor) {
+            return actor->id == ACTOR_EN_ITEM00;
+        }
+    }
+    return false;
+}
+
 static bool Takkuri_IsLootGone(EnTakkuri* this, PlayState* play) {
+    if (!Takkuri_IsLootListed(this, play)) {
+        return true;
+    }
     Player* player = GET_PLAYER(play);
     EnItem00* loot = this->targetLoot;
 
@@ -771,7 +788,7 @@ static void Takkuri_GatherLoot(EnTakkuri* this, PlayState* play) {
 }
 
 static void Takkuri_ShatterIce(EnTakkuri* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < TAKKURI_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.2f);
@@ -815,7 +832,7 @@ static void Takkuri_PlayWingbeat(EnTakkuri* this) {
         this->skelAnime.animation == (void*)sTakkuriFlyWithItemAnim && Animation_OnFrame(&this->skelAnime, 1.0f);
 
     if (isFlying || isFleeing) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_KAICHO_FLUTTER);
+        PlaySfx(&this->actor, MM_SE_EN_KAICHO_FLUTTER, NA_SE_EN_KAICHO_FLUTTER);
     }
 }
 

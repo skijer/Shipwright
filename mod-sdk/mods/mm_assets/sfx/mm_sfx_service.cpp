@@ -123,6 +123,16 @@ void UpdateMmSfx() {
     AudioMmSfx_ProcessActiveSfx();
 }
 
+// Mods play at &actor->projectedPos, and OoT only stops its own sounds when an actor goes. Runs before
+// Actor_Delete frees the actor, so its position can still be copied.
+void DetachActorSfx(void* actor) {
+    if (!sQueueReset) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sEngineMutex);
+    AudioMmSfx_DetachPos(&static_cast<Actor*>(actor)->projectedPos);
+}
+
 } // namespace
 
 void MmSfxService_Init(const SOHModApi* api) {
@@ -133,4 +143,5 @@ void MmSfxService_Init(const SOHModApi* api) {
     api->PublishService(MM_OCARINA_NOTE_SERVICE, reinterpret_cast<void*>(&PlayMmOcarinaNote));
     api->RegisterAudioMixInGroup(MixMmSfx, SOH_AUDIO_GROUP_SFX, nullptr);
     SOH_REGISTER_HOOK(api, OnGameFrameUpdate, UpdateMmSfx);
+    SOH_REGISTER_HOOK(api, OnActorDestroy, DetachActorSfx);
 }

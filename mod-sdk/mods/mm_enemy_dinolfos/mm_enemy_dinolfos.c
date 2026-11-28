@@ -14,6 +14,7 @@
 
 #define DINOLFOS_KEY "mm.dinolfos"
 #define DINOLFOS_SOUL_ITEM_KEY "soul.mm.dinolfos"
+#define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 #define GORON_MASK_KEY "nei.goron_form_mask"
 
 #define OBJ_DINOLFOS "__OTR__objects/object_dinofos/"
@@ -22,6 +23,19 @@
 #define COLORFILTER_RED 0x4000
 #define COLORFILTER_OPA 0x0000
 #define BGCHECK_UPDATE_WALL_FLOOR ((1 << 0) | (1 << 2))
+
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_DODO_J_FIRE 0x3802
+#define MM_SE_EN_BOMCHU_WALK 0x3828
+#define MM_SE_EN_RIZA_CRY 0x3829
+#define MM_SE_EN_RIZA_ATTACK 0x382A
+#define MM_SE_EN_RIZA_DAMAGE 0x382B
+#define MM_SE_EN_RIZA_WARAU 0x382C
+#define MM_SE_EN_RIZA_DEAD 0x382D
+#define MM_SE_EN_RIZA_WALK 0x382E
+#define MM_SE_EN_RIZA_JUMP 0x382F
+#define MM_SE_EN_GERUDOFT_DOWN 0x387A
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define DINOLFOS_HEALTH 4
 #define DINOLFOS_FIRE_START_INDEX 6
@@ -263,8 +277,24 @@ static Vec3f sKnifeBaseOffset = { 300.0f, 500.0f, 0.0f };
 static Vec3f sClawOffset = { 300.0f, 0.0f, 0.0f };
 static Vec3f sZeroVec = { 0.0f, 0.0f, 0.0f };
 
+typedef bool (*MmSfxPlayFunc)(uint16_t sfxId, Vec3f* pos);
+
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), NULL, 0 };
 static const SOHModApi* sApi;
+static MmSfxPlayFunc sPlayMmSfx;
+static bool sIsMmSfxSearched;
+
+// Falls back to the closest OoT sound when the mm_assets sound service is missing.
+static void PlaySfx(Actor* actor, u16 mmSfx, u16 ootSfx) {
+    if (!sIsMmSfxSearched && SOH_MOD_API_HAS(sApi, FindService)) {
+        sPlayMmSfx = (MmSfxPlayFunc)sApi->FindService(MM_SFX_PLAY_SERVICE);
+        sIsMmSfxSearched = true;
+    }
+    if (sPlayMmSfx != NULL && sPlayMmSfx(mmSfx, &actor->projectedPos)) {
+        return;
+    }
+    Audio_PlayActorSound2(actor, ootSfx);
+}
 
 static void Dinolfos_Idle(EnDinolfos* this, PlayState* play);
 static void Dinolfos_Walk(EnDinolfos* this, PlayState* play);
@@ -367,7 +397,7 @@ static void Dinolfos_ThawIfFrozen(EnDinolfos* this, PlayState* play) {
     this->isFrozen = false;
     this->collider.base.colType = COLTYPE_HIT0;
     this->actor.flags |= ACTOR_FLAG_HOOKSHOT_PULLS_PLAYER;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < DINOLFOS_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        1.0f);
@@ -405,7 +435,7 @@ static bool Dinolfos_Dodge(EnDinolfos* this, PlayState* play) {
 
         if (ABS(angle) < 0x3000) {
             Dinolfos_SetupDodgeProjectile(this, angle + this->headRotY);
-            Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WARAU);
+            PlaySfx(&this->actor, MM_SE_EN_RIZA_WARAU, NA_SE_EN_RIZA_WARAU);
             return true;
         }
     }
@@ -413,7 +443,7 @@ static bool Dinolfos_Dodge(EnDinolfos* this, PlayState* play) {
 
     if (bombchu != NULL && ABS(Dinolfos_GetAngleToActor(this, bombchu)) < 0x3000) {
         Dinolfos_SetupChooseJump(this, DINOLFOS_JUMP_IN_PLACE);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WARAU);
+        PlaySfx(&this->actor, MM_SE_EN_RIZA_WARAU, NA_SE_EN_RIZA_WARAU);
         return true;
     }
     if (play->actorCtx.unk_02 != 0) {
@@ -424,7 +454,7 @@ static bool Dinolfos_Dodge(EnDinolfos* this, PlayState* play) {
         return false;
     }
     Dinolfos_SetupChooseJump(this, Rand_ZeroOne() < 0.5f ? DINOLFOS_JUMP_BACKWARD : DINOLFOS_JUMP_SLASH);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WARAU);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_WARAU, NA_SE_EN_RIZA_WARAU);
     return true;
 }
 
@@ -486,7 +516,7 @@ static void Dinolfos_Walk(EnDinolfos* this, PlayState* play) {
         Dinolfos_ChooseAction(this, play);
     }
     if (Animation_OnFrame(&this->skelAnime, 0.0f) || Animation_OnFrame(&this->skelAnime, 6.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WALK);
+        PlaySfx(&this->actor, MM_SE_EN_RIZA_WALK, NA_SE_EN_RIZA_WALK);
     }
 }
 
@@ -585,7 +615,7 @@ static void Dinolfos_CircleAroundPlayer(EnDinolfos* this, PlayState* play) {
         Dinolfos_ChooseAction(this, play);
     }
     if (Animation_OnFrame(&this->skelAnime, 0.0f) || Animation_OnFrame(&this->skelAnime, 5.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WALK);
+        PlaySfx(&this->actor, MM_SE_EN_RIZA_WALK, NA_SE_EN_RIZA_WALK);
     }
 }
 
@@ -615,7 +645,7 @@ static void Dinolfos_SetupJump(EnDinolfos* this) {
         }
     }
     this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_JUMP);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_JUMP, NA_SE_EN_RIZA_JUMP);
     this->actionFunc = Dinolfos_Jump;
 }
 
@@ -623,7 +653,7 @@ static void Dinolfos_SetupJumpSlash(EnDinolfos* this) {
     this->actor.bgCheckFlags &= ~BGCHECKFLAG_GROUND;
     this->actor.speedXZ = 8.0f;
     this->actor.velocity.y = 16.0f;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_JUMP);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_JUMP, NA_SE_EN_RIZA_JUMP);
     this->timer = 0;
     this->lastKnifeFrame = -1;
     this->actionFunc = Dinolfos_JumpSlash;
@@ -675,7 +705,7 @@ static void Dinolfos_SetupLand(EnDinolfos* this) {
     }
     this->isJumpingBackward = this->actor.speedXZ < 0.0f;
     this->actor.speedXZ = 0.0f;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_ONGND);
+    PlaySfx(&this->actor, MM_SE_EN_BOMCHU_WALK, NA_SE_EN_RIZA_ONGND);
     this->actionFunc = Dinolfos_Land;
 }
 
@@ -696,7 +726,7 @@ static void Dinolfos_Land(EnDinolfos* this, PlayState* play) {
 static void Dinolfos_SetupSlash(EnDinolfos* this) {
     Animation_PlayOnce(&this->skelAnime, (AnimationHeader*)sDinolfosAttackAnim);
     this->knifeCollider.base.atFlags &= ~AT_BOUNCED;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_CRY);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_CRY, NA_SE_EN_RIZA_CRY);
     this->timer = 0;
     this->lastKnifeFrame = -1;
     this->actor.speedXZ = 0.0f;
@@ -717,7 +747,7 @@ static void Dinolfos_Slash(EnDinolfos* this, PlayState* play) {
     } else if (Animation_OnFrame(&this->skelAnime, 13.0f)) {
         this->knifeCollider.base.atFlags &= ~AT_ON;
     } else if (Animation_OnFrame(&this->skelAnime, 11.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_ATTACK);
+        PlaySfx(&this->actor, MM_SE_EN_RIZA_ATTACK, NA_SE_EN_RIZA_ATTACK);
     } else if (this->skelAnime.curFrame < 7.0f) {
         Dinolfos_Dodge(this, play);
     }
@@ -788,7 +818,7 @@ static void Dinolfos_SetupDamaged(EnDinolfos* this, s32 elementIndex) {
     this->actor.speedXZ = 10.0f;
     this->actor.velocity.y = MIN(this->actor.velocity.y, 0.0f);
     this->headRotY = 0;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_DAMAGE);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_DAMAGE, NA_SE_EN_RIZA_DAMAGE);
     this->collider.base.acFlags &= ~AC_ON;
     Actor_SetColorFilter(&this->actor, COLORFILTER_RED, 255, COLORFILTER_OPA, 18);
     this->actionFunc = Dinolfos_Damaged;
@@ -846,7 +876,7 @@ static void Dinolfos_SpawnFireBreath(EnDinolfos* this, PlayState* play) {
     Vec3f velocity = { 11.0f * sin, Rand_CenteredFloat(2.0f) - 5.4f, 11.0f * cos };
     Vec3f accel = { 0.9f * sin, Rand_CenteredFloat(0.6f) + 1.4f, 0.9f * cos };
 
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_DODO_J_FIRE - SFX_FLAG);
+    PlaySfx(&this->actor, MM_SE_EN_DODO_J_FIRE - SFX_FLAG, NA_SE_EN_DODO_J_FIRE - SFX_FLAG);
     EffectSsDFire_Spawn(play, &this->bodyPartsPos[DINOLFOS_BODYPART_JAW], &velocity, &accel, 30, 22,
                         255 - dimSteps * 20, 3, 8);
 }
@@ -900,7 +930,7 @@ static void Dinolfos_EndBreatheFire(EnDinolfos* this, PlayState* play) {
 static void Dinolfos_SetupDie(EnDinolfos* this) {
     Animation_PlayOnce(&this->skelAnime, (AnimationHeader*)sDinolfosDieAnim);
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_DEAD);
+    PlaySfx(&this->actor, MM_SE_EN_RIZA_DEAD, NA_SE_EN_RIZA_DEAD);
     this->actor.speedXZ = 0.0f;
     this->actor.world.rot.y = this->actor.shape.rot.y;
     this->actionFunc = Dinolfos_Die;
@@ -910,7 +940,7 @@ static void Dinolfos_SetupDie(EnDinolfos* this) {
 static void Dinolfos_Die(EnDinolfos* this, PlayState* play) {
     if (!SkelAnime_Update(&this->skelAnime)) {
         if (Animation_OnFrame(&this->skelAnime, 26.0f)) {
-            Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_DOWN);
+            PlaySfx(&this->actor, MM_SE_EN_GERUDOFT_DOWN, NA_SE_EN_RIZA_DOWN);
         }
         return;
     }
@@ -944,7 +974,7 @@ static void Dinolfos_DodgeProjectile(EnDinolfos* this, PlayState* play) {
         Dinolfos_ChooseAction(this, play);
     }
     if (Animation_OnFrame(&this->skelAnime, 0.0f) || Animation_OnFrame(&this->skelAnime, 5.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_RIZA_WALK);
+        PlaySfx(&this->actor, MM_SE_EN_RIZA_WALK, NA_SE_EN_RIZA_WALK);
     }
 }
 
@@ -994,7 +1024,7 @@ static void Dinolfos_ReactToHit(EnDinolfos* this, s32 elementIndex) {
     if (effect == DINOLFOS_DMGEFF_STUN) {
         this->timer = 40;
         Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
         Dinolfos_SetupStunned(this);
         return;
     }

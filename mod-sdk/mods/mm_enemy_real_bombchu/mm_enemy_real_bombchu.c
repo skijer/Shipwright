@@ -26,6 +26,7 @@
 #define MM_SE_EN_BOMCHU_VOICE 0x3854
 #define MM_SE_EN_BOMCHU_AIM 0x3855
 #define MM_SE_EN_BOMCHU_RUN 0x3856
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define REAL_BOMBCHU_OVERWORLD 0x8000
 #define REAL_BOMBCHU_DMGEFF_STUN 0x1
@@ -638,7 +639,7 @@ static void RealBombchu_ReactToHit(EnRealBombchu* this, PlayState* play) {
         RealBombchu_Explode(this, play);
         return;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 120, COLORFILTER_OPA, 40);
     if (this->actionFunc != RealBombchu_Bounced) {
         this->stunTimer = 40;

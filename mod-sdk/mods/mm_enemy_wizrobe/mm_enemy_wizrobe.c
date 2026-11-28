@@ -38,6 +38,14 @@
 #define MM_SE_EN_WIZ_EXP 0x38AB
 #define MM_SE_EN_WIZ_LAUGH2 0x38B0
 #define MM_SE_EN_WIZ_DISAPPEAR 0x3877
+#define MM_SE_PL_MAGIC_FIRE 0x0879
+#define MM_SE_IT_SHIELD_REFLECT_MG 0x180C
+#define MM_SE_IT_BOMB_EXPLOSION 0x180E
+#define MM_SE_EV_BURN_OUT 0x285B
+#define MM_SE_EV_ICE_MELT 0x28A2
+#define MM_SE_EV_ICE_FREEZE 0x28B2
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_EXTINCT 0x3878
 
 #define WIZROBE_PLATFORM_MAX 5
 #define WIZROBE_PLATFORM_MIN 3
@@ -819,7 +827,7 @@ static void Wizrobe_CastSpell(EnWizrobe* this, PlayState* play) {
                        Math_Vec3f_Yaw(&pos, &player->actor.world.pos), 0, magicType);
     this->hasActiveProjectile = true;
     PlaySfx(&this->actor, MM_SE_EN_WIZ_ATTACK, NA_SE_EN_FANTOM_MASIC1);
-    Audio_PlayActorSound2(&this->actor, NA_SE_PL_MAGIC_FIRE);
+    PlaySfx(&this->actor, MM_SE_PL_MAGIC_FIRE, NA_SE_PL_MAGIC_FIRE);
 }
 
 static void Wizrobe_Attack(EnWizrobe* this, PlayState* play) {
@@ -919,7 +927,7 @@ static void Wizrobe_Launch(EnWizrobe* this) {
 }
 
 static void Wizrobe_ShatterIce(EnWizrobe* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < WIZROBE_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.7f);
@@ -999,7 +1007,7 @@ static void Wizrobe_Dead(EnWizrobe* this, PlayState* play) {
         return;
     }
     Wizrobe_ReleasePlatforms(this, play, true);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_EXTINCT);
+    PlaySfx(&this->actor, MM_SE_EN_EXTINCT, NA_SE_EN_EXTINCT);
     Wizrobe_StopMinibossMusic(this);
     GameInteractor_ExecuteOnEnemyDefeat(&this->actor);
     Actor_Kill(&this->actor);
@@ -1458,12 +1466,12 @@ static void Magic_LandProjectile(EnWizrobeMagic* this, PlayState* play) {
                                MAGIC_TYPE_ARCING_PROJECTILE);
             emberYaw += (s16)((s32)Rand_CenteredFloat(0x1000) + 0x10000 / 5);
         }
-        Audio_PlayActorSound2(&this->actor, NA_SE_IT_BOMB_EXPLOSION);
+        PlaySfx(&this->actor, MM_SE_IT_BOMB_EXPLOSION, NA_SE_IT_BOMB_EXPLOSION);
         this->poolTimer = Rand_S16Offset(70, 30);
         PlaySfx(&this->actor, MM_SE_EN_WIZ_EXP - SFX_FLAG, NA_SE_EV_BURN_OUT - SFX_FLAG);
     } else {
         this->poolTimer = 100;
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
+        PlaySfx(&this->actor, MM_SE_EV_ICE_FREEZE - SFX_FLAG, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
     }
     this->actor.velocity = sZeroVec;
     this->timer = 0;
@@ -1473,7 +1481,7 @@ static void Magic_LandProjectile(EnWizrobeMagic* this, PlayState* play) {
 }
 
 static void Magic_Reflect(EnWizrobeMagic* this) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_REFLECT_MG);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_REFLECT_MG, NA_SE_IT_SHIELD_REFLECT_MG);
     this->collider.base.atFlags &= ~(AT_TYPE_ENEMY | AT_BOUNCED | AT_HIT);
     this->collider.base.atFlags |= AT_TYPE_PLAYER;
     this->collider.info.toucher.dmgFlags = DMG_ARROW_NORMAL;
@@ -1526,7 +1534,7 @@ static void Magic_MoveProjectile(EnWizrobeMagic* this, PlayState* play) {
         if (Magic_IsHitByIceArrow(this)) {
             this->timer = 0;
             this->hitByIceArrow = true;
-            Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_MELT);
+            PlaySfx(&this->actor, MM_SE_EV_ICE_MELT, NA_SE_EV_ICE_MELT);
         }
     }
     if (Player_HasMirrorShieldEquipped(play) && (this->collider.base.atFlags & AT_BOUNCED)) {
@@ -1550,11 +1558,11 @@ static void Magic_SmallFlame(EnWizrobeMagic* this, PlayState* play) {
         if (Magic_IsHitByIceArrow(this)) {
             this->timer = 0;
             this->hitByIceArrow = true;
-            Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_MELT);
+            PlaySfx(&this->actor, MM_SE_EV_ICE_MELT, NA_SE_EV_ICE_MELT);
         }
     }
     if (this->timer != 0) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_BURN_OUT - SFX_FLAG);
+        PlaySfx(&this->actor, MM_SE_EV_BURN_OUT - SFX_FLAG, NA_SE_EV_BURN_OUT - SFX_FLAG);
     }
 }
 
@@ -1588,7 +1596,7 @@ static void Magic_GrowIcePool(EnWizrobeMagic* this) {
     this->collider.dim.height = 30;
     this->collider.dim.yShift = 15;
     Magic_AddIceSmoke(this, &pos, &accel);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_FREEZE - SFX_FLAG, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
 }
 
 static void Magic_GrowFirePool(EnWizrobeMagic* this) {
@@ -1604,7 +1612,7 @@ static void Magic_GrowFirePool(EnWizrobeMagic* this) {
             sPoolHitByIceArrow = true;
             this->hitByIceArrow = true;
             this->poolTimer = 0;
-            Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_MELT);
+            PlaySfx(&this->actor, MM_SE_EV_ICE_MELT, NA_SE_EV_ICE_MELT);
         }
     }
     this->actor.world.pos.y = this->actor.floorHeight + 10.0f;
@@ -1613,7 +1621,7 @@ static void Magic_GrowFirePool(EnWizrobeMagic* this) {
 
 static void Magic_ShrinkIcePool(EnWizrobeMagic* this) {
     Math_ApproachZeroF(&this->poolScale, 0.046f, 0.001f);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_FREEZE - SFX_FLAG, NA_SE_EV_ICE_FREEZE - SFX_FLAG);
     if (!this->shouldPoolFadeOut && Magic_GetCaster(this) != NULL && this->poolScale < 0.05f) {
         this->collider.dim.yShift = -15;
         this->shouldPoolFadeOut = true;

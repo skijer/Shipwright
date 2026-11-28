@@ -29,6 +29,7 @@
 #define MM_SE_EN_BATTA_DAMAGE 0x38A2
 #define MM_SE_EN_BATTA_DEAD 0x38A3
 #define MM_SE_EN_COMMON_EXTINCT_LEV 0x3A1F
+#define MM_SE_EV_ICE_BROKEN 0x28CB
 
 #define DRAGONFLY_HEALTH 2
 #define DRAGONFLY_NOTICE_RANGE 200.0f
@@ -399,7 +400,7 @@ static void Dragonfly_Thaw(EnDragonfly* this, PlayState* play) {
         return;
     }
     this->isFrozen = false;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < 4; i++) {
         Vec3f pos = this->actor.world.pos;
 

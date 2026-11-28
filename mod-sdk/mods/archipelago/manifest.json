@@ -1,0 +1,9 @@
+{
+    "name": "archipelago",
+    "author": "Skijer",
+    "version": "1.0",
+    "display_name": "Archipelago",
+    "game": "oot",
+    "fleet_only": true,
+    "description": "Items of other Archipelago players, found in your checks: named for their owner and their game, drawn by their class."
+}

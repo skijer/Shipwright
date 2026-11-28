@@ -26,6 +26,13 @@
 #define MM_SE_EN_STALKIDS_APPEAR 0x3873
 #define MM_SE_EN_WIZ_DISAPPEAR 0x3877
 #define MM_SE_EN_COMMON_EXTINCT_LEV 0x3A1F
+#define MM_SE_EV_METAL_BOX_BOUND 0x28E0
+#define MM_SE_EN_PO_FLY 0x3871
+#define MM_SE_EN_PO_DISAPPEAR 0x3874
+#define MM_SE_EN_PO_DAMAGE 0x3875
+#define MM_SE_EN_PO_DEAD 0x3876
+#define MM_SE_EN_PO_LAUGH 0x38EC
+#define MM_SE_EN_PO_ROLL 0x38EE
 
 #define BIG_POE_HEALTH 10
 #define BIG_POE_WAKE_RANGE 400.0f
@@ -224,7 +231,7 @@ static void BigPoe_UpdateSpin(EnBigPoe* this) {
 
     this->actor.shape.rot.y += this->angularVelocity;
     if (previousYaw < 0 && this->actor.shape.rot.y > 0) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_ROLL);
+        PlaySfx(&this->actor, MM_SE_EN_PO_ROLL, NA_SE_EN_PO_ROLL);
     }
 }
 
@@ -336,7 +343,7 @@ static void BigPoe_SetupWarpOut(EnBigPoe* this) {
     this->timer = 32;
     this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
     this->actor.speedXZ = 0.0f;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_DISAPPEAR);
+    PlaySfx(&this->actor, MM_SE_EN_PO_DISAPPEAR, NA_SE_EN_PO_DISAPPEAR);
     this->actionFunc = BigPoe_WarpingOut;
 }
 
@@ -434,7 +441,7 @@ static void BigPoe_IdleFlying(EnBigPoe* this, PlayState* play) {
     Math_StepToF(&this->hoverHeight, player->actor.world.pos.y + 100.0f, 1.5f);
     this->actor.world.pos.y = Math_SinF(this->hoverCycle * (M_PI / 20)) * 10.0f + this->hoverHeight;
     Math_StepToF(&this->actor.speedXZ, 3.0f, 0.2f);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_FLY - SFX_FLAG);
+    PlaySfx(&this->actor, MM_SE_EN_PO_FLY - SFX_FLAG, NA_SE_EN_PO_FLY - SFX_FLAG);
     if (Actor_WorldDistXZToPoint(&this->actor, &this->actor.home.pos) > BIG_POE_LEASH_RADIUS) {
         this->targetYaw = Actor_WorldYawTowardPoint(&this->actor, &this->actor.home.pos);
     }
@@ -606,7 +613,7 @@ static void BigPoe_BurnAway(EnBigPoe* this, PlayState* play) {
 
 static void BigPoe_Vanish(EnBigPoe* this, PlayState* play) {
     EffectSsHahen_SpawnBurst(play, &this->actor.world.pos, 6.0f, 0, 1, 1, 15, -1, 10, (Gfx*)sBigPoeLanternFallingDL);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_METAL_BOX_BOUND);
+    PlaySfx(&this->actor, MM_SE_EV_METAL_BOX_BOUND, NA_SE_EV_METAL_BOX_BOUND);
     Item_DropCollectible(play, &this->actor.world.pos, ITEM00_RUPEE_PURPLE);
     Item_DropCollectibleRandom(play, &this->actor, &this->actor.world.pos, 0x80);
     GameInteractor_ExecuteOnEnemyDefeat(&this->actor);
@@ -649,11 +656,11 @@ static void BigPoe_FlickerLantern(EnBigPoe* this) {
 static void BigPoe_TakeHit(EnBigPoe* this, PlayState* play) {
     if (Actor_ApplyDamage(&this->actor) == 0) {
         this->actor.flags &= ~ACTOR_FLAG_ATTENTION_ENABLED;
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_DEAD);
+        PlaySfx(&this->actor, MM_SE_EN_PO_DEAD, NA_SE_EN_PO_DEAD);
         Enemy_StartFinishingBlow(play, &this->actor);
         BigPoe_StopMinibossMusic(this);
     } else {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_DAMAGE);
+        PlaySfx(&this->actor, MM_SE_EN_PO_DAMAGE, NA_SE_EN_PO_DAMAGE);
     }
     BigPoe_SetupHitStun(this);
 }
@@ -682,7 +689,7 @@ static bool BigPoe_CanLoseInterest(EnBigPoe* this) {
 static void BigPoe_UpdateLockOnPatience(EnBigPoe* this) {
     this->lockOnFrames = BigPoe_CanLoseInterest(this) ? this->lockOnFrames + 1 : 0;
     if (this->lockOnFrames == BIG_POE_LOCK_ON_PATIENCE) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EN_PO_LAUGH);
+        PlaySfx(&this->actor, MM_SE_EN_PO_LAUGH, NA_SE_EN_PO_LAUGH);
         BigPoe_SetupWarpOut(this);
     }
 }

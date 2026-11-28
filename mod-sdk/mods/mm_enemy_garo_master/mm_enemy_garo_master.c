@@ -37,6 +37,11 @@
 #define MM_SE_EN_ANSATSUSYA_DAMAGE 0x39C5
 #define MM_SE_EN_ANSATSUSYA_DEAD 0x39C6
 #define MM_SE_EN_ANSATSUSYA_SWORD 0x39C7
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_IT_SWORD_SWING_HARD 0x1818
+#define MM_SE_EV_FLAME_IGNITION 0x2822
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define GARO_MASTER_HEALTH 14
 #define GARO_MASTER_SCALE 0.042f
@@ -331,7 +336,7 @@ static bool GaroMaster_IsFrozen(EnGaroMaster* this) {
 }
 
 static void GaroMaster_ShatterIce(EnGaroMaster* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < GARO_MASTER_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.7f);
@@ -395,7 +400,7 @@ static void GaroMaster_Appear(EnGaroMaster* this, PlayState* play) {
     if (Animation_OnFrame(&this->skelAnime, 45.0f)) {
         GaroMaster_StartMinibossMusic(this);
         PlaySfx(&this->actor, MM_SE_EN_ANSATSUSYA_SWORD, NA_SE_IT_SWORD_PICKOUT);
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_FLAME_IGNITION);
+        PlaySfx(&this->actor, MM_SE_EV_FLAME_IGNITION, NA_SE_EV_FLAME_IGNITION);
         this->areSwordsDrawn = true;
     }
     if (this->areSwordsDrawn) {
@@ -494,7 +499,7 @@ static void GaroMaster_SetupGuard(EnGaroMaster* this) {
     this->actor.speedXZ = 0.0f;
     GaroMaster_ChangeAnim(this, GARO_MASTER_ANIM_GUARD);
     this->actor.world.rot.y = this->actor.yawTowardsPlayer;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     this->bodyCollider.base.acFlags |= AC_HARD;
     this->action = GARO_MASTER_ACTION_GUARD;
     this->actionFunc = GaroMaster_Guard;
@@ -614,7 +619,7 @@ static void GaroMaster_SetupSlash(EnGaroMaster* this, PlayState* play) {
     GaroMaster_SpawnDustRing(this, play);
     Math_ApproachZeroF(&this->actor.speedXZ, 0.3f, 3.0f);
     this->slashHitSomething = false;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SWORD_SWING_HARD);
+    PlaySfx(&this->actor, MM_SE_IT_SWORD_SWING_HARD, NA_SE_IT_SWORD_SWING_HARD);
     this->action = GARO_MASTER_ACTION_SLASH;
     this->bodyCollider.base.acFlags &= ~AC_HARD;
     this->actionFunc = GaroMaster_Slash;
@@ -640,7 +645,7 @@ static void GaroMaster_Damaged(EnGaroMaster* this, PlayState* play) {
     }
     GaroMaster_ChangeAnim(this, GARO_MASTER_ANIM_SPIN_ATTACK);
     this->slashHitSomething = false;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SWORD_SWING_HARD);
+    PlaySfx(&this->actor, MM_SE_IT_SWORD_SWING_HARD, NA_SE_IT_SWORD_SWING_HARD);
     this->disableBlure = false;
     this->attackTimer = 15;
     this->action = GARO_MASTER_ACTION_SPIN_ATTACK;
@@ -720,6 +725,17 @@ static void GaroMaster_FadeAway(EnGaroMaster* this, PlayState* play) {
     }
 }
 
+// The bomb can blow up early on contact with an enemy or when its fuse runs out, and may be freed while this actor is
+// frozen, so the pointer is trusted only while the bomb is still listed and alive.
+static bool GaroMaster_IsBombAlive(EnGaroMaster* this, PlayState* play) {
+    for (Actor* actor = play->actorCtx.actorLists[ACTORCAT_EXPLOSIVE].head; actor != NULL; actor = actor->next) {
+        if (actor == &this->bomb->actor) {
+            return actor->id == ACTOR_EN_BOM && actor->update != NULL;
+        }
+    }
+    return false;
+}
+
 static void GaroMaster_HoldBomb(EnGaroMaster* this) {
     if (this->bomb == NULL) {
         return;
@@ -734,6 +750,9 @@ static void GaroMaster_BlowUp(EnGaroMaster* this, PlayState* play) {
     Math_SmoothStepToS(&this->actor.shape.rot.y, this->actor.yawTowardsPlayer, 0xA, 0xFA0, 0x14);
     bool isAnimDone = GaroMaster_IsAnimDone(this);
 
+    if (this->bomb != NULL && !GaroMaster_IsBombAlive(this, play)) {
+        this->bomb = NULL;
+    }
     if (this->animIndex == GARO_MASTER_ANIM_COLLAPSE && isAnimDone) {
         this->blowUpCounter = 0;
         GaroMaster_ChangeAnim(this, GARO_MASTER_ANIM_TREMBLE);
@@ -804,7 +823,7 @@ static void GaroMaster_Stun(EnGaroMaster* this) {
     if (GaroMaster_IsFrozen(this)) {
         return;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
     GaroMaster_SetupStunned(this);
 }
@@ -1002,7 +1021,7 @@ static void EnGaroMaster_Destroy(Actor* thisx, PlayState* play) {
     Collider_DestroyQuad(play, &this->leftSwordCollider);
     Effect_Delete(play, this->rightSwordBlureIndex);
     Effect_Delete(play, this->leftSwordBlureIndex);
-    if (this->bomb != NULL) {
+    if (this->bomb != NULL && GaroMaster_IsBombAlive(this, play)) {
         this->bomb->actor.parent = NULL;
     }
     GaroMaster_StopMinibossMusic(this);

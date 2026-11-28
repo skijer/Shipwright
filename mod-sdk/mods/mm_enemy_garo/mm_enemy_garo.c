@@ -35,6 +35,10 @@
 #define MM_SE_EN_ANSATSUSYA_DEAD 0x39C6
 #define MM_SE_EN_ANSATSUSYA_SWORD 0x39C7
 #define MM_SE_EN_COMMON_EXTINCT_LEV 0x3A1F
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_IT_SWORD_SWING_HARD 0x1818
+#define MM_SE_EV_ICE_BROKEN 0x28CB
+#define MM_SE_EN_COMMON_FREEZE 0x389E
 
 #define GARO_HEALTH 3
 #define GARO_SCALE 0.035f
@@ -331,7 +335,7 @@ static bool Garo_IsFrozen(EnGaro* this) {
 }
 
 static void Garo_ShatterIce(EnGaro* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_ICE_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_ICE_BROKEN, NA_SE_EV_ICE_BROKEN);
     for (s32 i = 0; i < GARO_BODYPART_MAX; i++) {
         EffectSsEnIce_SpawnFlyingVec3f(play, &this->actor, &this->bodyPartsPos[i], 150, 150, 150, 250, 235, 245, 255,
                                        0.3f);
@@ -585,7 +589,7 @@ static void Garo_SetupGuard(EnGaro* this) {
     Garo_ChangeAnim(this, GARO_ANIM_GUARD);
     this->action = GARO_ACTION_GUARD;
     this->actor.world.rot.y = this->actor.yawTowardsPlayer;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     this->bodyCollider.base.acFlags |= AC_HARD;
     this->actionFunc = Garo_Guard;
 }
@@ -672,7 +676,7 @@ static void Garo_SetupSlash(EnGaro* this, PlayState* play) {
     Garo_SpawnDustRing(this, play);
     Math_ApproachZeroF(&this->actor.speedXZ, 0.3f, 3.0f);
     this->slashHitSomething = false;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SWORD_SWING_HARD);
+    PlaySfx(&this->actor, MM_SE_IT_SWORD_SWING_HARD, NA_SE_IT_SWORD_SWING_HARD);
     this->actionFunc = Garo_Slash;
 }
 
@@ -828,7 +832,7 @@ static void Garo_Stun(EnGaro* this) {
     if (Garo_IsFrozen(this)) {
         return;
     }
-    Audio_PlayActorSound2(&this->actor, NA_SE_EN_GOMA_JR_FREEZE);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_FREEZE, NA_SE_EN_GOMA_JR_FREEZE);
     Actor_SetColorFilter(&this->actor, COLORFILTER_BLUE, 255, COLORFILTER_OPA, 40);
     Garo_SetupStunned(this);
 }

@@ -7,7 +7,6 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "overlays/actors/ovl_En_Arrow/z_en_arrow.h"
@@ -16,7 +15,6 @@
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #define EYEGORE_KEY "mm.eyegore"
-#define EYEGORE_SOUL_ITEM_KEY "soul.mm.eyegore"
 #define EYEGORE_STONE_KEY "mm.eyegore.stone"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 
@@ -36,6 +34,10 @@
 #define MM_SE_EN_EYEGOLE_WALK 0x3A06
 #define MM_SE_EN_EYEGOLE_STAND 0x3A07
 #define MM_SE_EN_EYEGOLE_SIT 0x3A08
+#define MM_SE_IT_SHIELD_BOUND 0x1806
+#define MM_SE_IT_BOMB_EXPLOSION 0x180E
+#define MM_SE_EV_EXPLOSION 0x2802
+#define MM_SE_EV_WALL_BROKEN 0x2810
 
 #define EYEGORE_HEALTH 8
 #define EYEGORE_SCALE 0.015f
@@ -648,7 +650,7 @@ static void Eyegore_LaserImpact(EnEyegore* this, PlayState* play, Vec3f* hitPos,
         Eyegore_SpawnEffect(this, hitPos, &rotToNormal, 100, 0.02f, EYEGORE_EFFECT_IMPACT);
     }
     Eyegore_Quake(this, play);
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_EXPLOSION);
+    PlaySfx(&this->actor, MM_SE_EV_EXPLOSION, NA_SE_EV_EXPLOSION);
     EffectSsDeadDs_Spawn(play, hitPos, &sZeroVec, &sZeroVec, 40, -2, 255, 20);
     func_80033480(play, hitPos, 6.0f, 2, 120, 20, true);
     if (isPlayerLevel && this->actor.floorBgId == BGCHECK_SCENE) {
@@ -798,7 +800,7 @@ static void Eyegore_SlamWait(EnEyegore* this, PlayState* play) {
 }
 
 static void Eyegore_SlamImpact(EnEyegore* this, PlayState* play) {
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_EXPLOSION);
+    PlaySfx(&this->actor, MM_SE_EV_EXPLOSION, NA_SE_EV_EXPLOSION);
     Eyegore_Quake(this, play);
     if (this->actor.floorBgId == BGCHECK_SCENE) {
         Vec3f stonePos = { this->actor.world.pos.x + Math_SinS(this->actor.world.rot.y) * 60.0f,
@@ -930,7 +932,7 @@ static void Eyegore_Death(EnEyegore* this, PlayState* play) {
         return;
     }
     if (Animation_OnFrame(&this->skelAnime, 46.0f)) {
-        Audio_PlayActorSound2(&this->actor, NA_SE_EV_EXPLOSION);
+        PlaySfx(&this->actor, MM_SE_EV_EXPLOSION, NA_SE_EV_EXPLOSION);
         Actor_RequestQuakeAndRumble(&this->actor, play, 10, 5);
     }
     if (!Eyegore_IsAnimDone(this)) {
@@ -938,7 +940,7 @@ static void Eyegore_Death(EnEyegore* this, PlayState* play) {
     }
     EffectSsBomb2_SpawnLayered(play, &this->actor.world.pos, &sZeroVec, &sZeroVec, 100, 19);
     this->waitTimer = 30;
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_BOMB_EXPLOSION);
+    PlaySfx(&this->actor, MM_SE_IT_BOMB_EXPLOSION, NA_SE_IT_BOMB_EXPLOSION);
     this->action = EYEGORE_ACTION_DEAD;
     for (s32 i = 0; i < 20; i++) {
         Eyegore_SpawnEffect(this, &this->actor.world.pos, &sZeroRot, 10.0f + Rand_ZeroFloat(20.0f),
@@ -996,7 +998,7 @@ static void Eyegore_Deflect(EnEyegore* this, PlayState* play) {
     Vec3s* hit = &this->eyeCollider.elements[0].info.bumper.hitPos;
     Vec3f hitPos = { hit->x, hit->y, hit->z };
 
-    Audio_PlayActorSound2(&this->actor, NA_SE_IT_SHIELD_BOUND);
+    PlaySfx(&this->actor, MM_SE_IT_SHIELD_BOUND, NA_SE_IT_SHIELD_BOUND);
     EffectSsHitMark_SpawnFixedScale(play, EFFECT_HITMARK_METAL, &hitPos);
     CollisionCheck_SpawnShieldParticlesMetal(play, &hitPos);
 }
@@ -1532,7 +1534,7 @@ static void Stone_Land(EnEyegoreStone* this, PlayState* play) {
     this->actor.shape.shadowScale = 0.0f;
     this->isInactive = true;
     this->timer = 50;
-    Audio_PlayActorSound2(&this->actor, NA_SE_EV_WALL_BROKEN);
+    PlaySfx(&this->actor, MM_SE_EV_WALL_BROKEN, NA_SE_EV_WALL_BROKEN);
 }
 
 static void Stone_UpdateChips(EnEyegoreStone* this, PlayState* play) {
@@ -1632,90 +1634,6 @@ static bool Eyegore_CanKillInLogic(void* userData) {
            sApi->LogicCanUseItem(RG_HOOKSHOT) || sApi->LogicCanUseItem(RG_BOOMERANG);
 }
 
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[EYEGORE_LIMB_MAX];
-    static Vec3s sSoulMorphTable[EYEGORE_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sEyegoreSkel, (AnimationHeader*)sStandAnim,
-                           sSoulJointTable, sSoulMorphTable, EYEGORE_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.006f, 0.006f, 0.006f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sSoulEmptyDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(EYEGORE_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Eyegores";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul, "You got the %rSoul of Eyegores%w!&Eyegores can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_Register(sApi, &soul)) {
-        sApi->Log("Could not register " EYEGORE_SOUL_ITEM_KEY);
-    }
-}
-
 static void RegisterStone(void) {
     SOHActorDefinition stone = { 0 };
 
@@ -1751,6 +1669,12 @@ static void RegisterEyegore(void) {
     eyegore.enemyFlags = SOH_ACTOR_ENEMY | SOH_ACTOR_ENEMY_MINIBOSS | SOH_ACTOR_ENEMY_NOT_IN_WATER;
     eyegore.naviHint = "Eyegore&%cIts eye opens after a slam. Shoot it then, or stun it with a %ylight arrow%c!%w";
     eyegore.soulKey = EYEGORE_KEY;
+    eyegore.enemyCategory = SOH_ENEMY_CATEGORY_MINIBOSS;
+    eyegore.soulModel.skeleton = sEyegoreSkel;
+    eyegore.soulModel.idleAnimation = sStandAnim;
+    eyegore.soulModel.isFlex = 1;
+    eyegore.soulModel.limbCount = EYEGORE_LIMB_MAX;
+    eyegore.soulModel.scale = 0.006f;
     eyegore.logicKill = Eyegore_CanKillInLogic;
     if (sApi->RegisterActor(&eyegore) < 0) {
         sApi->Log("Could not register " EYEGORE_KEY);
@@ -1774,6 +1698,5 @@ SOH_MOD_EXPORT void ModInit(void) {
         sApi->Log("Could not register " EYEGORE_STONE_KEY);
         return;
     }
-    RegisterSoul();
     RegisterEyegore();
 }
