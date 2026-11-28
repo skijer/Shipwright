@@ -1336,7 +1336,7 @@ std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls)
     return GetSoulItems(soulKeys);
 }
 
-const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, RandomizerEnemy original) {
+const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, int32_t logicEnemy) {
     if (sceneNum < 0 || sLogicPlans.empty()) {
         return nullptr;
     }
@@ -1344,7 +1344,7 @@ const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, RandomizerE
     if (scene == sLogicPlans.end()) {
         return nullptr;
     }
-    auto plan = scene->second.find(static_cast<int32_t>(original));
+    auto plan = scene->second.find(logicEnemy);
     return plan != scene->second.end() ? &plan->second : nullptr;
 }
 

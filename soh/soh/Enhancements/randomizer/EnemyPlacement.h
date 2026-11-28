@@ -113,5 +113,5 @@ std::optional<EnemyKind> EnemyPlacement_FindSaveReplacement(int16_t sceneNum, co
 bool EnemyPlacement_IsSoulExcluded(const EnemyPlacement& placement, const std::string& soulKey);
 bool EnemyPlacement_IsSeedSoulItemExcluded(RandomizerGet soul);
 std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls);
-const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, RandomizerEnemy original);
+const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, int32_t logicEnemy);
 void EnemyPlacement_DrawPoolMenu();

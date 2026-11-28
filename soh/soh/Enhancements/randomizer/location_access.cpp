@@ -889,13 +889,13 @@ std::shared_ptr<Rando::Logic> logic;
 // own kind's drop instead, and needs the spawn's age/time plus its own kill logic.
 struct EnemyDropSlot {
     RandomizerRegion region;
-    RandomizerEnemy original;
+    int32_t original;
     RandomizerCheck nativeDrop;
     ConditionFn spawns;
     ConditionFn killsOriginal;
 };
 
-constexpr RandomizerEnemy kNeverReplaced = static_cast<RandomizerEnemy>(kNoLogicEnemy);
+constexpr int32_t kNeverReplaced = kNoLogicEnemy;
 
 #define DROP_SLOT(region, original, drop, spawns, killsOriginal)                    \
     {                                                                               \
