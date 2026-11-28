@@ -41,9 +41,17 @@ static const char* const sRequiredHooks[] = { "OnPlayerUpdate", "OnResolveCustom
 static const SOHModRequirements sRequirements = { sizeof(SOHModRequirements), sRequiredHooks,
                                                   ARRAY_COUNT(sRequiredHooks) };
 
+typedef struct {
+    bool isActive;
+    f32 sizeRatio;
+    f32 launchVelocity;
+    f32 appliedGravity;
+} SizedJump;
+
 static const SOHModApi* sApi;
 static bool sHasDoubleJumped;
 static u32 sGroundJumpFrame;
+static SizedJump sSizedJump;
 
 static bool IsOwned(const char* key) {
     return sApi->IsCustomItemOwned(key);
@@ -85,9 +93,43 @@ static f32 ScaleToLinkSize(Player* player, f32 velocity) {
     return velocity * sqrtf(player->actor.scale.y / ROCS_PLAYER_SCALE);
 }
 
-static void Jump(Player* player, PlayState* play, const char* animation) {
-    func_80838940(player, (LinkAnimationHeader*)animation, ScaleToLinkSize(player, ROCS_JUMP_VELOCITY), play,
+// The engine resets gravity every frame but not while most updating is paused; rescaling then would compound it.
+static void ScaleGravityToJump(Player* player) {
+    if (player->actor.gravity == sSizedJump.appliedGravity) {
+        return;
+    }
+    player->actor.gravity *= sSizedJump.sizeRatio;
+    sSizedJump.appliedGravity = player->actor.gravity;
+}
+
+// Launch and gravity both follow Link's size, so the jump keeps its full-size airtime at a height in proportion.
+static void StartSizedJump(Player* player, PlayState* play, const char* animation) {
+    sSizedJump.sizeRatio = player->actor.scale.y / ROCS_PLAYER_SCALE;
+    func_80838940(player, (LinkAnimationHeader*)animation, ROCS_JUMP_VELOCITY * sSizedJump.sizeRatio, play,
                   NA_SE_VO_LI_AUTO_JUMP);
+    sSizedJump.isActive = true;
+    sSizedJump.launchVelocity = player->actor.velocity.y;
+    ScaleGravityToJump(player);
+}
+
+static void EndSizedJump(void) {
+    sSizedJump.isActive = false;
+}
+
+// Past the launch height on the way down Link falls at normal gravity, so a drop off a ledge is not slowed.
+static void UpdateSizedJump(Player* player) {
+    if (!sSizedJump.isActive) {
+        return;
+    }
+    if (player->actor.velocity.y < -sSizedJump.launchVelocity || (player->stateFlags1 & PLAYER_STATE1_IN_WATER)) {
+        EndSizedJump();
+        return;
+    }
+    ScaleGravityToJump(player);
+}
+
+static void Jump(Player* player, PlayState* play, const char* animation) {
+    StartSizedJump(player, play, animation);
     KeepLedgesGrabbable(player);
     SpawnSparkles(player, play);
 }
@@ -163,14 +205,12 @@ static void UpdateRocs(void) {
         return;
     }
     UpgradeFeatherToCape();
-    if (IsBlockedByForm()) {
+    if (IsBlockedByForm() || (player->actor.bgCheckFlags & 1)) {
         sHasDoubleJumped = false;
+        EndSizedJump();
         return;
     }
-    if (player->actor.bgCheckFlags & 1) {
-        sHasDoubleJumped = false;
-        return;
-    }
+    UpdateSizedJump(player);
     JumpFromAirOrWater(player, play);
 }
 

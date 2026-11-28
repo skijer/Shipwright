@@ -1,7 +1,7 @@
 {
   "name": "leveled",
   "author": "Skijer",
-  "version": "1.0",
+  "version": "1.1",
   "display_name": "Leveled",
   "description": "RPG levels for Ocarina of Time, after Arrenton's Leveled: Link earns EXP and levels up to 99, every enemy and zone has a level, damage follows power and courage, levels add hearts and magic, and the HUD shows damage, EXP and stats.",
   "game": "oot"

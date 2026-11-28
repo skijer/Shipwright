@@ -1841,6 +1841,16 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.naviHint = "Lynel&%cA legendary beast! Shoot its %rhead%c to stun it, then press %b\x9F%c by its back "
                           "to ride it!%w";
 
+    definition.soulKey = "nei.lynel";
+    definition.enemyCategory = SOH_ENEMY_CATEGORY_MINIBOSS;
+    definition.enemyOrigin = SOH_ENEMY_ORIGIN_CUSTOM;
+    definition.soulModel.skeleton = (const char*)&gLynelSkel;
+    definition.soulModel.idleAnimation = (const char*)&gLynelIdleAnim;
+    definition.soulModel.isFlex = 1;
+    definition.soulModel.limbCount = LYNEL_NUM_LIMBS;
+    definition.soulModel.scale = 0.008f;
+    definition.isSoulModelInMemory = 1;
+
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " LYNEL_KEY);
     }

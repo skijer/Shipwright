@@ -256,7 +256,7 @@ static void Nejiron_Roll(EnNejiron* this, PlayState* play) {
     Math_ApproachF(&this->actor.speedXZ, 5.0f, 0.3f, 0.5f);
     this->actor.world.rot.x += (s16)this->rollSpeed.x;
     this->actor.world.rot.z += this->isRollingLeft ? -(s16)this->rollSpeed.z : (s16)this->rollSpeed.z;
-    PlaySfx(&this->actor, MM_SE_EN_BAKUO_ROLL, NA_SE_EN_DODO_M_MOVE);
+    PlaySfx(&this->actor, MM_SE_EN_BAKUO_ROLL - SFX_FLAG, NA_SE_EN_DODO_M_MOVE);
 }
 
 // Sinks back home when it rolls too far from its burrow.

@@ -8,7 +8,6 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -16,7 +15,6 @@
 
 #define BIO_BABA_KEY "mm.bio_baba"
 #define DEKU_BABA_FAMILY_KEY "mm.deku_baba"
-#define DEKU_BABA_SOUL_ITEM_KEY "soul.mm.deku_baba"
 #define BIO_BABA_LILY_PAD_KEY "mm.bio_baba.lily_pad"
 #define BIO_BABA_FRAGMENT_KEY "mm.bio_baba.fragment"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
@@ -1593,93 +1591,6 @@ static bool BioBaba_CanKillInLogic(void* userData) {
            sApi->LogicHasCapability("CanUseSword");
 }
 
-// MM's Deku Baba family soul, which any MM Deku Baba mod shares: all define it alike, so whichever loads first
-// registers it.
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[HEAD_LIMB_MAX];
-    static Vec3s sSoulMorphTable[HEAD_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sHeadSkel, (AnimationHeader*)sHeadIdleAnim,
-                           sSoulJointTable, sSoulMorphTable, HEAD_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.015f, 0.015f, 0.015f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sSoulEmptyDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(DEKU_BABA_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Deku Babas (MM)";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul,
-                        "You got the %rSoul of Deku Babas (MM)%w!&Majora's Mask's Deku Babas can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_RegisterShared(sApi, &soul)) {
-        sApi->Log("Could not register " DEKU_BABA_SOUL_ITEM_KEY);
-    }
-}
-
 static s16 RegisterHelper(const char* key, const char* description, u8 category, u32 instanceSize, SOHActorFunc init,
                           SOHActorFunc destroy, SOHActorFunc update, SOHActorFunc draw) {
     SOHActorDefinition helper = { 0 };
@@ -1721,6 +1632,12 @@ static void RegisterBioBaba(void) {
     bioBaba.naviHint = "Bio Deku Baba&%cIt dangles under a lily pad. Cut its stem, then finish the head off before "
                        "it grows legs!%w";
     bioBaba.soulKey = DEKU_BABA_FAMILY_KEY;
+    bioBaba.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    bioBaba.soulModel.skeleton = sHeadSkel;
+    bioBaba.soulModel.idleAnimation = sHeadIdleAnim;
+    bioBaba.soulModel.isFlex = 1;
+    bioBaba.soulModel.limbCount = HEAD_LIMB_MAX;
+    bioBaba.soulModel.scale = 0.015f;
     bioBaba.logicKill = BioBaba_CanKillInLogic;
     if (sApi->RegisterActor(&bioBaba) < 0) {
         sApi->Log("Could not register " BIO_BABA_KEY);
@@ -1745,6 +1662,5 @@ SOH_MOD_EXPORT void ModInit(void) {
     sFragmentActorId = RegisterHelper(BIO_BABA_FRAGMENT_KEY, "Bio Deku Baba Fragment", ACTORCAT_MISC,
                                       sizeof(EnBioBabaFragment), EnBioBabaFragment_Init, EnBioBabaFragment_Destroy,
                                       EnBioBabaFragment_Update, EnBioBabaFragment_Draw);
-    RegisterSoul();
     RegisterBioBaba();
 }

@@ -133,6 +133,19 @@ void DetachActorSfx(void* actor) {
     AudioMmSfx_DetachPos(&static_cast<Actor*>(actor)->projectedPos);
 }
 
+// MM's GameState_Destroy (AudioMgr_StopAllSfxExceptSystem): a detached loop has no owner left to stop it.
+void StopSceneSfx() {
+    if (!sQueueReset) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(sEngineMutex);
+    for (u8 bankId = MM_BANK_PLAYER; bankId <= MM_BANK_VOICE; bankId++) {
+        if (bankId != MM_BANK_SYSTEM) {
+            AudioMmSfx_StopByBank(bankId);
+        }
+    }
+}
+
 } // namespace
 
 void MmSfxService_Init(const SOHModApi* api) {
@@ -144,4 +157,5 @@ void MmSfxService_Init(const SOHModApi* api) {
     api->RegisterAudioMixInGroup(MixMmSfx, SOH_AUDIO_GROUP_SFX, nullptr);
     SOH_REGISTER_HOOK(api, OnGameFrameUpdate, UpdateMmSfx);
     SOH_REGISTER_HOOK(api, OnActorDestroy, DetachActorSfx);
+    SOH_REGISTER_HOOK(api, OnPlayDestroy, StopSceneSfx);
 }

@@ -242,7 +242,7 @@ static void Boe_Scurry(EnBoe* this, PlayState* play) {
     Math_ScaledStepToS(&this->heading, this->actor.yawTowardsPlayer, 0x400);
     this->actor.shape.rot.y =
         (s32)(Math_SinF(this->timer * ((2 * M_PI) / 15)) * (614.4f * this->actor.speedXZ)) + this->heading;
-    PlaySfx(&this->actor, MM_SE_EN_KUROSUKE_MOVE, NA_SE_EN_FFLY_FLY);
+    PlaySfx(&this->actor, MM_SE_EN_KUROSUKE_MOVE - SFX_FLAG, NA_SE_EN_FFLY_FLY);
     if (hasStopped) {
         Boe_SetupWait(this);
     } else if (Boe_CanPounce(this)) {

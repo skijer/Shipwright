@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_takkuri",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Takkuri (Majora's Mask)",
     "description": "Majora's Mask's Takkuri, drawn from your mm.o2r: a thieving bird whose swoop knocks rupees, bombs and arrows out of you before it gobbles them up. Beat it to win them back. Custom enemy mm.takkuri.",
     "game": "oot",

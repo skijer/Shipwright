@@ -371,7 +371,7 @@ static void Snapper_SpawnAttackEffects(EnSnapper* this, PlayState* play) {
         func_800286CC(play, &this->actor.world.pos, &sDustVelocity, &sZeroVec, 550, 100);
     }
     if (this->spin > 0x1200) {
-        PlaySfx(&this->actor, MM_SE_EN_PAMET_ROLL, NA_SE_EN_DODO_M_MOVE);
+        PlaySfx(&this->actor, MM_SE_EN_PAMET_ROLL - SFX_FLAG, NA_SE_EN_DODO_M_MOVE);
     }
 }
 
@@ -660,7 +660,7 @@ static void Snapper_BurstIntoFlames(EnSnapper* this, PlayState* play) {
         this->timer--;
         return;
     }
-    PlaySfx(&this->actor, MM_SE_EN_COMMON_EXTINCT_LEV, NA_SE_EN_EXTINCT);
+    PlaySfx(&this->actor, MM_SE_EN_COMMON_EXTINCT_LEV - SFX_FLAG, NA_SE_EN_EXTINCT);
     this->actor.scale.x -= 0.001f;
     if (this->actor.scale.x <= 0.0f) {
         Snapper_Vanish(this, play);

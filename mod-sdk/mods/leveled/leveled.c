@@ -1023,8 +1023,11 @@ static bool UsesColliderDamage(s16 actorId) {
     }
 }
 
+// A dying actor keeps some colliders live (Beamos' eye catches the rest of the blast): raising its health from zero
+// would rerun its hit check, swap the death action for a stun and leave it immune in mid-air.
 static void ResolveScriptedHit(LeveledEnemy* enemy, ColliderInfo* attack, Actor* attacker, s32 scriptedDamage) {
-    if (scriptedDamage == 0 || enemy->compensated) {
+    const bool isDying = ReadEnemyHealth(enemy->actor) <= 0;
+    if (scriptedDamage == 0 || enemy->compensated || isDying) {
         return;
     }
     const s32 units = ConvertHitToHealthUnits(enemy, GetAttackerPower(gPlayState, attacker), (f32)scriptedDamage);

@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_nejiron",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Nejiron (Majora's Mask)",
     "description": "Majora's Mask's Nejiron, drawn from your mm.o2r: a living boulder that rises from the ground, rolls at you and explodes when struck. Custom enemy mm.nejiron.",
     "game": "oot",

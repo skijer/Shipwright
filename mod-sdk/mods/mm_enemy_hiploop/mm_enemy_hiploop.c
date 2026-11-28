@@ -8,14 +8,12 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #define HIPLOOP_KEY "mm.hiploop"
-#define HIPLOOP_SOUL_ITEM_KEY "soul.mm.hiploop"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 
 #define OBJ_PP "__OTR__objects/object_pp/"
@@ -1351,90 +1349,6 @@ static bool Hiploop_CanKillInLogic(void* userData) {
            sApi->LogicCanUseItem(RG_MEGATON_HAMMER);
 }
 
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[HIPLOOP_LIMB_MAX];
-    static Vec3s sSoulMorphTable[HIPLOOP_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sHiploopSkel, (AnimationHeader*)sHiploopIdleAnim,
-                           sSoulJointTable, sSoulMorphTable, HIPLOOP_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.02f, 0.02f, 0.02f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sSoulEmptyDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(HIPLOOP_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Hiploops";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul, "You got the %rSoul of Hiploops%w!&Hiploops can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_Register(sApi, &soul)) {
-        sApi->Log("Could not register " HIPLOOP_SOUL_ITEM_KEY);
-    }
-}
-
 static void RegisterHiploop(void) {
     SOHActorDefinition hiploop = { 0 };
 
@@ -1454,6 +1368,12 @@ static void RegisterHiploop(void) {
     hiploop.naviHint = "Masked Hiploop&%cIts mask shrugs off any blow. Pull it off with the %rhookshot%c or blast it "
                        "away, then strike!%w";
     hiploop.soulKey = HIPLOOP_KEY;
+    hiploop.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    hiploop.soulModel.skeleton = sHiploopSkel;
+    hiploop.soulModel.idleAnimation = sHiploopIdleAnim;
+    hiploop.soulModel.isFlex = 1;
+    hiploop.soulModel.limbCount = HIPLOOP_LIMB_MAX;
+    hiploop.soulModel.scale = 0.02f;
     hiploop.logicKill = Hiploop_CanKillInLogic;
     sHiploopActorId = sApi->RegisterActor(&hiploop);
     if (sHiploopActorId < 0) {
@@ -1473,6 +1393,5 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !SOH_MOD_API_HAS(sApi, LogicHasCapability)) {
         return;
     }
-    RegisterSoul();
     RegisterHiploop();
 }

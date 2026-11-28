@@ -903,6 +903,16 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.naviHint = "Scissors Beetle&%cIt attacks by throwing its pincers&like boomerangs! Keep moving,&"
                           "then strike when they return!%w";
 
+    definition.soulKey = "nei.sbeetle";
+    definition.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    definition.enemyOrigin = SOH_ENEMY_ORIGIN_CUSTOM;
+    definition.soulModel.skeleton = (const char*)&gScissorsBeetleSkel;
+    definition.soulModel.idleAnimation = (const char*)&gScissorsBeetleSkelIdle1Anim;
+    definition.soulModel.isFlex = 1;
+    definition.soulModel.limbCount = GSCISSORSBEETLESKEL_NUM_LIMBS;
+    definition.soulModel.scale = 0.08f;
+    definition.isSoulModelInMemory = 1;
+
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " SBEETLE_KEY);
     }

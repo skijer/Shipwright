@@ -7,14 +7,12 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "overlays/effects/ovl_Effect_Ss_Hahen/z_eff_ss_hahen.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #define GEKKO_KEY "mm.gekko"
-#define GEKKO_SOUL_ITEM_KEY "soul.mm.gekko"
 #define SNAPPER_MOUNT_KEY "mm.gekko.snapper"
 #define GORON_MASK_KEY "nei.goron_form_mask"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
@@ -1848,7 +1846,7 @@ static void Snapper_SetupRoll(EnSnapper* this) {
 static void Snapper_SpinUp(EnSnapper* this, PlayState* play) {
     this->timer--;
     this->actor.shape.rot.y += 0x3B00;
-    PlaySfx(&this->actor, MM_SE_EN_B_PAMET_ROLL, NA_SE_EN_DODO_M_MOVE);
+    PlaySfx(&this->actor, MM_SE_EN_B_PAMET_ROLL - SFX_FLAG, NA_SE_EN_DODO_M_MOVE);
     if (this->timer == 0) {
         Snapper_SetupRoll(this);
     }
@@ -1863,7 +1861,7 @@ static bool Snapper_IsRollSpent(EnSnapper* this) {
 
 static void Snapper_Roll(EnSnapper* this, PlayState* play) {
     this->actor.shape.rot.y += 0x3B00;
-    PlaySfx(&this->actor, MM_SE_EN_B_PAMET_ROLL, NA_SE_EN_DODO_M_MOVE);
+    PlaySfx(&this->actor, MM_SE_EN_B_PAMET_ROLL - SFX_FLAG, NA_SE_EN_DODO_M_MOVE);
     this->timer = CLAMP_MAX(this->timer + 1, 20);
     if (this->collider.base.atFlags & AT_HIT) {
         this->collider.base.atFlags &= ~AT_HIT;
@@ -2270,90 +2268,6 @@ static bool Gekko_CanKillInLogic(void* userData) {
     return CanShootGekko() && CanFlipSnapper();
 }
 
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[GEKKO_LIMB_MAX];
-    static Vec3s sSoulMorphTable[GEKKO_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sGekkoSkel,
-                           (AnimationHeader*)sGekkoBoxingStanceAnim, sSoulJointTable, sSoulMorphTable, GEKKO_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.006f, 0.006f, 0.006f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sSoulEmptyDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(GEKKO_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Gekko";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul, "You got the %rSoul of Gekko%w!&Gekko and his Snapper can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_Register(sApi, &soul)) {
-        sApi->Log("Could not register " GEKKO_SOUL_ITEM_KEY);
-    }
-}
-
 static void RegisterSnapperMount(void) {
     SOHActorDefinition snapper = { 0 };
 
@@ -2391,6 +2305,12 @@ static void RegisterGekko(void) {
     gekko.naviHint = "Gekko&%cHe rides a Snapper! Flip it with %rexplosives%c or a %rhammer pound%c, then shoot "
                      "Gekko off the walls!%w";
     gekko.soulKey = GEKKO_KEY;
+    gekko.enemyCategory = SOH_ENEMY_CATEGORY_MINIBOSS;
+    gekko.soulModel.skeleton = sGekkoSkel;
+    gekko.soulModel.idleAnimation = sGekkoBoxingStanceAnim;
+    gekko.soulModel.isFlex = 1;
+    gekko.soulModel.limbCount = GEKKO_LIMB_MAX;
+    gekko.soulModel.scale = 0.006f;
     gekko.logicKill = Gekko_CanKillInLogic;
     if (sApi->RegisterActor(&gekko) < 0) {
         sApi->Log("Could not register " GEKKO_KEY);
@@ -2414,6 +2334,5 @@ SOH_MOD_EXPORT void ModInit(void) {
         sApi->Log("Could not register " SNAPPER_MOUNT_KEY);
         return;
     }
-    RegisterSoul();
     RegisterGekko();
 }

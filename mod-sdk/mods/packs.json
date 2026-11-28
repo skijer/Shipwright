@@ -6,10 +6,9 @@
             "icon": "ITEM_LENS",
             "mods": [
                 "anim_viewer",
-                "item_drop_tester",
                 "turbo"
             ],
-            "description": "For mod makers: test animations, item drops and game speed."
+            "description": "For mod makers: test animations and game speed."
         },
         {
             "id": "nei-items",

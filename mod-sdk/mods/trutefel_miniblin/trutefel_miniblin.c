@@ -586,6 +586,16 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.enemyFlags = SOH_ACTOR_ENEMY;
     definition.naviHint = "Miniblin&%cIt steals %wRupees%c with its tail!&Beat it quickly to get them back!%w";
 
+    definition.soulKey = "nei.miniblin";
+    definition.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    definition.enemyOrigin = SOH_ENEMY_ORIGIN_CUSTOM;
+    definition.soulModel.skeleton = (const char*)&gMiniblinSkel;
+    definition.soulModel.idleAnimation = (const char*)&gMiniblinSkelIdleAnim;
+    definition.soulModel.isFlex = 1;
+    definition.soulModel.limbCount = GMINIBLINSKEL_NUM_LIMBS;
+    definition.soulModel.scale = 0.004f;
+    definition.isSoulModelInMemory = 1;
+
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " MINIBLIN_KEY);
     }

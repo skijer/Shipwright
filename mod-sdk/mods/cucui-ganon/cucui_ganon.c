@@ -44,6 +44,7 @@
 #define WARP_KEY "skijer.cucui_ganon.blue_warp"
 #define BOSS_HINT_KEY "skijer.cucui_ganon.boss"
 #define BOSS_KEY "skijer.cucui_ganon"
+#define BOSS_SOUL_KEY "nei.cucui_ganon"
 #define BOSS_MAX_HEALTH 80
 #define BOSS_PHASE2_HEALTH 40
 #define BACK_DAMAGE 1
@@ -93,8 +94,23 @@ static const SOHModRequirements sRequirements = {
 };
 
 static const SOHBossDefinition sCucuiBoss = {
-    sizeof(SOHBossDefinition), BOSS_KEY, "Cucui Ganon", NULL, SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_GANON),
-    SOH_BOSS_SLOT_GANON,       NULL,     DANCE_CVAR,
+    .structSize = sizeof(SOHBossDefinition),
+    .key = BOSS_KEY,
+    .displayName = "Cucui Ganon",
+    .allowedSlots = SOH_BOSS_SLOT_BIT(SOH_BOSS_SLOT_GANON),
+    .preferredSlot = SOH_BOSS_SLOT_GANON,
+    .enabledCvar = DANCE_CVAR,
+    .soulKey = BOSS_SOUL_KEY,
+    .soulModel = {
+        .skeleton = gGanondorfSkel,
+        .idleAnimation = gGanondorfStandIdleAnim,
+        .isFlex = 1,
+        .limbCount = DANCE_LIMBS + 1,
+        .scale = 0.008f,
+        .flameRed = 150,
+        .flameGreen = 150,
+        .flameBlue = 150,
+    },
 };
 
 static const SOHModApi* sApi;

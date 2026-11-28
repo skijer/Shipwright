@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_wizrobe",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Wizrobe (Majora's Mask)",
     "description": "Majora's Mask miniboss Wizrobe, drawn from your mm.o2r. It raises its own warp platforms, blinks between them hurling fire or ice magic, and splits into phantoms once wounded. Custom enemy mm.wizrobe.",
     "game": "oot",

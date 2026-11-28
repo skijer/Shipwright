@@ -979,6 +979,16 @@ SOH_MOD_EXPORT void ModInit(void) {
     definition.enemyFlags = SOH_ACTOR_ENEMY | SOH_ACTOR_ENEMY_NOT_IN_TIMED_ROOMS;
     definition.naviHint = "Molmauk&%cWatch out for its %whammers%c!&Strike when it drops its guard!%w";
 
+    definition.soulKey = "nei.molmauk";
+    definition.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    definition.enemyOrigin = SOH_ENEMY_ORIGIN_CUSTOM;
+    definition.soulModel.skeleton = (const char*)&gHammergeistSkel;
+    definition.soulModel.idleAnimation = (const char*)&gHammergeistSkelIdleAnim;
+    definition.soulModel.isFlex = 1;
+    definition.soulModel.limbCount = GHAMMERGEISTSKEL_NUM_LIMBS;
+    definition.soulModel.scale = 0.01f;
+    definition.isSoulModelInMemory = 1;
+
     if (sApi->RegisterActor(&definition) < 0) {
         sApi->Log("Could not register " MOLMAUK_KEY);
     }

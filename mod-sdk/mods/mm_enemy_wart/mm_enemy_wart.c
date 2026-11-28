@@ -8,14 +8,12 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "objects/gameplay_keep/gameplay_keep.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #define WART_KEY "mm.wart"
-#define WART_SOUL_ITEM_KEY "soul.mm.wart"
 #define WART_BUBBLE_KEY "mm.wart.bubble"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 
@@ -1214,90 +1212,6 @@ static bool Wart_CanKillInLogic(void* userData) {
     return sApi->LogicCanUseItem(RG_FAIRY_BOW) || sApi->LogicCanUseItem(RG_HOOKSHOT);
 }
 
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[WART_LIMB_MAX];
-    static Vec3s sSoulMorphTable[WART_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sWartSkel, (AnimationHeader*)sIdleAnim,
-                           sSoulJointTable, sSoulMorphTable, WART_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.02f, 0.02f, 0.02f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sSoulEmptyDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(WART_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Wart";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul, "You got the %rSoul of Wart%w!&Wart can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_Register(sApi, &soul)) {
-        sApi->Log("Could not register " WART_SOUL_ITEM_KEY);
-    }
-}
-
 static void RegisterBubble(void) {
     SOHActorDefinition bubble = { 0 };
 
@@ -1334,6 +1248,12 @@ static void RegisterWart(void) {
     wart.naviHint = "Wart&%cPull its bubbles away with the %rhookshot%c and pop them. Shoot the eye when it "
                     "opens!%w";
     wart.soulKey = WART_KEY;
+    wart.enemyCategory = SOH_ENEMY_CATEGORY_MINIBOSS;
+    wart.soulModel.skeleton = sWartSkel;
+    wart.soulModel.idleAnimation = sIdleAnim;
+    wart.soulModel.isFlex = 1;
+    wart.soulModel.limbCount = WART_LIMB_MAX;
+    wart.soulModel.scale = 0.02f;
     wart.logicKill = Wart_CanKillInLogic;
     if (sApi->RegisterActor(&wart) < 0) {
         sApi->Log("Could not register " WART_KEY);
@@ -1357,6 +1277,5 @@ SOH_MOD_EXPORT void ModInit(void) {
         sApi->Log("Could not register " WART_BUBBLE_KEY);
         return;
     }
-    RegisterSoul();
     RegisterWart();
 }

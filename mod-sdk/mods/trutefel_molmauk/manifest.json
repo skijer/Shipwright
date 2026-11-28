@@ -1,7 +1,7 @@
 {
     "name": "trutefel_molmauk",
     "author": "trueffel, syeo501, Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "description": "Molmauk: a brute with an ice hammer and a fire hammer, a ground-shaking slam and an exploding stomp. Custom enemy trutefel.enemy.molmauk.",
     "display_name": "Molmauk"
 }

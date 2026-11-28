@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_eeno",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Eeno (Majora's Mask)",
     "description": "Majora's Mask's Eeno, drawn from your mm.o2r: a snow pile that sneaks up, pops out and pelts you with snowballs. Fire melts it at once. Custom enemy mm.eeno.",
     "game": "oot",

@@ -469,6 +469,7 @@ soh/properties.h
 
 # Private and local-only mods: never published or signed
 /mod-sdk/mods/*_tester/
+/mod-sdk/mods/skijer_tests/
 /mod-sdk/mods/hyrule_survivor/
 /mod-sdk/mods/trailer_intro/
 /mod-sdk/mods/hide_and_seek/

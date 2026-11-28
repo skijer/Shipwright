@@ -8,14 +8,12 @@
 #include "align_asset_macro.h"
 #include "functions.h"
 #include "macros.h"
-#include "soh_assets.h"
 #include "variables.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
 #include "soh/Enhancements/randomizer/randomizerTypes.h"
 
 #define DESBREKO_KEY "mm.desbreko"
 #define SKULLFISH_FAMILY_KEY "mm.skullfish"
-#define SKULLFISH_SOUL_ITEM_KEY "soul.mm.skullfish"
 #define DESBREKO_ESCORT_KEY "mm.desbreko.escort"
 #define MM_SFX_PLAY_SERVICE "mm.sfx.play"
 
@@ -1100,91 +1098,6 @@ static bool Desbreko_CanKillInLogic(void* userData) {
     return sApi->LogicCanUseItem(RG_IRON_BOOTS) && canWeaponUnderwater;
 }
 
-// The Skullfish family soul, shared with mm_enemy_skullfish: both define it alike, so either can register it.
-#define SOUL_FLAME_DL "__OTR__objects/object_gi_fire/gGiBlueFireFlameDL"
-
-// Ship's enemy soul flame, which its own enemies' souls burn in.
-static void DrawSoulFlame(PlayState* play) {
-    OPEN_DISPS(play->state.gfxCtx);
-    Gfx_SetupDL_25Xlu(play->state.gfxCtx);
-    gSPSegment(POLY_XLU_DISP++, 8,
-               (uintptr_t)Gfx_TwoTexScrollEx(play->state.gfxCtx, 0, 0, 0, 16, 32, 1, play->state.frames,
-                                             -8 * play->state.frames, 16, 32, 0, 0, 1, -8));
-    Matrix_Push();
-    Matrix_Translate(0.0f, -70.0f, 0.0f, MTXMODE_APPLY);
-    Matrix_Scale(5.0f, 5.0f, 5.0f, MTXMODE_APPLY);
-    Matrix_ReplaceRotation(&play->billboardMtxF);
-    gSPMatrix(POLY_XLU_DISP++, MATRIX_NEWMTX(play->state.gfxCtx), G_MTX_MODELVIEW | G_MTX_LOAD);
-    gDPSetGrayscaleColor(POLY_XLU_DISP++, 200, 60, 60, 255);
-    gSPGrayscale(POLY_XLU_DISP++, true);
-    gSPDisplayList(POLY_XLU_DISP++, (Gfx*)SOUL_FLAME_DL);
-    gSPGrayscale(POLY_XLU_DISP++, false);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-// Segments the enemy's lists read but only its actor fills; four entries cover the indexed render-mode table.
-static Gfx sSoulEmptyDL[] = {
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-    gsSPEndDisplayList(),
-};
-
-// The soul shows its enemy in an idle loop, as Majora's Mask souls do.
-static void DrawSoul(PlayState* play, GetItemEntry* getItemEntry) {
-    static SkelAnime sSoulSkelAnime;
-    static Vec3s sSoulJointTable[DESBREKO_LIMB_MAX];
-    static Vec3s sSoulMorphTable[DESBREKO_LIMB_MAX];
-    static bool sIsSoulPosed = false;
-    static u32 sSoulFrame = 0;
-
-    DrawSoulFlame(play);
-    if (!sIsSoulPosed) {
-        SkelAnime_InitFlex(play, &sSoulSkelAnime, (FlexSkeletonHeader*)sDesbrekoSkel,
-                           (AnimationHeader*)sDesbrekoSwimAnim, sSoulJointTable, sSoulMorphTable, DESBREKO_LIMB_MAX);
-        sIsSoulPosed = true;
-    }
-    if (sSoulFrame != play->state.frames) {
-        sSoulFrame = play->state.frames;
-        SkelAnime_Update(&sSoulSkelAnime);
-    }
-    OPEN_DISPS(play->state.gfxCtx);
-    Matrix_Push();
-    Gfx_SetupDL_25Opa(play->state.gfxCtx);
-    Matrix_Scale(0.01f, 0.01f, 0.01f, MTXMODE_APPLY);
-    // Animations place the root far from the origin; the soul floats on its root instead.
-    Matrix_Translate(-sSoulJointTable[0].x, -sSoulJointTable[0].y, -sSoulJointTable[0].z, MTXMODE_APPLY);
-    gSPSegment(POLY_OPA_DISP++, 0x08, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x09, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0A, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0B, (uintptr_t)sSoulEmptyDL);
-    gSPSegment(POLY_OPA_DISP++, 0x0C, (uintptr_t)sRenderModeOpaDL);
-    SkelAnime_DrawFlexOpa(play, sSoulSkelAnime.skeleton, sSoulSkelAnime.jointTable, sSoulSkelAnime.dListCount, NULL,
-                          NULL, NULL);
-    Matrix_Pop();
-    CLOSE_DISPS(play->state.gfxCtx);
-}
-
-static void RegisterSoul(void) {
-    static const SOHCustomItemRandomizer sSoulRandomizer = {
-        .structSize = sizeof(SOHCustomItemRandomizer),
-        .flags = SOH_CUSTOM_ITEM_RANDO_ADVANCEMENT,
-        .type = SOH_CUSTOM_ITEM_TYPE_ITEM,
-    };
-    SOHCustomItemDefinition soul = Z64Items_Define(SKULLFISH_SOUL_ITEM_KEY, gBossSoulTex, NULL);
-
-    soul.displayName = "Soul of Skullfish";
-    soul.presentationFlags = SOH_ITEM_HIDE_FROM_KALEIDO;
-    Z64Items_SetTextbox(&soul, "You got the %rSoul of Skullfish%w!&Skullfish can now be defeated.");
-    Z64Items_SetGetItemModel(&soul, gBossSoulSkullDL);
-    soul.getItemEntry.drawFunc = DrawSoul;
-    Z64Items_SetLogic(&soul, &sSoulRandomizer);
-    if (!Z64Items_RegisterShared(sApi, &soul)) {
-        sApi->Log("Could not register " SKULLFISH_SOUL_ITEM_KEY);
-    }
-}
-
 static void RegisterEscort(void) {
     SOHActorDefinition escort = { 0 };
 
@@ -1220,7 +1133,14 @@ static void RegisterDesbreko(void) {
     desbreko.enemyParams = DESBREKO_DEFAULT_ESCORT << 8;
     desbreko.naviHint = "Desbreko&%cThe bony leader of a Skullfish school. Defeat it and the whole school falls "
                         "apart!%w";
+    // Owns the Skullfish family soul item; mm_enemy_skullfish shares it through the same soulKey.
     desbreko.soulKey = SKULLFISH_FAMILY_KEY;
+    desbreko.enemyCategory = SOH_ENEMY_CATEGORY_REGULAR;
+    desbreko.soulModel.skeleton = sDesbrekoSkel;
+    desbreko.soulModel.idleAnimation = sDesbrekoSwimAnim;
+    desbreko.soulModel.isFlex = 1;
+    desbreko.soulModel.limbCount = DESBREKO_LIMB_MAX;
+    desbreko.soulModel.scale = 0.01f;
     desbreko.logicKill = Desbreko_CanKillInLogic;
     if (sApi->RegisterActor(&desbreko) < 0) {
         sApi->Log("Could not register " DESBREKO_KEY);
@@ -1239,7 +1159,6 @@ SOH_MOD_EXPORT void ModInit(void) {
     if (!SOH_MOD_API_HAS(sApi, RegisterActor) || !SOH_MOD_API_HAS(sApi, LogicHasCapability)) {
         return;
     }
-    RegisterSoul();
     RegisterEscort();
     if (sEscortActorId < 0) {
         sApi->Log("Could not register " DESBREKO_ESCORT_KEY);

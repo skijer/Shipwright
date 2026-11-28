@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_pirate",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Pirate (Majora's Mask)",
     "description": "Majora's Mask miniboss fighter pirate, drawn from your mm.o2r: she taunts in place, draws twin scimitars once you come near and blocks, flips and spins around you. Beaten, she vanishes in a Deku Nut flash. Custom enemy mm.pirate.",
     "game": "oot",

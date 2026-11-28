@@ -1,7 +1,7 @@
 {
     "name": "mm_enemy_garo",
     "author": "Skijer",
-    "version": "1.0",
+    "version": "1.1",
     "display_name": "Garo (Majora's Mask)",
     "description": "Majora's Mask's Garo, drawn from your mm.o2r: a twin-bladed ninja spirit that springs from the ground, circles you and dashes in to slash. Shield the blades to knock them from its hands. Custom enemy mm.garo.",
     "game": "oot",

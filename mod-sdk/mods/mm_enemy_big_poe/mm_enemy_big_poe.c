@@ -605,7 +605,7 @@ static void BigPoe_BurnAway(EnBigPoe* this, PlayState* play) {
         this->actor.world.pos.y += 5.0f;
     }
     if (this->timer < 18) {
-        PlaySfx(&this->actor, MM_SE_EN_COMMON_EXTINCT_LEV, NA_SE_EN_EXTINCT);
+        PlaySfx(&this->actor, MM_SE_EN_COMMON_EXTINCT_LEV - SFX_FLAG, NA_SE_EN_EXTINCT);
     } else if (this->timer == 18) {
         PlaySfx(&this->actor, MM_SE_EN_WIZ_DISAPPEAR, NA_SE_EN_EXTINCT);
     }
