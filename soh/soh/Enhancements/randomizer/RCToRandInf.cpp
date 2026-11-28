@@ -4,13 +4,18 @@
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
 bool IdentifyCheck(CheckIdentity* id, Rando::Location* loc, bool allowUnknown) {
-    if (loc != nullptr && DungeonRegistry_IsModCheck(loc->GetRandomizerCheck())) {
+    if (loc == nullptr) {
+        SPDLOG_WARN("IdentifyCheck received no location");
+        assert(allowUnknown);
+        return false;
+    }
+    if (DungeonRegistry_IsModCheck(loc->GetRandomizerCheck())) {
         id->randomizerInf =
             static_cast<RandomizerInf>(DungeonRegistry_GetCheckRandomizerInf(loc->GetRandomizerCheck()));
         id->randomizerCheck = loc->GetRandomizerCheck();
         return true;
     }
-    if (loc == nullptr || loc->GetRandomizerCheck() != RC_UNKNOWN_CHECK) {
+    if (loc->GetRandomizerCheck() != RC_UNKNOWN_CHECK) {
         if (rcToRandomizerInf.contains(loc->GetRandomizerCheck())) {
             id->randomizerInf = rcToRandomizerInf[loc->GetRandomizerCheck()];
         } else {

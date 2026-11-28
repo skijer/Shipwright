@@ -10,6 +10,7 @@
 #include "soh/OTRGlobals.h"
 #include "soh/SaveManager.h"
 #include "soh/Enhancements/speedrun/Speedrun.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/ResourceManagerHelpers.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
@@ -279,6 +280,7 @@ void Sram_InitSave(FileChooseContext* fileChooseCtx) {
     if (IS_SPEEDRUN) {
         Speedrun_InitSaveFile(fileChooseCtx->speedrunIndex);
     }
+    ModQuests_StartNewFile(currentQuest >= QUEST_MOD);
 
     Save_SaveFile();
     SaveManager_ThreadPoolWait();

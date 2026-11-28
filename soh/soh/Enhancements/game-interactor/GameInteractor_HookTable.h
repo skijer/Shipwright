@@ -147,6 +147,8 @@ DEFINE_HOOK(OnUpdateFileBossRushOptionSelection, (uint8_t optionIndex, uint8_t o
 DEFINE_HOOK(OnUpdateFileRandomizerOptionSelection, (uint8_t optionIndex));
 DEFINE_HOOK(OnUpdateFileNameSelection, (int16_t charCode));
 DEFINE_HOOK(OnFileChooseMain, (void* gameState));
+// SOH [Unbound] a mod quest's hooks start or stop running; never gated, so its mod can put tables back on sleep
+DEFINE_HOOK(OnModQuestAwake, (const char* quest, bool isAwake));
 DEFINE_HOOK(OnGenerationCompletion, ());
 
 DEFINE_HOOK(OnSetGameLanguage, ());

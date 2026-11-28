@@ -11,6 +11,8 @@
 #include <vector>
 
 #include "soh/OTRGlobals.h"
+#include "soh/Enhancements/audio/AudioCollection.h"
+#include "soh/Enhancements/audio/AudioEditor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/randomizer/randomizer.h"
 #include "soh/Enhancements/randomizer/randomizer_entrance.h"
@@ -657,6 +659,13 @@ std::optional<std::string> FleetFieldTest_Request(const std::string& request, co
             }
         }
         return nlohmann::json{ { "assets", assets } }.dump();
+    }
+    // Overwrites the player's music choices when "randomize" is set: run it on a test profile.
+    if (request == "TestAudioPool") {
+        if (input.value("randomize", false)) {
+            AudioEditor_RandomizeAll();
+        }
+        return nlohmann::json{ { "forbidden", AudioCollection::Instance->ListForbiddenReplacements() } }.dump();
     }
     if (request == "TestOwns") {
         return nlohmann::json{ { "owned", FleetRuntime_ReadOwnership(input.value("items", nlohmann::json::array())) } }

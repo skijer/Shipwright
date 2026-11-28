@@ -962,16 +962,6 @@ static Gfx sSoulEmptyDL[] = { gsSPEndDisplayList(), gsSPEndDisplayList(), gsSPEn
 static Gfx sSoulTextureScaleDL[] = { gsSPTexture(0x0A00, 0x0A00, 0, G_TX_RENDERTILE, G_ON), gsSPEndDisplayList() };
 
 // The segments 0x08 and 0x09 an enemy's actor fills; an empty list stands in for the rest.
-struct EnemySoulModel {
-    RandomizerGet soul;
-    const char* skeleton;
-    const char* animation;
-    bool isFlex;
-    f32 scale;
-    const void* segment08 = nullptr;
-    const void* segment09 = nullptr;
-};
-
 // Enemies without a skeleton, drawn as their actors draw them.
 static void DrawFreezardSoul(PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
@@ -1203,7 +1193,7 @@ static bool DrawEnemySoulModel(PlayState* play, const EnemySoulModel& model) {
     Matrix_Scale(model.scale, model.scale, model.scale, MTXMODE_APPLY);
     // Animations place the root far from the origin; the soul floats on its root instead.
     const Vec3s& root = pose.skelAnime.jointTable[0];
-    Matrix_Translate(static_cast<f32>(-root.x), static_cast<f32>(-root.y), static_cast<f32>(-root.z),
+    Matrix_Translate(static_cast<f32>(-root.x), static_cast<f32>(-root.y) + model.yOffset, static_cast<f32>(-root.z),
                      MTXMODE_APPLY);
     gDPSetEnvColor(POLY_OPA_DISP++, 0, 0, 0, 255);
     // 0x07 is the specular highlight an actor sets before drawing; the Lizalfos sword calls it.
@@ -1236,24 +1226,39 @@ static bool DrawEnemySoulLists(PlayState* play, RandomizerGet soul) {
     return true;
 }
 
-extern "C" void Randomizer_DrawEnemySoul(PlayState* play, GetItemEntry* getItemEntry) {
-    DrawSoulFlame(play, 200, 60, 60);
-    const s16 drawn = getItemEntry->getItemId != RG_ICE_TRAP ? getItemEntry->getItemId : getItemEntry->drawItemId;
-    const EnemySoulModel* model = FindEnemySoulModel(static_cast<RandomizerGet>(drawn));
-    const bool isSimple = CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("SimplerBossSoulModels"), 0) != 0;
-    if (model != nullptr && !isSimple && DrawEnemySoulModel(play, *model)) {
-        return;
-    }
-    if (!isSimple && DrawEnemySoulLists(play, static_cast<RandomizerGet>(drawn))) {
-        return;
-    }
-
+static void DrawSoulSkull(PlayState* play) {
     OPEN_DISPS(play->state.gfxCtx);
     gSPMatrix(POLY_XLU_DISP++, Matrix_NewMtx(play->state.gfxCtx, (char*)__FILE__, __LINE__),
               G_MTX_MODELVIEW | G_MTX_LOAD);
     gDPSetEnvColor(POLY_XLU_DISP++, 255, 255, 255, 255);
     gSPDisplayList(POLY_XLU_DISP++, (Gfx*)gBossSoulSkullDL);
     CLOSE_DISPS(play->state.gfxCtx);
+}
+
+static bool AreSoulModelsSimple() {
+    return CVarGetInteger(CVAR_RANDOMIZER_ENHANCEMENT("SimplerBossSoulModels"), 0) != 0;
+}
+
+void Randomizer_DrawEnemySoulOf(PlayState* play, const EnemySoulModel* model, Color_RGB8 flame) {
+    DrawSoulFlame(play, flame.r, flame.g, flame.b);
+    if (model != nullptr && !AreSoulModelsSimple() && DrawEnemySoulModel(play, *model)) {
+        return;
+    }
+    DrawSoulSkull(play);
+}
+
+extern "C" void Randomizer_DrawEnemySoul(PlayState* play, GetItemEntry* getItemEntry) {
+    DrawSoulFlame(play, 200, 60, 60);
+    const s16 drawn = getItemEntry->getItemId != RG_ICE_TRAP ? getItemEntry->getItemId : getItemEntry->drawItemId;
+    const EnemySoulModel* model = FindEnemySoulModel(static_cast<RandomizerGet>(drawn));
+    const bool isSimple = AreSoulModelsSimple();
+    if (model != nullptr && !isSimple && DrawEnemySoulModel(play, *model)) {
+        return;
+    }
+    if (!isSimple && DrawEnemySoulLists(play, static_cast<RandomizerGet>(drawn))) {
+        return;
+    }
+    DrawSoulSkull(play);
 }
 
 extern "C" void Randomizer_DrawBossSoul(PlayState* play, GetItemEntry* getItemEntry) {

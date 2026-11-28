@@ -44,4 +44,22 @@ void Randomizer_DrawStickBag(PlayState* play, GetItemEntry* getItemEntry);
     }
 #ifdef __cplusplus
 };
+
+#include <ship/utils/color.h>
+
+#include "randomizerTypes.h"
+
+struct EnemySoulModel {
+    RandomizerGet soul;
+    const char* skeleton;
+    const char* animation;
+    bool isFlex;
+    float scale;
+    const void* segment08 = nullptr;
+    const void* segment09 = nullptr;
+    float yOffset = 0.0f;
+};
+
+// A null model, or the simpler soul models option, draws the generic soul skull in the flame.
+void Randomizer_DrawEnemySoulOf(PlayState* play, const EnemySoulModel* model, Color_RGB8 flame);
 #endif

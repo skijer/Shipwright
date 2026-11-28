@@ -38,6 +38,31 @@ void func_800DDE3C(void) {
     gAudioContext.unk_3520[0] = 0.0f;
 }
 
+// SOH [Unbound] Set on the game thread when a mod quest's world swaps the audio files, read by the audio thread at
+// the next reset: permanent fonts point into the old files, so the permanent pool goes and everything reloads.
+static volatile bool sShouldDropPermanentCache;
+
+void AudioHeap_DropPermanentCacheAtReset(void) {
+    sShouldDropPermanentCache = true;
+}
+
+static void AudioHeap_DropPermanentCache(void) {
+    s32 i;
+
+    sShouldDropPermanentCache = false;
+    gAudioContext.permanentPool.cur = gAudioContext.permanentPool.start;
+    gAudioContext.permanentPool.count = 0;
+    for (i = 0; i < fontMapSize; i++) {
+        gAudioContext.fontLoadStatus[i] = 0;
+    }
+    for (i = 0; i < ARRAY_COUNT(gAudioContext.sampleFontLoadStatus); i++) {
+        gAudioContext.sampleFontLoadStatus[i] = 0;
+    }
+    for (i = 0; i < sequenceMapSize; i++) {
+        gAudioContext.seqLoadStatus[i] = 0;
+    }
+}
+
 void AudioHeap_ResetLoadStatus(void) {
     s32 i;
 
@@ -785,6 +810,9 @@ s32 AudioHeap_ResetStep(void) {
             break;
 
         case 1:
+            if (sShouldDropPermanentCache) {
+                AudioHeap_DropPermanentCache();
+            }
             AudioHeap_Init();
             gAudioContext.resetStatus = 0;
             for (i = 0; i < 3; i++) {

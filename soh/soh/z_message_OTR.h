@@ -8,6 +8,9 @@ extern "C" {
 
 void OTRMessage_Init(void);
 
+// SOH [Unbound] rebuilds the tables from the archives mounted now (a mod quest's world changed).
+void OTRMessage_Reload(void);
+
 MessageTableEntry* OTRMessage_Find(MessageTableEntry* table, u16 textId);
 
 #ifdef __cplusplus

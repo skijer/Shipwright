@@ -57,6 +57,7 @@ struct EnemyKind {
     uint32_t flags;
     int32_t logicEnemy;
     const char* soulKey;
+    uint8_t soulCategory;
     SOHLogicKillFunc logicKill;
     void* logicKillUserData;
     const char* enhancementCvar;
@@ -110,6 +111,6 @@ const EnemyPlacement& EnemyPlacement_GetSave();
 std::optional<EnemyKind> EnemyPlacement_FindSaveReplacement(int16_t sceneNum, const std::string& originalKey);
 bool EnemyPlacement_IsSoulExcluded(const EnemyPlacement& placement, const std::string& soulKey);
 bool EnemyPlacement_IsSeedSoulItemExcluded(RandomizerGet soul);
-std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems();
+std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls);
 const EnemyLogicPlan* EnemyPlacement_FindLogicPlan(int32_t sceneNum, RandomizerEnemy original);
 void EnemyPlacement_DrawPoolMenu();

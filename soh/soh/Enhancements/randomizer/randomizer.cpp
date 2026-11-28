@@ -32,6 +32,7 @@
 #include "logic.h"
 #include "soh/SohGui/UIWidgets.hpp"
 #include "soh/Enhancements/randomizer/trial.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 extern "C" {
 #include <variables.h>
@@ -1017,6 +1018,10 @@ bool GenerateRandomizer(std::string seed /*= ""*/) {
         return false;
     }
     WaitForRandoGeneration();
+    // SOH [Unbound] seeds come from the game's world; with a scene loaded the world can't change
+    if (gPlayState == nullptr) {
+        ModQuests_ShowGameWorld();
+    }
 #ifdef __EMSCRIPTEN__
     // Constructing a std::thread aborts in a build without pthreads.
     GenerateOnNextFrame(seed);

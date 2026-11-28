@@ -893,7 +893,9 @@ bool Logic::HasEnemySoul(RandomizerEnemy enemy) {
 }
 
 bool Logic::HasSoulOf(const EnemyKind& replacement) {
-    if (!ctx->GetOption(RSK_SHUFFLE_ENEMY_SOULS) || replacement.soulKey == nullptr) {
+    const bool isBossSoul = replacement.soulCategory == SOH_ENEMY_CATEGORY_BOSS;
+    const RandomizerSettingKey soulShuffle = isBossSoul ? RSK_SHUFFLE_BOSS_SOULS : RSK_SHUFFLE_ENEMY_SOULS;
+    if (!ctx->GetOption(soulShuffle) || replacement.soulKey == nullptr) {
         return true;
     }
     const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(replacement.soulKey);

@@ -8,9 +8,11 @@
 
 #include <nlohmann/json.hpp>
 #include <spdlog/spdlog.h>
+#include <SDL2/SDL_error.h>
 #include <SDL2/SDL_messagebox.h>
 
 #include "soh/ModApi/ModApi.h"
+#include "soh/ModApi/AssetSetup/AssetSetup.h"
 #include "soh/SohGui/SohGui.hpp"
 
 #if defined(_WIN32)
@@ -155,6 +157,10 @@ PermissionAnswer ModPermissions_AskOnce(const ModIdentity& mod, ModPermission pe
 }
 
 bool ModPermissions_ConfirmNow(const ModIdentity& mod, const std::string& title, const std::string& message) {
+    if (AssetSetup_IsRunning()) {
+        SPDLOG_INFO("[ModApi] Fleet's asset setup allowed '{}': {}", mod.name, title);
+        return true;
+    }
     const std::string fullTitle = mod.name + ": " + title;
     const std::string fullMessage = DescribeMod(mod) + " " + message;
     const SDL_MessageBoxButtonData buttons[] = {
@@ -166,7 +172,11 @@ bool ModPermissions_ConfirmNow(const ModIdentity& mod, const std::string& title,
         SDL_arraysize(buttons), buttons, nullptr,
     };
     int choice = static_cast<int>(ConfirmChoice::Refuse);
-    const bool allowed = SDL_ShowMessageBox(&box, &choice) == 0 && choice == static_cast<int>(ConfirmChoice::Allow);
+    if (SDL_ShowMessageBox(&box, &choice) != 0) {
+        SPDLOG_ERROR("[ModApi] Could not ask the player to allow '{}': {} ({})", mod.name, title, SDL_GetError());
+        return false;
+    }
+    const bool allowed = choice == static_cast<int>(ConfirmChoice::Allow);
     SPDLOG_INFO("[ModApi] Player {} '{}': {}", allowed ? "allowed" : "refused", mod.name, title);
     return allowed;
 }

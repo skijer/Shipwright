@@ -5,6 +5,7 @@
  */
 
 #include "global.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 void Sram_InitDebugSave(void);
 
@@ -38,6 +39,8 @@ void Opening_Init(GameState* thisx) {
     OpeningContext* this = (OpeningContext*)thisx;
 
     R_UPDATE_RATE = 1;
+    // SOH [Unbound] the title demo is a scene: its world goes on top before it loads
+    ModQuests_ShowTitleWorld();
     Matrix_Init(&this->state);
     View_Init(&this->view, this->state.gfxCtx);
     this->state.main = Opening_Main;

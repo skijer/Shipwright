@@ -7,6 +7,7 @@
 #include "soh/ResourceManagerHelpers.h"
 
 extern char** sequenceMap;
+extern size_t sequenceMapSize;
 
 #define PORTAMENTO_IS_SPECIAL(x) ((x).mode & 0x80)
 #define PORTAMENTO_MODE(x) ((x).mode & ~0x80)
@@ -45,6 +46,28 @@ u16 AudioSeq_GetScriptControlFlowArgument(SeqScriptState* state, u8 arg1) {
     return ret;
 }
 
+// Custom sequences may name ports past the eight that exist: such a port reads as empty and takes no writes.
+#define SEQ_IO_PORT_COUNT 8
+
+static s8 AudioSeq_ReadIoPort(s8* ports, u32 index) {
+    if (index >= SEQ_IO_PORT_COUNT) {
+        return -1;
+    }
+    return ports[index];
+}
+
+static void AudioSeq_WriteIoPort(s8* ports, u32 index, s8 value) {
+    if (index < SEQ_IO_PORT_COUNT) {
+        ports[index] = value;
+    }
+}
+
+static bool AudioSeq_CanPushScript(SeqScriptState* state) {
+    return state->depth < ARRAY_COUNT(state->stack);
+}
+
+// Custom sequences can close loops they never opened or nest past the stack; the script is stopped (-1) instead of
+// letting depth wrap and write outside its state.
 s32 AudioSeq_HandleScriptFlowControl(SequencePlayer* seqPlayer, SeqScriptState* state, s32 cmd, s32 arg) {
     switch (cmd) {
         case 0xFF:
@@ -61,16 +84,25 @@ s32 AudioSeq_HandleScriptFlowControl(SequencePlayer* seqPlayer, SeqScriptState* 
             return 1;
 
         case 0xFC:
+            if (!AudioSeq_CanPushScript(state)) {
+                return -1;
+            }
             state->stack[state->depth++] = state->pc;
             state->pc = seqPlayer->seqData + (u16)arg;
             break;
 
         case 0xF8:
+            if (!AudioSeq_CanPushScript(state)) {
+                return -1;
+            }
             state->remLoopIters[state->depth] = arg;
             state->stack[state->depth++] = state->pc;
             break;
 
         case 0xF7:
+            if (state->depth == 0) {
+                return -1;
+            }
             state->remLoopIters[state->depth - 1]--;
             if (state->remLoopIters[state->depth - 1] != 0) {
                 state->pc = state->stack[state->depth - 1];
@@ -80,6 +112,9 @@ s32 AudioSeq_HandleScriptFlowControl(SequencePlayer* seqPlayer, SeqScriptState* 
             break;
 
         case 0xF6:
+            if (state->depth == 0) {
+                return -1;
+            }
             state->depth--;
             break;
 
@@ -978,6 +1013,25 @@ void AudioSeq_SequenceChannelSetVolume(SequenceChannel* channel, u8 volume) {
     channel->volume = (f32)(s32)volume / 127.0f;
 }
 
+// Custom sequences list fewer fonts than their scripts may index, and an id past the list now names a loaded foreign
+// font instead of being rejected, so an index outside the list must leave the channel's font alone.
+static bool AudioSeq_GetSequenceFont(SequencePlayer* seqPlayer, u8 fontIndex, u16* fontId) {
+    if (gAudioContext.seqReplaced[seqPlayer->playerIdx]) {
+        seqPlayer->seqId = gAudioContext.seqToPlay[seqPlayer->playerIdx];
+        gAudioContext.seqReplaced[seqPlayer->playerIdx] = 0;
+    }
+    u16 seqId = AudioEditor_GetReplacementSeq(seqPlayer->seqId);
+    if (seqId >= sequenceMapSize + 0xF || sequenceMap[seqId] == NULL) {
+        return false;
+    }
+    SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
+    if ((s32)fontIndex >= sDat.numFonts) {
+        return false;
+    }
+    *fontId = sDat.fonts[sDat.numFonts - fontIndex - 1];
+    return true;
+}
+
 void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
     s32 i;
     u8* data;
@@ -1060,20 +1114,11 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                         }
                         break;
                     case 0xEB:
-                        result = (u8)parameters[0];
                         fontId = (u8)parameters[0];
 
-                        if (seqPlayer->defaultFont != FONT_ID_NONE) {
-                            if (gAudioContext.seqReplaced[seqPlayer->playerIdx]) {
-                                seqPlayer->seqId = gAudioContext.seqToPlay[seqPlayer->playerIdx];
-                                gAudioContext.seqReplaced[seqPlayer->playerIdx] = 0;
-                            }
-                            u16 seqId = AudioEditor_GetReplacementSeq(seqPlayer->seqId);
-                            SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
-                            fontId = sDat.fonts[sDat.numFonts - result - 1];
-                        }
-
-                        if (AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, fontId)) {
+                        if ((seqPlayer->defaultFont == FONT_ID_NONE ||
+                             AudioSeq_GetSequenceFont(seqPlayer, (u8)parameters[0], &fontId)) &&
+                            AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, fontId)) {
                             channel->fontId = fontId;
                         }
 
@@ -1175,26 +1220,11 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                         channel->reverb = command;
                         break;
                     case 0xC6:
-                        result = (u8)parameters[0];
                         fontId = (u8)parameters[0];
 
-                        if (seqPlayer->defaultFont != FONT_ID_NONE) {
-                            if (gAudioContext.seqReplaced[seqPlayer->playerIdx]) {
-                                seqPlayer->seqId = gAudioContext.seqToPlay[seqPlayer->playerIdx];
-                                gAudioContext.seqReplaced[seqPlayer->playerIdx] = 0;
-                            }
-                            u16 seqId = AudioEditor_GetReplacementSeq(seqPlayer->seqId);
-                            SequenceData sDat = ResourceMgr_LoadSeqByName(sequenceMap[seqId]);
-
-                            // The game apparantely would sometimes do negative array lookups, the result of which would
-                            // get rejected by AudioHeap_SearchCaches, never changing the actual fontid.
-                            if (result > sDat.numFonts)
-                                break;
-
-                            fontId = sDat.fonts[(sDat.numFonts - result - 1)];
-                        }
-
-                        if (AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, fontId)) {
+                        if ((seqPlayer->defaultFont == FONT_ID_NONE ||
+                             AudioSeq_GetSequenceFont(seqPlayer, (u8)parameters[0], &fontId)) &&
+                            AudioHeap_SearchCaches(FONT_TABLE, CACHE_EITHER, fontId)) {
                             channel->fontId = fontId;
                         }
 
@@ -1264,9 +1294,8 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                         channel->reverbIndex = command;
                         break;
                     case 0xE4:
-                        if (scriptState->value != -1) {
+                        if (scriptState->value != -1 && AudioSeq_CanPushScript(scriptState)) {
                             data = (*channel->dynTable)[scriptState->value];
-                            //! @bug: Missing a stack depth check here
                             scriptState->stack[scriptState->depth++] = scriptState->pc;
                             offset = (u16)((data[0] << 8) + data[1]);
                             scriptState->pc = seqPlayer->seqData + offset;
@@ -1459,13 +1488,13 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                     }
                     break;
                 case 0x60:
-                    scriptState->value = channel->soundScriptIO[lowBits];
+                    scriptState->value = AudioSeq_ReadIoPort(channel->soundScriptIO, lowBits);
                     if (lowBits < 2) {
                         channel->soundScriptIO[lowBits] = -1;
                     }
                     break;
                 case 0x50:
-                    scriptState->value -= channel->soundScriptIO[lowBits];
+                    scriptState->value -= AudioSeq_ReadIoPort(channel->soundScriptIO, lowBits);
                     break;
                 case 0x20:
                     offset = AudioSeq_ScriptReadS16(scriptState);
@@ -1473,11 +1502,11 @@ void AudioSeq_SequenceChannelProcessScript(SequenceChannel* channel) {
                     break;
                 case 0x30:
                     command = AudioSeq_ScriptReadU8(scriptState);
-                    seqPlayer->channels[lowBits]->soundScriptIO[command] = scriptState->value;
+                    AudioSeq_WriteIoPort(seqPlayer->channels[lowBits]->soundScriptIO, command, scriptState->value);
                     break;
                 case 0x40:
                     command = AudioSeq_ScriptReadU8(scriptState);
-                    scriptState->value = seqPlayer->channels[lowBits]->soundScriptIO[command];
+                    scriptState->value = AudioSeq_ReadIoPort(seqPlayer->channels[lowBits]->soundScriptIO, command);
                     break;
             }
         }
@@ -1731,13 +1760,13 @@ void AudioSeq_SequencePlayerProcessSequence(SequencePlayer* seqPlayer) {
                         seqScript->value = seqPlayer->channels[commandLow]->enabled ^ 1;
                         break;
                     case 0x50:
-                        seqScript->value -= seqPlayer->soundScriptIO[commandLow];
+                        seqScript->value -= AudioSeq_ReadIoPort(seqPlayer->soundScriptIO, commandLow);
                         break;
                     case 0x70:
-                        seqPlayer->soundScriptIO[commandLow] = seqScript->value;
+                        AudioSeq_WriteIoPort(seqPlayer->soundScriptIO, commandLow, seqScript->value);
                         break;
                     case 0x80:
-                        seqScript->value = seqPlayer->soundScriptIO[commandLow];
+                        seqScript->value = AudioSeq_ReadIoPort(seqPlayer->soundScriptIO, commandLow);
                         if (commandLow < 2) {
                             seqPlayer->soundScriptIO[commandLow] = -1;
                         }
@@ -1757,14 +1786,18 @@ void AudioSeq_SequencePlayerProcessSequence(SequencePlayer* seqPlayer) {
                         command = AudioSeq_ScriptReadU8(seqScript);
                         temp = AudioSeq_ScriptReadS16(seqScript);
                         data2 = &seqPlayer->seqData[temp];
-                        AudioLoad_SlowLoadSeq(command, data2, &seqPlayer->soundScriptIO[commandLow]);
+                        if (commandLow < SEQ_IO_PORT_COUNT) {
+                            AudioLoad_SlowLoadSeq(command, data2, &seqPlayer->soundScriptIO[commandLow]);
+                        }
                         break;
                     case 0x60: {
                         command = AudioSeq_ScriptReadU8(seqScript);
                         value = command;
                         temp = AudioSeq_ScriptReadU8(seqScript);
 
-                        AudioLoad_ScriptLoad(value, temp, &seqPlayer->soundScriptIO[commandLow]);
+                        if (commandLow < SEQ_IO_PORT_COUNT) {
+                            AudioLoad_ScriptLoad(value, temp, &seqPlayer->soundScriptIO[commandLow]);
+                        }
                         break;
                     }
                 }

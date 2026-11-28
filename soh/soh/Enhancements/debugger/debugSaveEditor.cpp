@@ -26,6 +26,7 @@
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/CustomEquipRegistry/CustomEquipRegistry.h"
 #include "soh/ModApi/Layout/ModLayout.h"
+#include "soh/ModApi/ModInfEditor/ModInfEditor.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 
@@ -1887,6 +1888,14 @@ void DrawFlagsTab() {
         }
         UIWidgets::EndCard();
     }
+
+    UIWidgets::BeginCard("Mod Inf Flags", 0);
+    ImGui::SetNextItemOpen(false, ImGuiCond_Once);
+    if (ImGui::TreeNode("Mod Inf Flags##tree")) {
+        ModInfEditor_Draw();
+        ImGui::TreePop();
+    }
+    UIWidgets::EndCard();
 
     UIWidgets::EndCardLayout();
 

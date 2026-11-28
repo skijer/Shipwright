@@ -317,6 +317,19 @@ static void OnGerudoFighterDefeat(void* refActor) {
     }
 }
 
+// A stored pointer outlives its actor whenever the two are freed in the other order (room or scene unload), and its
+// block may already hold a new actor, so the pointer is trusted only while it is listed with the expected id.
+static bool IsActorAlive(PlayState* play, Actor* target, int16_t expectedId) {
+    for (int32_t category = 0; category < ACTORCAT_MAX; category++) {
+        for (Actor* actor = play->actorCtx.actorLists[category].head; actor != nullptr; actor = actor->next) {
+            if (actor == target) {
+                return actor->id == expectedId && actor->update != nullptr;
+            }
+        }
+    }
+    return false;
+}
+
 struct CustomStalfosPairFightData {
     BgMoriBigst* moriBigst = nullptr;
     ActorFunc originalDestroy = nullptr;
@@ -330,7 +343,10 @@ void CustomStalfosPairFightDestroy(Actor* thisx, PlayState* play) {
     CustomStalfosPairFightData* customStalfosPairFightData =
         ObjectExtension::GetInstance().Get<CustomStalfosPairFightData>(thisx);
 
-    customStalfosPairFightData->moriBigst->dyna.actor.home.rot.z -= 1;
+    BgMoriBigst* moriBigst = customStalfosPairFightData->moriBigst;
+    if (IsActorAlive(play, &moriBigst->dyna.actor, ACTOR_BG_MORI_BIGST)) {
+        moriBigst->dyna.actor.home.rot.z -= 1;
+    }
 
     customStalfosPairFightData->originalDestroy(thisx, play);
 
@@ -349,7 +365,10 @@ void CustomPeehatLarvaDestroy(Actor* thisx, PlayState* play) {
 
     CustomPeehatLarvaData* customPeehatLarvaData = ObjectExtension::GetInstance().Get<CustomPeehatLarvaData>(thisx);
 
-    customPeehatLarvaData->peehat->unk_2FA -= 1;
+    EnPeehat* peehat = customPeehatLarvaData->peehat;
+    if (IsActorAlive(play, &peehat->actor, ACTOR_EN_PEEHAT)) {
+        peehat->unk_2FA -= 1;
+    }
 
     customPeehatLarvaData->originalDestroy(thisx, play);
 

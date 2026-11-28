@@ -350,6 +350,11 @@ std::string AudioCollection::GetCvarLockKey(std::string sfxKey) {
     return prefix + sfxKey + ".locked";
 }
 
+static std::string MakeSfxKey(const std::string& label) {
+    return StringHelper::Replace(StringHelper::Replace(StringHelper::Replace(label, " ", "_"), "~", "-"), ".", "");
+}
+
+// A custom sequence file is named "<label>_<type>", the type being "bgm" or "fanfare".
 void AudioCollection::AddToCollection(char* otrPath, uint16_t seqNum) {
     std::string fileName = std::filesystem::path(otrPath).filename().string();
     std::vector<std::string> splitFileName = StringHelper::Split(fileName, "_");
@@ -363,14 +368,39 @@ void AudioCollection::AddToCollection(char* otrPath, uint16_t seqNum) {
     if (typeString == "fanfare") {
         type = SEQ_FANFARE;
     }
-    SequenceInfo info = { seqNum,
-                          sequenceName,
-                          StringHelper::Replace(
-                              StringHelper::Replace(StringHelper::Replace(sequenceName, " ", "_"), "~", "-"), ".", ""),
-                          type,
-                          false,
-                          true };
-    sequenceMap.emplace(seqNum, info);
+    sequenceMap.emplace(seqNum, SequenceInfo{ seqNum, sequenceName, MakeSfxKey(sequenceName), type, false, true });
+}
+
+// Another game's sequences are written for that game's player and fonts, MM's Sequence_0 being its SFX program, not
+// music: they stay playable by path but are never handed out as a replacement. Their file names carry no type suffix,
+// so the whole name labels them; splitting it would give all of MM's "Sequence_N" one shared key.
+void AudioCollection::AddForeignToCollection(char* otrPath, uint16_t seqNum) {
+    const std::string label = std::filesystem::path(otrPath).filename().string();
+    sequenceMap.emplace(seqNum, SequenceInfo{ seqNum, label, MakeSfxKey(label), SEQ_BGM_CUSTOM, false, false });
+}
+
+bool AudioCollection::CanReplaceWith(uint16_t seqId, int replacementSeq) const {
+    const auto replacement = sequenceMap.find(replacementSeq);
+    if (replacement == sequenceMap.end()) {
+        return false;
+    }
+    return replacementSeq == seqId || replacement->second.canBeUsedAsReplacement;
+}
+
+std::vector<uint16_t> AudioCollection::ListForbiddenReplacements() {
+    std::vector<uint16_t> forbidden;
+    for (const SequenceInfo* included : includedSequences) {
+        if (!included->canBeUsedAsReplacement) {
+            forbidden.push_back(included->sequenceId);
+        }
+    }
+    for (const auto& [seqId, seqInfo] : sequenceMap) {
+        const int replacementSeq = CVarGetInteger(GetCvarKey(seqInfo.sfxKey).c_str(), seqId);
+        if (sequenceMap.contains(replacementSeq) && !CanReplaceWith(seqId, replacementSeq)) {
+            forbidden.push_back(static_cast<uint16_t>(replacementSeq));
+        }
+    }
+    return forbidden;
 }
 
 uint16_t AudioCollection::GetReplacementSequence(uint16_t seqId) {
@@ -391,7 +421,9 @@ uint16_t AudioCollection::GetReplacementSequence(uint16_t seqId) {
     const auto& sequenceInfo = sequenceMap.at(seqId);
     const std::string cvarKey = GetCvarKey(sequenceInfo.sfxKey);
     int replacementSeq = CVarGetInteger(cvarKey.c_str(), seqId);
-    if (!sequenceMap.contains(replacementSeq)) {
+    // A saved choice can predate a sequence becoming ineligible, such as another game's sequence picked by an
+    // older build's randomizer.
+    if (!CanReplaceWith(seqId, replacementSeq)) {
         replacementSeq = seqId;
     }
 
@@ -445,6 +477,10 @@ void AudioCollection::InitializeShufflePool() {
 
 extern "C" void AudioCollection_AddToCollection(char* otrPath, uint16_t seqNum) {
     AudioCollection::Instance->AddToCollection(otrPath, seqNum);
+}
+
+extern "C" void AudioCollection_AddForeignToCollection(char* otrPath, uint16_t seqNum) {
+    AudioCollection::Instance->AddForeignToCollection(otrPath, seqNum);
 }
 
 bool AudioCollection::HasSequenceNum(uint16_t seqId) {

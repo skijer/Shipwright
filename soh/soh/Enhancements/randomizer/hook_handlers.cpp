@@ -14,6 +14,7 @@
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/ModApi/ActorRegistry/ActorRegistry.h"
+#include "soh/ModApi/ActorRegistry/EnemySouls.h"
 #include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/game-interactor/GameInteractor_Hooks.h"
@@ -2540,19 +2541,20 @@ void RandomizerOnActorInitHandler(void* actorRef) {
         }
     }
 
-    // Deletes all actors in the boss category if the soul isn't found.
+    // Kills all actors in the boss category if the soul isn't found. Killed, not deleted: this runs inside Actor_Init,
+    // whose caller keeps using the actor, so freeing it here would leave the spawner with a dangling pointer.
     // Some actors, like Dark Link, Arwings, and Zora's Sapphire...?, are in this category despite not being actual
     // bosses, so ignore any "boss" if `currentBossSoulRandInf` doesn't change from RAND_INF_MAX. Iron Knuckle
     // (Nabooru) in Twinrova's room is a special exception, so exclude knuckles too.
     if (currentBossSoulRandInf != RAND_INF_MAX) {
         if (!Flags_GetRandomizerInf(currentBossSoulRandInf) && actor->category == ACTORCAT_BOSS &&
             actor->id != ACTOR_EN_IK) {
-            Actor_Delete(&gPlayState->actorCtx, actor, gPlayState);
+            Actor_Kill(actor);
         }
         // Special case for Phantom Ganon's horse (and fake), as they're considered "background actors",
         // but still control the boss fight flow.
         if (!Flags_GetRandomizerInf(RAND_INF_PHANTOM_GANON_SOUL) && actor->id == ACTOR_EN_FHG) {
-            Actor_Delete(&gPlayState->actorCtx, actor, gPlayState);
+            Actor_Kill(actor);
         }
     }
 
@@ -2978,6 +2980,7 @@ static RegisterShipInitFunc initFunc_RegisterHooks(RandomizerRegisterHooks);
 // clang-format off
 static const std::unordered_map<int16_t, RandomizerInf> enemySouls = {
     { ACTOR_EN_ANUBICE,    RAND_INF_SOUL_ENEMY_ANUBIS },
+    { ACTOR_EN_ANUBICE_TAG, RAND_INF_SOUL_ENEMY_ANUBIS },
     { ACTOR_EN_AM,         RAND_INF_SOUL_ENEMY_ARMOS },
     { ACTOR_EN_VALI,       RAND_INF_SOUL_ENEMY_BARI },
     { ACTOR_EN_BILI,       RAND_INF_SOUL_ENEMY_BARI },
@@ -3037,20 +3040,29 @@ static bool HasNativeSoul(RandomizerInf flag) {
     return (soul != nullptr && IsSoulOutOfPool(soul->key)) || Flags_GetRandomizerInf(flag);
 }
 
-static bool HasCustomEnemySoul(int16_t actorId) {
-    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actorId);
-    if (enemy == nullptr || enemy->soulKey == nullptr) {
-        return true;
-    }
-    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(enemy->soulKey);
+static bool HasCustomSoul(const SOHCustomEnemy& enemy) {
+    const EnemySoul* nativeSoul = EnemyCatalog_FindNativeSoul(enemy.soulKey);
     if (nativeSoul != nullptr) {
         return HasNativeSoul(nativeSoul->flag);
     }
-    if (IsSoulOutOfPool(enemy->soulKey)) {
+    if (IsSoulOutOfPool(enemy.soulKey)) {
         return true;
     }
-    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(enemy->soulKey)).c_str());
+    int32_t soulItem = RandoItems_GetRandoGet(("soul." + std::string(enemy.soulKey)).c_str());
     return soulItem == RG_NONE || RandoItems_IsOwned(soulItem, SOH_RANDO_INF_SAVE);
+}
+
+static bool IsCustomBoss(const SOHCustomEnemy* enemy) {
+    return enemy != nullptr && enemy->soulKey != nullptr && enemy->soulCategory == SOH_ENEMY_CATEGORY_BOSS;
+}
+
+// A boss soul follows the boss soul shuffle instead, so the enemy soul one leaves the boss alone.
+static bool HasCustomEnemySoul(int16_t actorId) {
+    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actorId);
+    if (enemy == nullptr || enemy->soulKey == nullptr || IsCustomBoss(enemy)) {
+        return true;
+    }
+    return HasCustomSoul(*enemy);
 }
 
 static bool HasEnemySoul(int16_t actorId) {
@@ -3109,6 +3121,22 @@ static void RegisterShuffleEnemySouls() {
 
 static RegisterShipInitFunc initFunc_ShuffleEnemySouls(RegisterShuffleEnemySouls, { "IS_RANDO" });
 
+// Like a vanilla boss, a custom one without its soul is killed as it spawns.
+static void RemoveSoullessCustomBoss(void* refActor) {
+    Actor* actor = static_cast<Actor*>(refActor);
+    const SOHCustomEnemy* enemy = ActorRegistry_FindEnemyById(actor->id);
+    if (IsCustomBoss(enemy) && !HasCustomSoul(*enemy)) {
+        Actor_Kill(actor);
+    }
+}
+
+static void RegisterShuffleCustomBossSouls() {
+    bool shouldRegister = IS_RANDO && RAND_GET_OPTION(RSK_SHUFFLE_BOSS_SOULS) && EnemySouls_HasBosses();
+    COND_HOOK(OnActorInit, shouldRegister, RemoveSoullessCustomBoss);
+}
+
+static RegisterShipInitFunc initFunc_ShuffleCustomBossSouls(RegisterShuffleCustomBossSouls, { "IS_RANDO" });
+
 enum class EnemyDropTrigger {
     Loot,
     Defeat,
@@ -3156,8 +3184,20 @@ static const std::unordered_map<int16_t, EnemyDrop> enemyDrops = {
 };
 // clang-format on
 
-static bool IsGoldSkulltula(Actor* actor) {
-    return actor->id == ACTOR_EN_SW && ((actor->params & 0xE000) >> 0xD) != 0;
+static bool IsGoldSkulltula(int16_t actorId, int16_t params) {
+    return actorId == ACTOR_EN_SW && ((params & 0xE000) >> 0xD) != 0;
+}
+
+RandomizerCheck Rando::StaticData::GetEnemyDropCheck(int16_t actorId, int16_t params) {
+    const SOHCustomEnemy* custom = ActorRegistry_FindEnemyById(actorId);
+    if (custom != nullptr) {
+        return static_cast<RandomizerCheck>(custom->dropCheck);
+    }
+    auto drop = enemyDrops.find(actorId);
+    if (drop == enemyDrops.end() || IsGoldSkulltula(actorId, params)) {
+        return RC_UNKNOWN_CHECK;
+    }
+    return drop->second.check;
 }
 
 static bool IsDropAwaitingPickup(RandomizerInf flag) {
@@ -3169,14 +3209,34 @@ static bool IsDropAwaitingPickup(RandomizerInf flag) {
     return false;
 }
 
-static bool SpawnEnemyDrop(Actor* enemy, Vec3f position, EnemyDropTrigger trigger) {
+// A custom enemy awards its drop on its loot or its defeat, whichever its mod signals first.
+static RandomizerCheck FindTriggeredDrop(Actor* enemy, EnemyDropTrigger trigger) {
+    if (ActorRegistry_FindEnemyById(enemy->id) != nullptr) {
+        return Rando::StaticData::GetEnemyDropCheck(enemy->id, enemy->params);
+    }
     auto drop = enemyDrops.find(enemy->id);
-    if (drop == enemyDrops.end() || drop->second.trigger != trigger || IsGoldSkulltula(enemy)) {
+    if (drop == enemyDrops.end() || drop->second.trigger != trigger || IsGoldSkulltula(enemy->id, enemy->params)) {
+        return RC_UNKNOWN_CHECK;
+    }
+    return drop->second.check;
+}
+
+static RandomizerInf GetDropFlag(RandomizerCheck check) {
+    if (DungeonRegistry_IsModCheck(check)) {
+        return static_cast<RandomizerInf>(DungeonRegistry_GetCheckRandomizerInf(check));
+    }
+    return rcToRandomizerInf.at(check);
+}
+
+static bool SpawnEnemyDrop(Actor* enemy, Vec3f position, EnemyDropTrigger trigger) {
+    RandomizerCheck check = FindTriggeredDrop(enemy, trigger);
+    if (check == RC_UNKNOWN_CHECK) {
         return false;
     }
-    RandomizerCheck check = drop->second.check;
-    RandomizerInf flag = rcToRandomizerInf.at(check);
-    if (Flags_GetRandomizerInf(flag) || IsDropAwaitingPickup(flag)) {
+    RandomizerInf flag = GetDropFlag(check);
+    // With the enemy randomizer a kind can spawn where the logic does not follow it; its drop then holds nothing.
+    const bool holdsItem = Rando::Context::GetInstance()->GetItemLocation(check)->GetPlacedRandomizerGet() != RG_NONE;
+    if (!holdsItem || Flags_GetRandomizerInf(flag) || IsDropAwaitingPickup(flag)) {
         return false;
     }
     EnItem00* item00 = reinterpret_cast<EnItem00*>(Item_DropCollectible2(gPlayState, &position, ITEM00_SOH_DUMMY));

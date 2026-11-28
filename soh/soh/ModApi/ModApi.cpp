@@ -2,11 +2,13 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fast/Fast3dWindow.h>
 #include <fast/interpreter.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <spdlog/spdlog.h>
@@ -22,7 +24,9 @@
 #include "soh/ModApi/ModDungeons/ModDungeonsHost.h"
 #include "soh/ModApi/Forms/FormModel.h"
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/ModApi/ModStore/ModStore.h"
+#include "soh/ModApi/ModCounters/ModCounters.h"
 #include "soh/ModApi/CustomItemRegistry/CustomItemRegistry.h"
 #include "soh/ModApi/ActorRegistry/ActorRegistry.h"
 #include "soh/ActorDB.h"
@@ -34,11 +38,32 @@ extern "C" bool Anchor_GetPlayerColor(const Actor* actor, Color_RGB8* color);
 
 namespace {
 
+// isAwake: NULL, or the flag of the registering mod's quest, which its callbacks run under.
 struct HookBinders {
-    void (*global)(void* callback);
-    void (*forId)(int32_t id, void* callback);
-    void (*forPtr)(uintptr_t ptr, void* callback);
+    void (*global)(void* callback, const bool* isAwake);
+    void (*forId)(int32_t id, void* callback, const bool* isAwake);
+    void (*forPtr)(uintptr_t ptr, void* callback, const bool* isAwake);
 };
+
+template <typename Hook, typename Callback> typename Hook::fn GateOnQuest(Callback callback, const bool* isAwake) {
+    if (isAwake == nullptr) {
+        return callback;
+    }
+    return [callback, isAwake](auto&&... args) {
+        if (*isAwake) {
+            callback(std::forward<decltype(args)>(args)...);
+        }
+    };
+}
+
+// OnModQuestAwake always runs, so a sleeping quest's mod can put back what it wrote into the game's tables.
+const bool* GetCallerAwakeFlag(const void* caller, const char* hookName) {
+    const ModIdentity* mod = ModPermissions_FindCaller(caller);
+    if (mod == nullptr || std::strcmp(hookName, "OnModQuestAwake") == 0) {
+        return nullptr;
+    }
+    return ModQuests_GetAwakeFlag(mod->name);
+}
 
 std::string sCurrentMod;
 std::unordered_set<std::string> sReportedMissing;
@@ -196,50 +221,59 @@ bool MayModDrawOnPlayer(const DrawHookOwner& owner) {
 }
 
 void GateDrawingOnOtherPlayers(std::unordered_map<std::string, HookBinders>& entries) {
-    entries["OnPlayerResolveLimbDraw"].global = [](void* callback) {
+    entries["OnPlayerResolveLimbDraw"].global = [](void* callback, const bool* isAwake) {
         auto modCallback = (SOHCb_OnPlayerResolveLimbDraw)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveLimbDraw>(
-            [modCallback, owner = RegisteringDrawHookOwner()](Player* player, int32_t limbIndex, Gfx** dList,
-                                                              Gfx* limbDList, Vec3f* pos) {
-                if (MayModDrawOnPlayer(owner)) {
-                    modCallback(player, limbIndex, dList, limbDList, pos);
-                }
-            });
+            GateOnQuest<GameInteractor::OnPlayerResolveLimbDraw>(
+                [modCallback, owner = RegisteringDrawHookOwner()](Player* player, int32_t limbIndex, Gfx** dList,
+                                                                  Gfx* limbDList, Vec3f* pos) {
+                    if (MayModDrawOnPlayer(owner)) {
+                        modCallback(player, limbIndex, dList, limbDList, pos);
+                    }
+                },
+                isAwake));
     };
-    entries["OnPlayerPostLimbDraw"].global = [](void* callback) {
+    entries["OnPlayerPostLimbDraw"].global = [](void* callback, const bool* isAwake) {
         auto modCallback = (SOHCb_OnPlayerPostLimbDraw)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerPostLimbDraw>(
-            [modCallback, owner = RegisteringDrawHookOwner()](PlayState* play, Player* player, int32_t limbIndex) {
-                if (MayModDrawOnPlayer(owner)) {
-                    modCallback(play, player, limbIndex);
-                }
-            });
+            GateOnQuest<GameInteractor::OnPlayerPostLimbDraw>(
+                [modCallback, owner = RegisteringDrawHookOwner()](PlayState* play, Player* player, int32_t limbIndex) {
+                    if (MayModDrawOnPlayer(owner)) {
+                        modCallback(play, player, limbIndex);
+                    }
+                },
+                isAwake));
     };
-    entries["OnPlayerResolveFaceTextures"].global = [](void* callback) {
+    entries["OnPlayerResolveFaceTextures"].global = [](void* callback, const bool* isAwake) {
         auto modCallback = (SOHCb_OnPlayerResolveFaceTextures)callback;
         GameInteractor::Instance->RegisterGameHook<GameInteractor::OnPlayerResolveFaceTextures>(
-            [modCallback, owner = RegisteringDrawHookOwner()](const char** eyes, const char** mouth) {
-                if (MayModDrawOnPlayer(owner)) {
-                    modCallback(eyes, mouth);
-                }
-            });
+            GateOnQuest<GameInteractor::OnPlayerResolveFaceTextures>(
+                [modCallback, owner = RegisteringDrawHookOwner()](const char** eyes, const char** mouth) {
+                    if (MayModDrawOnPlayer(owner)) {
+                        modCallback(eyes, mouth);
+                    }
+                },
+                isAwake));
     };
 }
 
 std::unordered_map<std::string, HookBinders> BuildHookEntries() {
     std::unordered_map<std::string, HookBinders> entries;
 
-#define DEFINE_HOOK(name, args)                                                                                  \
-    entries[#name] = {                                                                                           \
-        [](void* callback) {                                                                                     \
-            GameInteractor::Instance->RegisterGameHook<GameInteractor::name>((SOHCb_##name)callback);            \
-        },                                                                                                       \
-        [](int32_t id, void* callback) {                                                                         \
-            GameInteractor::Instance->RegisterGameHookForID<GameInteractor::name>(id, (SOHCb_##name)callback);   \
-        },                                                                                                       \
-        [](uintptr_t ptr, void* callback) {                                                                      \
-            GameInteractor::Instance->RegisterGameHookForPtr<GameInteractor::name>(ptr, (SOHCb_##name)callback); \
-        },                                                                                                       \
+#define DEFINE_HOOK(name, args)                                                                    \
+    entries[#name] = {                                                                             \
+        [](void* callback, const bool* isAwake) {                                                  \
+            GameInteractor::Instance->RegisterGameHook<GameInteractor::name>(                      \
+                GateOnQuest<GameInteractor::name>((SOHCb_##name)callback, isAwake));               \
+        },                                                                                         \
+        [](int32_t id, void* callback, const bool* isAwake) {                                      \
+            GameInteractor::Instance->RegisterGameHookForID<GameInteractor::name>(                 \
+                id, GateOnQuest<GameInteractor::name>((SOHCb_##name)callback, isAwake));           \
+        },                                                                                         \
+        [](uintptr_t ptr, void* callback, const bool* isAwake) {                                   \
+            GameInteractor::Instance->RegisterGameHookForPtr<GameInteractor::name>(                \
+                ptr, GateOnQuest<GameInteractor::name>((SOHCb_##name)callback, isAwake));          \
+        },                                                                                         \
     };
 #include "soh/Enhancements/game-interactor/GameInteractor_HookTable.h"
 #undef DEFINE_HOOK
@@ -273,15 +307,28 @@ const HookBinders* FindHookBinders(const char* name, void* callback) {
     return &entry->second;
 }
 
-bool RegisterHookByName(const char* name, void* callback) {
+bool BindGlobalHook(const char* name, void* callback, const void* caller, bool runsWhileAsleep) {
     const HookBinders* binders = FindHookBinders(name, callback);
     if (binders == nullptr) {
         return false;
     }
-    sRegisteringModUsesNetwork = DeclaresNetwork(ModPermissions_FindCaller(MOD_CALLER_ADDRESS()));
-    binders->global(callback);
+    sRegisteringModUsesNetwork = DeclaresNetwork(ModPermissions_FindCaller(caller));
+    binders->global(callback, runsWhileAsleep ? nullptr : GetCallerAwakeFlag(caller, name));
     sRegisteringModUsesNetwork = false;
     return true;
+}
+
+bool RegisterHookByName(const char* name, void* callback) {
+    return BindGlobalHook(name, callback, MOD_CALLER_ADDRESS(), false);
+}
+
+bool RegisterPersistentHookByName(const char* name, void* callback) {
+    return BindGlobalHook(name, callback, MOD_CALLER_ADDRESS(), true);
+}
+
+const char* GetDeclaredQuest() {
+    const ModIdentity* mod = ModPermissions_FindCaller(MOD_CALLER_ADDRESS());
+    return mod != nullptr ? ModQuests_GetQuestOfMod(mod->name) : nullptr;
 }
 
 bool RegisterHookForIdByName(const char* name, int32_t id, void* callback) {
@@ -289,7 +336,7 @@ bool RegisterHookForIdByName(const char* name, int32_t id, void* callback) {
     if (binders == nullptr) {
         return false;
     }
-    binders->forId(id, callback);
+    binders->forId(id, callback, GetCallerAwakeFlag(MOD_CALLER_ADDRESS(), name));
     return true;
 }
 
@@ -298,7 +345,7 @@ bool RegisterHookForPtrByName(const char* name, uintptr_t ptr, void* callback) {
     if (binders == nullptr) {
         return false;
     }
-    binders->forPtr(ptr, callback);
+    binders->forPtr(ptr, callback, GetCallerAwakeFlag(MOD_CALLER_ADDRESS(), name));
     return true;
 }
 
@@ -307,8 +354,12 @@ bool RegisterVB(GIVanillaBehavior flag, SOHVbCallback callback) {
         return false;
     }
 
+    const bool* isAwake = GetCallerAwakeFlag(MOD_CALLER_ADDRESS(), "");
     GameInteractor::Instance->RegisterGameHookForID<GameInteractor::OnModVanillaBehavior>(
-        flag, [callback](GIVanillaBehavior, bool* should, va_list originalArgs) {
+        flag, [callback, isAwake](GIVanillaBehavior, bool* should, va_list originalArgs) {
+            if (isAwake != nullptr && !*isAwake) {
+                return;
+            }
             va_list args;
             va_copy(args, originalArgs);
             callback(should, args);
@@ -403,6 +454,9 @@ SOHModApi BuildTable() {
     api.IsFormActive = FormRegistry_IsActive;
     api.IsFormSuspended = FormRegistry_IsSuspended;
     api.GetNetPlayerColor = Anchor_GetPlayerColor;
+    api.RegisterModCounter = ModCounters_Register;
+    api.GetModCounter = ModCounters_Get;
+    api.SetModCounter = ModCounters_Set;
     api.BlockPlayerInput = PlayerInput_Block;
     api.ReleasePlayerInput = PlayerInput_Release;
     api.ShowTextbox = CustomItemRegistry_ShowTextbox;
@@ -511,6 +565,9 @@ SOHModApi BuildTable() {
     api.SetCustomItemWorn = CustomItemRegistry_SetWorn;
     api.IsCustomItemWorn = CustomItemRegistry_IsWorn;
     api.SetCelShadingRamp = SetCelShadingRamp;
+    api.GetQuest = ModQuests_GetActive;
+    api.GetDeclaredQuest = GetDeclaredQuest;
+    api.RegisterPersistentHookByName = RegisterPersistentHookByName;
     return api;
 }
 
@@ -520,6 +577,7 @@ void ModApi_Init() {
     ProgressiveItems_Init();
     ModStorage_Init();
     RandoInfCustom_Init();
+    ModCounters_Init();
     CustomItemRegistry_Init();
     CustomEquipRegistry_Init();
     KaleidoEquipManager_Init();
@@ -540,7 +598,9 @@ void ModApi_Init() {
     BossRegistry_Init();
     DungeonRegistry_Init();
     ModNetwork_Init();
+    ModQuests_Init();
     ModLoader_LoadMods();
+    ModQuests_FinishLoading();
     if (Ship::Context::GetRawInstance()->GetWindow() != nullptr) {
         ModStore_Init();
     }

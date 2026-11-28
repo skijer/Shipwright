@@ -73,6 +73,8 @@ class StaticData {
     static void RegisterIcicleLocations();
     static void RegisterRedIceLocations();
     static void RegisterEnemyDropLocations();
+    // RC_UNKNOWN_CHECK when killing this actor awards no enemy drop.
+    static RandomizerCheck GetEnemyDropCheck(int16_t actorId, int16_t params);
     static void InitHashMaps();
     static std::array<std::pair<RandomizerCheck, RandomizerCheck>, 17> randomizerFishingPondFish;
     static std::unordered_map<int8_t, RandomizerCheck> randomizerGrottoFishMap;

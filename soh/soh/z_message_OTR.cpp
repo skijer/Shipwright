@@ -1,6 +1,7 @@
 #include "z_message_OTR.h"
 #include <libultraship/libultraship.h>
 #include "soh/resource/type/Scene.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/unbound/UnboundJson.h"
 #include "soh/unbound/UnboundSchema.h"
 #include <ship/utils/StringHelper.h>
@@ -148,6 +149,9 @@ void LoadOverrides(MessageTable& table, const LanguageSpec& spec) {
         return;
     }
     for (const auto& path : *files) {
+        if (ModQuests_IsPathAsleep(path.c_str())) {
+            continue;
+        }
         auto file = LoadTextResource(path);
         if (file == nullptr) {
             continue;
@@ -295,6 +299,18 @@ extern "C" void OTRMessage_Init(void) {
         }
     }
     PublishTables();
+}
+
+// The previous tables live until the next reload: a message on screen may still point into them.
+extern "C" void OTRMessage_Reload(void) {
+    static std::array<MessageTable, MSG_LANGUAGE_COUNT> sPrevious;
+    if (!sInitialized) {
+        return;
+    }
+    sPrevious = std::move(sTables);
+    sTables = {};
+    sInitialized = false;
+    OTRMessage_Init();
 }
 
 extern "C" MessageTableEntry* OTRMessage_Find(MessageTableEntry* table, u16 textId) {

@@ -28,10 +28,12 @@
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
 #include "soh/ShipUtils.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include <libultraship/bridge/consolevariablebridge.h>
 
 #define MIN_QUEST (ResourceMgr_GameHasOriginal() ? QUEST_NORMAL : QUEST_MASTER)
-#define MAX_QUEST QUEST_SPEEDRUN_MASTER
+// SOH [Unbound] mod quest i is quest QUEST_MOD + i
+#define MAX_QUEST (ModQuests_Count() > 0 ? QUEST_MOD + (s8)ModQuests_Count() - 1 : QUEST_SPEEDRUN_MASTER)
 
 // #region SOH [Enhancement] - Hide Quest Modes
 // Step from quest in the given direction (1 or -1) to the next visible quest, wrapping around at the ends
@@ -154,7 +156,49 @@ static int FileChoose_IsSaveCompatible(const SaveFileMetaInfo* restrict meta) {
     if (meta->requiresOriginal) {
         valid = valid && ResourceMgr_GameHasOriginal();
     }
-    return valid;
+    return valid && ModQuests_CanOpenFile(meta->modQuest);
+}
+
+// SOH [Unbound] a mod quest's file plays as Original Quest and remembers its quest
+static void FileChoose_ChooseQuest(FileChooseContext* this) {
+    s8 quest = this->questType[this->buttonIndex];
+
+    if (quest >= QUEST_MOD) {
+        gSaveContext.ship.quest.id = QUEST_NORMAL;
+        ModQuests_ChooseModQuest(quest - QUEST_MOD);
+        return;
+    }
+    gSaveContext.ship.quest.id = quest;
+    ModQuests_ChooseGameQuest();
+}
+
+static s16 FileChoose_GetTextLineWidth(const char* text) {
+    s16 width = 0;
+
+    for (const char* character = text; *character != '\0'; character++) {
+        width += (s16)(Ship_GetCharFontWidth(*character) * (R_TEXT_CHAR_SCALE / 100.0f));
+    }
+    return width;
+}
+
+// SOH [Unbound] a mod quest's 160x160 logo, or the Ocarina of Time logo with the quest's name under it
+static void FileChoose_DrawModQuestLogo(FileChooseContext* this, u32 index) {
+    const char* logo = ModQuests_GetLogo(index);
+    const char* name = ModQuests_GetName(index);
+
+    OPEN_DISPS(this->state.gfxCtx);
+    gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, this->logoAlpha);
+    CLOSE_DISPS(this->state.gfxCtx);
+
+    if (logo != NULL) {
+        FileChoose_DrawImageRGBA32(this->state.gfxCtx, 160, 135, logo, 160, 160);
+        return;
+    }
+    FileChoose_DrawTextureI8(this->state.gfxCtx, gTitleTheLegendOfTextTex, 72, 8, 156, 108, 72, 8, 1024, 1024);
+    FileChoose_DrawTextureI8(this->state.gfxCtx, gTitleOcarinaOfTimeTMTextTex, 96, 8, 154, 163, 96, 8, 1024, 1024);
+    FileChoose_DrawImageRGBA32(this->state.gfxCtx, 160, 135, gTitleZeldaShieldLogoTex, 160, 160);
+    Interface_DrawTextLine(this->state.gfxCtx, (char*)name, 160 - FileChoose_GetTextLineWidth(name) / 2, 176, 255, 255,
+                           255, this->logoAlpha, 1.0f, true);
 }
 
 void FileChoose_SetView(FileChooseContext* this, f32 eyeX, f32 eyeY, f32 eyeZ) {
@@ -825,7 +869,7 @@ void FileChoose_UpdateQuestMenu(GameState* thisx) {
     }
 
     if (CHECK_BTN_ALL(input->press.button, BTN_A)) {
-        gSaveContext.ship.quest.id = this->questType[this->buttonIndex];
+        FileChoose_ChooseQuest(this);
 
         if (this->questType[this->buttonIndex] == QUEST_BOSSRUSH) {
             Audio_PlaySfxGeneral(NA_SE_SY_FSEL_DECIDE_L, &gSfxDefaultPos, 4, &gSfxDefaultFreqAndVolScale,
@@ -1029,7 +1073,7 @@ void FileChoose_RotateToQuest(GameState* thisx) {
 
                 // Only one quest is visible, so select it as if it was picked on the quest menu
                 this->questType[this->buttonIndex] = NextVisibleQuest(MAX_QUEST, 1);
-                gSaveContext.ship.quest.id = this->questType[this->buttonIndex];
+                FileChoose_ChooseQuest(this);
 
                 switch (this->questType[this->buttonIndex]) {
                     case QUEST_RANDOMIZER:
@@ -1963,7 +2007,6 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
 
         switch (this->questType[this->buttonIndex]) {
             case QUEST_NORMAL:
-            default:
                 gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, 255, 255, 255, this->logoAlpha);
                 FileChoose_DrawTextureI8(this->state.gfxCtx, gTitleTheLegendOfTextTex, 72, 8, 156, 108, 72, 8, 1024,
                                          1024);
@@ -2045,6 +2088,10 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                                        this->questType[this->buttonIndex] == QUEST_SPEEDRUN_MASTER ? "Speedrun MQ"
                                                                                                    : "Speedrun",
                                        130, 176, 255, 255, 255, this->logoAlpha, 1.0f, true);
+                break;
+
+            default:
+                FileChoose_DrawModQuestLogo(this, this->questType[this->buttonIndex] - QUEST_MOD);
                 break;
         }
     } else if (this->configMode == CM_BOSS_RUSH_MENU) {
@@ -2188,6 +2235,9 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                 case QUEST_MASTER:
                     questLabelText = "MQ";
                     break;
+                case QUEST_NORMAL:
+                    questLabelText = ModQuests_GetFileLabel(Save_GetSaveMetaInfo(i)->modQuest);
+                    break;
             }
             if (!Save_GetSaveMetaInfo(i)->valid) {
                 questLabelText = NULL;
@@ -2222,7 +2272,7 @@ void FileChoose_DrawWindowContents(GameState* thisx) {
                                 G_TX_NOLOD, G_TX_NOLOD);
             gSP1Quadrangle(POLY_OPA_DISP++, 12, 14, 15, 13, 0);
 
-            if (this->n64ddFlags[i] || Save_GetSaveMetaInfo(i)->quest != QUEST_NORMAL) {
+            if (this->n64ddFlags[i] || Save_GetSaveMetaInfo(i)->quest != QUEST_NORMAL || questLabelText != NULL) {
                 gSP1Quadrangle(POLY_OPA_DISP++, 16, 18, 19, 17, 0);
             }
 
@@ -3359,6 +3409,7 @@ void FileChoose_Init(GameState* thisx) {
     this->questType[2] = MIN_QUEST;
     fileSelectSpoilerFileLoaded = false;
     CVarSetInteger(CVAR_GENERAL("OnFileSelectNameEntry"), 0);
+    ModQuests_LeaveFile();
 
     SREG(30) = 1;
     osSyncPrintf("SIZE=%x\n", size);

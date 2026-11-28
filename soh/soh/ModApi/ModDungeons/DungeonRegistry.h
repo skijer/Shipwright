@@ -68,6 +68,8 @@ Rando::ItemLocation* DungeonRegistry_GetItemLocation(int32_t check);
 void DungeonRegistry_AddLocations(std::vector<RandomizerCheck>& allLocations);
 void DungeonRegistry_ForEachItemLocation(const std::function<void(Rando::ItemLocation&)>& visit);
 RandomizerCheck DungeonRegistry_FindCheckBySceneFlag(int16_t sceneNum, int16_t flagType, int16_t flag);
+// A check the enemy's kind awards wherever it spawns; RC_UNKNOWN_CHECK if it cannot be registered.
+RandomizerCheck DungeonRegistry_RegisterEnemyDropCheck(const char* key, const char* name, int16_t actorId);
 #endif
 
 #endif

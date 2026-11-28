@@ -227,6 +227,7 @@ SaveManager::SaveManager() {
         }
 
         info.quest = QUEST_NORMAL;
+        info.modQuest[0] = '\0';
         info.requiresMasterQuest = 0;
         info.requiresOriginal = 0;
 
@@ -616,6 +617,7 @@ void SaveManager::Init() {
     }
 
     ReloadSaveFiles();
+    ModQuests_AdoptOriginalFiles();
 }
 
 void SaveManager::ReloadSaveFiles() {
@@ -786,6 +788,12 @@ void SaveManager::StartupCheckAndInitMeta(int fileNum) {
             fileMetaInfo[fileNum].requiresOriginal = randoBlock["masterQuestDungeonCount"] < 12;
         }
 
+        if (sections.contains("modQuest") && sections["modQuest"].contains("data")) {
+            SohUtils::CopyStringToCharArray(fileMetaInfo[fileNum].modQuest,
+                                            sections["modQuest"]["data"].value("key", ""s),
+                                            ARRAY_COUNT(fileMetaInfo[fileNum].modQuest));
+        }
+
         nlohmann::json& statsBlock = sections["sohStats"]["data"];
         fileMetaInfo[fileNum].buildVersionMajor = statsBlock.value("buildVersionMajor", 0);
         fileMetaInfo[fileNum].buildVersionMinor = statsBlock.value("buildVersionMinor", 0);
@@ -837,6 +845,9 @@ void SaveManager::InitMeta(int fileNum) {
     }
 
     fileMetaInfo[fileNum].quest = gSaveContext.ship.quest.id;
+    const char* modQuest = ModQuests_GetActive();
+    SohUtils::CopyStringToCharArray(fileMetaInfo[fileNum].modQuest, modQuest != nullptr ? modQuest : "",
+                                    ARRAY_COUNT(fileMetaInfo[fileNum].modQuest));
     // If the file is marked as a Master Quest file or if we're randomized and have at least one master quest dungeon,
     // we need the mq otr.
     fileMetaInfo[fileNum].requiresMasterQuest =
@@ -1435,6 +1446,7 @@ void SaveManager::LoadFile(int fileNum) {
                 assert(false);
                 break;
         }
+        ModQuests_EnterLoadedFile();
         InitMeta(fileNum);
         GameInteractor::Instance->ExecuteHooks<GameInteractor::OnLoadFile>(fileNum);
     } catch ([[maybe_unused]] const std::exception& e) {
@@ -2537,6 +2549,7 @@ void SaveManager::DeleteZeldaFile(int fileNum) {
     }
     fileMetaInfo[fileNum].valid = false;
     fileMetaInfo[fileNum].quest = QUEST_NORMAL;
+    fileMetaInfo[fileNum].modQuest[0] = '\0';
     fileMetaInfo[fileNum].requiresMasterQuest = false;
     fileMetaInfo[fileNum].requiresOriginal = false;
     GameInteractor::Instance->ExecuteHooks<GameInteractor::OnDeleteFile>(fileNum);

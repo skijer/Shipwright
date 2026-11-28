@@ -279,6 +279,9 @@ extern void DumpWorldGraph(std::string str);
 
 void RegionTable_Init();
 Region* RegionTable(const RandomizerRegion regionKey);
+// False when the drop's enemy spawns in no slot the logic knows this seed, so the check can never be reached.
+bool RegionTable_IsEnemyDropPlaced(RandomizerCheck drop);
+bool RegionTable_CanGetEnemyDropHere(RandomizerCheck drop);
 std::vector<Rando::Entrance*> GetShuffleableEntrances(Rando::EntranceType type, bool onlyPrimary = true);
 Rando::Entrance* GetEntrance(RandomizerRegion source, RandomizerRegion destination);
 

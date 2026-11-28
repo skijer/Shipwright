@@ -18,6 +18,7 @@
 #include "soh/Enhancements/game-interactor/GameInteractor.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/dungeon.h"
+#include "soh/ModApi/ActorRegistry/EnemySouls.h"
 #include "soh/ModApi/RandoItems/RandoItems.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/UIWidgets.hpp"
@@ -259,6 +260,7 @@ EnemyKind FromCustom(const SOHCustomEnemy& enemy) {
     kind.flags = enemy.flags;
     kind.logicEnemy = kNoLogicEnemy;
     kind.soulKey = enemy.soulKey;
+    kind.soulCategory = enemy.soulCategory;
     kind.logicKill = enemy.logicKill;
     kind.logicKillUserData = enemy.logicKillUserData;
     kind.spawnable = true;
@@ -872,16 +874,22 @@ std::vector<PoolEntry> ListEnemyPool(bool minibosses) {
     return entries;
 }
 
-std::vector<std::pair<std::string, std::string>> CustomSoulEntries() {
-    std::vector<std::pair<std::string, std::string>> entries;
+struct CustomSoulEntry {
+    std::string soulKey;
+    std::string name;
+    uint8_t category;
+};
+
+std::vector<CustomSoulEntry> CustomSoulEntries() {
+    std::vector<CustomSoulEntry> entries;
     for (const EnemyKind& kind : EnemyCatalog_GetCustoms()) {
         if (kind.soulKey == nullptr || EnemyCatalog_FindNativeSoul(kind.soulKey) != nullptr) {
             continue;
         }
         bool listed = std::any_of(entries.begin(), entries.end(),
-                                  [&kind](const auto& entry) { return entry.first == kind.soulKey; });
+                                  [&kind](const CustomSoulEntry& entry) { return entry.soulKey == kind.soulKey; });
         if (!listed) {
-            entries.emplace_back(kind.soulKey, kind.name);
+            entries.push_back({ kind.soulKey, kind.name, kind.soulCategory });
         }
     }
     return entries;
@@ -1221,6 +1229,7 @@ void EnemyPlacement_WriteSpoiler(nlohmann::ordered_json& spoiler) {
     for (const std::string& soulKey : sSeed.soulPoolExcluded) {
         spoiler["soulPoolExcluded"].push_back(soulKey);
     }
+    EnemySouls_WriteSpoiler(spoiler);
 }
 
 void EnemyPlacement_ParseSpoiler(const nlohmann::json& spoiler) {
@@ -1287,10 +1296,11 @@ bool EnemyPlacement_IsSeedSoulItemExcluded(RandomizerGet soul) {
     return false;
 }
 
-std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems() {
+std::vector<RandomizerGet> EnemyPlacement_GetSeedCustomSoulItems(bool bossSouls) {
     std::vector<RandomizerGet> items;
-    for (const auto& [soulKey, name] : CustomSoulEntries()) {
-        if (EnemyPlacement_IsSoulExcluded(sSeed, soulKey)) {
+    for (const auto& [soulKey, name, category] : CustomSoulEntries()) {
+        const bool isBossSoul = category == SOH_ENEMY_CATEGORY_BOSS;
+        if (isBossSoul != bossSouls || EnemyPlacement_IsSoulExcluded(sSeed, soulKey)) {
             continue;
         }
         int32_t soulItem = RandoItems_GetRandoGet(("soul." + soulKey).c_str());
@@ -1331,10 +1341,10 @@ void EnemyPlacement_DrawPoolMenu() {
     if (areSoulsShuffled) {
         std::vector<PoolEntry> souls;
         for (const EnemySoul& soul : EnemyCatalog_GetNativeSouls()) {
-            souls.push_back({ soul.key, soul.name });
+            souls.push_back({ soul.key, EnemySouls_DescribeNativeSoul(soul.key, soul.name) });
         }
-        for (const auto& [soulKey, name] : CustomSoulEntries()) {
-            souls.push_back({ soulKey, name });
+        for (const CustomSoulEntry& soul : CustomSoulEntries()) {
+            souls.push_back({ soul.soulKey, EnemySouls_DescribeCustomSoul(soul.soulKey.c_str(), soul.name) });
         }
         DrawPoolList("Soul Pool", CVAR_SOUL_POOL_EXCLUDED, souls);
     }

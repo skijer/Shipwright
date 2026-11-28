@@ -30,6 +30,12 @@ void ModLabels_ApplyTimestamps(void);
 
 #ifdef __cplusplus
 }
+
+#include <string>
+
+// A mod quest's labels go on while it's awake; the labels from before it woke come back when it sleeps.
+void ModLabels_WakeQuest(const std::string& quest);
+void ModLabels_SleepQuest(const std::string& quest);
 #endif
 
 #endif

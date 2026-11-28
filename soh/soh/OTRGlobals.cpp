@@ -66,6 +66,7 @@
 #if not defined(__SWITCH__) && not defined(__WIIU__) && not defined(__EMSCRIPTEN__)
 #include "Extractor/Extract.h"
 #endif
+#include "soh/ModApi/AssetSetup/AssetSetup.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
@@ -565,6 +566,39 @@ static std::string BrowserArchiveProblem(bool portArchiveMatches, OTRVersion van
 }
 #endif
 
+#ifndef __EMSCRIPTEN__
+static bool HasGameArchive() {
+    return std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot-mq.o2r", appShortName)) ||
+           std::filesystem::exists(Ship::Context::LocateFileAcrossAppDirs("oot.o2r", appShortName));
+}
+
+static void ExtractForAssetSetup() {
+    if (!sohArchiveVersionMatch) {
+        AssetSetup_Exit(AssetSetupExit::Failed, "soh.o2r does not match this build of Ship of Harkinian");
+    }
+    const bool isOutdated = VerifyArchiveVersion(DetectOTRVersion("oot.o2r", false)) ||
+                            VerifyArchiveVersion(DetectOTRVersion("oot-mq.o2r", true));
+    if (isOutdated && !(RemoveArchiveAcrossAppDirs("oot.o2r") && RemoveArchiveAcrossAppDirs("oot-mq.o2r"))) {
+        AssetSetup_Exit(AssetSetupExit::Failed, "an outdated oot.o2r could not be removed");
+    }
+    if (HasGameArchive()) {
+        return;
+    }
+    const std::string& rom = AssetSetup_GetOwnGameRom();
+    Extractor extract;
+    if (rom.empty() || !extract.RunFileStandalone(rom)) {
+        AssetSetup_Exit(AssetSetupExit::Failed, "'" + rom + "' is not a supported Ocarina of Time ROM");
+    }
+    std::atomic<size_t> extractCount = 0;
+    std::atomic<size_t> totalExtract = 0;
+    const std::string installPath = std::filesystem::absolute(Ship::Context::GetAppBundlePath()).string();
+    if (!extract.CallTorch(installPath, Ship::Context::GetAppDirectoryPath(appShortName), &extractCount,
+                           &totalExtract)) {
+        AssetSetup_Exit(AssetSetupExit::Failed, "the Ocarina of Time ROM could not be extracted");
+    }
+}
+#endif
+
 void OTRGlobals::RunExtract(int argc, char* argv[]) {
 #ifdef __EMSCRIPTEN__
     // The extract loop below pumps frames without returning to the browser event loop, which would hang the tab.
@@ -577,6 +611,10 @@ void OTRGlobals::RunExtract(int argc, char* argv[]) {
     return;
 #else
     if (FleetGame_IsHosted()) {
+        return;
+    }
+    if (AssetSetup_IsRunning()) {
+        ExtractForAssetSetup();
         return;
     }
     bool extractDone = false;
@@ -1880,6 +1918,7 @@ static void SetAppImageHome() {
 #endif
 
 extern "C" void InitOTR(int argc, char* argv[]) {
+    AssetSetup_TakeArguments(argc, argv);
 #ifdef __linux__
     SetAppImageHome();
 #endif
@@ -1891,6 +1930,7 @@ extern "C" void InitOTR(int argc, char* argv[]) {
     CustomMessageManager::Instance = new CustomMessageManager();
     ItemTableManager::Instance = new ItemTableManager();
     GameInteractor::Instance = new GameInteractor();
+    AssetSetup_ExitAfterFirstScene();
     SaveManager::Instance = new SaveManager();
 
     std::shared_ptr<Ship::Config> conf = OTRGlobals::Instance->context->GetConfig();

@@ -160,13 +160,11 @@ void EnAnubice_Destroy(Actor* thisx, PlayState* play) {
 
     Collider_DestroyCylinder(play, &this->collider);
 
-    if (this->actor.params != 0) {
-        if (this->actor.parent) {}
-
-        tag = (EnAnubiceTag*)this->actor.parent;
-        if (tag != NULL && tag->actor.update != NULL) {
-            tag->anubis = NULL;
-        }
+    // SOH [Bugfix] The tag spawns Anubis with params 0, so the vanilla params check never cleared the tag's pointer and
+    // the tag kept writing through it once Anubis was freed by anything other than its own death.
+    tag = (EnAnubiceTag*)this->actor.parent;
+    if (tag != NULL && tag->actor.id == ACTOR_EN_ANUBICE_TAG && tag->actor.update != NULL) {
+        tag->anubis = NULL;
     }
 }
 

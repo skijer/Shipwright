@@ -15,6 +15,7 @@
 
 #include "soh/ModApi/ModApi.h"
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
+#include "soh/ModApi/AssetSetup/AssetSetup.h"
 
 #if !defined(__SWITCH__) && !defined(__WIIU__) && !defined(__EMSCRIPTEN__)
 #define USER_FILES_HAS_DIALOGS 1
@@ -98,10 +99,23 @@ bool ReadPickedFile(const std::filesystem::path& path, SOHUserFile* file) {
     return true;
 }
 
+// The asset loaders ask for the other game's ROM; Fleet's setup already holds the one the player chose.
+bool IsRomGivenByAssetSetup(const char* filterPatterns) {
+    return AssetSetup_IsRunning() && !AssetSetup_GetOtherGameRom().empty() && filterPatterns != nullptr &&
+           std::strstr(filterPatterns, ".z64") != nullptr;
+}
+
 bool PickFor(const ModIdentity* mod, const char* title, const char* filterName, const char* filterPatterns,
              SOHUserFile* file) {
     if (file == nullptr || file->structSize < SOH_USER_FILE_MIN_SIZE || !CanUseFiles(mod)) {
         return false;
+    }
+    if (IsRomGivenByAssetSetup(filterPatterns)) {
+        if (!ReadPickedFile(AssetSetup_GetOtherGameRom(), file)) {
+            return false;
+        }
+        SPDLOG_INFO("[UserFiles] Fleet's asset setup gave '{}' the ROM '{}'", mod->name, file->name);
+        return true;
     }
 #ifdef USER_FILES_HAS_DIALOGS
     const std::string dialogTitle = mod->name + ": " + (title != nullptr ? title : "Choose a file to give it");

@@ -1,12 +1,16 @@
 #include "location_access.h"
 
 #include "soh/Enhancements/randomizer/static_data.h"
+#include "soh/Enhancements/randomizer/EnemyPlacement.h"
 #include "soh/Enhancements/randomizer/SeedContext.h"
 #include "soh/Enhancements/randomizer/entrance.h"
 #include "soh/Enhancements/debugger/performanceTimer.h"
 #include "soh/ModApi/ModDungeons/DungeonRegistry.h"
 
+#include <algorithm>
+#include <cassert>
 #include <fstream>
+#include <set>
 #include <spdlog/spdlog.h>
 #include <soh/OTRGlobals.h>
 
@@ -17,6 +21,9 @@ extern PlayState* gPlayState;
 
 // generic grotto event list
 std::vector<EventAccess> grottoEvents;
+
+// Set by LocationAccess::ConditionsMet: conditions take no arguments, and an enemy drop is judged by where it is seen.
+static RandomizerRegion sEvaluatedRegion = RR_NONE;
 
 bool HasCheckEnemySoul(RandomizerCheck check) {
     const Rando::Location* location = Rando::StaticData::GetLocation(check);
@@ -56,6 +63,7 @@ bool LocationAccess::ConditionsMet(Region* parentRegion, bool calculatingAvailab
     // When refactoring ToD access, either fix the above or do not assume that we
     // have any access at all just because this is being run
     bool conditionsMet = false;
+    sEvaluatedRegion = parentRegion->randomizerRegionKey;
 
     if ((parentRegion->childDay && CheckConditionAtAgeTime(logic->IsChild, logic->AtDay)) ||
         (parentRegion->childNight && CheckConditionAtAgeTime(logic->IsChild, logic->AtNight)) ||
@@ -877,83 +885,192 @@ bool CanPlantBean(const RandomizerGet bean) {
 Rando::Context* ctx;
 std::shared_ptr<Rando::Logic> logic;
 
+// Where each drop's enemy spawns in the vanilla world. A replacement placed there by the enemy randomizer awards its
+// own kind's drop instead, and needs the spawn's age/time plus its own kill logic.
+struct EnemyDropSlot {
+    RandomizerRegion region;
+    RandomizerEnemy original;
+    RandomizerCheck nativeDrop;
+    ConditionFn spawns;
+    ConditionFn killsOriginal;
+};
+
+constexpr RandomizerEnemy kNeverReplaced = static_cast<RandomizerEnemy>(kNoLogicEnemy);
+
+#define DROP_SLOT(region, original, drop, spawns, killsOriginal)                    \
+    {                                                                               \
+        region, original, drop, [] { return spawns; }, [] { return killsOriginal; } \
+    }
+
+// clang-format off
+static const EnemyDropSlot kEnemyDropSlots[] = {
+    DROP_SLOT(RR_SPIRIT_TEMPLE_1F_ANUBIS, RE_ANUBIS, RC_ENEMY_DROP_ANUBIS, true, logic->CanKillNativeEnemy(RE_ANUBIS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, RE_ANUBIS, RC_ENEMY_DROP_ANUBIS, true, logic->CanKillNativeEnemy(RE_ANUBIS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_ARMOS_ROOM, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_BEHIND_MOUTH, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, RE_ARMOS, RC_ENEMY_DROP_ARMOS, true, logic->CanKillNativeEnemy(RE_ARMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_BEAMOS_PITS, RE_BEAMOS, RC_ENEMY_DROP_BEAMOS, true, logic->CanKillNativeEnemy(RE_BEAMOS)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_BEAMOS_PITS, RE_BEAMOS, RC_ENEMY_DROP_BEAMOS, true, logic->CanKillNativeEnemy(RE_BEAMOS)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_BIGOCTO, RE_BIG_OCTO, RC_ENEMY_DROP_BIG_OCTO, true, logic->CanKillNativeEnemy(RE_BIG_OCTO)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_BIGOCTO, RE_BIG_OCTO, RC_ENEMY_DROP_BIG_OCTO, true, logic->CanKillNativeEnemy(RE_BIG_OCTO)),
+    DROP_SLOT(RR_WATER_TEMPLE_DARK_LINK_ROOM, RE_DARK_LINK, RC_ENEMY_DROP_DARK_LINK, true, logic->CanKillNativeEnemy(RE_DARK_LINK)),
+    DROP_SLOT(RR_WATER_TEMPLE_MQ_DARK_LINK_ROOM, RE_DARK_LINK, RC_ENEMY_DROP_DARK_LINK, true, logic->CanKillNativeEnemy(RE_DARK_LINK)),
+    DROP_SLOT(RR_BOTW_DEAD_HAND_ROOM, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_BOTW_MQ_DEAD_HAND_ROOM, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_SHADOW_TEMPLE_DEAD_HAND, RE_DEAD_HAND, RC_ENEMY_DROP_DEAD_HAND, true, logic->CanKillNativeEnemy(RE_DEAD_HAND)),
+    DROP_SLOT(RR_DEKU_TREE_LOBBY, RE_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_DEKU_BABA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_1F, RE_WITHERED_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_WITHERED_DEKU_BABA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_SLINGSHOT_ROOM, RE_DEKU_BABA, RC_ENEMY_DROP_DEKU_BABA, true, logic->CanKillNativeEnemy(RE_DEKU_BABA)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_DODONGO_ROOM, RE_DODONGO, RC_ENEMY_DROP_DODONGO, true, logic->CanKillNativeEnemy(RE_DODONGO)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_DODONGO_ROOM, RE_DODONGO, RC_ENEMY_DROP_DODONGO, true, logic->CanKillNativeEnemy(RE_DODONGO)),
+    DROP_SLOT(RR_FIRE_TEMPLE_LOOP_FLARE_DANCER, RE_FLARE_DANCER, RC_ENEMY_DROP_FLARE_DANCER, true, logic->CanKillNativeEnemy(RE_FLARE_DANCER)),
+    DROP_SLOT(RR_FIRE_TEMPLE_MQ_LOOP_FLARE_DANCER, RE_FLARE_DANCER, RC_ENEMY_DROP_FLARE_DANCER, true, logic->CanKillNativeEnemy(RE_FLARE_DANCER)),
+    DROP_SLOT(RR_ICE_CAVERN_BEGINNING, RE_FREEZARD, RC_ENEMY_DROP_FREEZARD, true, logic->CanKillNativeEnemy(RE_FREEZARD)),
+    DROP_SLOT(RR_ICE_CAVERN_MQ_HUB, RE_FREEZARD, RC_ENEMY_DROP_FREEZARD, true, logic->CanKillNativeEnemy(RE_FREEZARD)),
+    DROP_SLOT(RR_LAKE_HYLIA, RE_GUAY, RC_ENEMY_DROP_GUAY, true, logic->CanKillNativeEnemy(RE_GUAY)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_ADULT_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_CHILD_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ADULT_THRONE, RE_IRON_KNUCKLE, RC_ENEMY_DROP_IRON_KNUCKLE, true, logic->CanKillNativeEnemy(RE_IRON_KNUCKLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_SHADOW_TEMPLE_SKULL_JAR, RE_KEESE, RC_ENEMY_DROP_KEESE, true, logic->CanKillNativeEnemy(RE_KEESE)),
+    DROP_SLOT(RR_DESERT_COLOSSUS, RE_LEEVER, RC_ENEMY_DROP_LEEVER, logic->IsAdult, logic->CanKillNativeEnemy(RE_LEEVER)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_LOWER_LIZALFOS, RE_LIZALFOS, RC_ENEMY_DROP_LIZALFOS, true, logic->CanKillNativeEnemy(RE_LIZALFOS)),
+    DROP_SLOT(RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS, RE_LIZALFOS, RC_ENEMY_DROP_LIZALFOS, true, logic->CanKillNativeEnemy(RE_LIZALFOS)),
+    DROP_SLOT(RR_ZORAS_RIVER, RE_OCTOROK, RC_ENEMY_DROP_OCTOROK, true, logic->CanKillNativeEnemy(RE_OCTOROK)),
+    DROP_SLOT(RR_HYRULE_FIELD, RE_PEAHAT, RC_ENEMY_DROP_PEAHAT, logic->IsAdult && logic->AtDay, logic->CanKillNativeEnemy(RE_PEAHAT)),
+    DROP_SLOT(RR_FOREST_TEMPLE_LOBBY, kNeverReplaced, RC_ENEMY_DROP_POE_SISTER, true, logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)),
+    DROP_SLOT(RR_FOREST_TEMPLE_MQ_LOBBY, kNeverReplaced, RC_ENEMY_DROP_POE_SISTER, true, logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)),
+    DROP_SLOT(RR_KAK_REDEAD_GROTTO, RE_REDEAD, RC_ENEMY_DROP_REDEAD, true, logic->CanKillNativeEnemy(RE_REDEAD)),
+    DROP_SLOT(RR_DEKU_TREE_LOBBY_3F, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_DEKU_TREE_MQ_BASEMENT_WATER_ROOM_BACK, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_BOTW_PERIMETER, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_BOTW_MQ_PERIMETER, RE_BIG_SKULLTULA, RC_ENEMY_DROP_SKULLTULA, true, logic->CanKillNativeEnemy(RE_BIG_SKULLTULA)),
+    DROP_SLOT(RR_WATER_TEMPLE_4_SPIKES_ROOM, RE_SPIKE, RC_ENEMY_DROP_SPIKE, true, logic->CanKillNativeEnemy(RE_SPIKE)),
+    DROP_SLOT(RR_WATER_TEMPLE_MQ_TOWER_TARGET_ROOM, RE_SPIKE, RC_ENEMY_DROP_SPIKE, true, logic->CanKillNativeEnemy(RE_SPIKE)),
+    DROP_SLOT(RR_HYRULE_FIELD, RE_STALCHILD, RC_ENEMY_DROP_STALCHILD, logic->IsChild && logic->AtNight, logic->CanKillNativeEnemy(RE_STALCHILD)),
+    DROP_SLOT(RR_FOREST_TEMPLE_LOWER_STALFOS, RE_STALFOS, RC_ENEMY_DROP_STALFOS, true, logic->CanKillNativeEnemy(RE_STALFOS)),
+    DROP_SLOT(RR_FOREST_TEMPLE_MQ_3_STALFOS_ROOM, RE_STALFOS, RC_ENEMY_DROP_STALFOS, true, logic->CanKillNativeEnemy(RE_STALFOS)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_EAST, RE_STINGER, RC_ENEMY_DROP_STINGER, true, logic->CanKillNativeEnemy(RE_STINGER)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_INVISIBLE_KEESE_ROOM, RE_STINGER, RC_ENEMY_DROP_STINGER, true, logic->CanKillNativeEnemy(RE_STINGER)),
+    DROP_SLOT(RR_DEATH_MOUNTAIN_TRAIL, RE_TEKTITE, RC_ENEMY_DROP_TEKTITE, true, logic->CanKillNativeEnemy(RE_TEKTITE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_NORTH, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_FORK_WEST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_FORK_EAST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_JABU_JABUS_BELLY_MQ_FORK_WEST, RE_TENTACLE, RC_ENEMY_DROP_TENTACLE, true, logic->CanKillNativeEnemy(RE_TENTACLE)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_FAKE_DOORS_ROOM, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_SPIRIT_TEMPLE_MQ_CHILD_SIDE_HUB, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_FIRE_TEMPLE_LOOP_HEXAGON_ROOM, RE_TORCH_SLUG, RC_ENEMY_DROP_TORCH_SLUG, true, logic->CanKillNativeEnemy(RE_TORCH_SLUG)),
+    DROP_SLOT(RR_SFM_ENTRYWAY, RE_WOLFOS, RC_ENEMY_DROP_WOLFOS, logic->IsChild, logic->CanKillNativeEnemy(RE_WOLFOS)),
+    DROP_SLOT(RR_SFM_WOLFOS_GROTTO, RE_WOLFOS, RC_ENEMY_DROP_WOLFOS, true, logic->CanKillNativeEnemy(RE_WOLFOS)),
+};
+// clang-format on
+
+static const EnemyLogicPlan* FindSlotPlan(const EnemyDropSlot& slot) {
+    return EnemyPlacement_FindLogicPlan(areaTable[slot.region].scene, slot.original);
+}
+
+static RandomizerCheck GetReplacementDrop(const PlannedReplacement& replacement) {
+    return Rando::StaticData::GetEnemyDropCheck(replacement.kind.actorId, replacement.kind.params);
+}
+
+// The drops the enemies at this slot can award in this seed: the native one while the original stays, plus the drop
+// of every kind the enemy randomizer put in its place.
+static std::vector<RandomizerCheck> ListSlotDrops(const EnemyDropSlot& slot) {
+    const EnemyLogicPlan* plan = FindSlotPlan(slot);
+    if (plan == nullptr) {
+        return { slot.nativeDrop };
+    }
+    std::vector<RandomizerCheck> drops;
+    if (plan->keepsOriginal) {
+        drops.push_back(slot.nativeDrop);
+    }
+    for (const PlannedReplacement& replacement : plan->replacements) {
+        RandomizerCheck drop = GetReplacementDrop(replacement);
+        if (drop != RC_UNKNOWN_CHECK) {
+            drops.push_back(drop);
+        }
+    }
+    return drops;
+}
+
+static bool CanGetDropAtSlot(const EnemyDropSlot& slot, RandomizerCheck drop) {
+    const EnemyLogicPlan* plan = FindSlotPlan(slot);
+    const bool keepsOriginal = plan == nullptr || plan->keepsOriginal;
+    if (keepsOriginal && slot.nativeDrop == drop && slot.spawns() && slot.killsOriginal()) {
+        return true;
+    }
+    if (plan == nullptr || !slot.spawns()) {
+        return false;
+    }
+    return std::any_of(plan->replacements.begin(), plan->replacements.end(),
+                       [drop](const PlannedReplacement& replacement) {
+                           return GetReplacementDrop(replacement) == drop &&
+                                  logic->CanKillReplacement(replacement, ED_CLOSE, true, 1, false, false);
+                       });
+}
+
+// The drop is awarded by the enemy's kind wherever it spawns, so it is judged at the region being evaluated.
+bool RegionTable_CanGetEnemyDropHere(RandomizerCheck drop) {
+    return std::any_of(std::begin(kEnemyDropSlots), std::end(kEnemyDropSlots), [drop](const EnemyDropSlot& slot) {
+        return slot.region == sEvaluatedRegion && CanGetDropAtSlot(slot, drop);
+    });
+}
+
+#define DROP_CONDITION(drop)                           \
+    {                                                  \
+        drop, [] { return RegionTable_CanGetEnemyDropHere(drop); } \
+    }
+
+static const std::pair<RandomizerCheck, ConditionFn> kEnemyDropConditions[] = {
+    DROP_CONDITION(RC_ENEMY_DROP_ANUBIS),       DROP_CONDITION(RC_ENEMY_DROP_ARMOS),
+    DROP_CONDITION(RC_ENEMY_DROP_BEAMOS),       DROP_CONDITION(RC_ENEMY_DROP_BIG_OCTO),
+    DROP_CONDITION(RC_ENEMY_DROP_DARK_LINK),    DROP_CONDITION(RC_ENEMY_DROP_DEAD_HAND),
+    DROP_CONDITION(RC_ENEMY_DROP_DEKU_BABA),    DROP_CONDITION(RC_ENEMY_DROP_DODONGO),
+    DROP_CONDITION(RC_ENEMY_DROP_FLARE_DANCER), DROP_CONDITION(RC_ENEMY_DROP_FREEZARD),
+    DROP_CONDITION(RC_ENEMY_DROP_GUAY),         DROP_CONDITION(RC_ENEMY_DROP_IRON_KNUCKLE),
+    DROP_CONDITION(RC_ENEMY_DROP_KEESE),        DROP_CONDITION(RC_ENEMY_DROP_LEEVER),
+    DROP_CONDITION(RC_ENEMY_DROP_LIZALFOS),     DROP_CONDITION(RC_ENEMY_DROP_OCTOROK),
+    DROP_CONDITION(RC_ENEMY_DROP_PEAHAT),       DROP_CONDITION(RC_ENEMY_DROP_POE_SISTER),
+    DROP_CONDITION(RC_ENEMY_DROP_REDEAD),       DROP_CONDITION(RC_ENEMY_DROP_SKULLTULA),
+    DROP_CONDITION(RC_ENEMY_DROP_SPIKE),        DROP_CONDITION(RC_ENEMY_DROP_STALCHILD),
+    DROP_CONDITION(RC_ENEMY_DROP_STALFOS),      DROP_CONDITION(RC_ENEMY_DROP_STINGER),
+    DROP_CONDITION(RC_ENEMY_DROP_TEKTITE),      DROP_CONDITION(RC_ENEMY_DROP_TENTACLE),
+    DROP_CONDITION(RC_ENEMY_DROP_TORCH_SLUG),   DROP_CONDITION(RC_ENEMY_DROP_WOLFOS),
+};
+
+static LocationAccess MakeEnemyDropAccess(RandomizerCheck drop) {
+    // A custom enemy's drop is a mod check, which the registry judges through RegionTable_CanGetEnemyDropHere.
+    if (DungeonRegistry_IsModCheck(drop)) {
+        return LocationAccess(
+            drop, [] { return true; }, "CanGetEnemyDropHere");
+    }
+    for (const auto& [check, condition] : kEnemyDropConditions) {
+        if (check == drop) {
+            return LocationAccess(drop, condition, "CanGetEnemyDropHere");
+        }
+    }
+    assert(false);
+    return LocationAccess(
+        drop, [] { return false; }, "false");
+}
+
+bool RegionTable_IsEnemyDropPlaced(RandomizerCheck drop) {
+    return std::any_of(std::begin(kEnemyDropSlots), std::end(kEnemyDropSlots), [drop](const EnemyDropSlot& slot) {
+        const std::vector<RandomizerCheck> drops = ListSlotDrops(slot);
+        return std::find(drops.begin(), drops.end(), drop) != drops.end();
+    });
+}
+
 static void RegionTable_AddEnemyDrops() {
-    const std::pair<RandomizerRegion, LocationAccess> drops[] = {
-        { RR_SPIRIT_TEMPLE_1F_ANUBIS, LOCATION(RC_ENEMY_DROP_ANUBIS, logic->CanKillEnemy(RE_ANUBIS)) },
-        { RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, LOCATION(RC_ENEMY_DROP_ANUBIS, logic->CanKillEnemy(RE_ANUBIS)) },
-        { RR_DODONGOS_CAVERN_ARMOS_ROOM, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
-        { RR_DODONGOS_CAVERN_MQ_BEHIND_MOUTH, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
-        { RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_ARMOS, logic->CanKillEnemy(RE_ARMOS)) },
-        { RR_SPIRIT_TEMPLE_BEAMOS_PITS, LOCATION(RC_ENEMY_DROP_BEAMOS, logic->CanKillEnemy(RE_BEAMOS)) },
-        { RR_SPIRIT_TEMPLE_MQ_BEAMOS_PITS, LOCATION(RC_ENEMY_DROP_BEAMOS, logic->CanKillEnemy(RE_BEAMOS)) },
-        { RR_JABU_JABUS_BELLY_BIGOCTO, LOCATION(RC_ENEMY_DROP_BIG_OCTO, logic->CanKillEnemy(RE_BIG_OCTO)) },
-        { RR_JABU_JABUS_BELLY_MQ_BIGOCTO, LOCATION(RC_ENEMY_DROP_BIG_OCTO, logic->CanKillEnemy(RE_BIG_OCTO)) },
-        { RR_WATER_TEMPLE_DARK_LINK_ROOM, LOCATION(RC_ENEMY_DROP_DARK_LINK, logic->CanKillEnemy(RE_DARK_LINK)) },
-        { RR_WATER_TEMPLE_MQ_DARK_LINK_ROOM, LOCATION(RC_ENEMY_DROP_DARK_LINK, logic->CanKillEnemy(RE_DARK_LINK)) },
-        { RR_BOTW_DEAD_HAND_ROOM, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
-        { RR_BOTW_MQ_DEAD_HAND_ROOM, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
-        { RR_SHADOW_TEMPLE_DEAD_HAND, LOCATION(RC_ENEMY_DROP_DEAD_HAND, logic->CanKillEnemy(RE_DEAD_HAND)) },
-        { RR_DEKU_TREE_LOBBY, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_DEKU_BABA)) },
-        { RR_DEKU_TREE_MQ_1F, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_WITHERED_DEKU_BABA)) },
-        { RR_DEKU_TREE_MQ_SLINGSHOT_ROOM, LOCATION(RC_ENEMY_DROP_DEKU_BABA, logic->CanKillEnemy(RE_DEKU_BABA)) },
-        { RR_DODONGOS_CAVERN_DODONGO_ROOM, LOCATION(RC_ENEMY_DROP_DODONGO, logic->CanKillEnemy(RE_DODONGO)) },
-        { RR_DODONGOS_CAVERN_MQ_DODONGO_ROOM, LOCATION(RC_ENEMY_DROP_DODONGO, logic->CanKillEnemy(RE_DODONGO)) },
-        { RR_FIRE_TEMPLE_LOOP_FLARE_DANCER,
-          LOCATION(RC_ENEMY_DROP_FLARE_DANCER, logic->CanKillEnemy(RE_FLARE_DANCER)) },
-        { RR_FIRE_TEMPLE_MQ_LOOP_FLARE_DANCER,
-          LOCATION(RC_ENEMY_DROP_FLARE_DANCER, logic->CanKillEnemy(RE_FLARE_DANCER)) },
-        { RR_ICE_CAVERN_BEGINNING, LOCATION(RC_ENEMY_DROP_FREEZARD, logic->CanKillEnemy(RE_FREEZARD)) },
-        { RR_ICE_CAVERN_MQ_HUB, LOCATION(RC_ENEMY_DROP_FREEZARD, logic->CanKillEnemy(RE_FREEZARD)) },
-        { RR_LAKE_HYLIA, LOCATION(RC_ENEMY_DROP_GUAY, logic->CanKillEnemy(RE_GUAY)) },
-        { RR_SPIRIT_TEMPLE_CHILD_THRONE, LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
-        { RR_SPIRIT_TEMPLE_ADULT_THRONE, LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
-        { RR_SPIRIT_TEMPLE_MQ_CHILD_THRONE,
-          LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
-        { RR_SPIRIT_TEMPLE_MQ_ADULT_THRONE,
-          LOCATION(RC_ENEMY_DROP_IRON_KNUCKLE, logic->CanKillEnemy(RE_IRON_KNUCKLE)) },
-        { RR_SPIRIT_TEMPLE_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
-        { RR_SPIRIT_TEMPLE_MQ_ANUBIS_BRIDGE_CHEST, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
-        { RR_SHADOW_TEMPLE_SKULL_JAR, LOCATION(RC_ENEMY_DROP_KEESE, logic->CanKillEnemy(RE_KEESE)) },
-        { RR_DESERT_COLOSSUS, LOCATION(RC_ENEMY_DROP_LEEVER, logic->IsAdult && logic->CanKillEnemy(RE_LEEVER)) },
-        { RR_DODONGOS_CAVERN_LOWER_LIZALFOS, LOCATION(RC_ENEMY_DROP_LIZALFOS, logic->CanKillEnemy(RE_LIZALFOS)) },
-        { RR_DODONGOS_CAVERN_MQ_LOWER_LIZALFOS, LOCATION(RC_ENEMY_DROP_LIZALFOS, logic->CanKillEnemy(RE_LIZALFOS)) },
-        { RR_ZORAS_RIVER, LOCATION(RC_ENEMY_DROP_OCTOROK, logic->CanKillEnemy(RE_OCTOROK)) },
-        { RR_HYRULE_FIELD,
-          LOCATION(RC_ENEMY_DROP_PEAHAT, logic->IsAdult && logic->AtDay && logic->CanKillEnemy(RE_PEAHAT)) },
-        { RR_FOREST_TEMPLE_LOBBY,
-          LOCATION(RC_ENEMY_DROP_POE_SISTER,
-                   logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)) },
-        { RR_FOREST_TEMPLE_MQ_LOBBY,
-          LOCATION(RC_ENEMY_DROP_POE_SISTER,
-                   logic->Get(LOGIC_FOREST_JOELLE) || logic->Get(LOGIC_FOREST_BETH) || logic->Get(LOGIC_FOREST_AMY)) },
-        { RR_KAK_REDEAD_GROTTO, LOCATION(RC_ENEMY_DROP_REDEAD, logic->CanKillEnemy(RE_REDEAD)) },
-        { RR_DEKU_TREE_LOBBY_3F, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
-        { RR_DEKU_TREE_MQ_BASEMENT_WATER_ROOM_BACK,
-          LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
-        { RR_BOTW_PERIMETER, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
-        { RR_BOTW_MQ_PERIMETER, LOCATION(RC_ENEMY_DROP_SKULLTULA, logic->CanKillEnemy(RE_BIG_SKULLTULA)) },
-        { RR_WATER_TEMPLE_4_SPIKES_ROOM, LOCATION(RC_ENEMY_DROP_SPIKE, logic->CanKillEnemy(RE_SPIKE)) },
-        { RR_WATER_TEMPLE_MQ_TOWER_TARGET_ROOM, LOCATION(RC_ENEMY_DROP_SPIKE, logic->CanKillEnemy(RE_SPIKE)) },
-        { RR_HYRULE_FIELD,
-          LOCATION(RC_ENEMY_DROP_STALCHILD, logic->IsChild && logic->AtNight && logic->CanKillEnemy(RE_STALCHILD)) },
-        { RR_FOREST_TEMPLE_LOWER_STALFOS, LOCATION(RC_ENEMY_DROP_STALFOS, logic->CanKillEnemy(RE_STALFOS)) },
-        { RR_FOREST_TEMPLE_MQ_3_STALFOS_ROOM, LOCATION(RC_ENEMY_DROP_STALFOS, logic->CanKillEnemy(RE_STALFOS)) },
-        { RR_JABU_JABUS_BELLY_FORK_EAST, LOCATION(RC_ENEMY_DROP_STINGER, logic->CanKillEnemy(RE_STINGER)) },
-        { RR_JABU_JABUS_BELLY_MQ_INVISIBLE_KEESE_ROOM,
-          LOCATION(RC_ENEMY_DROP_STINGER, logic->CanKillEnemy(RE_STINGER)) },
-        { RR_DEATH_MOUNTAIN_TRAIL, LOCATION(RC_ENEMY_DROP_TEKTITE, logic->CanKillEnemy(RE_TEKTITE)) },
-        { RR_JABU_JABUS_BELLY_FORK_NORTH, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
-        { RR_JABU_JABUS_BELLY_FORK_WEST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
-        { RR_JABU_JABUS_BELLY_MQ_FORK_EAST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
-        { RR_JABU_JABUS_BELLY_MQ_FORK_WEST, LOCATION(RC_ENEMY_DROP_TENTACLE, logic->CanKillEnemy(RE_TENTACLE)) },
-        { RR_SPIRIT_TEMPLE_FAKE_DOORS_ROOM, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
-        { RR_SPIRIT_TEMPLE_MQ_CHILD_SIDE_HUB, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
-        { RR_FIRE_TEMPLE_LOOP_HEXAGON_ROOM, LOCATION(RC_ENEMY_DROP_TORCH_SLUG, logic->CanKillEnemy(RE_TORCH_SLUG)) },
-        { RR_SFM_ENTRYWAY, LOCATION(RC_ENEMY_DROP_WOLFOS, logic->IsChild && logic->CanKillEnemy(RE_WOLFOS)) },
-        { RR_SFM_WOLFOS_GROTTO, LOCATION(RC_ENEMY_DROP_WOLFOS, logic->CanKillEnemy(RE_WOLFOS)) },
-    };
-    for (const auto& [region, drop] : drops) {
-        areaTable[region].locations.push_back(drop);
+    std::set<std::pair<RandomizerRegion, RandomizerCheck>> added;
+    for (const EnemyDropSlot& slot : kEnemyDropSlots) {
+        for (RandomizerCheck drop : ListSlotDrops(slot)) {
+            if (added.insert({ slot.region, drop }).second) {
+                areaTable[slot.region].locations.push_back(MakeEnemyDropAccess(drop));
+            }
+        }
     }
 }
 

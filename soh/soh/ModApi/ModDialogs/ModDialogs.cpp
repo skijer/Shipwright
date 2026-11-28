@@ -1,10 +1,12 @@
 #include "ModDialogs.h"
 
+#include <algorithm>
 #include <cwchar>
 #include <string>
 
 #include <libultraship/libultraship.h>
 #include <spdlog/spdlog.h>
+#include <SDL2/SDL_error.h>
 #include <SDL2/SDL_messagebox.h>
 #include <SDL2/SDL_video.h>
 
@@ -13,6 +15,7 @@
 #endif
 
 #include "soh/ModApi/ModPermissions/ModPermissions.h"
+#include "soh/ModApi/AssetSetup/AssetSetup.h"
 
 namespace {
 
@@ -62,12 +65,22 @@ enum class DialogChoice : int {
     Yes,
 };
 
+// The asset loaders are the mods that read the player's files; Fleet's setup answers only for them.
+bool IsAnsweredByAssetSetup(const ModIdentity& mod) {
+    return AssetSetup_IsRunning() &&
+           std::find(mod.declared.begin(), mod.declared.end(), ModPermission::Files) != mod.declared.end();
+}
+
 // Every dialog is titled with the mod's name, so a mod cannot pass its questions off as the game's.
 bool AskFor(const ModIdentity* mod, const char* title, const std::string& message, const char* yes, const char* no) {
     if (mod == nullptr) {
         return false;
     }
     const std::string fullTitle = mod->name + ": " + (title != nullptr ? title : "");
+    if (IsAnsweredByAssetSetup(*mod)) {
+        SPDLOG_INFO("[ModApi] {} asked during Fleet's asset setup, answered '{}': {}", fullTitle, yes, message);
+        return true;
+    }
     if (IsNobodyWatching()) {
         SPDLOG_INFO("[ModApi] {} asked with nobody watching, answered '{}': {}", fullTitle, no, message);
         return false;
@@ -81,7 +94,11 @@ bool AskFor(const ModIdentity* mod, const char* title, const std::string& messag
         SDL_arraysize(buttons),     buttons, nullptr,
     };
     int choice = static_cast<int>(DialogChoice::No);
-    return SDL_ShowMessageBox(&box, &choice) == 0 && choice == static_cast<int>(DialogChoice::Yes);
+    if (SDL_ShowMessageBox(&box, &choice) != 0) {
+        SPDLOG_ERROR("[ModApi] Could not show '{}', so it counts as '{}': {}", fullTitle, no, SDL_GetError());
+        return false;
+    }
+    return choice == static_cast<int>(DialogChoice::Yes);
 }
 
 void TellFor(const ModIdentity* mod, const char* title, const std::string& message) {
@@ -89,7 +106,7 @@ void TellFor(const ModIdentity* mod, const char* title, const std::string& messa
         return;
     }
     const std::string fullTitle = mod->name + ": " + (title != nullptr ? title : "");
-    if (IsNobodyWatching()) {
+    if (AssetSetup_IsRunning() || IsNobodyWatching()) {
         SPDLOG_INFO("[ModApi] {}: {}", fullTitle, message);
         return;
     }
@@ -100,6 +117,10 @@ void TellFor(const ModIdentity* mod, const char* title, const std::string& messa
 bool RequestRestartFor(const ModIdentity* mod, const char* reason) {
     if (mod == nullptr) {
         return false;
+    }
+    if (AssetSetup_IsRunning()) {
+        AssetSetup_NoteRestart(mod->name);
+        return true;
     }
     const std::string message = "'" + mod->name + "' (" + mod->trustLabel + ") needs Unbound to restart" +
                                 (reason != nullptr ? std::string(": ") + reason : std::string(".")) +

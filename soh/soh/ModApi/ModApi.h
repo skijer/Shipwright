@@ -226,12 +226,26 @@ typedef struct {
     uint32_t (*ReadModsFolderFiles)(const char* extensions, SOHArchiveFileFunc visit, void* userData);
     bool (*IsFormSuspended)(void);
     bool (*GetNetPlayerColor)(const Actor* actor, Color_RGB8* color);
+    bool (*RegisterModCounter)(const char* key, int32_t max);
+    int32_t (*GetModCounter)(const char* key);
+    void (*SetModCounter)(const char* key, int32_t value);
+    // The key of the mod quest the loaded file belongs to, or NULL for the game's own quests.
+    const char* (*GetQuest)(void);
+    // The key of the quest the calling mod's manifest declares, or NULL when it declares none or the host refused it.
+    const char* (*GetDeclaredQuest)(void);
+    // A hook that runs whether the mod's quest is awake or asleep; on a mod without a quest, RegisterHookByName.
+    bool (*RegisterPersistentHookByName)(const char* name, void* callback);
 } SOHModApi;
 
 #define SOH_REGISTER_HOOK_FOR_ID(api, name, id, callback) \
     ((api)->RegisterHookForIdByName(#name, (id), (void*)(SOHCb_##name)(callback)))
 
 #define SOH_REGISTER_HOOK(api, name, callback) ((api)->RegisterHookByName(#name, (void*)(SOHCb_##name)(callback)))
+// Falls back to SOH_REGISTER_HOOK on a host without mod quests, where every hook already always runs.
+#define SOH_REGISTER_PERSISTENT_HOOK(api, name, callback)                                          \
+    (SOH_MOD_API_HAS(api, RegisterPersistentHookByName)                                            \
+         ? (api)->RegisterPersistentHookByName(#name, (void*)(SOHCb_##name)(callback))             \
+         : SOH_REGISTER_HOOK(api, name, callback))
 #define SOH_MOD_API_MEMBER_SIZE(member) (offsetof(SOHModApi, member) + sizeof(((SOHModApi*)0)->member))
 #define SOH_MOD_API_MATCHES(api) ((api) != NULL && (api)->tableSize >= SOH_MOD_API_MEMBER_SIZE(HasHook))
 #define SOH_MOD_API_HAS(api, member) ((api) != NULL && (api)->tableSize >= SOH_MOD_API_MEMBER_SIZE(member))

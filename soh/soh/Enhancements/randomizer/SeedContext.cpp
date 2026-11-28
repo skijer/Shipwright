@@ -6,6 +6,7 @@
 #include "dungeon.h"
 #include "logic.h"
 #include "entrance.h"
+#include "location_access.h"
 #include "settings.h"
 #include "rando_hash.h"
 #include "fishsanity.h"
@@ -215,7 +216,8 @@ void Context::GenerateLocationPool() {
             (location.GetRCType() == RCTYPE_BUSH && !mOptions[RSK_SHUFFLE_BUSHES]) ||
             (location.GetRCType() == RCTYPE_ICICLE && !mOptions[RSK_SHUFFLE_ICICLES]) ||
             (location.GetRCType() == RCTYPE_RED_ICE && !mOptions[RSK_SHUFFLE_RED_ICE]) ||
-            (location.GetRCType() == RCTYPE_ENEMY_DROP && !mOptions[RSK_SHUFFLE_ENEMY_DROPS]) ||
+            (location.GetRCType() == RCTYPE_ENEMY_DROP &&
+             (!mOptions[RSK_SHUFFLE_ENEMY_DROPS] || !RegionTable_IsEnemyDropPlaced(location.GetRandomizerCheck()))) ||
             (location.GetRCType() == RCTYPE_SIGN && mOptions[RSK_SHUFFLE_SIGNS].Is(RO_SHUFFLE_SIGNS_OFF)) ||
             (location.GetRCType() == RCTYPE_WONDER_ITEM &&
              mOptions[RSK_SHUFFLE_WONDER_ITEMS].Is(RO_SHUFFLE_WONDER_ITEMS_OFF)) ||

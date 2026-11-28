@@ -6,6 +6,7 @@
 #include <nlohmann/json_fwd.hpp>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 class SceneDB {
@@ -90,11 +91,14 @@ class SceneDB {
     void AddEntranceLayerGroup(int32_t index, const EntranceInfo& info);
     bool RegisterScene(const std::string& id, const nlohmann::json& def);
     void RegisterEntrance(const Entry& scene, const std::string& key, const nlohmann::json& def);
+    void FindLegacySceneOverrides();
 
     std::vector<Entry> db;
     std::unordered_map<std::string, int32_t> nameTable;
     int32_t nextSceneId = CUSTOM_SCENE_ID_BASE;
     bool unboundBase = false;
+    // Legacy scene folders ("shared/spot04_scene") whose headers a mod mounted above the base replaces.
+    std::unordered_set<std::string> legacySceneOverrides;
 
     std::vector<EntranceInfo> entranceTable;
     std::unordered_map<std::string, int32_t> entranceNameTable;

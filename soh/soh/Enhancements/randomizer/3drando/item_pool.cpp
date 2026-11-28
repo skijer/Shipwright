@@ -651,7 +651,7 @@ void GenerateItemPool() {
                 AddItemToPool(static_cast<RandomizerGet>(soul), 1, 1, 1, 1, false);
             }
         }
-        for (RandomizerGet soul : EnemyPlacement_GetSeedCustomSoulItems()) {
+        for (RandomizerGet soul : EnemyPlacement_GetSeedCustomSoulItems(false)) {
             AddItemToPool(soul, 1, 1, 1, 1, false);
         }
     }
@@ -674,6 +674,9 @@ void GenerateItemPool() {
         AddItemToPool(RG_MORPHA_SOUL, 2, 1, 1, 1);
         AddItemToPool(RG_BONGO_BONGO_SOUL, 2, 1, 1, 1);
         AddItemToPool(RG_TWINROVA_SOUL, 2, 1, 1, 1);
+        for (RandomizerGet soul : EnemyPlacement_GetSeedCustomSoulItems(true)) {
+            AddItemToPool(soul, 1, 1, 1, 1, false);
+        }
     }
 
     // Gerudo Fortress

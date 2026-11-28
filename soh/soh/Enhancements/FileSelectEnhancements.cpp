@@ -4,6 +4,7 @@
 
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 #include "soh/SohGui/SohModals.h"
 #include "soh/SohGui/SohGui.hpp"
 #include "soh/SohGui/UIWidgets.hpp"
@@ -87,13 +88,14 @@ bool SohFileSelect_IsQuestHidden(u8 quest) {
             return !ResourceMgr_GameHasMasterQuest() ||
                    CVarGetInteger(CVAR_ENHANCEMENT("FileSelect.HideSpeedrunMasterQuest"), 0);
         default:
-            return false;
+            // SOH [Unbound] mod quests play as Original Quest
+            return !ResourceMgr_GameHasOriginal() || quest - QUEST_MOD >= (int32_t)ModQuests_Count();
     }
 }
 
 u8 SohFileSelect_CountVisibleQuests() {
     u8 count = 0;
-    for (u8 quest = QUEST_NORMAL; quest <= QUEST_SPEEDRUN_MASTER; ++quest) {
+    for (u8 quest = QUEST_NORMAL; quest < QUEST_MOD + ModQuests_Count(); ++quest) {
         if (!SohFileSelect_IsQuestHidden(quest)) {
             count++;
         }

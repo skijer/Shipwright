@@ -109,6 +109,28 @@ flag): change both together.
 - The rando save stores entrance overrides as numbers; mod entrances also go by name in `unboundDungeons`, which
   sorts after `randomizer` and fixes them up on load. `entranceOverrideTable` covers every SceneDB entrance.
 
+## Mod quests
+
+- Declared in the manifest (`quest`), registered by `ModLoader` just before `ModInit`; a mod whose quest can't be
+  declared (a romhack whose world isn't built yet) runs as a plain mod. A quest starts awake, so its `ModInit`
+  writes as if in its world, and `ModQuests_FinishLoading` puts it to sleep; its labels are only recorded until the
+  host first wakes it. `QUEST_MOD + i` exists only
+  on the quest menu: the file is `QUEST_NORMAL` plus a `modQuest` save section, so every `IS_VANILLA` check holds
+  and a host without mod quests opens it as Original Quest.
+- Every hook and VB a quest's mod registers is wrapped with the quest's `isAwake` (`GateOnQuest`), the owner found
+  by caller address, so registrations outside `ModInit` are covered. `OnModQuestAwake` and hooks registered with
+  `RegisterPersistentHookByName` are never wrapped.
+- A romhack is awake while its world is on top; a mode while its file is loaded (cleared on `FileChoose_Init` and
+  `Opening_Init`). `SetWorld` puts sleeping worlds' archives at the bottom and the awake one at the top, unloads
+  the moved archives' cached resources (kept alive one more switch), rebuilds the text tables, and with a window
+  clears the texture cache and drops the audio permanent pool at a queued reset.
+- The world changes only with no scene loaded: boot, `Opening_Init`, the quest menu, file load or creation, and a
+  seed generated outside play. A file loaded during play keeps the current world. Headless hosts stay in the
+  game's world.
+- `LoadOverrides` skips paths only sleeping worlds provide: it lists every archive, not the topmost copy.
+- `ModLabels` records a quest mod's labels instead of writing them while it sleeps, snapshots the labels when it
+  wakes and puts them back when it sleeps, so other mods' labels survive.
+
 ## Audio
 
 - `AudioMix` callbacks run on the audio thread. Gains are refreshed on the game thread and read through

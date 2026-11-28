@@ -4,9 +4,9 @@
 #include <libultraship/libultraship.h>
 #include <nlohmann/json.hpp>
 #include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <spdlog/spdlog.h>
-#include <ship/utils/StringHelper.h>
 
 #include "soh/OTRGlobals.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -306,7 +306,9 @@ std::string SceneDB::GetScenePath(int32_t id, bool masterQuest) const {
     bool hasMqVariant = (id >= SCENE_DEKU_TREE && id <= SCENE_ICE_CAVERN) || id == SCENE_GERUDO_TRAINING_GROUND ||
                         id == SCENE_INSIDE_GANONS_CASTLE;
     bool useMq = hasMqVariant && masterQuest;
-    if (unboundBase) {
+    std::string legacyFolder =
+        std::string(hasMqVariant ? (useMq ? "mq" : "nonmq") : "shared") + "/" + entry.sceneFileName;
+    if (unboundBase && !legacySceneOverrides.contains(legacyFolder)) {
         std::string dir = entry.sceneFileName;
         const std::string suffix = "_scene";
         if (dir.ends_with(suffix)) {
@@ -314,9 +316,7 @@ std::string SceneDB::GetScenePath(int32_t id, bool masterQuest) const {
         }
         return "scenes/" + dir + (useMq ? "_mq" : "") + "/scene.json";
     }
-    const char* sceneVersion = hasMqVariant ? (useMq ? "mq" : "nonmq") : "shared";
-    return StringHelper::Sprintf("scenes/%s/%s/%s", sceneVersion, entry.sceneFileName.c_str(),
-                                 entry.sceneFileName.c_str());
+    return "scenes/" + legacyFolder + "/" + entry.sceneFileName;
 }
 
 bool SceneDB::HasUnboundBase() const {
@@ -380,6 +380,35 @@ bool DetectUnboundBase() {
     return base;
 }
 
+bool IsRoomSuffix(const std::string& suffix) {
+    const std::string marker = "_room_";
+    return suffix.size() > marker.size() && suffix.starts_with(marker) &&
+           std::all_of(suffix.begin() + marker.size(), suffix.end(),
+                       [](unsigned char c) { return std::isdigit(c) != 0; });
+}
+
+// "scenes/shared/spot04_scene/spot04_room_0" -> "shared/spot04_scene". Display lists and textures keep their
+// vanilla names, so scene.json picks a mod's copies up anyway: only scene and room headers count.
+std::string LegacySceneFolderOfHeader(const std::string& path) {
+    const std::string prefix = "scenes/";
+    size_t versionEnd = path.find('/', prefix.size());
+    size_t folderEnd = versionEnd == std::string::npos ? std::string::npos : path.find('/', versionEnd + 1);
+    if (!path.starts_with(prefix) || folderEnd == std::string::npos) {
+        return "";
+    }
+    std::string folder = path.substr(versionEnd + 1, folderEnd - versionEnd - 1);
+    std::string leaf = path.substr(folderEnd + 1);
+    const std::string sceneSuffix = "_scene";
+    if (!folder.ends_with(sceneSuffix) || !leaf.starts_with(folder.substr(0, folder.size() - sceneSuffix.size()))) {
+        return "";
+    }
+    std::string headerSuffix = leaf.substr(folder.size() - sceneSuffix.size());
+    if (headerSuffix != sceneSuffix && !IsRoomSuffix(headerSuffix)) {
+        return "";
+    }
+    return path.substr(prefix.size(), folderEnd - prefix.size());
+}
+
 SceneDB::Horse ReadHorse(const std::string& id, const Json& def) {
     SceneDB::Horse horse;
     if (!def.contains(K::kHorse)) {
@@ -412,6 +441,7 @@ void SceneDB::LoadCustomScenes() {
     unboundBase = DetectUnboundBase();
     if (unboundBase) {
         SPDLOG_INFO("[Unbound] Unbound-format archive mounted; vanilla scenes load from scene.json");
+        FindLegacySceneOverrides();
     }
 
     size_t loaded = SOH::Unbound::ForEachRegistryEntry(
@@ -422,6 +452,39 @@ void SceneDB::LoadCustomScenes() {
     }
     SPDLOG_INFO("[Unbound] {}: registered {} custom scene(s), {} custom entrance(s)", K::kRegistryPath, loaded,
                 customEntrances.size());
+}
+
+// The base was converted before any mod was mounted, so its scene.json would hide a legacy mod's scene and room
+// headers: such a scene loads from the legacy files instead. Assumes the mods are already mounted.
+void SceneDB::FindLegacySceneOverrides() {
+    legacySceneOverrides.clear();
+    auto archiveManager = Ship::Context::GetRawInstance()->GetResourceManager()->GetArchiveManager();
+    auto archives = archiveManager->GetArchives();
+    auto base = std::find_if(archives->begin(), archives->end(),
+                             [](const auto& archive) { return archive->HasFile(K::kManifestPath); });
+    if (base == archives->end()) {
+        return;
+    }
+    for (auto archive = std::next(base); archive != archives->end(); ++archive) {
+        for (const auto& [hash, path] : *(*archive)->ListFiles("scenes/*")) {
+            std::string folder = LegacySceneFolderOfHeader(path);
+            if (folder.empty() || legacySceneOverrides.contains(folder)) {
+                continue;
+            }
+            std::string sceneHeader = "scenes/" + folder + "/" + folder.substr(folder.find('/') + 1);
+            // A standalone base consumed the ROM's legacy headers: rooms the mod leaves out would be missing.
+            bool hasVanillaHeaders = std::any_of(archives->begin(), base,
+                                                 [&sceneHeader](const auto& rom) { return rom->HasFile(sceneHeader); });
+            if (!hasVanillaHeaders) {
+                SPDLOG_WARN("[Unbound] {} replaces {}, but no ROM archive holds its legacy scene; scene.json is kept",
+                            (*archive)->GetPath(), path);
+                continue;
+            }
+            SPDLOG_INFO("[Unbound] {} replaces scenes/{}; that scene loads from its legacy files",
+                        (*archive)->GetPath(), folder);
+            legacySceneOverrides.insert(folder);
+        }
+    }
 }
 
 bool SceneDB::RegisterScene(const std::string& id, const nlohmann::json& def) {

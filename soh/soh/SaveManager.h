@@ -1,6 +1,7 @@
 #pragma once
 
 #include "z64save.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
 
 #define SECTION_PARENT_NONE -1
 typedef struct {
@@ -35,6 +36,8 @@ typedef struct {
     u8 maxTriforcePieces;
     bool hasFishingRod;
     bool fishingPoleShuffled;
+    // SOH [Unbound] the key of the mod quest the file belongs to, empty for the game's own quests
+    char modQuest[MOD_QUEST_KEY_SIZE];
 } SaveFileMetaInfo;
 
 typedef enum {
@@ -156,8 +159,9 @@ class SaveManager {
     static const int MaxFiles = 3;
     std::array<SaveFileMetaInfo, MaxFiles> fileMetaInfo;
 
-  private:
     std::filesystem::path GetFileName(int fileNum);
+
+  private:
     nlohmann::json saveBlock;
 
     void ConvertFromUnversioned();

@@ -1552,7 +1552,7 @@ void AudioLoad_Init(void* heap, size_t heapSize) {
         while (AudioCollection_HasSequenceNum(seqNum)) {
             seqNum++;
         }
-        AudioCollection_AddToCollection(otherSeqList[i], seqNum);
+        AudioCollection_AddForeignToCollection(otherSeqList[i], seqNum);
         sDat->seqNumber = seqNum;
         sequenceMap[seqNum] = strdup(otherSeqList[i]);
         seqNum++;

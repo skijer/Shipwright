@@ -1,3 +1,4 @@
+#include <iterator>
 #include <type_traits>
 
 #include <ship/resource/ResourceManager.h>
@@ -32,11 +33,20 @@ ResourceFactoryBinaryAudioSequenceV2::ReadResource(std::shared_ptr<Ship::File> f
     audioSequence->sequence.cachePolicy = reader->ReadUByte();
 
     audioSequence->sequence.numFonts = reader->ReadUInt32();
-    for (int32_t i = 0; i < 16; i++) {
+    const int32_t maxFonts = static_cast<int32_t>(std::size(audioSequence->sequence.fonts));
+    for (int32_t i = 0; i < maxFonts; i++) {
         audioSequence->sequence.fonts[i] = 0;
     }
-    for (int32_t i = 0; i < static_cast<int32_t>(audioSequence->sequence.numFonts); i++) {
-        audioSequence->sequence.fonts[i] = reader->ReadUByte();
+    // A pack may list more fonts than fit; every listed byte is still read so the reader stays aligned.
+    const int32_t listedFonts = static_cast<int32_t>(audioSequence->sequence.numFonts);
+    for (int32_t i = 0; i < listedFonts; i++) {
+        const uint8_t font = reader->ReadUByte();
+        if (i < maxFonts) {
+            audioSequence->sequence.fonts[i] = font;
+        }
+    }
+    if (listedFonts > maxFonts) {
+        audioSequence->sequence.numFonts = maxFonts;
     }
 
     return audioSequence;

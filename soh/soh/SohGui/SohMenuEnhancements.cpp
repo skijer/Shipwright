@@ -4,6 +4,9 @@
 #include "soh/Enhancements/AdultMasks.h"
 #include "soh/Enhancements/BunnyHood.h"
 #include "soh/Enhancements/FileSelectEnhancements.h"
+#include "soh/ModApi/ModQuests/ModQuests.h"
+#include "soh/SohGui/SohGui.hpp"
+#include "soh/SohGui/UIWidgets.hpp"
 #include <soh/Enhancements/game-interactor/GameInteractor.h>
 #include <soh/OTRGlobals.h>
 #include <soh/Enhancements/cosmetics/authenticGfxPatches.h>
@@ -192,6 +195,28 @@ static WidgetFunc HideQuestPreFunc(Quest quest) {
             info.options->disabledTooltip = "At least one quest type must remain visible.";
         }
     };
+}
+
+// SOH [Unbound] which world the title screen shows when a mod quest has one: listed only while one is installed
+static void DrawTitleWorldSetting(WidgetInfo& info) {
+    const std::vector<ModQuestWorld> choices = ModQuests_ListTitleChoices();
+    if (choices.empty()) {
+        return;
+    }
+    std::vector<std::string> names;
+    int32_t selected = 0;
+    const std::string current = ModQuests_GetTitleChoice();
+    for (size_t i = 0; i < choices.size(); i++) {
+        names.push_back(choices[i].name);
+        if (choices[i].key == current) {
+            selected = (int32_t)i;
+        }
+    }
+    if (UIWidgets::Combobox("Title Screen", &selected, names,
+                            UIWidgets::ComboboxOptions().Color(THEME_COLOR).Tooltip(
+                                "Which world's title screen shows. Last Played follows the last file you opened."))) {
+        ModQuests_SetTitleChoice(choices[selected].key);
+    }
 }
 
 void SohMenu::AddMenuEnhancements() {
@@ -836,6 +861,7 @@ void SohMenu::AddMenuEnhancements() {
         .PreFunc(HideQuestPreFunc(QUEST_SPEEDRUN_MASTER))
         .Options(CheckboxOptions().Tooltip(
             "Hides the Speedrun Master Quest option when selecting a quest type on the File Select screen."));
+    AddWidget(path, "Title Screen", WIDGET_CUSTOM).RaceDisable(false).CustomFunction(DrawTitleWorldSetting);
 
     path.column = SECTION_COLUMN_3;
     AddWidget(path, "Misc.", WIDGET_SEPARATOR_TEXT);

@@ -1,4 +1,5 @@
 #include "ActorRegistry.h"
+#include "EnemySouls.h"
 
 #include <algorithm>
 #include <cstring>
@@ -44,6 +45,7 @@ void AddEnemy(const SOHActorDefinition* definition, int16_t actorId) {
         enemy.logicKill = definition->logicKill;
         enemy.logicKillUserData = definition->logicKillUserData;
     }
+    EnemySouls_OnEnemyRegistered(definition, enemy);
 
     auto position = std::lower_bound(
         sEnemies.begin(), sEnemies.end(), enemy,

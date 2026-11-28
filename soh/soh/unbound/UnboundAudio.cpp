@@ -51,22 +51,27 @@ extern "C" uint16_t Unbound_RegisterSequence(const char* path) {
         return 0;
     }
 
+    const size_t capacity = sequenceMapSize + 0xF;
     uint16_t id = 0;
-    while (AudioCollection::Instance->HasSequenceNum(id) || (id < sequenceMapSize && sequenceMap[id] != nullptr)) {
+    while (AudioCollection::Instance->HasSequenceNum(id) || (id < capacity && sequenceMap[id] != nullptr)) {
         id++;
     }
 
-    size_t needed = (size_t)id + 1;
+    const size_t needed = (size_t)id + 1;
     if (needed > sequenceMapSize) {
-        char** grown = (char**)realloc(sequenceMap, (needed + 0xF) * sizeof(char*));
-        u8* grownStatus = (u8*)realloc(gAudioContext.seqLoadStatus, needed);
-        if (grown == nullptr || grownStatus == nullptr) {
+        const size_t grownCapacity = needed + 0xF;
+        char** grown = (char**)realloc(sequenceMap, grownCapacity * sizeof(char*));
+        if (grown == nullptr) {
             return 0;
         }
-        memset(&grown[sequenceMapSize], 0, (needed + 0xF - sequenceMapSize) * sizeof(char*));
-        memset(&grownStatus[sequenceMapSize], 5, needed - sequenceMapSize);
         sequenceMap = grown;
+        u8* grownStatus = (u8*)realloc(gAudioContext.seqLoadStatus, grownCapacity);
+        if (grownStatus == nullptr) {
+            return 0;
+        }
         gAudioContext.seqLoadStatus = grownStatus;
+        memset(&grown[capacity], 0, (grownCapacity - capacity) * sizeof(char*));
+        memset(&grownStatus[capacity], 5, grownCapacity - capacity);
         sequenceMapSize = needed;
     }
 

@@ -4,6 +4,7 @@
 #include <string>
 #include <set>
 #include <stdint.h>
+#include <vector>
 
 enum SeqType {
     SEQ_NOSHUFFLE = 0,
@@ -61,6 +62,9 @@ class AudioCollection {
     void AddToShufflePool(SequenceInfo*);
     void RemoveFromShufflePool(SequenceInfo*);
     void AddToCollection(char* otrPath, uint16_t seqNum);
+    void AddForeignToCollection(char* otrPath, uint16_t seqNum);
+    bool CanReplaceWith(uint16_t seqId, int replacementSeq) const;
+    std::vector<uint16_t> ListForbiddenReplacements();
     uint16_t GetReplacementSequence(uint16_t seqId);
     void InitializeShufflePool();
     const char* GetSequenceName(uint16_t seqId);
@@ -71,6 +75,7 @@ class AudioCollection {
 };
 #else
 void AudioCollection_AddToCollection(char* otrPath, uint16_t seqNum);
+void AudioCollection_AddForeignToCollection(char* otrPath, uint16_t seqNum);
 const char* AudioCollection_GetSequenceName(uint16_t seqId);
 bool AudioCollection_HasSequenceNum(uint16_t seqId);
 size_t AudioCollection_SequenceMapSize();

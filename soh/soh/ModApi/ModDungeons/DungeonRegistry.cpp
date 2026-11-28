@@ -440,8 +440,16 @@ bool RegisterOverworldCheck(const std::string& key, const Json& def) {
     return true;
 }
 
+bool IsEnemyDropShuffled(const ModCheck& check) {
+    const bool areDropsShuffled = Rando::Context::GetInstance()->GetOption(RSK_SHUFFLE_ENEMY_DROPS).Get() != 0;
+    return areDropsShuffled && RegionTable_IsEnemyDropPlaced(check.location.GetRandomizerCheck());
+}
+
 bool IsOverworldCheckShuffled(const ModCheck& check) {
     const RandomizerCheckType type = check.location.GetRCType();
+    if (type == RCTYPE_ENEMY_DROP) {
+        return IsEnemyDropShuffled(check);
+    }
     const TypeShuffleRule* rule = nullptr;
     for (const TypeShuffleRule& candidate : kTypeShuffleRules) {
         if (candidate.type == type) {
@@ -933,7 +941,41 @@ bool DungeonRegistry_HasBossKey(int32_t dungeon) {
 
 bool DungeonRegistry_EvaluateCheck(int32_t check) {
     const ModCheck* modCheck = FindCheck(check);
-    return modCheck != nullptr && modCheck->logic.Evaluate();
+    if (modCheck == nullptr) {
+        return false;
+    }
+    if (modCheck->location.GetRCType() == RCTYPE_ENEMY_DROP) {
+        return RegionTable_CanGetEnemyDropHere(static_cast<RandomizerCheck>(check));
+    }
+    return modCheck->logic.Evaluate();
+}
+
+RandomizerCheck DungeonRegistry_RegisterEnemyDropCheck(const char* key, const char* name, int16_t actorId) {
+    if (key == nullptr || name == nullptr || Rando::StaticData::locationNameToEnum.contains(name)) {
+        SPDLOG_ERROR("[DungeonRegistry] enemy drop '{}' has no key or name, or is already registered",
+                     key != nullptr ? key : "");
+        return RC_UNKNOWN_CHECK;
+    }
+    const uint16_t randoInf = RandoInfCustom_Register((std::string(CheckFlagPrefix) + key).c_str());
+    if (randoInf == RANDO_INF_CUSTOM_NONE) {
+        return RC_UNKNOWN_CHECK;
+    }
+    const RandomizerCheck rc = static_cast<RandomizerCheck>(CheckBase + static_cast<int32_t>(sChecks.size()));
+    ModCheck check;
+    check.dungeon = NoDungeon;
+    check.scene = -1;
+    check.flagType = -1;
+    check.flag = -1;
+    check.randoInf = randoInf;
+    const auto collection =
+        Rando::SpoilerCollectionCheck::RandomizerInf(static_cast<uint16_t>(RAND_INF_MAX + randoInf));
+    // The enemy spawns wherever the enemy randomizer puts it, so the drop belongs to no scene.
+    check.location = Rando::Location(rc, RCQUEST_BOTH, RCTYPE_ENEMY_DROP, RCAREA_INVALID, static_cast<ActorID>(actorId),
+                                     SCENE_ID_MAX, 0, name, name, RHT_NONE, RG_NONE, false, collection);
+    check.itemLocation = Rando::ItemLocation(rc);
+    Rando::StaticData::locationNameToEnum[name] = rc;
+    sChecks.push_back(std::move(check));
+    return rc;
 }
 
 bool DungeonRegistry_EvaluateEvent(int32_t logicVal) {

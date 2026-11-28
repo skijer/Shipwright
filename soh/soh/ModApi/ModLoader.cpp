@@ -23,6 +23,7 @@
 #include <ship/resource/archive/ArchiveManager.h>
 
 #include "ModPermissions/ModPermissions.h"
+#include "ModQuests/ModQuests.h"
 #include "ModTrust/ModTrust.h"
 #include "soh/Fleet/FleetGame.h"
 #include "soh/ResourceManagerHelpers.h"
@@ -108,9 +109,7 @@ class ModLibrary {
         if (this != &other) {
             Unload();
             mHandle = other.mHandle;
-            mFileToDelete = std::move(other.mFileToDelete);
             other.mHandle = nullptr;
-            other.mFileToDelete.clear();
         }
         return *this;
     }
@@ -119,13 +118,12 @@ class ModLibrary {
         Unload();
     }
 
-    bool Load(const std::vector<char>& libraryImage) {
-        const std::string path = WriteToTemporaryFile(libraryImage);
+    bool Load(const std::vector<char>& libraryImage, [[maybe_unused]] const std::string& hash) {
+#if defined(_WIN32)
+        const std::string path = WriteCachedImage(libraryImage, hash);
         if (path.empty()) {
             return false;
         }
-
-#if defined(_WIN32)
         // A mod built against another soh.lib imports names this exe lacks: fail the load, not a system dialog.
         DWORD previousErrorMode = 0;
         SetThreadErrorMode(SEM_FAILCRITICALERRORS, &previousErrorMode);
@@ -136,12 +134,13 @@ class ModLibrary {
             SPDLOG_ERROR(
                 "[ModApi] The mod imports a function this game does not export; rebuild it with this game's SDK");
         }
-        mFileToDelete = path;
 #elif defined(__APPLE__) || defined(__linux__)
+        const std::string path = WriteTemporaryImage(libraryImage);
+        if (path.empty()) {
+            return false;
+        }
         mHandle = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
         unlink(path.c_str());
-#else
-        std::filesystem::remove(path);
 #endif
         return mHandle != nullptr;
     }
@@ -172,39 +171,53 @@ class ModLibrary {
     }
 
   private:
-    static std::string WriteToTemporaryFile(const std::vector<char>& libraryImage) {
-        std::string path;
+    static bool WriteImage(const std::filesystem::path& path, const std::vector<char>& libraryImage) {
+        std::ofstream output(path, std::ios::binary | std::ios::trunc);
+        output.write(libraryImage.data(), static_cast<std::streamsize>(libraryImage.size()));
+        output.close();
+        return static_cast<bool>(output);
+    }
 
 #if defined(_WIN32)
-        char temporaryDirectory[MAX_PATH];
-        char temporaryFile[MAX_PATH];
-        if (GetTempPathA(MAX_PATH, temporaryDirectory) == 0 ||
-            GetTempFileNameA(temporaryDirectory, "oub", 0, temporaryFile) == 0) {
+    // Named by content and kept between runs: a killed process never deletes its copy, and the fresh
+    // GetTempFileName names leaked that way fill its 65535 slots, slowing and then failing every load.
+    static std::string WriteCachedImage(const std::vector<char>& libraryImage, const std::string& hash) {
+        std::error_code error;
+        const std::filesystem::path temporary = std::filesystem::temp_directory_path(error);
+        if (error) {
             return {};
         }
-        path = temporaryFile;
+        const std::filesystem::path folder = temporary / "unbound-mods" / "soh";
+        const std::filesystem::path path = folder / (hash + ".dll");
+        if (std::filesystem::file_size(path, error) == libraryImage.size()) {
+            return path.string();
+        }
+        std::filesystem::create_directories(folder, error);
+        // Both games and the pool worker may place the same binary at once, so each writes aside and renames.
+        const std::filesystem::path staging = folder / (hash + "." + std::to_string(GetCurrentProcessId()) + ".part");
+        const bool isPlaced = WriteImage(staging, libraryImage) &&
+                              MoveFileExA(staging.string().c_str(), path.string().c_str(), MOVEFILE_REPLACE_EXISTING);
+        if (!isPlaced) {
+            std::filesystem::remove(staging, error);
+        }
+        return std::filesystem::exists(path, error) ? path.string() : std::string{};
+    }
 #elif defined(__APPLE__) || defined(__linux__)
+    static std::string WriteTemporaryImage(const std::vector<char>& libraryImage) {
         char pathTemplate[] = "/tmp/unbound_mod_XXXXXX";
-        int descriptor = mkstemp(pathTemplate);
+        const int descriptor = mkstemp(pathTemplate);
         if (descriptor == -1) {
             return {};
         }
         fchmod(descriptor, 0755);
         close(descriptor);
-        path = pathTemplate;
-#else
-        return {};
-#endif
-
-        std::ofstream output(path, std::ios::binary | std::ios::trunc);
-        output.write(libraryImage.data(), static_cast<std::streamsize>(libraryImage.size()));
-        output.close();
-        if (!output) {
-            std::filesystem::remove(path);
+        if (!WriteImage(pathTemplate, libraryImage)) {
+            unlink(pathTemplate);
             return {};
         }
-        return path;
+        return pathTemplate;
     }
+#endif
 
     void Unload() {
         if (mHandle == nullptr) {
@@ -212,9 +225,6 @@ class ModLibrary {
         }
 #if defined(_WIN32)
         FreeLibrary(static_cast<HMODULE>(mHandle));
-        if (!mFileToDelete.empty()) {
-            DeleteFileA(mFileToDelete.c_str());
-        }
 #elif defined(__APPLE__) || defined(__linux__)
         dlclose(mHandle);
 #endif
@@ -226,7 +236,6 @@ class ModLibrary {
 #else
     void* mHandle = nullptr;
 #endif
-    std::string mFileToDelete;
 };
 
 struct LoadedMod {
@@ -238,6 +247,7 @@ struct LoadedMod {
     SOHModInitFunc init = nullptr;
     std::vector<std::string> requiredHooks;
     std::vector<std::string> requiredResources;
+    std::optional<ModQuestDeclaration> quest;
     bool compatible = false;
     bool compatibilityCached = false;
 };
@@ -248,6 +258,7 @@ struct NativeModPackage {
     std::shared_ptr<std::vector<char>> binary;
     std::vector<std::string> requiredResources;
     std::vector<std::string> permissions;
+    std::optional<ModQuestDeclaration> quest;
     ModProvenance provenance;
 };
 
@@ -399,6 +410,27 @@ std::vector<std::string> ReadStringArray(const Json& manifest, const char* key) 
     return values;
 }
 
+std::optional<ModQuestDeclaration> ReadQuestDeclaration(const Json& manifest, const std::string& mod) {
+    const auto quest = manifest.find("quest");
+    if (quest == manifest.end() || !quest->is_object()) {
+        return std::nullopt;
+    }
+    const std::string kind = quest->value("kind", "");
+    if (kind != "romhack" && kind != "mode") {
+        SPDLOG_ERROR("[ModApi] Mod '{}' declares a quest whose kind is '{}', not 'romhack' or 'mode'", mod, kind);
+        return std::nullopt;
+    }
+    ModQuestDeclaration declaration;
+    declaration.key = quest->value("key", "");
+    declaration.name = quest->value("name", "");
+    declaration.label = quest->value("label", "");
+    declaration.isRomhack = kind == "romhack";
+    declaration.worldArchives = ReadStringArray(*quest, "world");
+    declaration.logo = quest->value("logo", "");
+    declaration.adoptsOriginalFiles = quest->value("adopt_original_files", false);
+    return declaration;
+}
+
 std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship::Archive>& archive,
                                                      const std::string& platform) {
     Json manifest;
@@ -431,6 +463,7 @@ std::optional<NativeModPackage> ReadNativeModPackage(const std::shared_ptr<Ship:
     package.binary = file->Buffer;
     package.requiredResources = ReadStringArray(manifest, "requires");
     package.permissions = ReadStringArray(manifest, "permissions");
+    package.quest = ReadQuestDeclaration(manifest, package.name);
     package.provenance = ModTrust_Verify(*archive);
     return package;
 }
@@ -445,8 +478,9 @@ std::unique_ptr<LoadedMod> LoadNativeMod(const NativeModPackage& package) {
     mod->name = package.name;
     mod->archivePath = package.archivePath;
     mod->requiredResources = package.requiredResources;
+    mod->quest = package.quest;
     mod->binaryHash = Hex(HashBytes(*package.binary));
-    if (!mod->library.Load(*package.binary)) {
+    if (!mod->library.Load(*package.binary, mod->binaryHash)) {
         SPDLOG_ERROR("[ModApi] Native library for mod '{}' could not be loaded", package.name);
         return nullptr;
     }
@@ -641,6 +675,10 @@ void ModLoader_LoadMods() {
                            { "hooks", mod->requiredHooks } };
         if (!mod->compatible || !HasRequiredResources(*mod)) {
             continue;
+        }
+        // A mod whose quest can't be declared, such as a romhack whose world isn't built yet, runs as a plain mod
+        if (mod->quest.has_value() && !ModQuests_Declare(*mod->quest, mod->name, mod->archivePath)) {
+            SPDLOG_WARN("[ModApi] Mod '{}' runs without its quest, in every file", mod->name);
         }
 
         try {
